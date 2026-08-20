@@ -89,6 +89,7 @@ import { Route as ShellOpsPersonalTrainingRouteImport } from './routes/_shell/op
 import { Route as ShellOpsPilatesRouteImport } from './routes/_shell/ops.pilates'
 import { Route as ShellOpsProgramsRouteImport } from './routes/_shell/ops.programs'
 import { Route as ShellOpsTrainersRouteImport } from './routes/_shell/ops.trainers'
+import { Route as ShellOverviewSectionRouteImport } from './routes/_shell/overview.$section'
 import { Route as ShellPerformanceAssessmentsRouteImport } from './routes/_shell/performance.assessments'
 import { Route as ShellPerformanceIntelligenceRouteImport } from './routes/_shell/performance.intelligence'
 import { Route as ShellPerformanceMovementRouteImport } from './routes/_shell/performance.movement'
@@ -522,6 +523,11 @@ const ShellOpsTrainersRoute = ShellOpsTrainersRouteImport.update({
   path: '/ops/trainers',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellOverviewSectionRoute = ShellOverviewSectionRouteImport.update({
+  id: '/overview/$section',
+  path: '/overview/$section',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPerformanceAssessmentsRoute =
   ShellPerformanceAssessmentsRouteImport.update({
     id: '/performance/assessments',
@@ -714,6 +720,7 @@ export interface FileRoutesByFullPath {
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
   '/ops/trainers': typeof ShellOpsTrainersRoute
+  '/overview/$section': typeof ShellOverviewSectionRoute
   '/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/performance/movement': typeof ShellPerformanceMovementRoute
@@ -816,6 +823,7 @@ export interface FileRoutesByTo {
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
   '/ops/trainers': typeof ShellOpsTrainersRoute
+  '/overview/$section': typeof ShellOverviewSectionRoute
   '/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/performance/movement': typeof ShellPerformanceMovementRoute
@@ -920,6 +928,7 @@ export interface FileRoutesById {
   '/_shell/ops/pilates': typeof ShellOpsPilatesRoute
   '/_shell/ops/programs': typeof ShellOpsProgramsRoute
   '/_shell/ops/trainers': typeof ShellOpsTrainersRoute
+  '/_shell/overview/$section': typeof ShellOverviewSectionRoute
   '/_shell/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/_shell/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/_shell/performance/movement': typeof ShellPerformanceMovementRoute
@@ -1024,6 +1033,7 @@ export interface FileRouteTypes {
     | '/ops/pilates'
     | '/ops/programs'
     | '/ops/trainers'
+    | '/overview/$section'
     | '/performance/assessments'
     | '/performance/intelligence'
     | '/performance/movement'
@@ -1126,6 +1136,7 @@ export interface FileRouteTypes {
     | '/ops/pilates'
     | '/ops/programs'
     | '/ops/trainers'
+    | '/overview/$section'
     | '/performance/assessments'
     | '/performance/intelligence'
     | '/performance/movement'
@@ -1229,6 +1240,7 @@ export interface FileRouteTypes {
     | '/_shell/ops/pilates'
     | '/_shell/ops/programs'
     | '/_shell/ops/trainers'
+    | '/_shell/overview/$section'
     | '/_shell/performance/assessments'
     | '/_shell/performance/intelligence'
     | '/_shell/performance/movement'
@@ -1818,6 +1830,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellOpsTrainersRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/overview/$section': {
+      id: '/_shell/overview/$section'
+      path: '/overview/$section'
+      fullPath: '/overview/$section'
+      preLoaderRoute: typeof ShellOverviewSectionRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/performance/assessments': {
       id: '/_shell/performance/assessments'
       path: '/performance/assessments'
@@ -2075,6 +2094,7 @@ interface ShellRouteChildren {
   ShellOpsPilatesRoute: typeof ShellOpsPilatesRoute
   ShellOpsProgramsRoute: typeof ShellOpsProgramsRoute
   ShellOpsTrainersRoute: typeof ShellOpsTrainersRoute
+  ShellOverviewSectionRoute: typeof ShellOverviewSectionRoute
   ShellPerformanceAssessmentsRoute: typeof ShellPerformanceAssessmentsRoute
   ShellPerformanceIntelligenceRoute: typeof ShellPerformanceIntelligenceRoute
   ShellPerformanceMovementRoute: typeof ShellPerformanceMovementRoute
@@ -2171,6 +2191,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellOpsPilatesRoute: ShellOpsPilatesRoute,
   ShellOpsProgramsRoute: ShellOpsProgramsRoute,
   ShellOpsTrainersRoute: ShellOpsTrainersRoute,
+  ShellOverviewSectionRoute: ShellOverviewSectionRoute,
   ShellPerformanceAssessmentsRoute: ShellPerformanceAssessmentsRoute,
   ShellPerformanceIntelligenceRoute: ShellPerformanceIntelligenceRoute,
   ShellPerformanceMovementRoute: ShellPerformanceMovementRoute,
