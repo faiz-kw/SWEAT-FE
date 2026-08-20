@@ -12,9 +12,6 @@ export interface ModuleDef {
   hint?: string;
 }
 
-const eq = (key: string, ...values: unknown[]) => ({
-  test: (r: Row) => values.includes(r[key]),
-});
 
 function preset(label: string, key: string, ...values: unknown[]) {
   return { label, test: (r: Row) => values.includes(r[key]) };
