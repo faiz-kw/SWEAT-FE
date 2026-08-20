@@ -7,6 +7,9 @@ import {
   Building2,
   CalendarRange,
   ChevronDown,
+  Dumbbell,
+  LifeBuoy,
+  Sparkles,
   HeartPulse,
   LayoutDashboard,
   Megaphone,
@@ -24,7 +27,7 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Target, Users, CalendarRange, Activity, Apple, Package, Wallet,
-  HeartPulse, Megaphone, Workflow, BarChart3, Settings, Building2,
+  HeartPulse, Megaphone, Workflow, BarChart3, Settings, Building2, Sparkles, Dumbbell, LifeBuoy,
 };
 
 export function Sidebar() {

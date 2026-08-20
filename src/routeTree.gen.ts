@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
+import { Route as ShellLifecycleRouteImport } from './routes/_shell/lifecycle'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
 import { Route as ShellAdminApiRouteImport } from './routes/_shell/admin.api'
 import { Route as ShellAdminAuditLogsRouteImport } from './routes/_shell/admin.audit-logs'
@@ -23,10 +24,22 @@ import { Route as ShellAdminRolesRouteImport } from './routes/_shell/admin.roles
 import { Route as ShellAdminSecurityRouteImport } from './routes/_shell/admin.security'
 import { Route as ShellAdminServicesRouteImport } from './routes/_shell/admin.services'
 import { Route as ShellAdminUsersRouteImport } from './routes/_shell/admin.users'
+import { Route as ShellAiBusinessIntelligenceRouteImport } from './routes/_shell/ai.business-intelligence'
+import { Route as ShellAiCoachRouteImport } from './routes/_shell/ai.coach'
+import { Route as ShellAiComputerVisionRouteImport } from './routes/_shell/ai.computer-vision'
+import { Route as ShellAiGroupTrackingRouteImport } from './routes/_shell/ai.group-tracking'
+import { Route as ShellAiLiveSessionsRouteImport } from './routes/_shell/ai.live-sessions'
+import { Route as ShellAiMlAdminRouteImport } from './routes/_shell/ai.ml-admin'
+import { Route as ShellAiTrainerCopilotRouteImport } from './routes/_shell/ai.trainer-copilot'
 import { Route as ShellAutomationApprovalsRouteImport } from './routes/_shell/automation.approvals'
 import { Route as ShellAutomationNotificationsRouteImport } from './routes/_shell/automation.notifications'
 import { Route as ShellAutomationRulesRouteImport } from './routes/_shell/automation.rules'
 import { Route as ShellAutomationWorkflowsRouteImport } from './routes/_shell/automation.workflows'
+import { Route as ShellCoachingExerciseLibraryRouteImport } from './routes/_shell/coaching.exercise-library'
+import { Route as ShellCoachingNutritionCoachesRouteImport } from './routes/_shell/coaching.nutrition-coaches'
+import { Route as ShellCoachingOnlineCoachesRouteImport } from './routes/_shell/coaching.online-coaches'
+import { Route as ShellCoachingProgramBuilderRouteImport } from './routes/_shell/coaching.program-builder'
+import { Route as ShellCoachingTrainersRouteImport } from './routes/_shell/coaching.trainers'
 import { Route as ShellCrmActivitiesRouteImport } from './routes/_shell/crm.activities'
 import { Route as ShellCrmAiCallingRouteImport } from './routes/_shell/crm.ai-calling'
 import { Route as ShellCrmCampaignsRouteImport } from './routes/_shell/crm.campaigns'
@@ -76,6 +89,7 @@ import { Route as ShellOpsPersonalTrainingRouteImport } from './routes/_shell/op
 import { Route as ShellOpsPilatesRouteImport } from './routes/_shell/ops.pilates'
 import { Route as ShellOpsProgramsRouteImport } from './routes/_shell/ops.programs'
 import { Route as ShellOpsTrainersRouteImport } from './routes/_shell/ops.trainers'
+import { Route as ShellOverviewSectionRouteImport } from './routes/_shell/overview.$section'
 import { Route as ShellPerformanceAssessmentsRouteImport } from './routes/_shell/performance.assessments'
 import { Route as ShellPerformanceIntelligenceRouteImport } from './routes/_shell/performance.intelligence'
 import { Route as ShellPerformanceMovementRouteImport } from './routes/_shell/performance.movement'
@@ -93,6 +107,9 @@ import { Route as ShellReportsMembersRouteImport } from './routes/_shell/reports
 import { Route as ShellReportsPerformanceRouteImport } from './routes/_shell/reports.performance'
 import { Route as ShellReportsSalesRouteImport } from './routes/_shell/reports.sales'
 import { Route as ShellReportsTrainersRouteImport } from './routes/_shell/reports.trainers'
+import { Route as ShellSupportEscalationsRouteImport } from './routes/_shell/support.escalations'
+import { Route as ShellSupportSlaRouteImport } from './routes/_shell/support.sla'
+import { Route as ShellSupportTicketsRouteImport } from './routes/_shell/support.tickets'
 import { Route as ShellPlatformTenantsNewRouteImport } from './routes/_shell/platform.tenants.new'
 
 const ShellRoute = ShellRouteImport.update({
@@ -102,6 +119,11 @@ const ShellRoute = ShellRouteImport.update({
 const ShellIndexRoute = ShellIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellLifecycleRoute = ShellLifecycleRouteImport.update({
+  id: '/lifecycle',
+  path: '/lifecycle',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellMembersRoute = ShellMembersRouteImport.update({
@@ -164,6 +186,42 @@ const ShellAdminUsersRoute = ShellAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellAiBusinessIntelligenceRoute =
+  ShellAiBusinessIntelligenceRouteImport.update({
+    id: '/ai/business-intelligence',
+    path: '/ai/business-intelligence',
+    getParentRoute: () => ShellRoute,
+  } as any)
+const ShellAiCoachRoute = ShellAiCoachRouteImport.update({
+  id: '/ai/coach',
+  path: '/ai/coach',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAiComputerVisionRoute = ShellAiComputerVisionRouteImport.update({
+  id: '/ai/computer-vision',
+  path: '/ai/computer-vision',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAiGroupTrackingRoute = ShellAiGroupTrackingRouteImport.update({
+  id: '/ai/group-tracking',
+  path: '/ai/group-tracking',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAiLiveSessionsRoute = ShellAiLiveSessionsRouteImport.update({
+  id: '/ai/live-sessions',
+  path: '/ai/live-sessions',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAiMlAdminRoute = ShellAiMlAdminRouteImport.update({
+  id: '/ai/ml-admin',
+  path: '/ai/ml-admin',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAiTrainerCopilotRoute = ShellAiTrainerCopilotRouteImport.update({
+  id: '/ai/trainer-copilot',
+  path: '/ai/trainer-copilot',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellAutomationApprovalsRoute =
   ShellAutomationApprovalsRouteImport.update({
     id: '/automation/approvals',
@@ -187,6 +245,35 @@ const ShellAutomationWorkflowsRoute =
     path: '/automation/workflows',
     getParentRoute: () => ShellRoute,
   } as any)
+const ShellCoachingExerciseLibraryRoute =
+  ShellCoachingExerciseLibraryRouteImport.update({
+    id: '/coaching/exercise-library',
+    path: '/coaching/exercise-library',
+    getParentRoute: () => ShellRoute,
+  } as any)
+const ShellCoachingNutritionCoachesRoute =
+  ShellCoachingNutritionCoachesRouteImport.update({
+    id: '/coaching/nutrition-coaches',
+    path: '/coaching/nutrition-coaches',
+    getParentRoute: () => ShellRoute,
+  } as any)
+const ShellCoachingOnlineCoachesRoute =
+  ShellCoachingOnlineCoachesRouteImport.update({
+    id: '/coaching/online-coaches',
+    path: '/coaching/online-coaches',
+    getParentRoute: () => ShellRoute,
+  } as any)
+const ShellCoachingProgramBuilderRoute =
+  ShellCoachingProgramBuilderRouteImport.update({
+    id: '/coaching/program-builder',
+    path: '/coaching/program-builder',
+    getParentRoute: () => ShellRoute,
+  } as any)
+const ShellCoachingTrainersRoute = ShellCoachingTrainersRouteImport.update({
+  id: '/coaching/trainers',
+  path: '/coaching/trainers',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellCrmActivitiesRoute = ShellCrmActivitiesRouteImport.update({
   id: '/crm/activities',
   path: '/crm/activities',
@@ -436,6 +523,11 @@ const ShellOpsTrainersRoute = ShellOpsTrainersRouteImport.update({
   path: '/ops/trainers',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellOverviewSectionRoute = ShellOverviewSectionRouteImport.update({
+  id: '/overview/$section',
+  path: '/overview/$section',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPerformanceAssessmentsRoute =
   ShellPerformanceAssessmentsRouteImport.update({
     id: '/performance/assessments',
@@ -527,6 +619,21 @@ const ShellReportsTrainersRoute = ShellReportsTrainersRouteImport.update({
   path: '/reports/trainers',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellSupportEscalationsRoute = ShellSupportEscalationsRouteImport.update({
+  id: '/support/escalations',
+  path: '/support/escalations',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellSupportSlaRoute = ShellSupportSlaRouteImport.update({
+  id: '/support/sla',
+  path: '/support/sla',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellSupportTicketsRoute = ShellSupportTicketsRouteImport.update({
+  id: '/support/tickets',
+  path: '/support/tickets',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -535,6 +642,7 @@ const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
+  '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/admin/api': typeof ShellAdminApiRoute
   '/admin/audit-logs': typeof ShellAdminAuditLogsRoute
@@ -547,10 +655,22 @@ export interface FileRoutesByFullPath {
   '/admin/security': typeof ShellAdminSecurityRoute
   '/admin/services': typeof ShellAdminServicesRoute
   '/admin/users': typeof ShellAdminUsersRoute
+  '/ai/business-intelligence': typeof ShellAiBusinessIntelligenceRoute
+  '/ai/coach': typeof ShellAiCoachRoute
+  '/ai/computer-vision': typeof ShellAiComputerVisionRoute
+  '/ai/group-tracking': typeof ShellAiGroupTrackingRoute
+  '/ai/live-sessions': typeof ShellAiLiveSessionsRoute
+  '/ai/ml-admin': typeof ShellAiMlAdminRoute
+  '/ai/trainer-copilot': typeof ShellAiTrainerCopilotRoute
   '/automation/approvals': typeof ShellAutomationApprovalsRoute
   '/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/automation/rules': typeof ShellAutomationRulesRoute
   '/automation/workflows': typeof ShellAutomationWorkflowsRoute
+  '/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
+  '/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
+  '/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
+  '/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
+  '/coaching/trainers': typeof ShellCoachingTrainersRoute
   '/crm/activities': typeof ShellCrmActivitiesRoute
   '/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/crm/campaigns': typeof ShellCrmCampaignsRoute
@@ -600,6 +720,7 @@ export interface FileRoutesByFullPath {
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
   '/ops/trainers': typeof ShellOpsTrainersRoute
+  '/overview/$section': typeof ShellOverviewSectionRoute
   '/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/performance/movement': typeof ShellPerformanceMovementRoute
@@ -617,9 +738,13 @@ export interface FileRoutesByFullPath {
   '/reports/performance': typeof ShellReportsPerformanceRoute
   '/reports/sales': typeof ShellReportsSalesRoute
   '/reports/trainers': typeof ShellReportsTrainersRoute
+  '/support/escalations': typeof ShellSupportEscalationsRoute
+  '/support/sla': typeof ShellSupportSlaRoute
+  '/support/tickets': typeof ShellSupportTicketsRoute
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesByTo {
+  '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/': typeof ShellIndexRoute
   '/admin/api': typeof ShellAdminApiRoute
@@ -633,10 +758,22 @@ export interface FileRoutesByTo {
   '/admin/security': typeof ShellAdminSecurityRoute
   '/admin/services': typeof ShellAdminServicesRoute
   '/admin/users': typeof ShellAdminUsersRoute
+  '/ai/business-intelligence': typeof ShellAiBusinessIntelligenceRoute
+  '/ai/coach': typeof ShellAiCoachRoute
+  '/ai/computer-vision': typeof ShellAiComputerVisionRoute
+  '/ai/group-tracking': typeof ShellAiGroupTrackingRoute
+  '/ai/live-sessions': typeof ShellAiLiveSessionsRoute
+  '/ai/ml-admin': typeof ShellAiMlAdminRoute
+  '/ai/trainer-copilot': typeof ShellAiTrainerCopilotRoute
   '/automation/approvals': typeof ShellAutomationApprovalsRoute
   '/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/automation/rules': typeof ShellAutomationRulesRoute
   '/automation/workflows': typeof ShellAutomationWorkflowsRoute
+  '/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
+  '/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
+  '/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
+  '/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
+  '/coaching/trainers': typeof ShellCoachingTrainersRoute
   '/crm/activities': typeof ShellCrmActivitiesRoute
   '/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/crm/campaigns': typeof ShellCrmCampaignsRoute
@@ -686,6 +823,7 @@ export interface FileRoutesByTo {
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
   '/ops/trainers': typeof ShellOpsTrainersRoute
+  '/overview/$section': typeof ShellOverviewSectionRoute
   '/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/performance/movement': typeof ShellPerformanceMovementRoute
@@ -703,11 +841,15 @@ export interface FileRoutesByTo {
   '/reports/performance': typeof ShellReportsPerformanceRoute
   '/reports/sales': typeof ShellReportsSalesRoute
   '/reports/trainers': typeof ShellReportsTrainersRoute
+  '/support/escalations': typeof ShellSupportEscalationsRoute
+  '/support/sla': typeof ShellSupportSlaRoute
+  '/support/tickets': typeof ShellSupportTicketsRoute
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteWithChildren
+  '/_shell/lifecycle': typeof ShellLifecycleRoute
   '/_shell/members': typeof ShellMembersRouteWithChildren
   '/_shell/': typeof ShellIndexRoute
   '/_shell/admin/api': typeof ShellAdminApiRoute
@@ -721,10 +863,22 @@ export interface FileRoutesById {
   '/_shell/admin/security': typeof ShellAdminSecurityRoute
   '/_shell/admin/services': typeof ShellAdminServicesRoute
   '/_shell/admin/users': typeof ShellAdminUsersRoute
+  '/_shell/ai/business-intelligence': typeof ShellAiBusinessIntelligenceRoute
+  '/_shell/ai/coach': typeof ShellAiCoachRoute
+  '/_shell/ai/computer-vision': typeof ShellAiComputerVisionRoute
+  '/_shell/ai/group-tracking': typeof ShellAiGroupTrackingRoute
+  '/_shell/ai/live-sessions': typeof ShellAiLiveSessionsRoute
+  '/_shell/ai/ml-admin': typeof ShellAiMlAdminRoute
+  '/_shell/ai/trainer-copilot': typeof ShellAiTrainerCopilotRoute
   '/_shell/automation/approvals': typeof ShellAutomationApprovalsRoute
   '/_shell/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/_shell/automation/rules': typeof ShellAutomationRulesRoute
   '/_shell/automation/workflows': typeof ShellAutomationWorkflowsRoute
+  '/_shell/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
+  '/_shell/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
+  '/_shell/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
+  '/_shell/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
+  '/_shell/coaching/trainers': typeof ShellCoachingTrainersRoute
   '/_shell/crm/activities': typeof ShellCrmActivitiesRoute
   '/_shell/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/_shell/crm/campaigns': typeof ShellCrmCampaignsRoute
@@ -774,6 +928,7 @@ export interface FileRoutesById {
   '/_shell/ops/pilates': typeof ShellOpsPilatesRoute
   '/_shell/ops/programs': typeof ShellOpsProgramsRoute
   '/_shell/ops/trainers': typeof ShellOpsTrainersRoute
+  '/_shell/overview/$section': typeof ShellOverviewSectionRoute
   '/_shell/performance/assessments': typeof ShellPerformanceAssessmentsRoute
   '/_shell/performance/intelligence': typeof ShellPerformanceIntelligenceRoute
   '/_shell/performance/movement': typeof ShellPerformanceMovementRoute
@@ -791,12 +946,16 @@ export interface FileRoutesById {
   '/_shell/reports/performance': typeof ShellReportsPerformanceRoute
   '/_shell/reports/sales': typeof ShellReportsSalesRoute
   '/_shell/reports/trainers': typeof ShellReportsTrainersRoute
+  '/_shell/support/escalations': typeof ShellSupportEscalationsRoute
+  '/_shell/support/sla': typeof ShellSupportSlaRoute
+  '/_shell/support/tickets': typeof ShellSupportTicketsRoute
   '/_shell/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/lifecycle'
     | '/members'
     | '/admin/api'
     | '/admin/audit-logs'
@@ -809,10 +968,22 @@ export interface FileRouteTypes {
     | '/admin/security'
     | '/admin/services'
     | '/admin/users'
+    | '/ai/business-intelligence'
+    | '/ai/coach'
+    | '/ai/computer-vision'
+    | '/ai/group-tracking'
+    | '/ai/live-sessions'
+    | '/ai/ml-admin'
+    | '/ai/trainer-copilot'
     | '/automation/approvals'
     | '/automation/notifications'
     | '/automation/rules'
     | '/automation/workflows'
+    | '/coaching/exercise-library'
+    | '/coaching/nutrition-coaches'
+    | '/coaching/online-coaches'
+    | '/coaching/program-builder'
+    | '/coaching/trainers'
     | '/crm/activities'
     | '/crm/ai-calling'
     | '/crm/campaigns'
@@ -862,6 +1033,7 @@ export interface FileRouteTypes {
     | '/ops/pilates'
     | '/ops/programs'
     | '/ops/trainers'
+    | '/overview/$section'
     | '/performance/assessments'
     | '/performance/intelligence'
     | '/performance/movement'
@@ -879,9 +1051,13 @@ export interface FileRouteTypes {
     | '/reports/performance'
     | '/reports/sales'
     | '/reports/trainers'
+    | '/support/escalations'
+    | '/support/sla'
+    | '/support/tickets'
     | '/platform/tenants/new'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/lifecycle'
     | '/members'
     | '/'
     | '/admin/api'
@@ -895,10 +1071,22 @@ export interface FileRouteTypes {
     | '/admin/security'
     | '/admin/services'
     | '/admin/users'
+    | '/ai/business-intelligence'
+    | '/ai/coach'
+    | '/ai/computer-vision'
+    | '/ai/group-tracking'
+    | '/ai/live-sessions'
+    | '/ai/ml-admin'
+    | '/ai/trainer-copilot'
     | '/automation/approvals'
     | '/automation/notifications'
     | '/automation/rules'
     | '/automation/workflows'
+    | '/coaching/exercise-library'
+    | '/coaching/nutrition-coaches'
+    | '/coaching/online-coaches'
+    | '/coaching/program-builder'
+    | '/coaching/trainers'
     | '/crm/activities'
     | '/crm/ai-calling'
     | '/crm/campaigns'
@@ -948,6 +1136,7 @@ export interface FileRouteTypes {
     | '/ops/pilates'
     | '/ops/programs'
     | '/ops/trainers'
+    | '/overview/$section'
     | '/performance/assessments'
     | '/performance/intelligence'
     | '/performance/movement'
@@ -965,10 +1154,14 @@ export interface FileRouteTypes {
     | '/reports/performance'
     | '/reports/sales'
     | '/reports/trainers'
+    | '/support/escalations'
+    | '/support/sla'
+    | '/support/tickets'
     | '/platform/tenants/new'
   id:
     | '__root__'
     | '/_shell'
+    | '/_shell/lifecycle'
     | '/_shell/members'
     | '/_shell/'
     | '/_shell/admin/api'
@@ -982,10 +1175,22 @@ export interface FileRouteTypes {
     | '/_shell/admin/security'
     | '/_shell/admin/services'
     | '/_shell/admin/users'
+    | '/_shell/ai/business-intelligence'
+    | '/_shell/ai/coach'
+    | '/_shell/ai/computer-vision'
+    | '/_shell/ai/group-tracking'
+    | '/_shell/ai/live-sessions'
+    | '/_shell/ai/ml-admin'
+    | '/_shell/ai/trainer-copilot'
     | '/_shell/automation/approvals'
     | '/_shell/automation/notifications'
     | '/_shell/automation/rules'
     | '/_shell/automation/workflows'
+    | '/_shell/coaching/exercise-library'
+    | '/_shell/coaching/nutrition-coaches'
+    | '/_shell/coaching/online-coaches'
+    | '/_shell/coaching/program-builder'
+    | '/_shell/coaching/trainers'
     | '/_shell/crm/activities'
     | '/_shell/crm/ai-calling'
     | '/_shell/crm/campaigns'
@@ -1035,6 +1240,7 @@ export interface FileRouteTypes {
     | '/_shell/ops/pilates'
     | '/_shell/ops/programs'
     | '/_shell/ops/trainers'
+    | '/_shell/overview/$section'
     | '/_shell/performance/assessments'
     | '/_shell/performance/intelligence'
     | '/_shell/performance/movement'
@@ -1052,6 +1258,9 @@ export interface FileRouteTypes {
     | '/_shell/reports/performance'
     | '/_shell/reports/sales'
     | '/_shell/reports/trainers'
+    | '/_shell/support/escalations'
+    | '/_shell/support/sla'
+    | '/_shell/support/tickets'
     | '/_shell/platform/tenants/new'
   fileRoutesById: FileRoutesById
 }
@@ -1073,6 +1282,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/lifecycle': {
+      id: '/_shell/lifecycle'
+      path: '/lifecycle'
+      fullPath: '/lifecycle'
+      preLoaderRoute: typeof ShellLifecycleRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/members': {
@@ -1159,6 +1375,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellAdminUsersRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/ai/business-intelligence': {
+      id: '/_shell/ai/business-intelligence'
+      path: '/ai/business-intelligence'
+      fullPath: '/ai/business-intelligence'
+      preLoaderRoute: typeof ShellAiBusinessIntelligenceRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/coach': {
+      id: '/_shell/ai/coach'
+      path: '/ai/coach'
+      fullPath: '/ai/coach'
+      preLoaderRoute: typeof ShellAiCoachRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/computer-vision': {
+      id: '/_shell/ai/computer-vision'
+      path: '/ai/computer-vision'
+      fullPath: '/ai/computer-vision'
+      preLoaderRoute: typeof ShellAiComputerVisionRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/group-tracking': {
+      id: '/_shell/ai/group-tracking'
+      path: '/ai/group-tracking'
+      fullPath: '/ai/group-tracking'
+      preLoaderRoute: typeof ShellAiGroupTrackingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/live-sessions': {
+      id: '/_shell/ai/live-sessions'
+      path: '/ai/live-sessions'
+      fullPath: '/ai/live-sessions'
+      preLoaderRoute: typeof ShellAiLiveSessionsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/ml-admin': {
+      id: '/_shell/ai/ml-admin'
+      path: '/ai/ml-admin'
+      fullPath: '/ai/ml-admin'
+      preLoaderRoute: typeof ShellAiMlAdminRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ai/trainer-copilot': {
+      id: '/_shell/ai/trainer-copilot'
+      path: '/ai/trainer-copilot'
+      fullPath: '/ai/trainer-copilot'
+      preLoaderRoute: typeof ShellAiTrainerCopilotRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/automation/approvals': {
       id: '/_shell/automation/approvals'
       path: '/automation/approvals'
@@ -1185,6 +1450,41 @@ declare module '@tanstack/react-router' {
       path: '/automation/workflows'
       fullPath: '/automation/workflows'
       preLoaderRoute: typeof ShellAutomationWorkflowsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/coaching/exercise-library': {
+      id: '/_shell/coaching/exercise-library'
+      path: '/coaching/exercise-library'
+      fullPath: '/coaching/exercise-library'
+      preLoaderRoute: typeof ShellCoachingExerciseLibraryRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/coaching/nutrition-coaches': {
+      id: '/_shell/coaching/nutrition-coaches'
+      path: '/coaching/nutrition-coaches'
+      fullPath: '/coaching/nutrition-coaches'
+      preLoaderRoute: typeof ShellCoachingNutritionCoachesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/coaching/online-coaches': {
+      id: '/_shell/coaching/online-coaches'
+      path: '/coaching/online-coaches'
+      fullPath: '/coaching/online-coaches'
+      preLoaderRoute: typeof ShellCoachingOnlineCoachesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/coaching/program-builder': {
+      id: '/_shell/coaching/program-builder'
+      path: '/coaching/program-builder'
+      fullPath: '/coaching/program-builder'
+      preLoaderRoute: typeof ShellCoachingProgramBuilderRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/coaching/trainers': {
+      id: '/_shell/coaching/trainers'
+      path: '/coaching/trainers'
+      fullPath: '/coaching/trainers'
+      preLoaderRoute: typeof ShellCoachingTrainersRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/crm/activities': {
@@ -1530,6 +1830,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellOpsTrainersRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/overview/$section': {
+      id: '/_shell/overview/$section'
+      path: '/overview/$section'
+      fullPath: '/overview/$section'
+      preLoaderRoute: typeof ShellOverviewSectionRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/performance/assessments': {
       id: '/_shell/performance/assessments'
       path: '/performance/assessments'
@@ -1649,6 +1956,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellReportsTrainersRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/support/escalations': {
+      id: '/_shell/support/escalations'
+      path: '/support/escalations'
+      fullPath: '/support/escalations'
+      preLoaderRoute: typeof ShellSupportEscalationsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/support/sla': {
+      id: '/_shell/support/sla'
+      path: '/support/sla'
+      fullPath: '/support/sla'
+      preLoaderRoute: typeof ShellSupportSlaRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/support/tickets': {
+      id: '/_shell/support/tickets'
+      path: '/support/tickets'
+      fullPath: '/support/tickets'
+      preLoaderRoute: typeof ShellSupportTicketsRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/platform/tenants/new': {
       id: '/_shell/platform/tenants/new'
       path: '/new'
@@ -1693,6 +2021,7 @@ const ShellPlatformTenantsRouteWithChildren =
   ShellPlatformTenantsRoute._addFileChildren(ShellPlatformTenantsRouteChildren)
 
 interface ShellRouteChildren {
+  ShellLifecycleRoute: typeof ShellLifecycleRoute
   ShellMembersRoute: typeof ShellMembersRouteWithChildren
   ShellIndexRoute: typeof ShellIndexRoute
   ShellAdminApiRoute: typeof ShellAdminApiRoute
@@ -1706,10 +2035,22 @@ interface ShellRouteChildren {
   ShellAdminSecurityRoute: typeof ShellAdminSecurityRoute
   ShellAdminServicesRoute: typeof ShellAdminServicesRoute
   ShellAdminUsersRoute: typeof ShellAdminUsersRoute
+  ShellAiBusinessIntelligenceRoute: typeof ShellAiBusinessIntelligenceRoute
+  ShellAiCoachRoute: typeof ShellAiCoachRoute
+  ShellAiComputerVisionRoute: typeof ShellAiComputerVisionRoute
+  ShellAiGroupTrackingRoute: typeof ShellAiGroupTrackingRoute
+  ShellAiLiveSessionsRoute: typeof ShellAiLiveSessionsRoute
+  ShellAiMlAdminRoute: typeof ShellAiMlAdminRoute
+  ShellAiTrainerCopilotRoute: typeof ShellAiTrainerCopilotRoute
   ShellAutomationApprovalsRoute: typeof ShellAutomationApprovalsRoute
   ShellAutomationNotificationsRoute: typeof ShellAutomationNotificationsRoute
   ShellAutomationRulesRoute: typeof ShellAutomationRulesRoute
   ShellAutomationWorkflowsRoute: typeof ShellAutomationWorkflowsRoute
+  ShellCoachingExerciseLibraryRoute: typeof ShellCoachingExerciseLibraryRoute
+  ShellCoachingNutritionCoachesRoute: typeof ShellCoachingNutritionCoachesRoute
+  ShellCoachingOnlineCoachesRoute: typeof ShellCoachingOnlineCoachesRoute
+  ShellCoachingProgramBuilderRoute: typeof ShellCoachingProgramBuilderRoute
+  ShellCoachingTrainersRoute: typeof ShellCoachingTrainersRoute
   ShellCrmActivitiesRoute: typeof ShellCrmActivitiesRoute
   ShellCrmAiCallingRoute: typeof ShellCrmAiCallingRoute
   ShellCrmCampaignsRoute: typeof ShellCrmCampaignsRoute
@@ -1753,6 +2094,7 @@ interface ShellRouteChildren {
   ShellOpsPilatesRoute: typeof ShellOpsPilatesRoute
   ShellOpsProgramsRoute: typeof ShellOpsProgramsRoute
   ShellOpsTrainersRoute: typeof ShellOpsTrainersRoute
+  ShellOverviewSectionRoute: typeof ShellOverviewSectionRoute
   ShellPerformanceAssessmentsRoute: typeof ShellPerformanceAssessmentsRoute
   ShellPerformanceIntelligenceRoute: typeof ShellPerformanceIntelligenceRoute
   ShellPerformanceMovementRoute: typeof ShellPerformanceMovementRoute
@@ -1770,9 +2112,13 @@ interface ShellRouteChildren {
   ShellReportsPerformanceRoute: typeof ShellReportsPerformanceRoute
   ShellReportsSalesRoute: typeof ShellReportsSalesRoute
   ShellReportsTrainersRoute: typeof ShellReportsTrainersRoute
+  ShellSupportEscalationsRoute: typeof ShellSupportEscalationsRoute
+  ShellSupportSlaRoute: typeof ShellSupportSlaRoute
+  ShellSupportTicketsRoute: typeof ShellSupportTicketsRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
+  ShellLifecycleRoute: ShellLifecycleRoute,
   ShellMembersRoute: ShellMembersRouteWithChildren,
   ShellIndexRoute: ShellIndexRoute,
   ShellAdminApiRoute: ShellAdminApiRoute,
@@ -1786,10 +2132,22 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellAdminSecurityRoute: ShellAdminSecurityRoute,
   ShellAdminServicesRoute: ShellAdminServicesRoute,
   ShellAdminUsersRoute: ShellAdminUsersRoute,
+  ShellAiBusinessIntelligenceRoute: ShellAiBusinessIntelligenceRoute,
+  ShellAiCoachRoute: ShellAiCoachRoute,
+  ShellAiComputerVisionRoute: ShellAiComputerVisionRoute,
+  ShellAiGroupTrackingRoute: ShellAiGroupTrackingRoute,
+  ShellAiLiveSessionsRoute: ShellAiLiveSessionsRoute,
+  ShellAiMlAdminRoute: ShellAiMlAdminRoute,
+  ShellAiTrainerCopilotRoute: ShellAiTrainerCopilotRoute,
   ShellAutomationApprovalsRoute: ShellAutomationApprovalsRoute,
   ShellAutomationNotificationsRoute: ShellAutomationNotificationsRoute,
   ShellAutomationRulesRoute: ShellAutomationRulesRoute,
   ShellAutomationWorkflowsRoute: ShellAutomationWorkflowsRoute,
+  ShellCoachingExerciseLibraryRoute: ShellCoachingExerciseLibraryRoute,
+  ShellCoachingNutritionCoachesRoute: ShellCoachingNutritionCoachesRoute,
+  ShellCoachingOnlineCoachesRoute: ShellCoachingOnlineCoachesRoute,
+  ShellCoachingProgramBuilderRoute: ShellCoachingProgramBuilderRoute,
+  ShellCoachingTrainersRoute: ShellCoachingTrainersRoute,
   ShellCrmActivitiesRoute: ShellCrmActivitiesRoute,
   ShellCrmAiCallingRoute: ShellCrmAiCallingRoute,
   ShellCrmCampaignsRoute: ShellCrmCampaignsRoute,
@@ -1833,6 +2191,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellOpsPilatesRoute: ShellOpsPilatesRoute,
   ShellOpsProgramsRoute: ShellOpsProgramsRoute,
   ShellOpsTrainersRoute: ShellOpsTrainersRoute,
+  ShellOverviewSectionRoute: ShellOverviewSectionRoute,
   ShellPerformanceAssessmentsRoute: ShellPerformanceAssessmentsRoute,
   ShellPerformanceIntelligenceRoute: ShellPerformanceIntelligenceRoute,
   ShellPerformanceMovementRoute: ShellPerformanceMovementRoute,
@@ -1850,6 +2209,9 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellReportsPerformanceRoute: ShellReportsPerformanceRoute,
   ShellReportsSalesRoute: ShellReportsSalesRoute,
   ShellReportsTrainersRoute: ShellReportsTrainersRoute,
+  ShellSupportEscalationsRoute: ShellSupportEscalationsRoute,
+  ShellSupportSlaRoute: ShellSupportSlaRoute,
+  ShellSupportTicketsRoute: ShellSupportTicketsRoute,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)

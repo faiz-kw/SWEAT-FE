@@ -63,6 +63,7 @@ export function DataTable<T>({
   searchKeys,
   filters = [],
   bulkActions = [],
+  onBulkAction,
   onRowClick,
   rowActions,
   toolbar,
@@ -77,6 +78,7 @@ export function DataTable<T>({
   searchKeys?: (row: T) => string;
   filters?: FilterDef<T>[];
   bulkActions?: BulkAction[];
+  onBulkAction?: (label: string, ids: string[]) => void;
   onRowClick?: (row: T) => void;
   rowActions?: (row: T) => React.ReactNode;
   toolbar?: React.ReactNode;
@@ -85,6 +87,7 @@ export function DataTable<T>({
   exportName?: string;
   dense?: boolean;
 }) {
+
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [active, setActive] = React.useState<Record<string, string>>({});
@@ -251,11 +254,15 @@ export function DataTable<T>({
               variant={a.destructive ? "destructive" : "outline"}
               className="h-7 bg-surface px-2 text-xs"
               onClick={() => {
-                toast.success(`${a.label} · ${selected.size} record(s)`, {
-                  description: "Queued as a bulk operation.",
-                });
+                const ids = [...selected];
+                if (onBulkAction) onBulkAction(a.label, ids);
+                else
+                  toast.success(`${a.label} · ${ids.length} record(s)`, {
+                    description: "Queued as a bulk operation.",
+                  });
                 setSelected(new Set());
               }}
+
             >
               {a.icon && <a.icon className="size-3.5" />}
               {a.label}
