@@ -198,9 +198,8 @@ export const NAV: NavSection[] = [
   },
 ];
 
-export const ALL_NAV_ITEMS: { section: string; label: string; to: string }[] = NAV.flatMap((s) =>
-  s.items.map((i) => ({ section: s.label, label: i.label, to: i.to })),
-);
+export const ALL_NAV_ITEMS: { section: string; sectionId: string; label: string; to: string }[] =
+  NAV.flatMap((s) => s.items.map((i) => ({ section: s.label, sectionId: s.id, label: i.label, to: i.to })));
 
 export function findNavItem(pathname: string) {
   return ALL_NAV_ITEMS.find((i) => i.to === pathname);

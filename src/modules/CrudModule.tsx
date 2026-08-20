@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { DataTable, type Column, type FilterDef } from "@/components/enterprise/DataTable";
 import { KpiTile, PageBody, PageHeader } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
-import { useAppContext } from "@/lib/app-context";
+import { useApp } from "@/lib/app-context";
 import { findNavItem } from "@/lib/nav";
 import { formatCell, plainValue, sortValue } from "@/modules/cells";
 import { RecordDetail } from "@/modules/RecordDetail";
@@ -31,7 +31,7 @@ const PRIMARY_COLUMNS = 8;
 export function CrudModule({ path }: { path: string }) {
   const def = moduleDef(path);
   const nav = findNavItem(path);
-  const { locationId } = useAppContext();
+  const { locationId } = useApp();
   const search = useModuleSearch();
   const go = useModuleNavigate();
 
