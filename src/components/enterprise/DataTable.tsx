@@ -254,11 +254,15 @@ export function DataTable<T>({
               variant={a.destructive ? "destructive" : "outline"}
               className="h-7 bg-surface px-2 text-xs"
               onClick={() => {
-                toast.success(`${a.label} · ${selected.size} record(s)`, {
-                  description: "Queued as a bulk operation.",
-                });
+                const ids = [...selected];
+                if (onBulkAction) onBulkAction(a.label, ids);
+                else
+                  toast.success(`${a.label} · ${ids.length} record(s)`, {
+                    description: "Queued as a bulk operation.",
+                  });
                 setSelected(new Set());
               }}
+
             >
               {a.icon && <a.icon className="size-3.5" />}
               {a.label}
