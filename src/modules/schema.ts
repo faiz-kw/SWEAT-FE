@@ -61,7 +61,7 @@ export function inferFields(rows: Row[]): Field[] {
         }
         if (LONG_TEXT.test(k)) return { key: k, label, type: "textarea" as const };
       }
-      return { key: k, label, type: "text" as const, required: k === "id" ? false : undefined };
+      return { key: k, label, type: "text" as const };
     });
 }
 
