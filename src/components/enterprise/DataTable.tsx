@@ -184,7 +184,7 @@ export function DataTable<T>({
               setPage(1);
             }}
           >
-            <SelectTrigger size="sm" className="h-8 w-auto min-w-[7.5rem] gap-1 text-[13px]">
+            <SelectTrigger className="h-8 w-auto min-w-[7.5rem] gap-1 text-[13px]">
               <SlidersHorizontal className="size-3.5 text-muted-foreground" />
               <SelectValue placeholder={f.label} />
             </SelectTrigger>
@@ -395,7 +395,7 @@ export function DataTable<T>({
               setPage(1);
             }}
           >
-            <SelectTrigger size="sm" className="h-7 w-[4.5rem] text-xs">
+            <SelectTrigger className="h-7 w-[4.5rem] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
