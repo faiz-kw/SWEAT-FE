@@ -9,7 +9,7 @@ export type ID = string;
 
 export interface Scoped {
   tenantId: ID;
-  locationId?: ID;
+  locationId?: ID | undefined;
 }
 
 export type TenantStatus = "Active" | "Trial" | "Suspended" | "Churned";
@@ -142,7 +142,7 @@ export interface Member extends Scoped {
   performanceScore: number;
   riskLevel: "Low" | "Medium" | "High";
   source: string;
-  fromLeadId?: ID;
+  fromLeadId?: ID | undefined;
 }
 
 export type LeadStage =
@@ -188,8 +188,8 @@ export type CallType =
 
 export interface Call extends Scoped {
   id: ID;
-  leadId?: ID;
-  memberId?: ID;
+  leadId?: ID | undefined;
+  memberId?: ID | undefined;
   contact: string;
   phone: string;
   callType: CallType;
