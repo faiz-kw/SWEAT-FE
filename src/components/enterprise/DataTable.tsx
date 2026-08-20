@@ -63,6 +63,7 @@ export function DataTable<T>({
   searchKeys,
   filters = [],
   bulkActions = [],
+  onBulkAction,
   onRowClick,
   rowActions,
   toolbar,
@@ -77,6 +78,7 @@ export function DataTable<T>({
   searchKeys?: (row: T) => string;
   filters?: FilterDef<T>[];
   bulkActions?: BulkAction[];
+  onBulkAction?: (label: string, ids: string[]) => void;
   onRowClick?: (row: T) => void;
   rowActions?: (row: T) => React.ReactNode;
   toolbar?: React.ReactNode;
@@ -85,6 +87,7 @@ export function DataTable<T>({
   exportName?: string;
   dense?: boolean;
 }) {
+
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [active, setActive] = React.useState<Record<string, string>>({});
