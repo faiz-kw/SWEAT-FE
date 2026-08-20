@@ -16,9 +16,10 @@ const eq = (key: string, ...values: unknown[]) => ({
   test: (r: Row) => values.includes(r[key]),
 });
 
-function preset(label: string, key: string, ...values: unknown[]): ModuleDef["preset"] {
-  return { label, ...eq(key, ...values) };
+function preset(label: string, key: string, ...values: unknown[]) {
+  return { label, test: (r: Row) => values.includes(r[key]) };
 }
+
 
 export const MODULES: Record<string, ModuleDef> = {
   /* CRM & Sales */
