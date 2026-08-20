@@ -20,7 +20,11 @@ export const NAV: NavSection[] = [
     id: "dashboard",
     label: "Dashboard",
     icon: "LayoutDashboard",
-    items: [{ label: "Executive Dashboard", to: "/" }],
+    items: [
+      { label: "Executive Dashboard", to: "/" },
+      { label: "Member Lifecycle", to: "/lifecycle" },
+      { label: "Module Overviews", to: "/overview/all" },
+    ],
   },
   {
     id: "crm",
@@ -78,6 +82,42 @@ export const NAV: NavSection[] = [
       { label: "Progress", to: "/performance/progress" },
       { label: "Recovery", to: "/performance/recovery" },
       { label: "Movement Intelligence", to: "/performance/movement" },
+    ],
+  },
+  {
+    id: "ai",
+    label: "AI & Intelligence",
+    icon: "Sparkles",
+    items: [
+      { label: "AI Coach", to: "/ai/coach" },
+      { label: "Trainer Copilot", to: "/ai/trainer-copilot" },
+      { label: "AI Business Intelligence", to: "/ai/business-intelligence" },
+      { label: "Computer Vision", to: "/ai/computer-vision" },
+      { label: "Live Session", to: "/ai/live-sessions" },
+      { label: "Group Class Tracking", to: "/ai/group-tracking" },
+      { label: "AI/ML Administrator", to: "/ai/ml-admin" },
+    ],
+  },
+  {
+    id: "coaching",
+    label: "Coaching",
+    icon: "Dumbbell",
+    items: [
+      { label: "Trainers", to: "/coaching/trainers" },
+      { label: "Online Coaches", to: "/coaching/online-coaches" },
+      { label: "Nutrition Coaches", to: "/coaching/nutrition-coaches" },
+      { label: "Exercise Library", to: "/coaching/exercise-library" },
+      { label: "Program Builder", to: "/coaching/program-builder" },
+    ],
+  },
+  {
+    id: "support",
+    label: "Support & Grievance",
+    icon: "LifeBuoy",
+    items: [
+      { label: "Tickets", to: "/support/tickets" },
+      { label: "Escalations", to: "/support/escalations" },
+      { label: "SLA Monitor", to: "/support/sla" },
     ],
   },
   {
