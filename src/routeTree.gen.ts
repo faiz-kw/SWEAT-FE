@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
 import { Route as ShellAdminApiRouteImport } from './routes/_shell/admin.api'
 import { Route as ShellAdminAuditLogsRouteImport } from './routes/_shell/admin.audit-logs'
@@ -99,239 +100,243 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ShellMembersRoute = ShellMembersRouteImport.update({
-  id: '/_shell/members',
-  path: '/members',
+const ShellRoute = ShellRouteImport.update({
+  id: '/_shell',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ShellMembersRoute = ShellMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminApiRoute = ShellAdminApiRouteImport.update({
-  id: '/_shell/admin/api',
+  id: '/admin/api',
   path: '/admin/api',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminAuditLogsRoute = ShellAdminAuditLogsRouteImport.update({
-  id: '/_shell/admin/audit-logs',
+  id: '/admin/audit-logs',
   path: '/admin/audit-logs',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminConfigurationRoute = ShellAdminConfigurationRouteImport.update({
-  id: '/_shell/admin/configuration',
+  id: '/admin/configuration',
   path: '/admin/configuration',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminFormsRoute = ShellAdminFormsRouteImport.update({
-  id: '/_shell/admin/forms',
+  id: '/admin/forms',
   path: '/admin/forms',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminIntegrationsRoute = ShellAdminIntegrationsRouteImport.update({
-  id: '/_shell/admin/integrations',
+  id: '/admin/integrations',
   path: '/admin/integrations',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminLocationsRoute = ShellAdminLocationsRouteImport.update({
-  id: '/_shell/admin/locations',
+  id: '/admin/locations',
   path: '/admin/locations',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminPermissionsRoute = ShellAdminPermissionsRouteImport.update({
-  id: '/_shell/admin/permissions',
+  id: '/admin/permissions',
   path: '/admin/permissions',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminRolesRoute = ShellAdminRolesRouteImport.update({
-  id: '/_shell/admin/roles',
+  id: '/admin/roles',
   path: '/admin/roles',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminSecurityRoute = ShellAdminSecurityRouteImport.update({
-  id: '/_shell/admin/security',
+  id: '/admin/security',
   path: '/admin/security',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminServicesRoute = ShellAdminServicesRouteImport.update({
-  id: '/_shell/admin/services',
+  id: '/admin/services',
   path: '/admin/services',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminUsersRoute = ShellAdminUsersRouteImport.update({
-  id: '/_shell/admin/users',
+  id: '/admin/users',
   path: '/admin/users',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAutomationApprovalsRoute =
   ShellAutomationApprovalsRouteImport.update({
-    id: '/_shell/automation/approvals',
+    id: '/automation/approvals',
     path: '/automation/approvals',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellAutomationNotificationsRoute =
   ShellAutomationNotificationsRouteImport.update({
-    id: '/_shell/automation/notifications',
+    id: '/automation/notifications',
     path: '/automation/notifications',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellAutomationRulesRoute = ShellAutomationRulesRouteImport.update({
-  id: '/_shell/automation/rules',
+  id: '/automation/rules',
   path: '/automation/rules',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellAutomationWorkflowsRoute =
   ShellAutomationWorkflowsRouteImport.update({
-    id: '/_shell/automation/workflows',
+    id: '/automation/workflows',
     path: '/automation/workflows',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellCrmActivitiesRoute = ShellCrmActivitiesRouteImport.update({
-  id: '/_shell/crm/activities',
+  id: '/crm/activities',
   path: '/crm/activities',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmAiCallingRoute = ShellCrmAiCallingRouteImport.update({
-  id: '/_shell/crm/ai-calling',
+  id: '/crm/ai-calling',
   path: '/crm/ai-calling',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmCampaignsRoute = ShellCrmCampaignsRouteImport.update({
-  id: '/_shell/crm/campaigns',
+  id: '/crm/campaigns',
   path: '/crm/campaigns',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmCouponsRoute = ShellCrmCouponsRouteImport.update({
-  id: '/_shell/crm/coupons',
+  id: '/crm/coupons',
   path: '/crm/coupons',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmFollowUpsRoute = ShellCrmFollowUpsRouteImport.update({
-  id: '/_shell/crm/follow-ups',
+  id: '/crm/follow-ups',
   path: '/crm/follow-ups',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmLeadsRoute = ShellCrmLeadsRouteImport.update({
-  id: '/_shell/crm/leads',
+  id: '/crm/leads',
   path: '/crm/leads',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmOffersRoute = ShellCrmOffersRouteImport.update({
-  id: '/_shell/crm/offers',
+  id: '/crm/offers',
   path: '/crm/offers',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmPipelineRoute = ShellCrmPipelineRouteImport.update({
-  id: '/_shell/crm/pipeline',
+  id: '/crm/pipeline',
   path: '/crm/pipeline',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmTrialsRoute = ShellCrmTrialsRouteImport.update({
-  id: '/_shell/crm/trials',
+  id: '/crm/trials',
   path: '/crm/trials',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCsAtRiskRoute = ShellCsAtRiskRouteImport.update({
-  id: '/_shell/cs/at-risk',
+  id: '/cs/at-risk',
   path: '/cs/at-risk',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCsFeedbackRoute = ShellCsFeedbackRouteImport.update({
-  id: '/_shell/cs/feedback',
+  id: '/cs/feedback',
   path: '/cs/feedback',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCsGrievancesRoute = ShellCsGrievancesRouteImport.update({
-  id: '/_shell/cs/grievances',
+  id: '/cs/grievances',
   path: '/cs/grievances',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCsMemberHealthRoute = ShellCsMemberHealthRouteImport.update({
-  id: '/_shell/cs/member-health',
+  id: '/cs/member-health',
   path: '/cs/member-health',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellCsRetentionRoute = ShellCsRetentionRouteImport.update({
-  id: '/_shell/cs/retention',
+  id: '/cs/retention',
   path: '/cs/retention',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceExpensesRoute = ShellFinanceExpensesRouteImport.update({
-  id: '/_shell/finance/expenses',
+  id: '/finance/expenses',
   path: '/finance/expenses',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceInvoicesRoute = ShellFinanceInvoicesRouteImport.update({
-  id: '/_shell/finance/invoices',
+  id: '/finance/invoices',
   path: '/finance/invoices',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceOutstandingRoute = ShellFinanceOutstandingRouteImport.update({
-  id: '/_shell/finance/outstanding',
+  id: '/finance/outstanding',
   path: '/finance/outstanding',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinancePaymentsRoute = ShellFinancePaymentsRouteImport.update({
-  id: '/_shell/finance/payments',
+  id: '/finance/payments',
   path: '/finance/payments',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceRefundsRoute = ShellFinanceRefundsRouteImport.update({
-  id: '/_shell/finance/refunds',
+  id: '/finance/refunds',
   path: '/finance/refunds',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceRevenueRoute = ShellFinanceRevenueRouteImport.update({
-  id: '/_shell/finance/revenue',
+  id: '/finance/revenue',
   path: '/finance/revenue',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventoryExpiryRoute = ShellInventoryExpiryRouteImport.update({
-  id: '/_shell/inventory/expiry',
+  id: '/inventory/expiry',
   path: '/inventory/expiry',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventoryMovementRoute = ShellInventoryMovementRouteImport.update({
-  id: '/_shell/inventory/movement',
+  id: '/inventory/movement',
   path: '/inventory/movement',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventoryProductsRoute = ShellInventoryProductsRouteImport.update({
-  id: '/_shell/inventory/products',
+  id: '/inventory/products',
   path: '/inventory/products',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventoryPurchasesRoute = ShellInventoryPurchasesRouteImport.update({
-  id: '/_shell/inventory/purchases',
+  id: '/inventory/purchases',
   path: '/inventory/purchases',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventoryStockRoute = ShellInventoryStockRouteImport.update({
-  id: '/_shell/inventory/stock',
+  id: '/inventory/stock',
   path: '/inventory/stock',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellInventorySuppliersRoute = ShellInventorySuppliersRouteImport.update({
-  id: '/_shell/inventory/suppliers',
+  id: '/inventory/suppliers',
   path: '/inventory/suppliers',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellMarketingAudiencesRoute = ShellMarketingAudiencesRouteImport.update({
-  id: '/_shell/marketing/audiences',
+  id: '/marketing/audiences',
   path: '/marketing/audiences',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellMarketingCampaignsRoute = ShellMarketingCampaignsRouteImport.update({
-  id: '/_shell/marketing/campaigns',
+  id: '/marketing/campaigns',
   path: '/marketing/campaigns',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellMarketingCommunicationRoute =
   ShellMarketingCommunicationRouteImport.update({
-    id: '/_shell/marketing/communication',
+    id: '/marketing/communication',
     path: '/marketing/communication',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellMarketingTemplatesRoute = ShellMarketingTemplatesRouteImport.update({
-  id: '/_shell/marketing/templates',
+  id: '/marketing/templates',
   path: '/marketing/templates',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellMembersAttendanceRoute = ShellMembersAttendanceRouteImport.update({
   id: '/attendance',
@@ -365,162 +370,162 @@ const ShellMembersTransfersRoute = ShellMembersTransfersRouteImport.update({
 } as any)
 const ShellNutritionConsultationsRoute =
   ShellNutritionConsultationsRouteImport.update({
-    id: '/_shell/nutrition/consultations',
+    id: '/nutrition/consultations',
     path: '/nutrition/consultations',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellNutritionDietPlansRoute = ShellNutritionDietPlansRouteImport.update({
-  id: '/_shell/nutrition/diet-plans',
+  id: '/nutrition/diet-plans',
   path: '/nutrition/diet-plans',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellNutritionFoodLogsRoute = ShellNutritionFoodLogsRouteImport.update({
-  id: '/_shell/nutrition/food-logs',
+  id: '/nutrition/food-logs',
   path: '/nutrition/food-logs',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellNutritionSupplementsRoute =
   ShellNutritionSupplementsRouteImport.update({
-    id: '/_shell/nutrition/supplements',
+    id: '/nutrition/supplements',
     path: '/nutrition/supplements',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellOpsAssessmentsRoute = ShellOpsAssessmentsRouteImport.update({
-  id: '/_shell/ops/assessments',
+  id: '/ops/assessments',
   path: '/ops/assessments',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsBookingsRoute = ShellOpsBookingsRouteImport.update({
-  id: '/_shell/ops/bookings',
+  id: '/ops/bookings',
   path: '/ops/bookings',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsCalendarRoute = ShellOpsCalendarRouteImport.update({
-  id: '/_shell/ops/calendar',
+  id: '/ops/calendar',
   path: '/ops/calendar',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsClassesRoute = ShellOpsClassesRouteImport.update({
-  id: '/_shell/ops/classes',
+  id: '/ops/classes',
   path: '/ops/classes',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsExercisesRoute = ShellOpsExercisesRouteImport.update({
-  id: '/_shell/ops/exercises',
+  id: '/ops/exercises',
   path: '/ops/exercises',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsPersonalTrainingRoute =
   ShellOpsPersonalTrainingRouteImport.update({
-    id: '/_shell/ops/personal-training',
+    id: '/ops/personal-training',
     path: '/ops/personal-training',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellOpsPilatesRoute = ShellOpsPilatesRouteImport.update({
-  id: '/_shell/ops/pilates',
+  id: '/ops/pilates',
   path: '/ops/pilates',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsProgramsRoute = ShellOpsProgramsRouteImport.update({
-  id: '/_shell/ops/programs',
+  id: '/ops/programs',
   path: '/ops/programs',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellOpsTrainersRoute = ShellOpsTrainersRouteImport.update({
-  id: '/_shell/ops/trainers',
+  id: '/ops/trainers',
   path: '/ops/trainers',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPerformanceAssessmentsRoute =
   ShellPerformanceAssessmentsRouteImport.update({
-    id: '/_shell/performance/assessments',
+    id: '/performance/assessments',
     path: '/performance/assessments',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPerformanceIntelligenceRoute =
   ShellPerformanceIntelligenceRouteImport.update({
-    id: '/_shell/performance/intelligence',
+    id: '/performance/intelligence',
     path: '/performance/intelligence',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPerformanceMovementRoute =
   ShellPerformanceMovementRouteImport.update({
-    id: '/_shell/performance/movement',
+    id: '/performance/movement',
     path: '/performance/movement',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPerformanceProgressRoute =
   ShellPerformanceProgressRouteImport.update({
-    id: '/_shell/performance/progress',
+    id: '/performance/progress',
     path: '/performance/progress',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPerformanceRecoveryRoute =
   ShellPerformanceRecoveryRouteImport.update({
-    id: '/_shell/performance/recovery',
+    id: '/performance/recovery',
     path: '/performance/recovery',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPlatformBillingRoute = ShellPlatformBillingRouteImport.update({
-  id: '/_shell/platform/billing',
+  id: '/platform/billing',
   path: '/platform/billing',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPlatformBrandingRoute = ShellPlatformBrandingRouteImport.update({
-  id: '/_shell/platform/branding',
+  id: '/platform/branding',
   path: '/platform/branding',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPlatformMarketplaceRoute =
   ShellPlatformMarketplaceRouteImport.update({
-    id: '/_shell/platform/marketplace',
+    id: '/platform/marketplace',
     path: '/platform/marketplace',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => ShellRoute,
   } as any)
 const ShellPlatformPlansRoute = ShellPlatformPlansRouteImport.update({
-  id: '/_shell/platform/plans',
+  id: '/platform/plans',
   path: '/platform/plans',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPlatformTenantsRoute = ShellPlatformTenantsRouteImport.update({
-  id: '/_shell/platform/tenants',
+  id: '/platform/tenants',
   path: '/platform/tenants',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPlatformUsageRoute = ShellPlatformUsageRouteImport.update({
-  id: '/_shell/platform/usage',
+  id: '/platform/usage',
   path: '/platform/usage',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsBusinessRoute = ShellReportsBusinessRouteImport.update({
-  id: '/_shell/reports/business',
+  id: '/reports/business',
   path: '/reports/business',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsFinancialRoute = ShellReportsFinancialRouteImport.update({
-  id: '/_shell/reports/financial',
+  id: '/reports/financial',
   path: '/reports/financial',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsMembersRoute = ShellReportsMembersRouteImport.update({
-  id: '/_shell/reports/members',
+  id: '/reports/members',
   path: '/reports/members',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsPerformanceRoute = ShellReportsPerformanceRouteImport.update({
-  id: '/_shell/reports/performance',
+  id: '/reports/performance',
   path: '/reports/performance',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsSalesRoute = ShellReportsSalesRouteImport.update({
-  id: '/_shell/reports/sales',
+  id: '/reports/sales',
   path: '/reports/sales',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellReportsTrainersRoute = ShellReportsTrainersRouteImport.update({
-  id: '/_shell/reports/trainers',
+  id: '/reports/trainers',
   path: '/reports/trainers',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
   id: '/new',
@@ -703,6 +708,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_shell': typeof ShellRouteWithChildren
   '/_shell/members': typeof ShellMembersRouteWithChildren
   '/_shell/admin/api': typeof ShellAdminApiRoute
   '/_shell/admin/audit-logs': typeof ShellAdminAuditLogsRoute
@@ -963,6 +969,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/_shell'
     | '/_shell/members'
     | '/_shell/admin/api'
     | '/_shell/admin/audit-logs'
@@ -1050,6 +1057,643 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ShellRoute: typeof ShellRouteWithChildren
+}
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_shell': {
+      id: '/_shell'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_shell/members': {
+      id: '/_shell/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof ShellMembersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/api': {
+      id: '/_shell/admin/api'
+      path: '/admin/api'
+      fullPath: '/admin/api'
+      preLoaderRoute: typeof ShellAdminApiRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/audit-logs': {
+      id: '/_shell/admin/audit-logs'
+      path: '/admin/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof ShellAdminAuditLogsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/configuration': {
+      id: '/_shell/admin/configuration'
+      path: '/admin/configuration'
+      fullPath: '/admin/configuration'
+      preLoaderRoute: typeof ShellAdminConfigurationRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/forms': {
+      id: '/_shell/admin/forms'
+      path: '/admin/forms'
+      fullPath: '/admin/forms'
+      preLoaderRoute: typeof ShellAdminFormsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/integrations': {
+      id: '/_shell/admin/integrations'
+      path: '/admin/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof ShellAdminIntegrationsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/locations': {
+      id: '/_shell/admin/locations'
+      path: '/admin/locations'
+      fullPath: '/admin/locations'
+      preLoaderRoute: typeof ShellAdminLocationsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/permissions': {
+      id: '/_shell/admin/permissions'
+      path: '/admin/permissions'
+      fullPath: '/admin/permissions'
+      preLoaderRoute: typeof ShellAdminPermissionsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/roles': {
+      id: '/_shell/admin/roles'
+      path: '/admin/roles'
+      fullPath: '/admin/roles'
+      preLoaderRoute: typeof ShellAdminRolesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/security': {
+      id: '/_shell/admin/security'
+      path: '/admin/security'
+      fullPath: '/admin/security'
+      preLoaderRoute: typeof ShellAdminSecurityRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/services': {
+      id: '/_shell/admin/services'
+      path: '/admin/services'
+      fullPath: '/admin/services'
+      preLoaderRoute: typeof ShellAdminServicesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/users': {
+      id: '/_shell/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof ShellAdminUsersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/automation/approvals': {
+      id: '/_shell/automation/approvals'
+      path: '/automation/approvals'
+      fullPath: '/automation/approvals'
+      preLoaderRoute: typeof ShellAutomationApprovalsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/automation/notifications': {
+      id: '/_shell/automation/notifications'
+      path: '/automation/notifications'
+      fullPath: '/automation/notifications'
+      preLoaderRoute: typeof ShellAutomationNotificationsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/automation/rules': {
+      id: '/_shell/automation/rules'
+      path: '/automation/rules'
+      fullPath: '/automation/rules'
+      preLoaderRoute: typeof ShellAutomationRulesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/automation/workflows': {
+      id: '/_shell/automation/workflows'
+      path: '/automation/workflows'
+      fullPath: '/automation/workflows'
+      preLoaderRoute: typeof ShellAutomationWorkflowsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/activities': {
+      id: '/_shell/crm/activities'
+      path: '/crm/activities'
+      fullPath: '/crm/activities'
+      preLoaderRoute: typeof ShellCrmActivitiesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/ai-calling': {
+      id: '/_shell/crm/ai-calling'
+      path: '/crm/ai-calling'
+      fullPath: '/crm/ai-calling'
+      preLoaderRoute: typeof ShellCrmAiCallingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/campaigns': {
+      id: '/_shell/crm/campaigns'
+      path: '/crm/campaigns'
+      fullPath: '/crm/campaigns'
+      preLoaderRoute: typeof ShellCrmCampaignsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/coupons': {
+      id: '/_shell/crm/coupons'
+      path: '/crm/coupons'
+      fullPath: '/crm/coupons'
+      preLoaderRoute: typeof ShellCrmCouponsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/follow-ups': {
+      id: '/_shell/crm/follow-ups'
+      path: '/crm/follow-ups'
+      fullPath: '/crm/follow-ups'
+      preLoaderRoute: typeof ShellCrmFollowUpsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/leads': {
+      id: '/_shell/crm/leads'
+      path: '/crm/leads'
+      fullPath: '/crm/leads'
+      preLoaderRoute: typeof ShellCrmLeadsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/offers': {
+      id: '/_shell/crm/offers'
+      path: '/crm/offers'
+      fullPath: '/crm/offers'
+      preLoaderRoute: typeof ShellCrmOffersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/pipeline': {
+      id: '/_shell/crm/pipeline'
+      path: '/crm/pipeline'
+      fullPath: '/crm/pipeline'
+      preLoaderRoute: typeof ShellCrmPipelineRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/trials': {
+      id: '/_shell/crm/trials'
+      path: '/crm/trials'
+      fullPath: '/crm/trials'
+      preLoaderRoute: typeof ShellCrmTrialsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/cs/at-risk': {
+      id: '/_shell/cs/at-risk'
+      path: '/cs/at-risk'
+      fullPath: '/cs/at-risk'
+      preLoaderRoute: typeof ShellCsAtRiskRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/cs/feedback': {
+      id: '/_shell/cs/feedback'
+      path: '/cs/feedback'
+      fullPath: '/cs/feedback'
+      preLoaderRoute: typeof ShellCsFeedbackRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/cs/grievances': {
+      id: '/_shell/cs/grievances'
+      path: '/cs/grievances'
+      fullPath: '/cs/grievances'
+      preLoaderRoute: typeof ShellCsGrievancesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/cs/member-health': {
+      id: '/_shell/cs/member-health'
+      path: '/cs/member-health'
+      fullPath: '/cs/member-health'
+      preLoaderRoute: typeof ShellCsMemberHealthRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/cs/retention': {
+      id: '/_shell/cs/retention'
+      path: '/cs/retention'
+      fullPath: '/cs/retention'
+      preLoaderRoute: typeof ShellCsRetentionRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/expenses': {
+      id: '/_shell/finance/expenses'
+      path: '/finance/expenses'
+      fullPath: '/finance/expenses'
+      preLoaderRoute: typeof ShellFinanceExpensesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/invoices': {
+      id: '/_shell/finance/invoices'
+      path: '/finance/invoices'
+      fullPath: '/finance/invoices'
+      preLoaderRoute: typeof ShellFinanceInvoicesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/outstanding': {
+      id: '/_shell/finance/outstanding'
+      path: '/finance/outstanding'
+      fullPath: '/finance/outstanding'
+      preLoaderRoute: typeof ShellFinanceOutstandingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/payments': {
+      id: '/_shell/finance/payments'
+      path: '/finance/payments'
+      fullPath: '/finance/payments'
+      preLoaderRoute: typeof ShellFinancePaymentsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/refunds': {
+      id: '/_shell/finance/refunds'
+      path: '/finance/refunds'
+      fullPath: '/finance/refunds'
+      preLoaderRoute: typeof ShellFinanceRefundsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/revenue': {
+      id: '/_shell/finance/revenue'
+      path: '/finance/revenue'
+      fullPath: '/finance/revenue'
+      preLoaderRoute: typeof ShellFinanceRevenueRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/expiry': {
+      id: '/_shell/inventory/expiry'
+      path: '/inventory/expiry'
+      fullPath: '/inventory/expiry'
+      preLoaderRoute: typeof ShellInventoryExpiryRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/movement': {
+      id: '/_shell/inventory/movement'
+      path: '/inventory/movement'
+      fullPath: '/inventory/movement'
+      preLoaderRoute: typeof ShellInventoryMovementRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/products': {
+      id: '/_shell/inventory/products'
+      path: '/inventory/products'
+      fullPath: '/inventory/products'
+      preLoaderRoute: typeof ShellInventoryProductsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/purchases': {
+      id: '/_shell/inventory/purchases'
+      path: '/inventory/purchases'
+      fullPath: '/inventory/purchases'
+      preLoaderRoute: typeof ShellInventoryPurchasesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/stock': {
+      id: '/_shell/inventory/stock'
+      path: '/inventory/stock'
+      fullPath: '/inventory/stock'
+      preLoaderRoute: typeof ShellInventoryStockRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventory/suppliers': {
+      id: '/_shell/inventory/suppliers'
+      path: '/inventory/suppliers'
+      fullPath: '/inventory/suppliers'
+      preLoaderRoute: typeof ShellInventorySuppliersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/marketing/audiences': {
+      id: '/_shell/marketing/audiences'
+      path: '/marketing/audiences'
+      fullPath: '/marketing/audiences'
+      preLoaderRoute: typeof ShellMarketingAudiencesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/marketing/campaigns': {
+      id: '/_shell/marketing/campaigns'
+      path: '/marketing/campaigns'
+      fullPath: '/marketing/campaigns'
+      preLoaderRoute: typeof ShellMarketingCampaignsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/marketing/communication': {
+      id: '/_shell/marketing/communication'
+      path: '/marketing/communication'
+      fullPath: '/marketing/communication'
+      preLoaderRoute: typeof ShellMarketingCommunicationRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/marketing/templates': {
+      id: '/_shell/marketing/templates'
+      path: '/marketing/templates'
+      fullPath: '/marketing/templates'
+      preLoaderRoute: typeof ShellMarketingTemplatesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/members/attendance': {
+      id: '/_shell/members/attendance'
+      path: '/attendance'
+      fullPath: '/members/attendance'
+      preLoaderRoute: typeof ShellMembersAttendanceRouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/members/client-360': {
+      id: '/_shell/members/client-360'
+      path: '/client-360'
+      fullPath: '/members/client-360'
+      preLoaderRoute: typeof ShellMembersClient360RouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/members/freeze': {
+      id: '/_shell/members/freeze'
+      path: '/freeze'
+      fullPath: '/members/freeze'
+      preLoaderRoute: typeof ShellMembersFreezeRouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/members/memberships': {
+      id: '/_shell/members/memberships'
+      path: '/memberships'
+      fullPath: '/members/memberships'
+      preLoaderRoute: typeof ShellMembersMembershipsRouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/members/renewals': {
+      id: '/_shell/members/renewals'
+      path: '/renewals'
+      fullPath: '/members/renewals'
+      preLoaderRoute: typeof ShellMembersRenewalsRouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/members/transfers': {
+      id: '/_shell/members/transfers'
+      path: '/transfers'
+      fullPath: '/members/transfers'
+      preLoaderRoute: typeof ShellMembersTransfersRouteImport
+      parentRoute: typeof ShellMembersRoute
+    }
+    '/_shell/nutrition/consultations': {
+      id: '/_shell/nutrition/consultations'
+      path: '/nutrition/consultations'
+      fullPath: '/nutrition/consultations'
+      preLoaderRoute: typeof ShellNutritionConsultationsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/nutrition/diet-plans': {
+      id: '/_shell/nutrition/diet-plans'
+      path: '/nutrition/diet-plans'
+      fullPath: '/nutrition/diet-plans'
+      preLoaderRoute: typeof ShellNutritionDietPlansRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/nutrition/food-logs': {
+      id: '/_shell/nutrition/food-logs'
+      path: '/nutrition/food-logs'
+      fullPath: '/nutrition/food-logs'
+      preLoaderRoute: typeof ShellNutritionFoodLogsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/nutrition/supplements': {
+      id: '/_shell/nutrition/supplements'
+      path: '/nutrition/supplements'
+      fullPath: '/nutrition/supplements'
+      preLoaderRoute: typeof ShellNutritionSupplementsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/assessments': {
+      id: '/_shell/ops/assessments'
+      path: '/ops/assessments'
+      fullPath: '/ops/assessments'
+      preLoaderRoute: typeof ShellOpsAssessmentsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/bookings': {
+      id: '/_shell/ops/bookings'
+      path: '/ops/bookings'
+      fullPath: '/ops/bookings'
+      preLoaderRoute: typeof ShellOpsBookingsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/calendar': {
+      id: '/_shell/ops/calendar'
+      path: '/ops/calendar'
+      fullPath: '/ops/calendar'
+      preLoaderRoute: typeof ShellOpsCalendarRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/classes': {
+      id: '/_shell/ops/classes'
+      path: '/ops/classes'
+      fullPath: '/ops/classes'
+      preLoaderRoute: typeof ShellOpsClassesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/exercises': {
+      id: '/_shell/ops/exercises'
+      path: '/ops/exercises'
+      fullPath: '/ops/exercises'
+      preLoaderRoute: typeof ShellOpsExercisesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/personal-training': {
+      id: '/_shell/ops/personal-training'
+      path: '/ops/personal-training'
+      fullPath: '/ops/personal-training'
+      preLoaderRoute: typeof ShellOpsPersonalTrainingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/pilates': {
+      id: '/_shell/ops/pilates'
+      path: '/ops/pilates'
+      fullPath: '/ops/pilates'
+      preLoaderRoute: typeof ShellOpsPilatesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/programs': {
+      id: '/_shell/ops/programs'
+      path: '/ops/programs'
+      fullPath: '/ops/programs'
+      preLoaderRoute: typeof ShellOpsProgramsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ops/trainers': {
+      id: '/_shell/ops/trainers'
+      path: '/ops/trainers'
+      fullPath: '/ops/trainers'
+      preLoaderRoute: typeof ShellOpsTrainersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/performance/assessments': {
+      id: '/_shell/performance/assessments'
+      path: '/performance/assessments'
+      fullPath: '/performance/assessments'
+      preLoaderRoute: typeof ShellPerformanceAssessmentsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/performance/intelligence': {
+      id: '/_shell/performance/intelligence'
+      path: '/performance/intelligence'
+      fullPath: '/performance/intelligence'
+      preLoaderRoute: typeof ShellPerformanceIntelligenceRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/performance/movement': {
+      id: '/_shell/performance/movement'
+      path: '/performance/movement'
+      fullPath: '/performance/movement'
+      preLoaderRoute: typeof ShellPerformanceMovementRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/performance/progress': {
+      id: '/_shell/performance/progress'
+      path: '/performance/progress'
+      fullPath: '/performance/progress'
+      preLoaderRoute: typeof ShellPerformanceProgressRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/performance/recovery': {
+      id: '/_shell/performance/recovery'
+      path: '/performance/recovery'
+      fullPath: '/performance/recovery'
+      preLoaderRoute: typeof ShellPerformanceRecoveryRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/billing': {
+      id: '/_shell/platform/billing'
+      path: '/platform/billing'
+      fullPath: '/platform/billing'
+      preLoaderRoute: typeof ShellPlatformBillingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/branding': {
+      id: '/_shell/platform/branding'
+      path: '/platform/branding'
+      fullPath: '/platform/branding'
+      preLoaderRoute: typeof ShellPlatformBrandingRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/marketplace': {
+      id: '/_shell/platform/marketplace'
+      path: '/platform/marketplace'
+      fullPath: '/platform/marketplace'
+      preLoaderRoute: typeof ShellPlatformMarketplaceRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/plans': {
+      id: '/_shell/platform/plans'
+      path: '/platform/plans'
+      fullPath: '/platform/plans'
+      preLoaderRoute: typeof ShellPlatformPlansRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/tenants': {
+      id: '/_shell/platform/tenants'
+      path: '/platform/tenants'
+      fullPath: '/platform/tenants'
+      preLoaderRoute: typeof ShellPlatformTenantsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/usage': {
+      id: '/_shell/platform/usage'
+      path: '/platform/usage'
+      fullPath: '/platform/usage'
+      preLoaderRoute: typeof ShellPlatformUsageRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/business': {
+      id: '/_shell/reports/business'
+      path: '/reports/business'
+      fullPath: '/reports/business'
+      preLoaderRoute: typeof ShellReportsBusinessRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/financial': {
+      id: '/_shell/reports/financial'
+      path: '/reports/financial'
+      fullPath: '/reports/financial'
+      preLoaderRoute: typeof ShellReportsFinancialRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/members': {
+      id: '/_shell/reports/members'
+      path: '/reports/members'
+      fullPath: '/reports/members'
+      preLoaderRoute: typeof ShellReportsMembersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/performance': {
+      id: '/_shell/reports/performance'
+      path: '/reports/performance'
+      fullPath: '/reports/performance'
+      preLoaderRoute: typeof ShellReportsPerformanceRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/sales': {
+      id: '/_shell/reports/sales'
+      path: '/reports/sales'
+      fullPath: '/reports/sales'
+      preLoaderRoute: typeof ShellReportsSalesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/reports/trainers': {
+      id: '/_shell/reports/trainers'
+      path: '/reports/trainers'
+      fullPath: '/reports/trainers'
+      preLoaderRoute: typeof ShellReportsTrainersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/platform/tenants/new': {
+      id: '/_shell/platform/tenants/new'
+      path: '/new'
+      fullPath: '/platform/tenants/new'
+      preLoaderRoute: typeof ShellPlatformTenantsNewRouteImport
+      parentRoute: typeof ShellPlatformTenantsRoute
+    }
+  }
+}
+
+interface ShellMembersRouteChildren {
+  ShellMembersAttendanceRoute: typeof ShellMembersAttendanceRoute
+  ShellMembersClient360Route: typeof ShellMembersClient360Route
+  ShellMembersFreezeRoute: typeof ShellMembersFreezeRoute
+  ShellMembersMembershipsRoute: typeof ShellMembersMembershipsRoute
+  ShellMembersRenewalsRoute: typeof ShellMembersRenewalsRoute
+  ShellMembersTransfersRoute: typeof ShellMembersTransfersRoute
+}
+
+const ShellMembersRouteChildren: ShellMembersRouteChildren = {
+  ShellMembersAttendanceRoute: ShellMembersAttendanceRoute,
+  ShellMembersClient360Route: ShellMembersClient360Route,
+  ShellMembersFreezeRoute: ShellMembersFreezeRoute,
+  ShellMembersMembershipsRoute: ShellMembersMembershipsRoute,
+  ShellMembersRenewalsRoute: ShellMembersRenewalsRoute,
+  ShellMembersTransfersRoute: ShellMembersTransfersRoute,
+}
+
+const ShellMembersRouteWithChildren = ShellMembersRoute._addFileChildren(
+  ShellMembersRouteChildren,
+)
+
+interface ShellPlatformTenantsRouteChildren {
+  ShellPlatformTenantsNewRoute: typeof ShellPlatformTenantsNewRoute
+}
+
+const ShellPlatformTenantsRouteChildren: ShellPlatformTenantsRouteChildren = {
+  ShellPlatformTenantsNewRoute: ShellPlatformTenantsNewRoute,
+}
+
+const ShellPlatformTenantsRouteWithChildren =
+  ShellPlatformTenantsRoute._addFileChildren(ShellPlatformTenantsRouteChildren)
+
+interface ShellRouteChildren {
   ShellMembersRoute: typeof ShellMembersRouteWithChildren
   ShellAdminApiRoute: typeof ShellAdminApiRoute
   ShellAdminAuditLogsRoute: typeof ShellAdminAuditLogsRoute
@@ -1128,634 +1772,7 @@ export interface RootRouteChildren {
   ShellReportsTrainersRoute: typeof ShellReportsTrainersRoute
 }
 
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/members': {
-      id: '/_shell/members'
-      path: '/members'
-      fullPath: '/members'
-      preLoaderRoute: typeof ShellMembersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/api': {
-      id: '/_shell/admin/api'
-      path: '/admin/api'
-      fullPath: '/admin/api'
-      preLoaderRoute: typeof ShellAdminApiRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/audit-logs': {
-      id: '/_shell/admin/audit-logs'
-      path: '/admin/audit-logs'
-      fullPath: '/admin/audit-logs'
-      preLoaderRoute: typeof ShellAdminAuditLogsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/configuration': {
-      id: '/_shell/admin/configuration'
-      path: '/admin/configuration'
-      fullPath: '/admin/configuration'
-      preLoaderRoute: typeof ShellAdminConfigurationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/forms': {
-      id: '/_shell/admin/forms'
-      path: '/admin/forms'
-      fullPath: '/admin/forms'
-      preLoaderRoute: typeof ShellAdminFormsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/integrations': {
-      id: '/_shell/admin/integrations'
-      path: '/admin/integrations'
-      fullPath: '/admin/integrations'
-      preLoaderRoute: typeof ShellAdminIntegrationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/locations': {
-      id: '/_shell/admin/locations'
-      path: '/admin/locations'
-      fullPath: '/admin/locations'
-      preLoaderRoute: typeof ShellAdminLocationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/permissions': {
-      id: '/_shell/admin/permissions'
-      path: '/admin/permissions'
-      fullPath: '/admin/permissions'
-      preLoaderRoute: typeof ShellAdminPermissionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/roles': {
-      id: '/_shell/admin/roles'
-      path: '/admin/roles'
-      fullPath: '/admin/roles'
-      preLoaderRoute: typeof ShellAdminRolesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/security': {
-      id: '/_shell/admin/security'
-      path: '/admin/security'
-      fullPath: '/admin/security'
-      preLoaderRoute: typeof ShellAdminSecurityRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/services': {
-      id: '/_shell/admin/services'
-      path: '/admin/services'
-      fullPath: '/admin/services'
-      preLoaderRoute: typeof ShellAdminServicesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/admin/users': {
-      id: '/_shell/admin/users'
-      path: '/admin/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof ShellAdminUsersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/automation/approvals': {
-      id: '/_shell/automation/approvals'
-      path: '/automation/approvals'
-      fullPath: '/automation/approvals'
-      preLoaderRoute: typeof ShellAutomationApprovalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/automation/notifications': {
-      id: '/_shell/automation/notifications'
-      path: '/automation/notifications'
-      fullPath: '/automation/notifications'
-      preLoaderRoute: typeof ShellAutomationNotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/automation/rules': {
-      id: '/_shell/automation/rules'
-      path: '/automation/rules'
-      fullPath: '/automation/rules'
-      preLoaderRoute: typeof ShellAutomationRulesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/automation/workflows': {
-      id: '/_shell/automation/workflows'
-      path: '/automation/workflows'
-      fullPath: '/automation/workflows'
-      preLoaderRoute: typeof ShellAutomationWorkflowsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/activities': {
-      id: '/_shell/crm/activities'
-      path: '/crm/activities'
-      fullPath: '/crm/activities'
-      preLoaderRoute: typeof ShellCrmActivitiesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/ai-calling': {
-      id: '/_shell/crm/ai-calling'
-      path: '/crm/ai-calling'
-      fullPath: '/crm/ai-calling'
-      preLoaderRoute: typeof ShellCrmAiCallingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/campaigns': {
-      id: '/_shell/crm/campaigns'
-      path: '/crm/campaigns'
-      fullPath: '/crm/campaigns'
-      preLoaderRoute: typeof ShellCrmCampaignsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/coupons': {
-      id: '/_shell/crm/coupons'
-      path: '/crm/coupons'
-      fullPath: '/crm/coupons'
-      preLoaderRoute: typeof ShellCrmCouponsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/follow-ups': {
-      id: '/_shell/crm/follow-ups'
-      path: '/crm/follow-ups'
-      fullPath: '/crm/follow-ups'
-      preLoaderRoute: typeof ShellCrmFollowUpsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/leads': {
-      id: '/_shell/crm/leads'
-      path: '/crm/leads'
-      fullPath: '/crm/leads'
-      preLoaderRoute: typeof ShellCrmLeadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/offers': {
-      id: '/_shell/crm/offers'
-      path: '/crm/offers'
-      fullPath: '/crm/offers'
-      preLoaderRoute: typeof ShellCrmOffersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/pipeline': {
-      id: '/_shell/crm/pipeline'
-      path: '/crm/pipeline'
-      fullPath: '/crm/pipeline'
-      preLoaderRoute: typeof ShellCrmPipelineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/crm/trials': {
-      id: '/_shell/crm/trials'
-      path: '/crm/trials'
-      fullPath: '/crm/trials'
-      preLoaderRoute: typeof ShellCrmTrialsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/cs/at-risk': {
-      id: '/_shell/cs/at-risk'
-      path: '/cs/at-risk'
-      fullPath: '/cs/at-risk'
-      preLoaderRoute: typeof ShellCsAtRiskRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/cs/feedback': {
-      id: '/_shell/cs/feedback'
-      path: '/cs/feedback'
-      fullPath: '/cs/feedback'
-      preLoaderRoute: typeof ShellCsFeedbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/cs/grievances': {
-      id: '/_shell/cs/grievances'
-      path: '/cs/grievances'
-      fullPath: '/cs/grievances'
-      preLoaderRoute: typeof ShellCsGrievancesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/cs/member-health': {
-      id: '/_shell/cs/member-health'
-      path: '/cs/member-health'
-      fullPath: '/cs/member-health'
-      preLoaderRoute: typeof ShellCsMemberHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/cs/retention': {
-      id: '/_shell/cs/retention'
-      path: '/cs/retention'
-      fullPath: '/cs/retention'
-      preLoaderRoute: typeof ShellCsRetentionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/expenses': {
-      id: '/_shell/finance/expenses'
-      path: '/finance/expenses'
-      fullPath: '/finance/expenses'
-      preLoaderRoute: typeof ShellFinanceExpensesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/invoices': {
-      id: '/_shell/finance/invoices'
-      path: '/finance/invoices'
-      fullPath: '/finance/invoices'
-      preLoaderRoute: typeof ShellFinanceInvoicesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/outstanding': {
-      id: '/_shell/finance/outstanding'
-      path: '/finance/outstanding'
-      fullPath: '/finance/outstanding'
-      preLoaderRoute: typeof ShellFinanceOutstandingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/payments': {
-      id: '/_shell/finance/payments'
-      path: '/finance/payments'
-      fullPath: '/finance/payments'
-      preLoaderRoute: typeof ShellFinancePaymentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/refunds': {
-      id: '/_shell/finance/refunds'
-      path: '/finance/refunds'
-      fullPath: '/finance/refunds'
-      preLoaderRoute: typeof ShellFinanceRefundsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/finance/revenue': {
-      id: '/_shell/finance/revenue'
-      path: '/finance/revenue'
-      fullPath: '/finance/revenue'
-      preLoaderRoute: typeof ShellFinanceRevenueRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/expiry': {
-      id: '/_shell/inventory/expiry'
-      path: '/inventory/expiry'
-      fullPath: '/inventory/expiry'
-      preLoaderRoute: typeof ShellInventoryExpiryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/movement': {
-      id: '/_shell/inventory/movement'
-      path: '/inventory/movement'
-      fullPath: '/inventory/movement'
-      preLoaderRoute: typeof ShellInventoryMovementRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/products': {
-      id: '/_shell/inventory/products'
-      path: '/inventory/products'
-      fullPath: '/inventory/products'
-      preLoaderRoute: typeof ShellInventoryProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/purchases': {
-      id: '/_shell/inventory/purchases'
-      path: '/inventory/purchases'
-      fullPath: '/inventory/purchases'
-      preLoaderRoute: typeof ShellInventoryPurchasesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/stock': {
-      id: '/_shell/inventory/stock'
-      path: '/inventory/stock'
-      fullPath: '/inventory/stock'
-      preLoaderRoute: typeof ShellInventoryStockRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/inventory/suppliers': {
-      id: '/_shell/inventory/suppliers'
-      path: '/inventory/suppliers'
-      fullPath: '/inventory/suppliers'
-      preLoaderRoute: typeof ShellInventorySuppliersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/marketing/audiences': {
-      id: '/_shell/marketing/audiences'
-      path: '/marketing/audiences'
-      fullPath: '/marketing/audiences'
-      preLoaderRoute: typeof ShellMarketingAudiencesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/marketing/campaigns': {
-      id: '/_shell/marketing/campaigns'
-      path: '/marketing/campaigns'
-      fullPath: '/marketing/campaigns'
-      preLoaderRoute: typeof ShellMarketingCampaignsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/marketing/communication': {
-      id: '/_shell/marketing/communication'
-      path: '/marketing/communication'
-      fullPath: '/marketing/communication'
-      preLoaderRoute: typeof ShellMarketingCommunicationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/marketing/templates': {
-      id: '/_shell/marketing/templates'
-      path: '/marketing/templates'
-      fullPath: '/marketing/templates'
-      preLoaderRoute: typeof ShellMarketingTemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/members/attendance': {
-      id: '/_shell/members/attendance'
-      path: '/attendance'
-      fullPath: '/members/attendance'
-      preLoaderRoute: typeof ShellMembersAttendanceRouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/members/client-360': {
-      id: '/_shell/members/client-360'
-      path: '/client-360'
-      fullPath: '/members/client-360'
-      preLoaderRoute: typeof ShellMembersClient360RouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/members/freeze': {
-      id: '/_shell/members/freeze'
-      path: '/freeze'
-      fullPath: '/members/freeze'
-      preLoaderRoute: typeof ShellMembersFreezeRouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/members/memberships': {
-      id: '/_shell/members/memberships'
-      path: '/memberships'
-      fullPath: '/members/memberships'
-      preLoaderRoute: typeof ShellMembersMembershipsRouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/members/renewals': {
-      id: '/_shell/members/renewals'
-      path: '/renewals'
-      fullPath: '/members/renewals'
-      preLoaderRoute: typeof ShellMembersRenewalsRouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/members/transfers': {
-      id: '/_shell/members/transfers'
-      path: '/transfers'
-      fullPath: '/members/transfers'
-      preLoaderRoute: typeof ShellMembersTransfersRouteImport
-      parentRoute: typeof ShellMembersRoute
-    }
-    '/_shell/nutrition/consultations': {
-      id: '/_shell/nutrition/consultations'
-      path: '/nutrition/consultations'
-      fullPath: '/nutrition/consultations'
-      preLoaderRoute: typeof ShellNutritionConsultationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/nutrition/diet-plans': {
-      id: '/_shell/nutrition/diet-plans'
-      path: '/nutrition/diet-plans'
-      fullPath: '/nutrition/diet-plans'
-      preLoaderRoute: typeof ShellNutritionDietPlansRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/nutrition/food-logs': {
-      id: '/_shell/nutrition/food-logs'
-      path: '/nutrition/food-logs'
-      fullPath: '/nutrition/food-logs'
-      preLoaderRoute: typeof ShellNutritionFoodLogsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/nutrition/supplements': {
-      id: '/_shell/nutrition/supplements'
-      path: '/nutrition/supplements'
-      fullPath: '/nutrition/supplements'
-      preLoaderRoute: typeof ShellNutritionSupplementsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/assessments': {
-      id: '/_shell/ops/assessments'
-      path: '/ops/assessments'
-      fullPath: '/ops/assessments'
-      preLoaderRoute: typeof ShellOpsAssessmentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/bookings': {
-      id: '/_shell/ops/bookings'
-      path: '/ops/bookings'
-      fullPath: '/ops/bookings'
-      preLoaderRoute: typeof ShellOpsBookingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/calendar': {
-      id: '/_shell/ops/calendar'
-      path: '/ops/calendar'
-      fullPath: '/ops/calendar'
-      preLoaderRoute: typeof ShellOpsCalendarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/classes': {
-      id: '/_shell/ops/classes'
-      path: '/ops/classes'
-      fullPath: '/ops/classes'
-      preLoaderRoute: typeof ShellOpsClassesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/exercises': {
-      id: '/_shell/ops/exercises'
-      path: '/ops/exercises'
-      fullPath: '/ops/exercises'
-      preLoaderRoute: typeof ShellOpsExercisesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/personal-training': {
-      id: '/_shell/ops/personal-training'
-      path: '/ops/personal-training'
-      fullPath: '/ops/personal-training'
-      preLoaderRoute: typeof ShellOpsPersonalTrainingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/pilates': {
-      id: '/_shell/ops/pilates'
-      path: '/ops/pilates'
-      fullPath: '/ops/pilates'
-      preLoaderRoute: typeof ShellOpsPilatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/programs': {
-      id: '/_shell/ops/programs'
-      path: '/ops/programs'
-      fullPath: '/ops/programs'
-      preLoaderRoute: typeof ShellOpsProgramsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/ops/trainers': {
-      id: '/_shell/ops/trainers'
-      path: '/ops/trainers'
-      fullPath: '/ops/trainers'
-      preLoaderRoute: typeof ShellOpsTrainersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/performance/assessments': {
-      id: '/_shell/performance/assessments'
-      path: '/performance/assessments'
-      fullPath: '/performance/assessments'
-      preLoaderRoute: typeof ShellPerformanceAssessmentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/performance/intelligence': {
-      id: '/_shell/performance/intelligence'
-      path: '/performance/intelligence'
-      fullPath: '/performance/intelligence'
-      preLoaderRoute: typeof ShellPerformanceIntelligenceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/performance/movement': {
-      id: '/_shell/performance/movement'
-      path: '/performance/movement'
-      fullPath: '/performance/movement'
-      preLoaderRoute: typeof ShellPerformanceMovementRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/performance/progress': {
-      id: '/_shell/performance/progress'
-      path: '/performance/progress'
-      fullPath: '/performance/progress'
-      preLoaderRoute: typeof ShellPerformanceProgressRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/performance/recovery': {
-      id: '/_shell/performance/recovery'
-      path: '/performance/recovery'
-      fullPath: '/performance/recovery'
-      preLoaderRoute: typeof ShellPerformanceRecoveryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/billing': {
-      id: '/_shell/platform/billing'
-      path: '/platform/billing'
-      fullPath: '/platform/billing'
-      preLoaderRoute: typeof ShellPlatformBillingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/branding': {
-      id: '/_shell/platform/branding'
-      path: '/platform/branding'
-      fullPath: '/platform/branding'
-      preLoaderRoute: typeof ShellPlatformBrandingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/marketplace': {
-      id: '/_shell/platform/marketplace'
-      path: '/platform/marketplace'
-      fullPath: '/platform/marketplace'
-      preLoaderRoute: typeof ShellPlatformMarketplaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/plans': {
-      id: '/_shell/platform/plans'
-      path: '/platform/plans'
-      fullPath: '/platform/plans'
-      preLoaderRoute: typeof ShellPlatformPlansRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/tenants': {
-      id: '/_shell/platform/tenants'
-      path: '/platform/tenants'
-      fullPath: '/platform/tenants'
-      preLoaderRoute: typeof ShellPlatformTenantsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/usage': {
-      id: '/_shell/platform/usage'
-      path: '/platform/usage'
-      fullPath: '/platform/usage'
-      preLoaderRoute: typeof ShellPlatformUsageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/business': {
-      id: '/_shell/reports/business'
-      path: '/reports/business'
-      fullPath: '/reports/business'
-      preLoaderRoute: typeof ShellReportsBusinessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/financial': {
-      id: '/_shell/reports/financial'
-      path: '/reports/financial'
-      fullPath: '/reports/financial'
-      preLoaderRoute: typeof ShellReportsFinancialRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/members': {
-      id: '/_shell/reports/members'
-      path: '/reports/members'
-      fullPath: '/reports/members'
-      preLoaderRoute: typeof ShellReportsMembersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/performance': {
-      id: '/_shell/reports/performance'
-      path: '/reports/performance'
-      fullPath: '/reports/performance'
-      preLoaderRoute: typeof ShellReportsPerformanceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/sales': {
-      id: '/_shell/reports/sales'
-      path: '/reports/sales'
-      fullPath: '/reports/sales'
-      preLoaderRoute: typeof ShellReportsSalesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/reports/trainers': {
-      id: '/_shell/reports/trainers'
-      path: '/reports/trainers'
-      fullPath: '/reports/trainers'
-      preLoaderRoute: typeof ShellReportsTrainersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_shell/platform/tenants/new': {
-      id: '/_shell/platform/tenants/new'
-      path: '/new'
-      fullPath: '/platform/tenants/new'
-      preLoaderRoute: typeof ShellPlatformTenantsNewRouteImport
-      parentRoute: typeof ShellPlatformTenantsRoute
-    }
-  }
-}
-
-interface ShellMembersRouteChildren {
-  ShellMembersAttendanceRoute: typeof ShellMembersAttendanceRoute
-  ShellMembersClient360Route: typeof ShellMembersClient360Route
-  ShellMembersFreezeRoute: typeof ShellMembersFreezeRoute
-  ShellMembersMembershipsRoute: typeof ShellMembersMembershipsRoute
-  ShellMembersRenewalsRoute: typeof ShellMembersRenewalsRoute
-  ShellMembersTransfersRoute: typeof ShellMembersTransfersRoute
-}
-
-const ShellMembersRouteChildren: ShellMembersRouteChildren = {
-  ShellMembersAttendanceRoute: ShellMembersAttendanceRoute,
-  ShellMembersClient360Route: ShellMembersClient360Route,
-  ShellMembersFreezeRoute: ShellMembersFreezeRoute,
-  ShellMembersMembershipsRoute: ShellMembersMembershipsRoute,
-  ShellMembersRenewalsRoute: ShellMembersRenewalsRoute,
-  ShellMembersTransfersRoute: ShellMembersTransfersRoute,
-}
-
-const ShellMembersRouteWithChildren = ShellMembersRoute._addFileChildren(
-  ShellMembersRouteChildren,
-)
-
-interface ShellPlatformTenantsRouteChildren {
-  ShellPlatformTenantsNewRoute: typeof ShellPlatformTenantsNewRoute
-}
-
-const ShellPlatformTenantsRouteChildren: ShellPlatformTenantsRouteChildren = {
-  ShellPlatformTenantsNewRoute: ShellPlatformTenantsNewRoute,
-}
-
-const ShellPlatformTenantsRouteWithChildren =
-  ShellPlatformTenantsRoute._addFileChildren(ShellPlatformTenantsRouteChildren)
-
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+const ShellRouteChildren: ShellRouteChildren = {
   ShellMembersRoute: ShellMembersRouteWithChildren,
   ShellAdminApiRoute: ShellAdminApiRoute,
   ShellAdminAuditLogsRoute: ShellAdminAuditLogsRoute,
@@ -1832,6 +1849,13 @@ const rootRouteChildren: RootRouteChildren = {
   ShellReportsPerformanceRoute: ShellReportsPerformanceRoute,
   ShellReportsSalesRoute: ShellReportsSalesRoute,
   ShellReportsTrainersRoute: ShellReportsTrainersRoute,
+}
+
+const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  ShellRoute: ShellRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
