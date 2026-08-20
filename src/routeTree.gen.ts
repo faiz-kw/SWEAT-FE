@@ -9,8 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
 import { Route as ShellAdminApiRouteImport } from './routes/_shell/admin.api'
 import { Route as ShellAdminAuditLogsRouteImport } from './routes/_shell/admin.audit-logs'
@@ -95,14 +95,14 @@ import { Route as ShellReportsSalesRouteImport } from './routes/_shell/reports.s
 import { Route as ShellReportsTrainersRouteImport } from './routes/_shell/reports.trainers'
 import { Route as ShellPlatformTenantsNewRouteImport } from './routes/_shell/platform.tenants.new'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ShellIndexRoute = ShellIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ShellRoute,
 } as any)
 const ShellMembersRoute = ShellMembersRouteImport.update({
   id: '/members',
@@ -534,7 +534,7 @@ const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof ShellIndexRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/admin/api': typeof ShellAdminApiRoute
   '/admin/audit-logs': typeof ShellAdminAuditLogsRoute
@@ -620,8 +620,8 @@ export interface FileRoutesByFullPath {
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/members': typeof ShellMembersRouteWithChildren
+  '/': typeof ShellIndexRoute
   '/admin/api': typeof ShellAdminApiRoute
   '/admin/audit-logs': typeof ShellAdminAuditLogsRoute
   '/admin/configuration': typeof ShellAdminConfigurationRoute
@@ -707,9 +707,9 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
   '/_shell': typeof ShellRouteWithChildren
   '/_shell/members': typeof ShellMembersRouteWithChildren
+  '/_shell/': typeof ShellIndexRoute
   '/_shell/admin/api': typeof ShellAdminApiRoute
   '/_shell/admin/audit-logs': typeof ShellAdminAuditLogsRoute
   '/_shell/admin/configuration': typeof ShellAdminConfigurationRoute
@@ -882,8 +882,8 @@ export interface FileRouteTypes {
     | '/platform/tenants/new'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/members'
+    | '/'
     | '/admin/api'
     | '/admin/audit-logs'
     | '/admin/configuration'
@@ -968,9 +968,9 @@ export interface FileRouteTypes {
     | '/platform/tenants/new'
   id:
     | '__root__'
-    | '/'
     | '/_shell'
     | '/_shell/members'
+    | '/_shell/'
     | '/_shell/admin/api'
     | '/_shell/admin/audit-logs'
     | '/_shell/admin/configuration'
@@ -1056,25 +1056,24 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
   ShellRoute: typeof ShellRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_shell': {
       id: '/_shell'
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_shell/': {
+      id: '/_shell/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRoute
     }
     '/_shell/members': {
       id: '/_shell/members'
@@ -1695,6 +1694,7 @@ const ShellPlatformTenantsRouteWithChildren =
 
 interface ShellRouteChildren {
   ShellMembersRoute: typeof ShellMembersRouteWithChildren
+  ShellIndexRoute: typeof ShellIndexRoute
   ShellAdminApiRoute: typeof ShellAdminApiRoute
   ShellAdminAuditLogsRoute: typeof ShellAdminAuditLogsRoute
   ShellAdminConfigurationRoute: typeof ShellAdminConfigurationRoute
@@ -1774,6 +1774,7 @@ interface ShellRouteChildren {
 
 const ShellRouteChildren: ShellRouteChildren = {
   ShellMembersRoute: ShellMembersRouteWithChildren,
+  ShellIndexRoute: ShellIndexRoute,
   ShellAdminApiRoute: ShellAdminApiRoute,
   ShellAdminAuditLogsRoute: ShellAdminAuditLogsRoute,
   ShellAdminConfigurationRoute: ShellAdminConfigurationRoute,
@@ -1854,7 +1855,6 @@ const ShellRouteChildren: ShellRouteChildren = {
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
   ShellRoute: ShellRouteWithChildren,
 }
 export const routeTree = rootRouteImport
