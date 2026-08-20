@@ -69,6 +69,14 @@ export function CrudModule({ path }: { path: string }) {
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Row | undefined>(undefined);
+
+  // Quick action from the section overview: ?create=1 opens the new-record form.
+  React.useEffect(() => {
+    if (search["create"]) {
+      setEditing(undefined);
+      setFormOpen(true);
+    }
+  }, [search]);
   const [detailId, setDetailId] = React.useState<string | undefined>(undefined);
   const detailRow = rows.find((r) => r.id === detailId) ?? presetRows.find((r) => r.id === detailId);
 
