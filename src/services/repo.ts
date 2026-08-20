@@ -1,4 +1,4 @@
-import { getDataset, TENANT_ID, TODAY } from "@/data/types-bridge";
+import { getDataset, TENANT_ID, TODAY } from "@/data/seed";
 
 /**
  * Service layer. UI code only talks to these functions — never to the demo
