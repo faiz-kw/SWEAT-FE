@@ -119,6 +119,14 @@ export function collection(key: CollectionKey): Row[] {
   return getCollections()[key];
 }
 
+/** Read-only view of every collection — used by cross-module timelines. */
+export function snapshot(): Collections {
+  return getCollections();
+}
+
+export const COLLECTION_KEYS = Object.keys(getCollections()) as CollectionKey[];
+
+
 function emit() {
   version += 1;
   for (const l of listeners) l();
