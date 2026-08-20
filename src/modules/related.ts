@@ -96,7 +96,7 @@ export function relatedGroups(source: CollectionKey, row: Row): RelatedGroup[] {
   const data = snapshot();
   for (const key of COLLECTION_KEYS) {
     if (key === source) continue;
-    const rows = data[key].filter((r) => {
+    const rows = data[key].filter((r: Row) => {
       for (const k of LINK_KEYS) {
         const v = r[k];
         if (typeof v === "string" && ids.has(v)) return true;
