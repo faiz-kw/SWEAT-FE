@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { DataTable, type Column, type FilterDef } from "@/components/enterprise/DataTable";
 import { KpiTile, PageBody, PageHeader } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
-import { useApp } from "@/lib/app-context";
+import { useApp } from "@/contexts";
 import { findNavItem } from "@/lib/nav";
 import { formatCell, plainValue, sortValue } from "@/modules/cells";
 import { RecordDetail } from "@/modules/RecordDetail";
@@ -39,7 +39,7 @@ export function CrudModule({ path }: { path: string }) {
   const all = useCollection(collectionKey, locationId);
   const entity = nav?.label ?? collectionLabel(collectionKey);
 
-  const fields = React.useMemo(() => inferFields(all), [all]);
+  const fields = React.useMemo(() => inferFields(all, collectionKey), [all, collectionKey]);
   const statusKey = React.useMemo(() => pickStatusKey(fields), [fields]);
 
   const presetRows = React.useMemo(
@@ -146,13 +146,13 @@ export function CrudModule({ path }: { path: string }) {
               Showing <span className="num font-semibold text-foreground">{rows.length}</span> of{" "}
               <span className="num">{presetRows.length}</span>
             </span>
-            {def.preset && <span className="text-muted-foreground">Preset: {def.preset.label}</span>}
+            {def.preset && <span className="hidden sm:inline text-muted-foreground">Preset: {def.preset.label}</span>}
             {stage && (
               <button
                 className="text-primary underline-offset-2 hover:underline"
                 onClick={() => go(path, {})}
               >
-                Stage filter: {stage} — clear
+                Stage: {stage} — clear
               </button>
             )}
             {focus && (
@@ -160,7 +160,7 @@ export function CrudModule({ path }: { path: string }) {
                 className="text-primary underline-offset-2 hover:underline"
                 onClick={() => go(path, {})}
               >
-                Focused on {focus} — clear
+                Focus: {focus} — clear
               </button>
             )}
           </>
@@ -171,9 +171,9 @@ export function CrudModule({ path }: { path: string }) {
               size="sm"
               variant="outline"
               onClick={() => go(`/overview/${nav?.sectionId ?? "crm"}`)}
-              className="hidden lg:inline-flex"
+              className="hidden xl:inline-flex"
             >
-              Section overview <ArrowUpRight className="ml-1 size-3.5" />
+              Overview <ArrowUpRight className="ml-1 size-3.5" />
             </Button>
             <Button
               size="sm"
@@ -190,7 +190,7 @@ export function CrudModule({ path }: { path: string }) {
 
       <PageBody>
         {statusCounts.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             <KpiTile label="Total records" value={presetRows.length} hint="In current scope" />
             {statusCounts.map(([label, count]) => (
               <button key={label} className="text-left" onClick={() => go(path, { stage: label })}>
@@ -219,7 +219,26 @@ export function CrudModule({ path }: { path: string }) {
                 deleteRecords(collectionKey, ids);
                 toast.success(`${ids.length} record(s) deleted`);
               } else {
-                toast.success(`${ids.length} record(s) exported`);
+                const selectedRows = rows.filter((r) => ids.includes(r.id));
+                const head = columns.map((c) => c.header).join(",");
+                const body = selectedRows
+                  .map((r) =>
+                    columns
+                      .map((c) => {
+                        const v = c.value ? c.value(r) : (r[c.key] ?? "");
+                        return `"${String(v).replace(/"/g, '""')}"`;
+                      })
+                      .join(","),
+                  )
+                  .join("\n");
+                const blob = new Blob([`${head}\n${body}`], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${collectionKey}-selected.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                toast.success(`Exported ${ids.length} record(s)`, { description: `${collectionKey}-selected.csv` });
               }
             }}
           />

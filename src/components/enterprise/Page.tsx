@@ -13,19 +13,19 @@ export function PageHeader({
   meta?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-surface/60 backdrop-blur-md px-5 py-4">
       <div className="min-w-0">
-        <h1 className="truncate text-[15px] font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
-        {meta && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">{meta}</div>}
+        <h1 className="truncate text-base sm:text-lg font-bold tracking-tight text-foreground">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{subtitle}</p>}
+        {meta && <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">{meta}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
 export function PageBody({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("flex-1 space-y-3 p-4", className)}>{children}</div>;
+  return <div className={cn("flex-1 space-y-5 p-4 sm:p-5", className)}>{children}</div>;
 }
 
 export function Section({
@@ -44,50 +44,73 @@ export function Section({
   padded?: boolean;
 }) {
   return (
-    <section className={cn("rounded-md border border-border bg-surface", className)}>
+    <section className={cn("rounded-xl border border-border/60 bg-card shadow-xs backdrop-blur-sm", className)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <header className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3 bg-muted/20 rounded-t-xl">
           <div className="min-w-0">
-            {title && <h2 className="truncate text-[13px] font-semibold">{title}</h2>}
-            {description && <p className="truncate text-[11px] text-muted-foreground">{description}</p>}
+            {title && <h2 className="truncate text-xs sm:text-sm font-bold text-foreground">{title}</h2>}
+            {description && <p className="truncate text-[11px] text-muted-foreground mt-0.5">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
         </header>
       )}
-      <div className={cn(padded && "p-3")}>{children}</div>
+      <div className={cn(padded && "p-4")}>{children}</div>
     </section>
   );
 }
 
 export function KpiTile({
   label,
+  title,
   value,
   delta,
+  change,
   hint,
   tone = "neutral",
+  variant,
 }: {
-  label: string;
+  label?: string;
+  title?: string;
   value: string | number;
   delta?: string;
+  change?: string;
   hint?: string;
-  tone?: "neutral" | "positive" | "negative" | "warning";
+  tone?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
+  variant?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
 }) {
-  const deltaTone =
-    tone === "positive"
-      ? "text-success"
-      : tone === "negative"
-        ? "text-destructive"
-        : tone === "warning"
-          ? "text-warning-foreground"
-          : "text-muted-foreground";
+  const effectiveLabel = label || title || "";
+  const effectiveDelta = delta || change;
+  const effectiveTone = variant || tone;
+
+  const isPos = effectiveTone === "positive";
+  const isNeg = effectiveTone === "negative";
+  const isWarn = effectiveTone === "warning" || effectiveTone === "warn";
+
   return (
-    <div className="rounded-md border border-border bg-surface px-3 py-2.5">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="num text-xl font-semibold tracking-tight text-foreground">{value}</span>
-        {delta && <span className={cn("num text-[11px] font-medium", deltaTone)}>{delta}</span>}
+    <div className="rounded-xl border border-border/60 bg-card p-3.5 sm:p-4 shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between min-w-0">
+      <div className="text-[10.5px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate" title={effectiveLabel}>
+        {effectiveLabel}
       </div>
-      {hint && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div>}
+      <div className="mt-1.5 sm:mt-2 flex flex-wrap items-baseline gap-1.5 sm:gap-2 min-w-0">
+        <span className="num text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+          {value}
+        </span>
+        {effectiveDelta && (
+          <span
+            className={cn(
+              "num text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded-md truncate max-w-full",
+              isPos && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+              isNeg && "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+              isWarn && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+              !isPos && !isNeg && !isWarn && "bg-muted text-muted-foreground"
+            )}
+            title={effectiveDelta}
+          >
+            {effectiveDelta}
+          </span>
+        )}
+      </div>
+      {hint && <div className="mt-1 truncate text-[10.5px] text-muted-foreground">{hint}</div>}
     </div>
   );
 }
@@ -95,8 +118,8 @@ export function KpiTile({
 export function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 truncate text-[13px] font-medium">{value ?? "—"}</dd>
+      <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-xs sm:text-sm font-semibold text-foreground">{value ?? "—"}</dd>
     </div>
   );
 }

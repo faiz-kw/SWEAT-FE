@@ -1,0 +1,17 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, bun.lock, tsconfig.json, tsconfig.*.json, vite.config.ts, eslint.config.js, components.json, .prettierrc, .prettierignore",
+    ".env.local": ".env, .env.example, .env.*",
+    "README.md": "AGENTS.md"
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/*.sqlite3": true,
+    "**/db.sqlite3": true
+  }
+}

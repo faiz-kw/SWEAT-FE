@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { TenantsWorkspace } from "@/components/platform/TenantsWorkspace";
 
 export const Route = createFileRoute("/_shell/platform/tenants")({
   head: () => ({
     meta: [
-      { title: "Tenants · PerformanceOS Admin" },
-      { name: "description", content: "Tenants workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Tenants · PerformanceOS Admin" },
-      { property: "og:description", content: "Tenants workspace in the PerformanceOS fitness business operating system." },
+      { title: "Tenants & Organizations · PerformanceOS Admin" },
+      { name: "description", content: "Global multi-tenant governance and organization management." },
     ],
   }),
-  component: () => <ModuleView path="/platform/tenants" />,
+  component: TenantsWorkspace,
 });

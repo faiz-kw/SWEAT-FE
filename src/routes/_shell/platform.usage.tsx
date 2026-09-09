@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { UsageWorkspace } from "@/components/platform/UsageWorkspace";
 
 export const Route = createFileRoute("/_shell/platform/usage")({
   head: () => ({
     meta: [
-      { title: "Usage · PerformanceOS Admin" },
-      { name: "description", content: "Usage workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Usage · PerformanceOS Admin" },
-      { property: "og:description", content: "Usage workspace in the PerformanceOS fitness business operating system." },
+      { title: "Tenant Resource Usage · PerformanceOS Admin" },
+      { name: "description", content: "Resource consumption and limits monitoring." },
     ],
   }),
-  component: () => <ModuleView path="/platform/usage" />,
+  component: UsageWorkspace,
 });

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <!-- Deep High-Tech Cosmic Obsidian Substrate -->
+    <linearGradient id="fav-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f2b2c" />
+      <stop offset="50%" stop-color="#081b1d" />
+      <stop offset="100%" stop-color="#020809" />
+    </linearGradient>
+
+    <!-- Dynamic Cyan to Neon Emerald Gradient -->
+    <linearGradient id="fav-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="45%" stop-color="#2dd4bf" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+
+    <!-- Radiant Telemetry Core Gradient -->
+    <linearGradient id="fav-core" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="25%" stop-color="#a7f3d0" />
+      <stop offset="65%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded Squircle Substrate with subtle outer stroke -->
+  <rect width="64" height="64" rx="16" fill="url(#fav-bg)" />
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="url(#fav-rim)" stroke-width="1.6" stroke-opacity="0.5" />
+
+  <!-- Precision Athletic Cyber-Shield Hexagon -->
+  <path
+    d="M32 9 L51 20 L51 44 L32 55 L13 44 L13 20 Z"
+    stroke="url(#fav-rim)"
+    stroke-width="3.2"
+    stroke-linejoin="round"
+    fill="rgba(6, 182, 212, 0.12)"
+  />
+
+  <!-- High-Performance Telemetry Velocity Core -->
+  <path
+    d="M34.5 14 L22 31.5 L31 31.5 L26.5 49 L43 27.5 L33 27.5 Z"
+    fill="url(#fav-core)"
+  />
+</svg>

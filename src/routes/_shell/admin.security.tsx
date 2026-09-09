@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { SecurityWorkspace } from "@/components/admin/SecurityWorkspace";
 
 export const Route = createFileRoute("/_shell/admin/security")({
   head: () => ({
     meta: [
-      { title: "Security · PerformanceOS Admin" },
-      { name: "description", content: "Security workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Security · PerformanceOS Admin" },
-      { property: "og:description", content: "Security workspace in the PerformanceOS fitness business operating system." },
+      { title: "Security Policies & Access Control · PerformanceOS Admin" },
+      { name: "description", content: "2FA requirements, session timeouts, and lockout rules." },
     ],
   }),
-  component: () => <ModuleView path="/admin/security" />,
+  component: SecurityWorkspace,
 });

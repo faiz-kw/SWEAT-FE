@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellLifecycleRouteImport } from './routes/_shell/lifecycle'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
@@ -98,6 +99,7 @@ import { Route as ShellPerformanceRecoveryRouteImport } from './routes/_shell/pe
 import { Route as ShellPlatformBillingRouteImport } from './routes/_shell/platform.billing'
 import { Route as ShellPlatformBrandingRouteImport } from './routes/_shell/platform.branding'
 import { Route as ShellPlatformMarketplaceRouteImport } from './routes/_shell/platform.marketplace'
+import { Route as ShellPlatformOnboardRouteImport } from './routes/_shell/platform.onboard'
 import { Route as ShellPlatformPlansRouteImport } from './routes/_shell/platform.plans'
 import { Route as ShellPlatformTenantsRouteImport } from './routes/_shell/platform.tenants'
 import { Route as ShellPlatformUsageRouteImport } from './routes/_shell/platform.usage'
@@ -114,6 +116,11 @@ import { Route as ShellPlatformTenantsNewRouteImport } from './routes/_shell/pla
 
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShellIndexRoute = ShellIndexRouteImport.update({
@@ -574,6 +581,11 @@ const ShellPlatformMarketplaceRoute =
     path: '/platform/marketplace',
     getParentRoute: () => ShellRoute,
   } as any)
+const ShellPlatformOnboardRoute = ShellPlatformOnboardRouteImport.update({
+  id: '/platform/onboard',
+  path: '/platform/onboard',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPlatformPlansRoute = ShellPlatformPlansRouteImport.update({
   id: '/platform/plans',
   path: '/platform/plans',
@@ -642,6 +654,7 @@ const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
+  '/login': typeof LoginRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/admin/api': typeof ShellAdminApiRoute
@@ -729,6 +742,7 @@ export interface FileRoutesByFullPath {
   '/platform/billing': typeof ShellPlatformBillingRoute
   '/platform/branding': typeof ShellPlatformBrandingRoute
   '/platform/marketplace': typeof ShellPlatformMarketplaceRoute
+  '/platform/onboard': typeof ShellPlatformOnboardRoute
   '/platform/plans': typeof ShellPlatformPlansRoute
   '/platform/tenants': typeof ShellPlatformTenantsRouteWithChildren
   '/platform/usage': typeof ShellPlatformUsageRoute
@@ -744,6 +758,7 @@ export interface FileRoutesByFullPath {
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesByTo {
+  '/login': typeof LoginRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/': typeof ShellIndexRoute
@@ -832,6 +847,7 @@ export interface FileRoutesByTo {
   '/platform/billing': typeof ShellPlatformBillingRoute
   '/platform/branding': typeof ShellPlatformBrandingRoute
   '/platform/marketplace': typeof ShellPlatformMarketplaceRoute
+  '/platform/onboard': typeof ShellPlatformOnboardRoute
   '/platform/plans': typeof ShellPlatformPlansRoute
   '/platform/tenants': typeof ShellPlatformTenantsRouteWithChildren
   '/platform/usage': typeof ShellPlatformUsageRoute
@@ -849,6 +865,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteWithChildren
+  '/login': typeof LoginRoute
   '/_shell/lifecycle': typeof ShellLifecycleRoute
   '/_shell/members': typeof ShellMembersRouteWithChildren
   '/_shell/': typeof ShellIndexRoute
@@ -937,6 +954,7 @@ export interface FileRoutesById {
   '/_shell/platform/billing': typeof ShellPlatformBillingRoute
   '/_shell/platform/branding': typeof ShellPlatformBrandingRoute
   '/_shell/platform/marketplace': typeof ShellPlatformMarketplaceRoute
+  '/_shell/platform/onboard': typeof ShellPlatformOnboardRoute
   '/_shell/platform/plans': typeof ShellPlatformPlansRoute
   '/_shell/platform/tenants': typeof ShellPlatformTenantsRouteWithChildren
   '/_shell/platform/usage': typeof ShellPlatformUsageRoute
@@ -955,6 +973,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/lifecycle'
     | '/members'
     | '/admin/api'
@@ -1042,6 +1061,7 @@ export interface FileRouteTypes {
     | '/platform/billing'
     | '/platform/branding'
     | '/platform/marketplace'
+    | '/platform/onboard'
     | '/platform/plans'
     | '/platform/tenants'
     | '/platform/usage'
@@ -1057,6 +1077,7 @@ export interface FileRouteTypes {
     | '/platform/tenants/new'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/login'
     | '/lifecycle'
     | '/members'
     | '/'
@@ -1145,6 +1166,7 @@ export interface FileRouteTypes {
     | '/platform/billing'
     | '/platform/branding'
     | '/platform/marketplace'
+    | '/platform/onboard'
     | '/platform/plans'
     | '/platform/tenants'
     | '/platform/usage'
@@ -1161,6 +1183,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_shell'
+    | '/login'
     | '/_shell/lifecycle'
     | '/_shell/members'
     | '/_shell/'
@@ -1249,6 +1272,7 @@ export interface FileRouteTypes {
     | '/_shell/platform/billing'
     | '/_shell/platform/branding'
     | '/_shell/platform/marketplace'
+    | '/_shell/platform/onboard'
     | '/_shell/platform/plans'
     | '/_shell/platform/tenants'
     | '/_shell/platform/usage'
@@ -1266,6 +1290,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   ShellRoute: typeof ShellRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1275,6 +1300,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_shell/': {
@@ -1893,6 +1925,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellPlatformMarketplaceRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/platform/onboard': {
+      id: '/_shell/platform/onboard'
+      path: '/platform/onboard'
+      fullPath: '/platform/onboard'
+      preLoaderRoute: typeof ShellPlatformOnboardRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/platform/plans': {
       id: '/_shell/platform/plans'
       path: '/platform/plans'
@@ -2103,6 +2142,7 @@ interface ShellRouteChildren {
   ShellPlatformBillingRoute: typeof ShellPlatformBillingRoute
   ShellPlatformBrandingRoute: typeof ShellPlatformBrandingRoute
   ShellPlatformMarketplaceRoute: typeof ShellPlatformMarketplaceRoute
+  ShellPlatformOnboardRoute: typeof ShellPlatformOnboardRoute
   ShellPlatformPlansRoute: typeof ShellPlatformPlansRoute
   ShellPlatformTenantsRoute: typeof ShellPlatformTenantsRouteWithChildren
   ShellPlatformUsageRoute: typeof ShellPlatformUsageRoute
@@ -2200,6 +2240,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellPlatformBillingRoute: ShellPlatformBillingRoute,
   ShellPlatformBrandingRoute: ShellPlatformBrandingRoute,
   ShellPlatformMarketplaceRoute: ShellPlatformMarketplaceRoute,
+  ShellPlatformOnboardRoute: ShellPlatformOnboardRoute,
   ShellPlatformPlansRoute: ShellPlatformPlansRoute,
   ShellPlatformTenantsRoute: ShellPlatformTenantsRouteWithChildren,
   ShellPlatformUsageRoute: ShellPlatformUsageRoute,
@@ -2218,6 +2259,7 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   ShellRoute: ShellRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

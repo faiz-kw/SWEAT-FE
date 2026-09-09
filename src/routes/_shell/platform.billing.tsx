@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { BillingWorkspace } from "@/components/platform/BillingWorkspace";
 
 export const Route = createFileRoute("/_shell/platform/billing")({
   head: () => ({
     meta: [
-      { title: "Subscription Billing · PerformanceOS Admin" },
-      { name: "description", content: "Subscription Billing workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Subscription Billing · PerformanceOS Admin" },
-      { property: "og:description", content: "Subscription Billing workspace in the PerformanceOS fitness business operating system." },
+      { title: "Subscription Billing & Revenue · PerformanceOS Admin" },
+      { name: "description", content: "Platform subscription revenue, recurring billing, and GST invoices." },
     ],
   }),
-  component: () => <ModuleView path="/platform/billing" />,
+  component: BillingWorkspace,
 });

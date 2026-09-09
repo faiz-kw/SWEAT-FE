@@ -9,6 +9,9 @@ import {
   Search,
   SlidersHorizontal,
   X,
+  Inbox,
+  Plus,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -165,7 +168,8 @@ export function DataTable<T>({
     <div className="flex min-h-0 flex-col rounded-md border border-border bg-surface">
       {/* toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-2.5 py-2">
-        <div className="relative min-w-[180px] flex-1 md:max-w-72">
+        {/* search — grows to fill available space */}
+        <div className="relative min-w-0 flex-1 sm:max-w-72">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -174,46 +178,101 @@ export function DataTable<T>({
               setPage(1);
             }}
             placeholder="Search…"
-            className="h-8 pl-7 text-[13px]"
+            className="h-8 pl-7 text-[13px] w-full"
           />
         </div>
 
-        {filters.map((f) => (
-          <Select
-            key={f.key}
-            value={active[f.key] ?? "all"}
-            onValueChange={(v) => {
-              setActive((p) => ({ ...p, [f.key]: v }));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-8 w-auto min-w-[7.5rem] gap-1 text-[13px]">
-              <SlidersHorizontal className="size-3.5 text-muted-foreground" />
-              <SelectValue placeholder={f.label} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{f.label}: All</SelectItem>
-              {f.options.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+        {/* filters — hidden on mobile, shown sm+ inline; on mobile use the dropdown */}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap">
+          {filters.map((f) => (
+            <Select
+              key={f.key}
+              value={active[f.key] ?? "all"}
+              onValueChange={(v) => {
+                setActive((p) => ({ ...p, [f.key]: v }));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="h-8 w-auto min-w-[7.5rem] gap-1 text-[13px]">
+                <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+                <SelectValue placeholder={f.label} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{f.label}: All</SelectItem>
+                {f.options.map((o) => (
+                  <SelectItem key={o} value={o}>
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setActive({})}>
+              <X className="size-3.5" /> Clear
+            </Button>
+          )}
+        </div>
 
-        {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setActive({})}>
-            <X className="size-3.5" /> Clear
-          </Button>
+        {/* mobile filters dropdown */}
+        {filters.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "sm:hidden h-8 px-2 text-xs",
+                  activeFilterCount > 0 && "border-primary text-primary",
+                )}
+              >
+                <SlidersHorizontal className="size-3.5" />
+                {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filter"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              <DropdownMenuLabel className="text-xs">Filter by</DropdownMenuLabel>
+              {filters.map((f) => (
+                <div key={f.key} className="px-2 py-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{f.label}</p>
+                  <Select
+                    value={active[f.key] ?? "all"}
+                    onValueChange={(v) => {
+                      setActive((p) => ({ ...p, [f.key]: v }));
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-full text-[12px]">
+                      <SelectValue placeholder={`All ${f.label}`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {f.options.map((o) => (
+                        <SelectItem key={o} value={o}>{o}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+              {activeFilterCount > 0 && (
+                <div className="px-2 pb-1.5">
+                  <Button variant="ghost" size="sm" className="w-full h-7 text-xs" onClick={() => setActive({})}>
+                    <X className="size-3.5" /> Clear all
+                  </Button>
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
+        {/* right-side toolbar actions */}
         <div className="ml-auto flex items-center gap-1.5">
           {toolbar}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
-                <Columns3 className="size-3.5" /> Columns
+                <Columns3 className="size-3.5" />
+                <span className="hidden sm:inline ml-1">Columns</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -238,7 +297,8 @@ export function DataTable<T>({
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={exportCsv}>
-            <Download className="size-3.5" /> Export
+            <Download className="size-3.5" />
+            <span className="hidden sm:inline ml-1">Export</span>
           </Button>
         </div>
       </div>
@@ -275,8 +335,8 @@ export function DataTable<T>({
       )}
 
       {/* table */}
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse text-[13px]">
+      <div className="scrollbar-thin min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+        <table className="w-full min-w-[600px] border-collapse text-[13px]">
           <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur">
             <tr className="border-b border-border">
               {bulkActions.length > 0 && (
@@ -377,9 +437,29 @@ export function DataTable<T>({
               <tr>
                 <td
                   colSpan={visible.length + (bulkActions.length ? 1 : 0) + (rowActions ? 1 : 0)}
-                  className="px-3 py-10 text-center text-sm text-muted-foreground"
+                  className="px-4 py-16 text-center"
                 >
-                  {emptyLabel}
+                  <div className="mx-auto flex max-w-sm flex-col items-center justify-center space-y-3">
+                    <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-teal-500/15 via-emerald-500/10 to-primary/20 text-primary border border-primary/20 shadow-xs">
+                      <Inbox className="size-6 text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-foreground">No records found</h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {emptyLabel || "No records match the current filter criteria or location scope."}
+                      </p>
+                    </div>
+                    {activeFilterCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5"
+                        onClick={() => setActive({})}
+                      >
+                        <X className="size-3.5" /> Clear Filters
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
@@ -389,12 +469,12 @@ export function DataTable<T>({
 
       {/* footer */}
       <div className="flex flex-wrap items-center gap-2 border-t border-border px-2.5 py-1.5 text-xs text-muted-foreground">
-        <span className="num">
-          {filtered.length === 0 ? 0 : (current - 1) * size + 1}–{Math.min(current * size, filtered.length)} of{" "}
-          {filtered.length}
+        <span className="num shrink-0">
+          {filtered.length === 0 ? 0 : (current - 1) * size + 1}–{Math.min(current * size, filtered.length)}{" "}
+          <span className="hidden xs:inline">of {filtered.length}</span>
         </span>
-        <span className="hidden md:inline">· {rows.length} total records</span>
-        <div className="ml-auto flex items-center gap-2">
+        <span className="hidden lg:inline">· {rows.length} total records</span>
+        <div className="ml-auto flex items-center gap-1.5">
           <Select
             value={String(size)}
             onValueChange={(v) => {
@@ -402,13 +482,13 @@ export function DataTable<T>({
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-7 w-[4.5rem] text-xs">
+            <SelectTrigger className="h-7 w-[5rem] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {[10, 25, 50, 100].map((n) => (
                 <SelectItem key={n} value={String(n)}>
-                  {n} / page
+                  {n} / pg
                 </SelectItem>
               ))}
             </SelectContent>
@@ -420,10 +500,11 @@ export function DataTable<T>({
               className="size-7"
               disabled={current <= 1}
               onClick={() => setPage(current - 1)}
+              aria-label="Previous page"
             >
               <ChevronLeft className="size-3.5" />
             </Button>
-            <span className="num px-1">
+            <span className="num px-1 min-w-[3rem] text-center">
               {current} / {pageCount}
             </span>
             <Button
@@ -432,6 +513,7 @@ export function DataTable<T>({
               className="size-7"
               disabled={current >= pageCount}
               onClick={() => setPage(current + 1)}
+              aria-label="Next page"
             >
               <ChevronRight className="size-3.5" />
             </Button>

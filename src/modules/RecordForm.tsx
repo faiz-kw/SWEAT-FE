@@ -81,7 +81,7 @@ export function RecordForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto sm:w-full">
         <DialogHeader>
           <DialogTitle className="text-[15px]">
             {row ? `Edit ${entity}` : `New ${entity}`}
@@ -158,11 +158,11 @@ export function RecordForm({
           })}
         </form>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+          <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" form="record-form" size="sm">
+          <Button type="submit" form="record-form" size="sm" className="w-full sm:w-auto">
             {row ? "Save changes" : `Create ${entity.toLowerCase()}`}
           </Button>
         </DialogFooter>

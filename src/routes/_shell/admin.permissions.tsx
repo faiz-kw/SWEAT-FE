@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { PermissionsWorkspace } from "@/components/admin/PermissionsWorkspace";
 
 export const Route = createFileRoute("/_shell/admin/permissions")({
   head: () => ({
     meta: [
-      { title: "Permissions · PerformanceOS Admin" },
-      { name: "description", content: "Permissions workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Permissions · PerformanceOS Admin" },
-      { property: "og:description", content: "Permissions workspace in the PerformanceOS fitness business operating system." },
+      { title: "RBAC Permissions Matrix · PerformanceOS Admin" },
+      { name: "description", content: "Granular capability matrix and role assignments." },
     ],
   }),
-  component: () => <ModuleView path="/admin/permissions" />,
+  component: PermissionsWorkspace,
 });

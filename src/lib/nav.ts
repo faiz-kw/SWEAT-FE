@@ -9,7 +9,28 @@ export type NavSection = {
   label: string;
   icon: string;
   items: NavItem[];
+  /** Controls role-based visibility:
+   *  - 'all' (default): all authenticated users can see it
+   *  - 'superadmin_only': only Platform Super Admins (no tenant) see this
+   *  - 'tenant_only': only users with a tenant (not super admins) see this
+   */
+  visibility?: "all" | "superadmin_only" | "tenant_only";
 };
+
+/**
+ * Filter NAV sections based on the authenticated user's role.
+ * - Super Admins (isSuperAdmin = true) see: Platform Core, Administration, + all tenant modules
+ * - Tenant users (Admin, Manager, Trainer, etc.) see: all tenant modules EXCEPT Platform Core
+ */
+export function getFilteredNav(isSuperAdmin: boolean): NavSection[] {
+  return NAV.filter((section) => {
+    const vis = section.visibility ?? "all";
+    if (vis === "all") return true;
+    if (vis === "superadmin_only") return isSuperAdmin;
+    if (vis === "tenant_only") return !isSuperAdmin;
+    return true;
+  });
+}
 
 /**
  * Single source of truth for the console navigation. Route files mirror these
@@ -224,11 +245,12 @@ export const NAV: NavSection[] = [
   },
   {
     id: "platform",
-    label: "Platform (Super Admin)",
+    label: "Platform Core",
     icon: "Building2",
+    visibility: "superadmin_only",
     items: [
       { label: "Tenants", to: "/platform/tenants" },
-      { label: "Onboard Tenant", to: "/platform/tenants/new" },
+      { label: "Onboard Tenant", to: "/platform/onboard" },
       { label: "Plans & Modules", to: "/platform/plans" },
       { label: "Usage", to: "/platform/usage" },
       { label: "Subscription Billing", to: "/platform/billing" },

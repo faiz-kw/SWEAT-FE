@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { ServicesWorkspace } from "@/components/admin/ServicesWorkspace";
 
 export const Route = createFileRoute("/_shell/admin/services")({
   head: () => ({
     meta: [
-      { title: "Services · PerformanceOS Admin" },
-      { name: "description", content: "Services workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Services · PerformanceOS Admin" },
-      { property: "og:description", content: "Services workspace in the PerformanceOS fitness business operating system." },
+      { title: "Services & Offerings Catalog · PerformanceOS Admin" },
+      { name: "description", content: "Personal training, pilates, spa, and studio offerings." },
     ],
   }),
-  component: () => <ModuleView path="/admin/services" />,
+  component: ServicesWorkspace,
 });

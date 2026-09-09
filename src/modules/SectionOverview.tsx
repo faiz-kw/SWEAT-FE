@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/enterprise/StatusBadge";
 import { dateTime } from "@/components/enterprise/format";
 import { Button } from "@/components/ui/button";
 import { NAV } from "@/lib/nav";
-import { useApp } from "@/lib/app-context";
+import { useApp } from "@/contexts";
 import { useModuleNavigate } from "@/modules/navigate";
 import { moduleDef } from "@/modules/registry";
 import { timeOf } from "@/modules/related";

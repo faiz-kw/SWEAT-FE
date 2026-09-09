@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { ApiWorkspace } from "@/components/admin/ApiWorkspace";
 
 export const Route = createFileRoute("/_shell/admin/api")({
   head: () => ({
     meta: [
-      { title: "API · PerformanceOS Admin" },
-      { name: "description", content: "API workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "API · PerformanceOS Admin" },
-      { property: "og:description", content: "API workspace in the PerformanceOS fitness business operating system." },
+      { title: "Developer API & Webhooks · PerformanceOS Admin" },
+      { name: "description", content: "API keys, HMAC signatures, and outbound webhook endpoints." },
     ],
   }),
-  component: () => <ModuleView path="/admin/api" />,
+  component: ApiWorkspace,
 });

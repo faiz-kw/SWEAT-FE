@@ -142,6 +142,7 @@ export const MODULES: Record<string, ModuleDef> = {
 
   /* Platform */
   "/platform/tenants": { collection: "tenants" },
+  "/platform/onboard": { collection: "tenants", hint: "Onboard new tenant organization, configure initial branding and subscription tier." },
   "/platform/plans": { collection: "plans" },
   "/platform/usage": { collection: "tenants" },
   "/platform/billing": { collection: "tenants" },
