@@ -4,8 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "start": "powershell -ExecutionPolicy Bypass -File scripts/start_all.ps1",
-    "start:bat": "scripts\\start_all.bat",
+    "start": "scripts\\start_all.bat",
     "dev": "vite dev --port 5173",
     "backend": "python backend/manage.py runserver 8080",
     "build": "vite build",
