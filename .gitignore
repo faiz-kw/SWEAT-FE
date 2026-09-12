@@ -29,6 +29,9 @@ lerna-debug.log*
 # Backend (Separated into SWEAT-BE repository)
 backend/
 
+# Scratch & Temporary Audits
+scratch/
+
 
 # Cloudflare / Wrangler
 .wrangler/

@@ -164,11 +164,18 @@ export interface MarketplaceAppRow {
   installation_id?: string | null;
 }
 
+function extractList<T>(resData: any): T[] {
+  if (!resData) return [];
+  if (Array.isArray(resData)) return resData;
+  if (Array.isArray(resData.results)) return resData.results;
+  return [];
+}
+
 // ── TENANTS ──────────────────────────────────────────────────────────
 
 export async function fetchTenantsApi(): Promise<TenantRow[]> {
-  const res = await api.get<TenantRow[]>("/platform/tenants/");
-  return res.data || [];
+  const res = await api.get<any>("/platform/tenants/");
+  return extractList<TenantRow>(res.data);
 }
 
 export async function fetchPlatformMetricsApi(): Promise<PlatformMetrics> {
@@ -218,8 +225,8 @@ export async function onboardTenantApi(payload: OnboardTenantPayload): Promise<a
 // ── PLANS ────────────────────────────────────────────────────────────
 
 export async function fetchPlatformPlansApi(): Promise<PlatformPlanRow[]> {
-  const res = await api.get<PlatformPlanRow[]>("/platform/plans/");
-  return res.data || [];
+  const res = await api.get<any>("/platform/plans/");
+  return extractList<PlatformPlanRow>(res.data);
 }
 
 export async function createPlatformPlanApi(payload: Partial<PlatformPlanRow>): Promise<PlatformPlanRow> {
@@ -243,8 +250,8 @@ export async function fetchTenantUsageApi(tier?: string, search?: string): Promi
   if (tier && tier !== "all") params.set("tier", tier);
   if (search) params.set("search", search);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<TenantUsageRow[]>(`/platform/usage/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/platform/usage/${query}`);
+  return extractList<TenantUsageRow>(res.data);
 }
 
 export async function fetchTenantUsageSummaryApi(): Promise<UsageSummaryMetrics> {
@@ -263,8 +270,8 @@ export async function fetchMarketplaceAppsApi(category?: string): Promise<Market
   const params = new URLSearchParams();
   if (category && category !== "all") params.set("category", category);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<MarketplaceAppRow[]>(`/platform/marketplace/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/platform/marketplace/${query}`);
+  return extractList<MarketplaceAppRow>(res.data);
 }
 
 export async function toggleMarketplaceAppInstallationApi(appId: string, tenantId?: string): Promise<{
@@ -280,13 +287,13 @@ export async function toggleMarketplaceAppInstallationApi(appId: string, tenantI
 // ── BILLING & INVOICES ────────────────────────────────────────────────
 
 export async function fetchPlatformSubscriptionsApi(): Promise<SubscriptionItem[]> {
-  const res = await api.get<SubscriptionItem[]>("/platform/tenants/subscriptions/");
-  return res.data || [];
+  const res = await api.get<any>("/platform/subscriptions/");
+  return extractList<SubscriptionItem>(res.data);
 }
 
 export async function fetchPlatformInvoicesApi(): Promise<InvoiceItem[]> {
-  const res = await api.get<InvoiceItem[]>("/platform/tenants/invoices/");
-  return res.data || [];
+  const res = await api.get<any>("/platform/invoices/");
+  return extractList<InvoiceItem>(res.data);
 }
 
 // ── BRANDING ─────────────────────────────────────────────────────────

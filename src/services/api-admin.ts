@@ -137,30 +137,39 @@ export async function fetchUsersApi(role?: string, location?: string, search?: s
   if (search) params.set("search", search);
   if (tenantId && tenantId !== "all") params.set("tenant", tenantId);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<AdminUserRow[]>(`/users/users/${query}`);
+  const res = await api.get<AdminUserRow[]>(`/tenant/users/${query}`);
   return res.data || [];
 }
 
 export async function createUserApi(payload: Record<string, unknown>): Promise<AdminUserRow> {
-  const res = await api.post<AdminUserRow>("/users/users/", payload);
+  const res = await api.post<AdminUserRow>("/tenant/users/", payload);
   return res.data;
 }
 
 export async function updateUserApi(userId: string, payload: Record<string, unknown>): Promise<AdminUserRow> {
-  const res = await api.patch<AdminUserRow>(`/users/users/${userId}/`, payload);
+  const res = await api.patch<AdminUserRow>(`/tenant/users/${userId}/`, payload);
   return res.data;
 }
 
 export async function deleteUserApi(userId: string): Promise<void> {
-  await api.delete(`/users/users/${userId}/`);
+  await api.delete(`/tenant/users/${userId}/`);
 }
 
 export async function toggleUserActiveApi(userId: string): Promise<AdminUserRow> {
-  const res = await api.post<AdminUserRow>(`/users/users/${userId}/toggle-active/`);
+  const res = await api.post<AdminUserRow>(`/tenant/users/${userId}/toggle-active/`);
   return res.data;
 }
 
-export async function inviteUserApi(payload: { email: string; first_name: string; last_name?: string; phone?: string; role: string; location_ids?: string[]; tenant_id?: string }): Promise<any> {
+export async function inviteUserApi(payload: {
+  email: string;
+  first_name: string;
+  last_name?: string;
+  phone?: string;
+  role: string;
+  password?: string;
+  location_ids?: string[];
+  tenant_id?: string;
+}): Promise<any> {
   const res = await api.post<any>("/users/invite/", payload);
   return res.data;
 }
@@ -172,7 +181,7 @@ export async function fetchRolesApi(tenantId?: string, scope?: string): Promise<
   if (tenantId && tenantId !== "all") params.set("tenant", tenantId);
   if (scope && scope !== "all") params.set("scope", scope);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<RoleDefRow[]>(`/users/roles/${query}`);
+  const res = await api.get<RoleDefRow[]>(`/tenant/roles/${query}`);
   return res.data || [];
 }
 
@@ -181,7 +190,7 @@ export async function fetchPermissionsApi(module?: string, scope?: string): Prom
   if (module && module !== "all") params.set("module", module);
   if (scope && scope !== "all") params.set("scope", scope);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<PermissionDefRow[]>(`/users/permissions/${query}`);
+  const res = await api.get<PermissionDefRow[]>(`/tenant/permissions/${query}`);
   return res.data || [];
 }
 
@@ -194,7 +203,7 @@ export async function createRoleApi(payload: {
   permissions?: { permission_id: string; granted: boolean }[];
 }): Promise<RoleDefRow> {
   const code = payload.code || payload.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  const res = await api.post<RoleDefRow>("/users/roles/", {
+  const res = await api.post<RoleDefRow>("/tenant/roles/", {
     ...payload,
     code,
     description: payload.description || "",
@@ -203,11 +212,11 @@ export async function createRoleApi(payload: {
 }
 
 export async function deleteRoleApi(roleId: string): Promise<void> {
-  await api.delete(`/users/roles/${roleId}/`);
+  await api.delete(`/tenant/roles/${roleId}/`);
 }
 
 export async function updateRolePermissionsApi(roleId: string, permissions: { permission_id: string; granted: boolean }[]): Promise<any> {
-  const res = await api.post<any>(`/users/roles/${roleId}/update-permissions/`, { permissions });
+  const res = await api.post<any>(`/tenant/roles/${roleId}/update-permissions/`, { permissions });
   return res.data;
 }
 
@@ -262,12 +271,12 @@ export async function deleteServiceApi(serviceId: string): Promise<void> {
 // ── TENANT CONFIGURATION ──────────────────────────────────────────────
 
 export async function fetchTenantSettingsApi(): Promise<TenantSettingsData> {
-  const res = await api.get<TenantSettingsData>("/admin-config/settings/current/");
+  const res = await api.get<TenantSettingsData>("/tenant/organization-settings/current/");
   return res.data;
 }
 
 export async function updateTenantSettingsApi(payload: Partial<TenantSettingsData>): Promise<TenantSettingsData> {
-  const res = await api.put<TenantSettingsData>("/admin-config/settings/current/", payload);
+  const res = await api.put<TenantSettingsData>("/tenant/organization-settings/current/", payload);
   return res.data;
 }
 
@@ -299,7 +308,7 @@ export async function fetchAuditLogsApi(action?: string, module?: string): Promi
   if (action && action !== "all") params.set("action", action);
   if (module && module !== "all") params.set("module", module);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<AuditLogRow[]>(`/admin-config/audit-logs/${query}`);
+  const res = await api.get<AuditLogRow[]>(`/tenant/audit-events/${query}`);
   return res.data || [];
 }
 

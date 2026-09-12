@@ -135,6 +135,12 @@ export function CrudModule({ path }: { path: string }) {
     );
   }
 
+  const singularEntity = entity
+    .replace(/^All\s+/i, "")
+    .replace(/ies$/i, "y")
+    .replace(/es$/i, "")
+    .replace(/s$/i, "");
+
   return (
     <>
       <PageHeader
@@ -182,7 +188,7 @@ export function CrudModule({ path }: { path: string }) {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-1 size-3.5" /> New record
+              <Plus className="mr-1 size-3.5" /> New {singularEntity.toLowerCase()}
             </Button>
           </>
         }
@@ -250,7 +256,7 @@ export function CrudModule({ path }: { path: string }) {
         onOpenChange={setFormOpen}
         fields={fields}
         row={editing}
-        entity={entity.replace(/s$/, "")}
+        entity={singularEntity}
         onSubmit={(values) => {
           if (editing) {
             updateRecord(collectionKey, editing.id, values);
@@ -268,7 +274,7 @@ export function CrudModule({ path }: { path: string }) {
         collection={collectionKey}
         fields={fields}
         row={detailRow}
-        entity={entity.replace(/s$/, "")}
+        entity={singularEntity}
         onEdit={() => {
           setEditing(detailRow);
           setDetailId(undefined);

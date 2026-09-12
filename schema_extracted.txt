@@ -1,0 +1,1074 @@
+[Normal] Phase 1 (Layer 1)
+Final Foundation Schema Design
+[Normal] Multi-tenant Fitness & Wellness SaaS Platform
+[Normal] Architecture: Master/Control Database + One Dedicated PostgreSQL Database Per Tenant
+[Normal] File Storage: Zata.ai S3-compatible object storage on NeevCloud
+[Normal] Status: Finalized design baseline for Phase 1 implementation
+[Heading 1] 1. Final Architecture Decisions
+[List Bullet] One Master/Control DB manages the SaaS control plane, platform IAM, tenant registry, SaaS plans, subscription billing, resource usage, marketplace, domains, branding, database routing and platform audit.
+[List Bullet] Every tenant has its own dedicated PostgreSQL database. The database may be PLATFORM_MANAGED or CUSTOMER_MANAGED (AWS, NeevCloud, another cloud, or customer datacenter).
+[List Bullet] The platform team creates and controls Tenant -> Organization -> optional Company Entity -> Location -> Branch. Tenant Org Admin manages departments, users, roles, permission matrices and role assignments inside that structure.
+[List Bullet] Both platform users and tenant users have Department -> Role -> Module visibility -> Submodule visibility -> Action permission controls.
+[List Bullet] Tenant product modules are assigned at tenant level and may be ALL_BRANCHES or SELECTED_BRANCHES. Super Admin controls branch-level module availability.
+[List Bullet] Tenant/organization/location/branch deactivation is non-destructive. It blocks access/operations but does not automatically deactivate users or erase historical relationships.
+[List Bullet] All tenant/end-user files are stored as objects in Zata.ai S3-compatible storage. PostgreSQL stores metadata, ownership, classification and object keys only.
+[List Bullet] Legacy data is migrated through a staging/transform/reconciliation process and standardized into the new schema while preserving legacy IDs and traceability.
+[Heading 1] 2. High-Level Hierarchy
+[List Bullet] MASTER DB -> Tenant -> Dedicated Tenant DB
+[List Bullet] Tenant DB -> Organization -> Company Entity [optional] -> Location -> Branch
+[List Bullet] Tenant Org Admin -> Department -> Role -> Permission Set/Scope -> Module -> Submodule -> Action
+[List Bullet] Platform Staff -> Platform Department -> Platform Role -> Platform Module -> Platform Submodule -> Action
+[Heading 1] 3. Ownership and Administration Model
+[Heading 1] 4. Effective Tenant Authorization Rule
+[Heading 1] 5. Module Assignment and Branch Applicability
+[List Bullet] When a tenant is onboarded, assigned modules default to availability_mode = ALL_BRANCHES unless Super Admin chooses SELECTED_BRANCHES.
+[List Bullet] For ALL_BRANCHES, every existing and future active branch inherits the module without creating a branch_modules row.
+[List Bullet] For SELECTED_BRANCHES, Super Admin explicitly maps enabled branches in branch_modules. A new branch does not receive that module until selected.
+[List Bullet] Tenant Org Admin can configure role visibility/permissions only for modules actually entitled to the tenant and available at the relevant branch.
+[Heading 1] 6. Storage and Resource Metering
+[List Bullet] Tenant DB storage: measured from PostgreSQL for platform-managed tenant databases.
+[List Bullet] File/media storage: actual objects are stored in Zata.ai S3 with tenant-namespaced object keys; S3/provider metrics are the authoritative storage measure.
+[List Bullet] Resource metrics can also track active members, branch count, trainer accounts, AI voice minutes, API calls, backup storage and other plan quotas.
+[List Bullet] Customer-managed resources may be observed for health/visibility but can be marked is_platform_billable = FALSE.
+[Heading 1] 7. Legacy Migration Principle
+[Heading 1] 8. Master / Control Database Schema
+[Body Text] The Master DB contains 41 core/commercial/control-plane tables in this Phase 1 design. It does not contain tenant operational member/bookings/membership data.
+[Heading 3] 1. platform_users
+[Body Text] Internal users who operate the SaaS platform.
+[Heading 3] 2. platform_departments
+[Body Text] Internal departments for platform staff.
+[Normal] Design note: Examples: OPERATIONS, FINANCE, BILLING, SUPPORT, SECURITY, AI_ML, PRODUCT, ENGINEERING.
+[Heading 3] 3. platform_user_departments
+[Body Text] Many-to-many assignment of platform users to departments.
+[Normal] Design note: UNIQUE(platform_user_id, department_id).
+[Heading 3] 4. platform_roles
+[Body Text] Platform-side roles, optionally owned by a platform department.
+[Heading 3] 5. platform_modules
+[Body Text] Modules visible inside the Super Admin / Platform panel.
+[Normal] Design note: Examples: TENANT_MANAGEMENT, BILLING, DATABASE_OPERATIONS, PLATFORM_RBAC, PROVISIONING, MARKETPLACE, WHITE_LABEL, RESOURCE_USAGE.
+[Heading 3] 6. platform_submodules
+[Body Text] Sub-sections within platform modules.
+[Normal] Design note: UNIQUE(module_id, code).
+[Heading 3] 7. platform_permissions
+[Body Text] Action-level permissions for platform users.
+[Heading 3] 8. platform_role_module_access
+[Body Text] Controls platform module visibility per platform role.
+[Normal] Design note: UNIQUE(role_id, module_id). UI visibility never replaces backend authorization.
+[Heading 3] 9. platform_role_submodule_access
+[Body Text] Controls platform submodule visibility per role.
+[Normal] Design note: UNIQUE(role_id, submodule_id).
+[Heading 3] 10. platform_role_permissions
+[Body Text] Actual platform actions allowed to a role.
+[Normal] Design note: UNIQUE(role_id, permission_id).
+[Heading 3] 11. platform_user_roles
+[Body Text] Assigns platform roles to platform users.
+[Normal] Design note: UNIQUE(platform_user_id, role_id).
+[Heading 3] 12. tenants
+[Body Text] Top-level SaaS customer/account record.
+[Normal] Design note: Tenant deactivation blocks tenant-side login/API access but does not change underlying user status rows.
+[Heading 3] 13. tenant_domains
+[Body Text] Maps platform/custom domains to tenants.
+[Heading 3] 14. platform_branding
+[Body Text] Default platform branding used by standard tenants.
+[Heading 3] 15. tenant_branding
+[Body Text] Tenant-specific branding independent from domain mode.
+[Normal] Design note: Supports: platform domain + platform branding; platform domain + tenant branding; custom domain + tenant branding.
+[Heading 3] 16. product_modules
+[Body Text] Modules sold/enabled for tenant businesses.
+[Normal] Design note: Examples: CRM, MEMBERS, MEMBERSHIPS, BOOKINGS, CLASSES, PERSONAL_TRAINING, PILATES, NUTRITION, INVENTORY, AI.
+[Heading 3] 17. product_submodules
+[Body Text] Submodules of tenant product modules.
+[Normal] Design note: UNIQUE(module_id, code).
+[Heading 3] 18. tenant_permission_catalog
+[Body Text] Canonical tenant-side action permission catalogue controlled by the platform.
+[Normal] Design note: Tenants create roles and assign catalogue permissions; tenants do not invent new backend permission semantics.
+[Heading 3] 19. tenant_modules
+[Body Text] Tenant-level entitlement to product modules, including branch applicability mode.
+[Normal] Design note: UNIQUE(tenant_id, module_id). New branches automatically receive ALL_BRANCHES modules; SELECTED_BRANCHES modules require explicit Super Admin assignment.
+[Heading 3] 20. saas_plans
+[Body Text] Commercial SaaS plans offered to tenants.
+[Heading 3] 21. saas_plan_prices
+[Body Text] Versioned pricing for SaaS plans.
+[Heading 3] 22. saas_plan_modules
+[Body Text] Defines which product modules are included in a SaaS plan.
+[Normal] Design note: UNIQUE(plan_id, module_id).
+[Heading 3] 23. resource_metrics
+[Body Text] Generic resource/usage metric catalogue for quotas and billing.
+[Normal] Design note: Examples: ACTIVE_MEMBERS, BRANCH_COUNT, TRAINER_ACCOUNTS, AI_VOICE_MINUTES, MEDIA_STORAGE_BYTES, DATABASE_STORAGE_BYTES, BACKUP_STORAGE_BYTES, API_CALLS.
+[Heading 3] 24. saas_plan_resource_limits
+[Body Text] Default quotas/limits per SaaS plan and metric.
+[Normal] Design note: UNIQUE(plan_id, metric_id).
+[Heading 3] 25. tenant_resource_limits
+[Body Text] Tenant-specific quota overrides.
+[Normal] Design note: UNIQUE(tenant_id, metric_id). Effective limit = active tenant override, otherwise plan limit.
+[Heading 3] 26. tenant_resource_usage
+[Body Text] Historical measured resource consumption per tenant.
+[Normal] Design note: UNIQUE(tenant_id, metric_id, period_start, period_end). Database usage comes from PostgreSQL metrics; object storage usage should be reconciled with Zata S3 provider metrics.
+[Heading 3] 27. tenant_usage_alerts
+[Body Text] Quota/usage threshold alerts for platform operations and billing.
+[Heading 3] 28. tenant_subscriptions
+[Body Text] Current SaaS subscription of a tenant.
+[Heading 3] 29. tenant_billing_methods
+[Body Text] References tenant payment instruments held by the billing provider.
+[Normal] Design note: No card/bank secrets are stored directly.
+[Heading 3] 30. subscription_invoices
+[Body Text] Invoices issued by the SaaS platform to tenants.
+[Heading 3] 31. subscription_payments
+[Body Text] Payments against SaaS subscription invoices.
+[Heading 3] 32. subscription_dunning_events
+[Body Text] Payment recovery and overdue-account events.
+[Heading 3] 33. marketplace_integrations
+[Body Text] Master catalogue of supported external integrations.
+[Heading 3] 34. saas_plan_integrations
+[Body Text] Integrations available/included under each SaaS plan.
+[Normal] Design note: UNIQUE(plan_id, integration_id).
+[Heading 3] 35. tenant_integration_entitlements
+[Body Text] Platform-side entitlement state for tenant marketplace integrations.
+[Normal] Design note: UNIQUE(tenant_id, integration_id). Actual integration configuration/secrets live in the tenant DB and external secret manager.
+[Heading 3] 36. tenant_data_sources
+[Body Text] Routes each tenant to its dedicated PostgreSQL database, regardless of hosting location.
+[Heading 3] 37. tenant_data_hosting_policies
+[Body Text] Defines operational responsibility for platform- or customer-managed databases.
+[Heading 3] 38. tenant_data_source_health
+[Body Text] Historical DB health checks, especially important for customer-managed databases.
+[Heading 3] 39. tenant_provisioning
+[Body Text] Tracks tenant DB creation, schema migration, verification and onboarding state.
+[Heading 3] 40. platform_settings
+[Body Text] Non-secret global platform configuration/defaults.
+[Normal] Design note: Secrets, passwords, API keys and private certificates never belong here.
+[Heading 3] 41. platform_audit_events
+[Body Text] Append-only audit ledger for platform-side administrative actions.
+[Normal] Design note: Do not log passwords, OTPs, JWTs, authorization headers, session cookies, payment secrets or private keys.
+[Heading 1] 9. Dedicated Tenant Database Schema
+[Body Text] Every tenant receives the same standardized tenant schema. This design contains 28 runtime/support tables including the recommended legacy mapping table.
+[Heading 3] 1. organizations
+[Body Text] Business organization inside the tenant DB. Created/managed by the platform team.
+[Normal] Design note: Normal onboarding creates one organization per tenant. Tenant Org Admin can view but cannot structurally create/deactivate it.
+[Heading 3] 2. company_entities
+[Body Text] Optional legal/company entities under the organization. Created/managed by the platform team.
+[Heading 3] 3. locations
+[Body Text] Geographical/business areas such as Goregaon West. Created/managed by the platform team.
+[Heading 3] 4. branches
+[Body Text] Actual operational gyms/studios/centres. Created/managed by the platform team.
+[Normal] Design note: Branch deactivation blocks new branch operations but does not deactivate users, delete history, cancel memberships or reset future cross-branch/passport balances.
+[Heading 3] 5. users
+[Body Text] Tenant-side people/accounts: staff, members, online clients, guests and trials.
+[Normal] Design note: Tenant login is allowed only when tenant.status=ACTIVE and user.status=ACTIVE; existing API sessions are also tenant-gated centrally.
+[Heading 3] 6. user_branches
+[Body Text] Historical/operational user-to-branch associations.
+[Normal] Design note: UNIQUE(user_id, branch_id, relationship_type). Branch closure never deletes this history.
+[Heading 3] 7. departments
+[Body Text] Tenant-created departments within the organization.
+[Heading 3] 8. user_departments
+[Body Text] Many-to-many user membership in tenant departments.
+[Normal] Design note: UNIQUE(user_id, department_id).
+[Heading 3] 9. module_catalog
+[Body Text] Tenant-local synchronized copy of enabled product module catalogue.
+[Heading 3] 10. submodule_catalog
+[Body Text] Tenant-local synchronized product submodule catalogue.
+[Heading 3] 11. permissions
+[Body Text] Tenant-local synchronized action permission catalogue.
+[Heading 3] 12. roles
+[Body Text] Tenant-created roles, usually under a department.
+[Heading 3] 13. role_permission_sets
+[Body Text] Defines a role permission matrix at Organization, Company Entity, Location or Branch scope, with inheritance.
+[Normal] Design note: Scope validation must ensure only the matching structural FK is populated. Inheritance: organization default -> company entity/location -> branch override.
+[Heading 3] 14. role_module_access
+[Body Text] Role permission-set module visibility.
+[Normal] Design note: UNIQUE(permission_set_id, module_id).
+[Heading 3] 15. role_submodule_access
+[Body Text] Role permission-set submodule visibility.
+[Normal] Design note: UNIQUE(permission_set_id, submodule_id).
+[Heading 3] 16. role_permission_set_items
+[Body Text] Action permissions allowed/denied within a permission set.
+[Normal] Design note: UNIQUE(permission_set_id, permission_id). Permission matrix = Department -> Role -> Module -> Submodule -> Action.
+[Heading 3] 17. role_assignments
+[Body Text] Assigns a tenant role to a user at a structural scope.
+[Normal] Design note: Org Admin uses ORGANIZATION scope and can see the full organization hierarchy subject to permissions.
+[Heading 3] 18. branch_modules
+[Body Text] Super-Admin-controlled branch-level module applicability when tenant_modules.availability_mode=SELECTED_BRANCHES.
+[Normal] Design note: UNIQUE(branch_id, module_id). For ALL_BRANCHES modules, an explicit row is not required; availability is inherited. For SELECTED_BRANCHES, only explicitly enabled rows are available.
+[Heading 3] 19. organization_settings
+[Body Text] Organization-level business defaults.
+[Normal] Design note: Configuration inheritance: platform defaults -> organization settings -> branch override.
+[Heading 3] 20. branch_settings
+[Body Text] Branch-specific overrides of organization settings.
+[Heading 3] 21. notification_templates
+[Body Text] Tenant-owned notification templates with optional branch override.
+[Heading 3] 22. processing_purposes
+[Body Text] DPDP/privacy processing-purpose catalogue.
+[Normal] Design note: Examples: CORE_SERVICE, MARKETING_EMAIL, MARKETING_WHATSAPP, AI_COACHING, NUTRITION_ANALYSIS, WEARABLE_PROCESSING, COMPUTER_VISION_ANALYSIS.
+[Heading 3] 23. consent_records
+[Body Text] Historical consent ledger; do not overwrite previous evidence.
+[Heading 3] 24. privacy_requests
+[Body Text] Data-principal/privacy rights workflow.
+[Heading 3] 25. audit_events
+[Body Text] Append-only tenant audit ledger.
+[Normal] Design note: Never log passwords, OTPs, JWTs, authorization headers, session cookies, secret keys or full sensitive payment data.
+[Heading 3] 26. files
+[Body Text] Metadata registry for all tenant/end-user files. Actual binaries are stored in the Zata.ai S3-compatible bucket on NeevCloud.
+[Normal] Design note: Store metadata only in PostgreSQL. Use short-lived signed URLs after authorization. Namespace object keys by tenant. Actual S3/provider metrics are authoritative for storage billing; files.file_size supports application-level reconciliation.
+[Heading 3] 27. integrations
+[Body Text] Tenant-side configuration of enabled external integrations.
+[Normal] Design note: UNIQUE(integration_type, provider). Examples: Razorpay, ICICI, TeleCMI, Gupshup, SES, Meta, Timewatch.
+[Heading 3] 28. legacy_entity_map
+[Body Text] Recommended migration traceability map from legacy records to standardized new entities.
+[Normal] Design note: UNIQUE(source_system, legacy_entity_type, legacy_entity_id). Recommended as a migration-support table/schema; preserves legacy traceability without carrying the legacy schema forward.
+[Heading 3] 29. branch_working_hours
+[Body Text] Per-branch weekly operating schedule with day-of-week open/close times.
+[Heading 3] 30. branch_operating_exceptions
+[Body Text] Per-branch calendar date operating exceptions, closures, or modified holiday hours.
+[Heading 1] 10. Mandatory Lifecycle Rules
+[Heading 1] 11. Tenant Onboarding Flow
+[List Bullet] 1. Create Tenant in Master DB.
+[List Bullet] 2. Configure platform/custom domain and branding mode.
+[List Bullet] 3. Assign SaaS plan and product modules.
+[List Bullet] 4. Choose module availability: ALL_BRANCHES or SELECTED_BRANCHES.
+[List Bullet] 5. Configure tenant data source: platform-managed or customer-managed.
+[List Bullet] 6. Provision/verify dedicated tenant PostgreSQL database and synchronize module/submodule/permission catalogue.
+[List Bullet] 7. Create Organization.
+[List Bullet] 8. Create optional Company Entity records.
+[List Bullet] 9. Create Locations.
+[List Bullet] 10. Create Branches.
+[List Bullet] 11. Apply selected branch module mappings where required.
+[List Bullet] 12. Create/invite first Org Admin.
+[List Bullet] 13. Tenant Org Admin creates departments, roles, module/submodule/action matrices, users and role assignments.
+[List Bullet] 14. Activate tenant after validation.
+[Heading 1] 12. Example: Branch Module Applicability
+[Heading 1] 13. Legacy Standardization Mapping - Planning Reference
+[Heading 1] 14. Implementation Guardrails
+[List Bullet] Use UUID primary keys for new entities; maintain proper foreign keys within each database.
+[List Bullet] Use RESTRICT/PROTECT for structural and historical relationships; avoid accidental destructive CASCADE deletes.
+[List Bullet] Do not trust tenant_id from the frontend to choose a database. Resolve tenant from trusted domain/context and Master DB routing.
+[List Bullet] Keep Master DB and Tenant DB models explicitly separated in Django database routing.
+[List Bullet] Keep secret values in a secrets manager/Vault. Store only secret_reference in PostgreSQL.
+[List Bullet] Use Redis/Celery for asynchronous usage collection, database health checks, notifications, provisioning and catalogue synchronization.
+[List Bullet] Generate signed object URLs only after authorization. Do not expose permanent public Zata S3 URLs for restricted files.
+[List Bullet] Keep platform audit and tenant audit append-only at application level and redact sensitive data.
+[List Bullet] Apply database schema version checks before serving a tenant whose database is customer-managed.
+[List Bullet] Treat UI visibility as presentation only; every API must independently enforce entitlement, scope and action permission.
+[Heading 1] 15. Schema Inventory
+[Heading 2] Master DB: 41 tables
+[Normal] 1. platform_users
+[Normal] 2. platform_departments
+[Normal] 3. platform_user_departments
+[Normal] 4. platform_roles
+[Normal] 5. platform_modules
+[Normal] 6. platform_submodules
+[Normal] 7. platform_permissions
+[Normal] 8. platform_role_module_access
+[Normal] 9. platform_role_submodule_access
+[Normal] 10. platform_role_permissions
+[Normal] 11. platform_user_roles
+[Normal] 12. tenants
+[Normal] 13. tenant_domains
+[Normal] 14. platform_branding
+[Normal] 15. tenant_branding
+[Normal] 16. product_modules
+[Normal] 17. product_submodules
+[Normal] 18. tenant_permission_catalog
+[Normal] 19. tenant_modules
+[Normal] 20. saas_plans
+[Normal] 21. saas_plan_prices
+[Normal] 22. saas_plan_modules
+[Normal] 23. resource_metrics
+[Normal] 24. saas_plan_resource_limits
+[Normal] 25. tenant_resource_limits
+[Normal] 26. tenant_resource_usage
+[Normal] 27. tenant_usage_alerts
+[Normal] 28. tenant_subscriptions
+[Normal] 29. tenant_billing_methods
+[Normal] 30. subscription_invoices
+[Normal] 31. subscription_payments
+[Normal] 32. subscription_dunning_events
+[Normal] 33. marketplace_integrations
+[Normal] 34. saas_plan_integrations
+[Normal] 35. tenant_integration_entitlements
+[Normal] 36. tenant_data_sources
+[Normal] 37. tenant_data_hosting_policies
+[Normal] 38. tenant_data_source_health
+[Normal] 39. tenant_provisioning
+[Normal] 40. platform_settings
+[Normal] 41. platform_audit_events
+[Heading 2] Dedicated Tenant DB: 28 tables (including migration traceability)
+[Normal] 1. organizations
+[Normal] 2. company_entities
+[Normal] 3. locations
+[Normal] 4. branches
+[Normal] 5. users
+[Normal] 6. user_branches
+[Normal] 7. departments
+[Normal] 8. user_departments
+[Normal] 9. module_catalog
+[Normal] 10. submodule_catalog
+[Normal] 11. permissions
+[Normal] 12. roles
+[Normal] 13. role_permission_sets
+[Normal] 14. role_module_access
+[Normal] 15. role_submodule_access
+[Normal] 16. role_permission_set_items
+[Normal] 17. role_assignments
+[Normal] 18. branch_modules
+[Normal] 19. organization_settings
+[Normal] 20. branch_settings
+[Normal] 21. notification_templates
+[Normal] 22. processing_purposes
+[Normal] 23. consent_records
+[Normal] 24. privacy_requests
+[Normal] 25. audit_events
+[Normal] 26. files
+[Normal] 27. integrations
+[Normal] 28. legacy_entity_map
+[Normal] Phase 1 boundary: CRM leads, member 360, trainer profiles, programs/packages, memberships, payment/order domain, class scheduling, bookings, attendance and cross-branch/passport session entitlements belong to the next business-domain layer and should build on this foundation.
+[TABLE] Tenant Login Gate
+[TABLE] Tenant-side login/API access is allowed only when tenant.status = ACTIVE.
+[TABLE] Do not bulk-change users.status when a tenant is suspended/deactivated.
+[TABLE] Tenant status must also be rechecked for authenticated API requests so already-issued sessions/tokens cannot bypass deactivation.
+[TABLE] Resource / Capability | Primary Owner
+[TABLE] Tenant / domain / branding / database / SaaS plan / enabled product modules | Platform / Super Admin
+[TABLE] Organization / company entities / locations / branches | Platform / Super Admin
+[TABLE] Branch activation/deactivation and branch module applicability | Platform / Super Admin
+[TABLE] Departments / tenant users / roles / permission matrices / role assignments | Tenant Org Admin
+[TABLE] Notification templates and allowed business settings | Tenant Org Admin
+[TABLE] Platform departments / roles / platform panel visibility | Platform Super Admin
+[TABLE] Access is granted only when ALL required checks pass
+[TABLE] Tenant ACTIVE
+[TABLE] Organization ACTIVE
+[TABLE] Location/Branch ACTIVE when the requested resource is branch-scoped
+[TABLE] Tenant product module ENABLED
+[TABLE] Branch module available (ALL_BRANCHES or explicitly selected branch)
+[TABLE] User ACTIVE
+[TABLE] Role assignment ACTIVE and scope matches requested resource
+[TABLE] Role module visible
+[TABLE] Role submodule visible
+[TABLE] Requested action permission allowed
+[TABLE] Migration Rule
+[TABLE] Preserve data, business meaning, history and legacy IDs.
+[TABLE] Do not copy the legacy schema as-is into the new system.
+[TABLE] Legacy MySQL -> immutable backup -> migration staging -> transform/standardize -> new tenant PostgreSQL -> reconciliation.
+[TABLE] Use legacy_entity_map to trace every migrated legacy record to its new standardized entity.
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Platform user identifier
+[TABLE] email | VARCHAR(320) | UNIQUE, NOT NULL | Login identity
+[TABLE] phone | VARCHAR(30) | NULL | Contact / alternate identity
+[TABLE] password_hash | TEXT | NOT NULL | Hashed credential only
+[TABLE] first_name / last_name | VARCHAR(100) | NOT NULL | Platform user name
+[TABLE] status | VARCHAR(30) | INVITED | ACTIVE | INACTIVE | SUSPENDED | Independent user lifecycle
+[TABLE] is_mfa_enabled | BOOLEAN | DEFAULT FALSE | Privileged-access control
+[TABLE] last_login_at | TIMESTAMPTZ | NULL | Last successful login
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Department identifier
+[TABLE] code | VARCHAR(50) | UNIQUE | Stable department code
+[TABLE] name | VARCHAR(150) | NOT NULL | Department name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Department lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Assignment identifier
+[TABLE] platform_user_id | UUID | FK -> platform_users RESTRICT | Assigned user
+[TABLE] department_id | UUID | FK -> platform_departments RESTRICT | Assigned department
+[TABLE] is_primary | BOOLEAN | DEFAULT FALSE | Primary department flag
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Assignment lifecycle
+[TABLE] assigned_at / unassigned_at | TIMESTAMPTZ | unassigned_at NULL | History
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Role identifier
+[TABLE] department_id | UUID | FK -> platform_departments, NULL | Null for cross-platform roles such as SUPER_ADMIN
+[TABLE] code | VARCHAR(100) | UNIQUE | Stable role code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] description | TEXT | NULL | Role description
+[TABLE] is_system_role | BOOLEAN | DEFAULT FALSE | Protect platform-seeded roles
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Role lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Module identifier
+[TABLE] code | VARCHAR(100) | UNIQUE | Module code
+[TABLE] name | VARCHAR(150) | NOT NULL | Module label
+[TABLE] description | TEXT | NULL | Description
+[TABLE] display_order | INTEGER | NOT NULL | Navigation ordering
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Catalogue lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Submodule identifier
+[TABLE] module_id | UUID | FK -> platform_modules RESTRICT | Parent module
+[TABLE] code | VARCHAR(100) | UNIQUE per module | Stable code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display label
+[TABLE] description | TEXT | NULL | Description
+[TABLE] display_order | INTEGER | NOT NULL | Navigation ordering
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Catalogue lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission identifier
+[TABLE] module_id | UUID | FK -> platform_modules RESTRICT | Parent module
+[TABLE] submodule_id | UUID | FK -> platform_submodules, NULL | Optional submodule
+[TABLE] code | VARCHAR(150) | UNIQUE | Permission code
+[TABLE] action | VARCHAR(50) | VIEW | CREATE | EDIT | DELETE | ASSIGN | APPROVE | EXPORT | etc. | Action
+[TABLE] description | TEXT | NULL | Meaning
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Access row
+[TABLE] role_id | UUID | FK -> platform_roles RESTRICT | Role
+[TABLE] module_id | UUID | FK -> platform_modules RESTRICT | Module
+[TABLE] is_visible | BOOLEAN | DEFAULT FALSE | Whether module is visible/eligible
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Access row
+[TABLE] role_id | UUID | FK -> platform_roles RESTRICT | Role
+[TABLE] submodule_id | UUID | FK -> platform_submodules RESTRICT | Submodule
+[TABLE] is_visible | BOOLEAN | DEFAULT FALSE | Visibility
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission mapping
+[TABLE] role_id | UUID | FK -> platform_roles RESTRICT | Role
+[TABLE] permission_id | UUID | FK -> platform_permissions RESTRICT | Permission
+[TABLE] is_allowed | BOOLEAN | DEFAULT TRUE | Action allowed
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Assignment
+[TABLE] platform_user_id | UUID | FK -> platform_users RESTRICT | User
+[TABLE] role_id | UUID | FK -> platform_roles RESTRICT | Role
+[TABLE] assigned_by | UUID | FK -> platform_users, NULL | Assigner
+[TABLE] assigned_at | TIMESTAMPTZ | NOT NULL | Assignment time
+[TABLE] expires_at | TIMESTAMPTZ | NULL | Optional expiry
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Assignment state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Tenant identifier
+[TABLE] code | VARCHAR(50) | UNIQUE | Stable tenant code
+[TABLE] name | VARCHAR(200) | NOT NULL | Tenant/business name
+[TABLE] legal_name | VARCHAR(250) | NULL | Legal display name
+[TABLE] slug | VARCHAR(150) | UNIQUE | URL-friendly identifier
+[TABLE] status | VARCHAR(30) | DRAFT | PENDING_ACTIVATION | ACTIVE | SUSPENDED | DEACTIVATED | TERMINATED | Tenant lifecycle
+[TABLE] country / currency / timezone | VARCHAR | NOT NULL | Tenant defaults
+[TABLE] default_language | VARCHAR(20) | NOT NULL | Default language
+[TABLE] activated_at / suspended_at / deactivated_at / terminated_at | TIMESTAMPTZ | NULL | Lifecycle timestamps
+[TABLE] deactivation_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Domain record
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] domain | VARCHAR(255) | UNIQUE | Hostname
+[TABLE] domain_type | VARCHAR(30) | PLATFORM | CUSTOM | Domain ownership mode
+[TABLE] is_primary | BOOLEAN | DEFAULT FALSE | Primary domain
+[TABLE] is_verified | BOOLEAN | DEFAULT FALSE | Verification state
+[TABLE] verification_method | VARCHAR(50) | NULL | DNS/file/etc.
+[TABLE] verified_at | TIMESTAMPTZ | NULL | Verification time
+[TABLE] ssl_status | VARCHAR(30) | NULL | Certificate status
+[TABLE] status | VARCHAR(30) | PENDING | ACTIVE | INACTIVE | FAILED | Domain lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Branding record
+[TABLE] brand_name | VARCHAR(200) | NOT NULL | Platform brand
+[TABLE] logo_storage_key / favicon_storage_key | TEXT | NULL | Object storage keys
+[TABLE] login_logo_key / login_background_key | TEXT | NULL | Login assets
+[TABLE] primary_color / secondary_color | VARCHAR(20) | NULL | Theme colors
+[TABLE] login_title | VARCHAR(250) | NULL | Login copy
+[TABLE] support_email / support_phone | VARCHAR | NULL | Support details
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Branding record
+[TABLE] tenant_id | UUID | UNIQUE FK -> tenants RESTRICT | Tenant
+[TABLE] branding_mode | VARCHAR(30) | PLATFORM | TENANT | Brand source
+[TABLE] brand_name | VARCHAR(200) | NULL | Tenant brand
+[TABLE] logo_storage_key / favicon_storage_key | TEXT | NULL | Brand assets
+[TABLE] login_logo_key / login_background_key | TEXT | NULL | Login assets
+[TABLE] email_logo_key | TEXT | NULL | Email branding
+[TABLE] primary_color / secondary_color | VARCHAR(20) | NULL | Theme colors
+[TABLE] theme_preset_code | VARCHAR(100) | NULL | Optional theme preset
+[TABLE] theme_tokens | JSONB | NULL | Tokenized theming only
+[TABLE] support_email / support_phone | VARCHAR | NULL | Tenant support details
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Product module
+[TABLE] code | VARCHAR(100) | UNIQUE | Module code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] supports_branch_scope | BOOLEAN | DEFAULT FALSE | Whether branch applicability is supported
+[TABLE] display_order | INTEGER | NOT NULL | UI ordering
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Catalogue state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Submodule
+[TABLE] module_id | UUID | FK -> product_modules RESTRICT | Parent module
+[TABLE] code | VARCHAR(100) | UNIQUE per module | Stable code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] display_order | INTEGER | NOT NULL | UI order
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Catalogue state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission
+[TABLE] module_id | UUID | FK -> product_modules RESTRICT | Module
+[TABLE] submodule_id | UUID | FK -> product_submodules, NULL | Submodule
+[TABLE] code | VARCHAR(150) | UNIQUE | Permission code
+[TABLE] action | VARCHAR(50) | VIEW | CREATE | EDIT | DELETE | ASSIGN | EXPORT | etc. | Action
+[TABLE] description | TEXT | NULL | Meaning
+[TABLE] version | INTEGER | DEFAULT 1 | Permission version
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Tenant-module entitlement
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] module_id | UUID | FK -> product_modules RESTRICT | Module
+[TABLE] status | VARCHAR(30) | ENABLED | DISABLED | SUSPENDED | Entitlement state
+[TABLE] availability_mode | VARCHAR(30) | ALL_BRANCHES | SELECTED_BRANCHES | Branch applicability
+[TABLE] enabled_at / disabled_at | TIMESTAMPTZ | NULL | Lifecycle timestamps
+[TABLE] configuration | JSONB | NULL | Non-secret module-level config
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Plan
+[TABLE] code | VARCHAR(100) | UNIQUE | Plan code
+[TABLE] name | VARCHAR(150) | NOT NULL | Plan name
+[TABLE] description | TEXT | NULL | Plan summary
+[TABLE] status | VARCHAR(30) | DRAFT | ACTIVE | INACTIVE | ARCHIVED | Lifecycle
+[TABLE] is_custom | BOOLEAN | DEFAULT FALSE | Enterprise/custom plan
+[TABLE] is_featured | BOOLEAN | DEFAULT FALSE | UI flag
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Price
+[TABLE] plan_id | UUID | FK -> saas_plans RESTRICT | Plan
+[TABLE] billing_cycle | VARCHAR(30) | MONTHLY | QUARTERLY | ANNUAL | Cycle
+[TABLE] currency | VARCHAR(10) | NOT NULL | Currency
+[TABLE] amount | DECIMAL(14,2) | NOT NULL | Price
+[TABLE] effective_from | TIMESTAMPTZ | NOT NULL | Start
+[TABLE] effective_until | TIMESTAMPTZ | NULL | End
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Mapping
+[TABLE] plan_id | UUID | FK -> saas_plans RESTRICT | Plan
+[TABLE] module_id | UUID | FK -> product_modules RESTRICT | Module
+[TABLE] is_included | BOOLEAN | DEFAULT TRUE | Inclusion flag
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created timestamp
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Metric
+[TABLE] code | VARCHAR(100) | UNIQUE | Metric code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] unit | VARCHAR(50) | COUNT | BYTES | MINUTES | API_CALLS | Unit
+[TABLE] aggregation_period | VARCHAR(30) | REALTIME | DAILY | MONTHLY | Aggregation
+[TABLE] is_billable | BOOLEAN | DEFAULT FALSE | Billing eligibility
+[TABLE] description | TEXT | NULL | Description
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Limit
+[TABLE] plan_id | UUID | FK -> saas_plans RESTRICT | Plan
+[TABLE] metric_id | UUID | FK -> resource_metrics RESTRICT | Metric
+[TABLE] limit_value | DECIMAL(20,4) | NULL | Null if unlimited
+[TABLE] is_unlimited | BOOLEAN | DEFAULT FALSE | Unlimited flag
+[TABLE] warning_percent | DECIMAL(5,2) | DEFAULT 80 | Warning threshold
+[TABLE] enforcement_mode | VARCHAR(30) | MONITOR_ONLY | SOFT_LIMIT | HARD_LIMIT | Enforcement
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Override
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] metric_id | UUID | FK -> resource_metrics RESTRICT | Metric
+[TABLE] limit_value | DECIMAL(20,4) | NULL | Override
+[TABLE] is_unlimited | BOOLEAN | DEFAULT FALSE | Unlimited override
+[TABLE] warning_threshold_percent | DECIMAL(5,2) | DEFAULT 80 | Tenant threshold
+[TABLE] effective_from / effective_until | TIMESTAMPTZ | effective_until NULL | Validity
+[TABLE] override_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Usage record
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] metric_id | UUID | FK -> resource_metrics RESTRICT | Metric
+[TABLE] period_start / period_end | TIMESTAMPTZ | NOT NULL | Measurement period
+[TABLE] usage_value | DECIMAL(20,4) | NOT NULL | Consumption
+[TABLE] is_platform_billable | BOOLEAN | DEFAULT TRUE | False for customer-managed resources when appropriate
+[TABLE] measured_at | TIMESTAMPTZ | NOT NULL | Measurement time
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created timestamp
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Alert
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] metric_id | UUID | FK -> resource_metrics RESTRICT | Metric
+[TABLE] usage_value / limit_value | DECIMAL(20,4) | NOT NULL | Snapshot values
+[TABLE] threshold_percent | DECIMAL(5,2) | NOT NULL | Triggered threshold
+[TABLE] status | VARCHAR(30) | OPEN | ACKNOWLEDGED | RESOLVED | Alert lifecycle
+[TABLE] triggered_at / resolved_at | TIMESTAMPTZ | resolved_at NULL | Lifecycle timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Subscription
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] plan_id | UUID | FK -> saas_plans RESTRICT | Plan
+[TABLE] billing_cycle | VARCHAR(30) | MONTHLY | QUARTERLY | ANNUAL | Cycle
+[TABLE] currency | VARCHAR(10) | NOT NULL | Currency
+[TABLE] billing_amount | DECIMAL(14,2) | NOT NULL | Contracted amount
+[TABLE] status | VARCHAR(30) | TRIAL | ACTIVE | PAST_DUE | SUSPENDED | CANCELLED | EXPIRED | Lifecycle
+[TABLE] started_at | TIMESTAMPTZ | NOT NULL | Start
+[TABLE] current_period_start / current_period_end | TIMESTAMPTZ | NOT NULL | Current period
+[TABLE] next_renewal_at | TIMESTAMPTZ | NULL | Renewal
+[TABLE] cancelled_at | TIMESTAMPTZ | NULL | Cancellation
+[TABLE] autopay_enabled | BOOLEAN | DEFAULT FALSE | Autopay state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Billing method
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] provider | VARCHAR(100) | e.g. RAZORPAY | Provider
+[TABLE] method_type | VARCHAR(50) | CARD | UPI | MANDATE | etc. | Method
+[TABLE] provider_customer_ref | VARCHAR(255) | NULL | Provider customer ID
+[TABLE] provider_method_ref | VARCHAR(255) | NULL | Provider method reference
+[TABLE] mandate_reference | VARCHAR(255) | NULL | Mandate reference
+[TABLE] is_default | BOOLEAN | DEFAULT FALSE | Default method
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | EXPIRED | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Invoice
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] subscription_id | UUID | FK -> tenant_subscriptions RESTRICT | Subscription
+[TABLE] invoice_number | VARCHAR(100) | UNIQUE | Invoice number
+[TABLE] billing_period_start / billing_period_end | DATE | NOT NULL | Period
+[TABLE] subtotal / tax_amount / discount_amount / total_amount | DECIMAL(14,2) | NOT NULL | Amounts
+[TABLE] currency | VARCHAR(10) | NOT NULL | Currency
+[TABLE] status | VARCHAR(30) | DRAFT | ISSUED | PAID | PARTIALLY_PAID | PAST_DUE | VOID | Lifecycle
+[TABLE] issued_at / due_at / paid_at | TIMESTAMPTZ | NULL | Lifecycle timestamps
+[TABLE] invoice_file_key | TEXT | NULL | Object storage reference
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Payment
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] invoice_id | UUID | FK -> subscription_invoices RESTRICT | Invoice
+[TABLE] provider | VARCHAR(100) | NOT NULL | Payment provider
+[TABLE] provider_payment_id | VARCHAR(255) | NULL | Provider ref
+[TABLE] amount | DECIMAL(14,2) | NOT NULL | Amount
+[TABLE] currency | VARCHAR(10) | NOT NULL | Currency
+[TABLE] status | VARCHAR(30) | INITIATED | SUCCESS | FAILED | REFUNDED | Lifecycle
+[TABLE] paid_at | TIMESTAMPTZ | NULL | Success time
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Dunning event
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] subscription_id | UUID | FK -> tenant_subscriptions RESTRICT | Subscription
+[TABLE] invoice_id | UUID | FK -> subscription_invoices, NULL | Invoice
+[TABLE] event_type | VARCHAR(50) | PAYMENT_FAILED | REMINDER_SENT | RETRY_SCHEDULED | RETRY_FAILED | RETRY_SUCCESS | SUSPENSION_WARNING | SUBSCRIPTION_SUSPENDED | Event
+[TABLE] attempt_number | INTEGER | NULL | Retry number
+[TABLE] scheduled_at / executed_at | TIMESTAMPTZ | NULL | Timing
+[TABLE] result | VARCHAR(30) | NULL | Outcome
+[TABLE] metadata | JSONB | NULL | Provider/context metadata
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Integration
+[TABLE] code | VARCHAR(100) | UNIQUE | Stable code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] category | VARCHAR(50) | AI_VOICE | PAYMENTS | MESSAGING | ACCESS_CONTROL | ACCOUNTING | LEADS | EMAIL | OTHER | Category
+[TABLE] provider | VARCHAR(100) | NOT NULL | Provider
+[TABLE] description | TEXT | NULL | Description
+[TABLE] logo_storage_key | TEXT | NULL | Marketplace icon
+[TABLE] configuration_schema | JSONB | NULL | Non-secret configuration schema
+[TABLE] status | VARCHAR(30) | DRAFT | ACTIVE | DEPRECATED | DISABLED | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Mapping
+[TABLE] plan_id | UUID | FK -> saas_plans RESTRICT | Plan
+[TABLE] integration_id | UUID | FK -> marketplace_integrations RESTRICT | Integration
+[TABLE] is_included | BOOLEAN | DEFAULT TRUE | Included
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Entitlement
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] integration_id | UUID | FK -> marketplace_integrations RESTRICT | Integration
+[TABLE] status | VARCHAR(30) | AVAILABLE | ENABLED | DISABLED | SUSPENDED | State
+[TABLE] enabled_at / disabled_at | TIMESTAMPTZ | NULL | Lifecycle timestamps
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Data source
+[TABLE] tenant_id | UUID | UNIQUE FK -> tenants RESTRICT | Tenant
+[TABLE] hosting_mode | VARCHAR(30) | PLATFORM_MANAGED | CUSTOMER_MANAGED | Hosting model
+[TABLE] database_engine | VARCHAR(30) | POSTGRESQL | Engine
+[TABLE] database_name | VARCHAR(150) | NOT NULL | DB name
+[TABLE] provider | VARCHAR(50) | PLATFORM | NEEVCLOUD | AWS | AZURE | GCP | CUSTOMER_DATACENTER | OTHER | Provider
+[TABLE] region | VARCHAR(100) | NULL | Region
+[TABLE] network_mode | VARCHAR(40) | PRIVATE_NETWORK | VPN | PRIVATE_LINK | PUBLIC_TLS | SSH_TUNNEL | Connectivity
+[TABLE] ssl_mode | VARCHAR(30) | REQUIRE | VERIFY_CA | VERIFY_FULL | TLS verification
+[TABLE] secret_reference | VARCHAR(255) | NOT NULL | Secret Manager/Vault reference
+[TABLE] schema_version | VARCHAR(50) | NOT NULL | Expected schema version
+[TABLE] status | VARCHAR(30) | PROVISIONING | ACTIVE | DEGRADED | UNREACHABLE | DISABLED | Data source state
+[TABLE] last_health_check_at | TIMESTAMPTZ | NULL | Last check
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Policy
+[TABLE] tenant_id | UUID | UNIQUE FK -> tenants RESTRICT | Tenant
+[TABLE] backup_owner / restore_owner / patching_owner / monitoring_owner / migration_owner / encryption_owner | VARCHAR(30) | PLATFORM | CUSTOMER | SHARED | Responsibility
+[TABLE] availability_sla | VARCHAR(50) | NULL | Contracted SLA
+[TABLE] backup_policy_reference / dr_policy_reference | TEXT | NULL | Policy references
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Health record
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] status | VARCHAR(30) | HEALTHY | DEGRADED | UNREACHABLE | AUTH_FAILED | SSL_FAILED | SCHEMA_MISMATCH | Health
+[TABLE] response_time_ms | INTEGER | NULL | Latency
+[TABLE] detected_schema_version | VARCHAR(50) | NULL | Observed version
+[TABLE] error_code | VARCHAR(100) | NULL | Error code
+[TABLE] error_message | TEXT | NULL | Sanitized message
+[TABLE] checked_at | TIMESTAMPTZ | NOT NULL | Check time
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Provisioning run
+[TABLE] tenant_id | UUID | FK -> tenants RESTRICT | Tenant
+[TABLE] provisioning_status | VARCHAR(30) | PENDING | PROVISIONING | MIGRATING | VERIFYING | COMPLETED | FAILED | State
+[TABLE] target_schema_version | VARCHAR(50) | NOT NULL | Target version
+[TABLE] database_created_at | TIMESTAMPTZ | NULL | DB creation
+[TABLE] started_at / completed_at / failed_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] failure_reason | TEXT | NULL | Sanitized reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Setting
+[TABLE] key | VARCHAR(150) | UNIQUE | Setting key
+[TABLE] category | VARCHAR(100) | NOT NULL | Category
+[TABLE] value | JSONB | NOT NULL | Non-secret value
+[TABLE] description | TEXT | NULL | Meaning
+[TABLE] is_active | BOOLEAN | DEFAULT TRUE | State
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Audit event
+[TABLE] platform_user_id | UUID | NULL | Actor
+[TABLE] tenant_id | UUID | NULL | Affected tenant
+[TABLE] event_name | VARCHAR(150) | NOT NULL | Event
+[TABLE] action | VARCHAR(50) | NOT NULL | Action
+[TABLE] resource_type / resource_id | VARCHAR + UUID | resource_id NULL | Affected resource
+[TABLE] before_data / after_data | JSONB | NULL | Redacted snapshots
+[TABLE] reason | TEXT | NULL | Reason
+[TABLE] source_application | VARCHAR(100) | NOT NULL | Source
+[TABLE] ip_address | INET | NULL | Actor IP
+[TABLE] user_agent | TEXT | NULL | Client
+[TABLE] request_id / correlation_id | UUID | NULL | Traceability
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Event time
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Organization
+[TABLE] code | VARCHAR(50) | UNIQUE | Stable code
+[TABLE] name | VARCHAR(200) | NOT NULL | Business name
+[TABLE] legal_name | VARCHAR(250) | NULL | Legal name
+[TABLE] email / phone | VARCHAR | NULL | Contact
+[TABLE] country / currency / timezone | VARCHAR | NOT NULL | Defaults
+[TABLE] status | VARCHAR(30) | DRAFT | ACTIVE | SUSPENDED | INACTIVE | Lifecycle
+[TABLE] activated_at / deactivated_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] deactivation_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Entity
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] code | VARCHAR(50) | UNIQUE per org | Stable code
+[TABLE] name / legal_name | VARCHAR | NOT NULL | Entity names
+[TABLE] registration_number / tax_registration_number | VARCHAR(100) | NULL | Legal/tax IDs
+[TABLE] email / phone | VARCHAR | NULL | Contact
+[TABLE] status | VARCHAR(30) | DRAFT | ACTIVE | INACTIVE | SUSPENDED | CLOSED | Lifecycle
+[TABLE] activated_at / deactivated_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] deactivation_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Location
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] code | VARCHAR(50) | UNIQUE per org | Code
+[TABLE] name | VARCHAR(200) | NOT NULL | Location name
+[TABLE] city / area / state / country / postal_code | VARCHAR | area/postal NULL | Geography
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | SUSPENDED | Lifecycle
+[TABLE] activated_at / deactivated_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] deactivation_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Branch
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] company_entity_id | UUID | FK -> company_entities, NULL | Optional entity
+[TABLE] location_id | UUID | FK -> locations RESTRICT | Location
+[TABLE] code | VARCHAR(50) | UNIQUE per org | Branch code
+[TABLE] name | VARCHAR(200) | NOT NULL | Branch name
+[TABLE] address_line_1 / address_line_2 | VARCHAR(250) | address2 NULL | Address
+[TABLE] latitude / longitude | DECIMAL(10,7) | NULL | Coordinates
+[TABLE] timezone | VARCHAR(100) | NOT NULL | Branch timezone
+[TABLE] email / phone | VARCHAR | NULL | Contact
+[TABLE] status | VARCHAR(30) | DRAFT | ACTIVE | INACTIVE | SUSPENDED | CLOSED | Lifecycle
+[TABLE] activated_at / deactivated_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] deactivation_reason | TEXT | NULL | Reason
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | User
+[TABLE] first_name / last_name / display_name | VARCHAR | display_name NULL | Identity
+[TABLE] email / phone | VARCHAR | NULL | Contact/login fields as applicable
+[TABLE] password_hash | TEXT | NULL | Hashed credential if tenant-local auth is used
+[TABLE] date_of_birth | DATE | NULL | DOB
+[TABLE] profile_file_id | UUID | NULL logical ref -> files | Profile asset
+[TABLE] user_type | VARCHAR(30) | STAFF | MEMBER | ONLINE_CLIENT | GUEST | TRIAL | Classification, not authorization
+[TABLE] status | VARCHAR(30) | INVITED | ACTIVE | INACTIVE | SUSPENDED | BLOCKED | Independent lifecycle
+[TABLE] is_mfa_enabled | BOOLEAN | DEFAULT FALSE | MFA
+[TABLE] email_verified_at / phone_verified_at / last_login_at | TIMESTAMPTZ | NULL | Verification/login
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Association
+[TABLE] user_id | UUID | FK -> users RESTRICT | User
+[TABLE] branch_id | UUID | FK -> branches RESTRICT | Branch
+[TABLE] relationship_type | VARCHAR(30) | PRIMARY | ASSIGNED | STAFF | ACCESS | Association type
+[TABLE] is_primary | BOOLEAN | DEFAULT FALSE | Primary flag
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Association state
+[TABLE] assigned_at / unassigned_at | TIMESTAMPTZ | unassigned_at NULL | History
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Department
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] code | VARCHAR(50) | UNIQUE per org | Code
+[TABLE] name | VARCHAR(150) | NOT NULL | Name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_by | UUID | FK -> users, NULL | Creator
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Assignment
+[TABLE] user_id | UUID | FK -> users RESTRICT | User
+[TABLE] department_id | UUID | FK -> departments RESTRICT | Department
+[TABLE] is_primary | BOOLEAN | DEFAULT FALSE | Primary department
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Assignment state
+[TABLE] assigned_at / unassigned_at | TIMESTAMPTZ | unassigned_at NULL | History
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Local module
+[TABLE] source_module_id | UUID | UNIQUE logical ref to Master | Master source
+[TABLE] code | VARCHAR(100) | UNIQUE | Module code
+[TABLE] name | VARCHAR(150) | NOT NULL | Display name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] supports_branch_scope | BOOLEAN | DEFAULT FALSE | Branch applicability
+[TABLE] display_order | INTEGER | NOT NULL | UI order
+[TABLE] is_enabled | BOOLEAN | DEFAULT TRUE | Tenant module state
+[TABLE] catalog_version | INTEGER | NOT NULL | Sync version
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Local submodule
+[TABLE] source_submodule_id | UUID | UNIQUE logical Master ref | Master source
+[TABLE] module_id | UUID | FK -> module_catalog RESTRICT | Parent module
+[TABLE] code | VARCHAR(100) | UNIQUE per module | Code
+[TABLE] name | VARCHAR(150) | NOT NULL | Name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] display_order | INTEGER | NOT NULL | UI order
+[TABLE] catalog_version | INTEGER | NOT NULL | Sync version
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission
+[TABLE] source_permission_id | UUID | UNIQUE logical Master ref | Master source
+[TABLE] module_id | UUID | FK -> module_catalog RESTRICT | Module
+[TABLE] submodule_id | UUID | FK -> submodule_catalog, NULL | Submodule
+[TABLE] code | VARCHAR(150) | UNIQUE | Permission code
+[TABLE] action | VARCHAR(50) | VIEW | CREATE | EDIT | DELETE | ASSIGN | EXPORT | etc. | Action
+[TABLE] description | TEXT | NULL | Meaning
+[TABLE] version | INTEGER | DEFAULT 1 | Version
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Role
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] department_id | UUID | FK -> departments, NULL | Null for ORG_ADMIN
+[TABLE] code | VARCHAR(100) | UNIQUE per org | Role code
+[TABLE] name | VARCHAR(150) | NOT NULL | Role name
+[TABLE] description | TEXT | NULL | Description
+[TABLE] is_system_role | BOOLEAN | DEFAULT FALSE | Seeded/protected role
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_by | UUID | FK -> users, NULL | Creator
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission set
+[TABLE] role_id | UUID | FK -> roles RESTRICT | Role
+[TABLE] scope_type | VARCHAR(30) | ORGANIZATION | COMPANY_ENTITY | LOCATION | BRANCH | Scope
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] company_entity_id | UUID | FK -> company_entities, NULL | Entity scope
+[TABLE] location_id | UUID | FK -> locations, NULL | Location scope
+[TABLE] branch_id | UUID | FK -> branches, NULL | Branch scope
+[TABLE] inherits_from_id | UUID | Self FK, NULL | Parent matrix
+[TABLE] is_override | BOOLEAN | DEFAULT FALSE | Override flag
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | State
+[TABLE] created_by | UUID | FK -> users, NULL | Creator
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Access row
+[TABLE] permission_set_id | UUID | FK -> role_permission_sets RESTRICT | Permission set
+[TABLE] module_id | UUID | FK -> module_catalog RESTRICT | Module
+[TABLE] is_visible | BOOLEAN | NOT NULL | Module visibility
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Access row
+[TABLE] permission_set_id | UUID | FK -> role_permission_sets RESTRICT | Permission set
+[TABLE] submodule_id | UUID | FK -> submodule_catalog RESTRICT | Submodule
+[TABLE] is_visible | BOOLEAN | NOT NULL | Submodule visibility
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Permission item
+[TABLE] permission_set_id | UUID | FK -> role_permission_sets RESTRICT | Permission set
+[TABLE] permission_id | UUID | FK -> permissions RESTRICT | Permission
+[TABLE] is_allowed | BOOLEAN | NOT NULL | Action state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Role assignment
+[TABLE] user_id | UUID | FK -> users RESTRICT | User
+[TABLE] role_id | UUID | FK -> roles RESTRICT | Role
+[TABLE] scope_type | VARCHAR(30) | ORGANIZATION | COMPANY_ENTITY | LOCATION | BRANCH | Scope
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] company_entity_id / location_id / branch_id | UUID | NULL as scope requires | Scope entity
+[TABLE] assigned_by | UUID | FK -> users, NULL | Assigner
+[TABLE] assigned_at / expires_at | TIMESTAMPTZ | expires_at NULL | Validity
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Assignment state
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Branch-module mapping
+[TABLE] branch_id | UUID | FK -> branches RESTRICT | Branch
+[TABLE] module_id | UUID | FK -> module_catalog RESTRICT | Module
+[TABLE] status | VARCHAR(30) | ENABLED | DISABLED | Branch availability
+[TABLE] enabled_at / disabled_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] assigned_by_type | VARCHAR(30) | PLATFORM_USER | SYSTEM | Origin
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Settings
+[TABLE] organization_id | UUID | UNIQUE FK -> organizations RESTRICT | Organization
+[TABLE] default_timezone | VARCHAR(100) | NOT NULL | Timezone
+[TABLE] currency | VARCHAR(10) | NOT NULL | Currency
+[TABLE] language | VARCHAR(20) | NOT NULL | Language
+[TABLE] date_format / time_format | VARCHAR(30) | NOT NULL | Formatting
+[TABLE] membership_config / booking_config / attendance_config / notification_config / ai_config | JSONB | NOT NULL/default {} | Flexible non-secret settings
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Settings
+[TABLE] branch_id | UUID | UNIQUE FK -> branches RESTRICT | Branch
+[TABLE] membership_config / booking_config / attendance_config / notification_config / ai_config | JSONB | NULL | Overrides only
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Template
+[TABLE] organization_id | UUID | FK -> organizations RESTRICT | Organization
+[TABLE] branch_id | UUID | FK -> branches, NULL | Null = org-wide
+[TABLE] event_code | VARCHAR(100) | NOT NULL | Business event
+[TABLE] channel | VARCHAR(30) | EMAIL | SMS | WHATSAPP | PUSH | IN_APP | Channel
+[TABLE] language | VARCHAR(20) | NOT NULL | Language
+[TABLE] name | VARCHAR(150) | NOT NULL | Template name
+[TABLE] subject | VARCHAR(300) | NULL | Subject
+[TABLE] body | TEXT | NOT NULL | Body
+[TABLE] version | INTEGER | DEFAULT 1 | Version
+[TABLE] is_active | BOOLEAN | DEFAULT TRUE | State
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Purpose
+[TABLE] code | VARCHAR(100) | UNIQUE | Purpose code
+[TABLE] name | VARCHAR(200) | NOT NULL | Name
+[TABLE] description | TEXT | NOT NULL | Purpose/notice
+[TABLE] notice_version | VARCHAR(50) | NOT NULL | Notice version
+[TABLE] is_mandatory | BOOLEAN | DEFAULT FALSE | Required for core service
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | Lifecycle
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Consent record
+[TABLE] user_id | UUID | FK -> users RESTRICT | User
+[TABLE] purpose_id | UUID | FK -> processing_purposes RESTRICT | Purpose
+[TABLE] status | VARCHAR(30) | GRANTED | WITHDRAWN | EXPIRED | Status
+[TABLE] notice_version | VARCHAR(50) | NOT NULL | Accepted notice
+[TABLE] granted_at / withdrawn_at | TIMESTAMPTZ | NULL | Lifecycle
+[TABLE] capture_source | VARCHAR(50) | NOT NULL | Web/app/admin/etc.
+[TABLE] ip_address | INET | NULL | Capture IP
+[TABLE] proof_metadata | JSONB | NULL | Evidence
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Request
+[TABLE] user_id | UUID | FK -> users RESTRICT | Requester
+[TABLE] request_type | VARCHAR(40) | ACCESS | CORRECTION | ERASURE | CONSENT_WITHDRAWAL | GRIEVANCE | Type
+[TABLE] status | VARCHAR(40) | OPEN workflow status | State
+[TABLE] identity_verified_at | TIMESTAMPTZ | NULL | Verification
+[TABLE] assigned_to | UUID | FK -> users, NULL | Assignee
+[TABLE] received_at / due_at / completed_at | TIMESTAMPTZ | due/completed NULL | SLA
+[TABLE] resolution | TEXT | NULL | Resolution
+[TABLE] evidence | JSONB | NULL | Evidence
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Audit event
+[TABLE] organization_id / company_entity_id / location_id / branch_id | UUID | NULL | Scope context
+[TABLE] actor_type | VARCHAR(30) | PLATFORM_USER | TENANT_USER | SYSTEM | API | AI | INTEGRATION | Actor type
+[TABLE] actor_id | UUID | NULL | Actor
+[TABLE] actor_role | VARCHAR(100) | NULL | Role snapshot
+[TABLE] event_name / action | VARCHAR | NOT NULL | Event/action
+[TABLE] resource_type / resource_id | VARCHAR + UUID | resource_id NULL | Affected resource
+[TABLE] before_data / after_data | JSONB | NULL | Redacted snapshots
+[TABLE] reason | TEXT | NULL | Reason
+[TABLE] source_application | VARCHAR(100) | NOT NULL | Source
+[TABLE] ip_address | INET | NULL | IP
+[TABLE] user_agent | TEXT | NULL | Client
+[TABLE] request_id / correlation_id | UUID | NULL | Traceability
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Event time
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | File record
+[TABLE] owner_type | VARCHAR(100) | NOT NULL | MEMBER_DOCUMENT | TRAINER_CERTIFICATE | ASSESSMENT | etc.
+[TABLE] owner_id | UUID | NULL | Owning business entity
+[TABLE] file_name | VARCHAR(255) | NOT NULL | Current name
+[TABLE] original_file_name | VARCHAR(255) | NULL | Uploaded name
+[TABLE] storage_provider | VARCHAR(50) | ZATA_S3 | Storage provider
+[TABLE] bucket_reference | VARCHAR(150) | NOT NULL | Bucket alias/reference
+[TABLE] object_key | TEXT | UNIQUE, NOT NULL | Tenant-namespaced S3 key
+[TABLE] mime_type | VARCHAR(150) | NOT NULL | MIME type
+[TABLE] file_size | BIGINT | NOT NULL | Bytes
+[TABLE] checksum | VARCHAR(128) | NOT NULL | Integrity hash
+[TABLE] classification | VARCHAR(50) | PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED | Data classification
+[TABLE] uploaded_by | UUID | FK -> users, NULL | Uploader
+[TABLE] uploaded_at | TIMESTAMPTZ | NOT NULL | Upload time
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Integration config
+[TABLE] integration_type | VARCHAR(50) | PAYMENT | CALLING | WHATSAPP | EMAIL | LEADS | ACCESS_CONTROL | etc. | Type
+[TABLE] provider | VARCHAR(100) | NOT NULL | Provider
+[TABLE] secret_reference | VARCHAR(255) | NULL | Secret Manager/Vault ref
+[TABLE] configuration | JSONB | NOT NULL | Non-secret config
+[TABLE] status | VARCHAR(30) | ACTIVE | INACTIVE | ERROR | Lifecycle
+[TABLE] last_sync_at | TIMESTAMPTZ | NULL | Last sync
+[TABLE] created_at / updated_at | TIMESTAMPTZ | NOT NULL | Audit timestamps
+[TABLE] Field | Type | Constraint / Values | Purpose
+[TABLE] id | UUID | PK | Mapping
+[TABLE] source_system | VARCHAR(100) | NOT NULL | Legacy source
+[TABLE] legacy_entity_type | VARCHAR(100) | NOT NULL | Legacy table/entity
+[TABLE] legacy_entity_id | VARCHAR(255) | NOT NULL | Legacy key
+[TABLE] new_entity_type | VARCHAR(100) | NOT NULL | New model/entity
+[TABLE] new_entity_id | UUID | NOT NULL | New ID
+[TABLE] migration_batch_id | UUID | NOT NULL | Migration batch
+[TABLE] source_checksum | VARCHAR(128) | NULL | Integrity fingerprint
+[TABLE] migrated_at | TIMESTAMPTZ | NOT NULL | Migration time
+[TABLE] Non-destructive deactivation
+[TABLE] Tenant DEACTIVATED/SUSPENDED -> tenant-side login and API access blocked; users remain unchanged.
+[TABLE] Organization SUSPENDED/INACTIVE -> organization operations blocked; users remain unchanged.
+[TABLE] Location INACTIVE/SUSPENDED -> new operations at underlying location/branches blocked as policy requires; users remain unchanged.
+[TABLE] Branch INACTIVE/SUSPENDED/CLOSED -> new branch-dependent operations blocked; users, user_branches and history remain unchanged.
+[TABLE] Future membership/home-branch/passport entitlements are not reset automatically by branch deactivation.
+[TABLE] Module | Availability Mode | Available Branches | Resolution
+[TABLE] CRM | ALL_BRANCHES | Goregaon 1, Goregaon 2, Andheri 1 | Inherited automatically
+[TABLE] BOOKINGS | ALL_BRANCHES | Goregaon 1, Goregaon 2, Andheri 1 | Inherited automatically
+[TABLE] PILATES | SELECTED_BRANCHES | Goregaon 1, Andheri 1 | Explicit branch_modules rows
+[TABLE] NUTRITION | SELECTED_BRANCHES | Goregaon 2, Andheri 1 | Explicit branch_modules rows
+[TABLE] Legacy | New Standardized Target | Note
+[TABLE] users | users / future member or staff profile | Preserve legacy user ID
+[TABLE] agents | future staff/trainer profiles + role assignments | Normalize staff identity
+[TABLE] Roles_abac | departments / roles / permissions / matrices | Do not carry opaque permission blob
+[TABLE] types | future product categories | Layer 2+
+[TABLE] plans | future programs/plans | Layer 2+
+[TABLE] sessions | future plan packages / entitlements | Legacy sessions are commercial packages, not scheduled class occurrences
+[TABLE] transactions | future orders + payments | Separate commerce/payment records
+[TABLE] userplans | future memberships + entitlements | Home/purchase branch and cross-branch/passport entitlements standardized
+[TABLE] class | future class templates | Layer 2+
+[TABLE] slots | future class occurrences | Layer 2+
+[TABLE] bookings | future bookings | Preserve history
+[TABLE] bookings_rescheduled | future booking history/events | Preserve reschedule history
+[TABLE] call_logs | future communication history | Preserve provider refs where appropriate
+[TABLE] access_control_log | future access/attendance events | Preserve operational evidence
+[TABLE] Field | Type | Constraints / Default | Description
+[TABLE] id | UUID | PK | Schedule ID
+[TABLE] branch_id | UUID | NOT NULL FK -> branches RESTRICT | Branch
+[TABLE] day_of_week | SMALLINT | NOT NULL | Day of week 1-7
+[TABLE] is_open | BOOLEAN | DEFAULT TRUE | Branch open flag
+[TABLE] open_time | TIME | NULL | Opening time
+[TABLE] close_time | TIME | NULL | Closing time
+[TABLE] is_24_hours | BOOLEAN | DEFAULT FALSE | 24-hour flag
+[TABLE] created_by | UUID | FK -> users, NULL | Created by user
+[TABLE] updated_by | UUID | FK -> users, NULL | Updated by user
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created timestamp
+[TABLE] updated_at | TIMESTAMPTZ | NOT NULL | Updated timestamp
+
+[TABLE] Field | Type | Constraints / Default | Description
+[TABLE] id | UUID | PK | Exception ID
+[TABLE] branch_id | UUID | NOT NULL FK -> branches RESTRICT | Branch
+[TABLE] exception_date | DATE | NOT NULL | Exception calendar date
+[TABLE] is_closed | BOOLEAN | DEFAULT FALSE | Full-day closure flag
+[TABLE] open_time | TIME | NULL | Special open time
+[TABLE] close_time | TIME | NULL | Special close time
+[TABLE] reason | VARCHAR(255) | NULL | Exception reason
+[TABLE] created_by | UUID | FK -> users, NULL | Created by user
+[TABLE] updated_by | UUID | FK -> users, NULL | Updated by user
+[TABLE] created_at | TIMESTAMPTZ | NOT NULL | Created timestamp
+[TABLE] updated_at | TIMESTAMPTZ | NOT NULL | Updated timestamp

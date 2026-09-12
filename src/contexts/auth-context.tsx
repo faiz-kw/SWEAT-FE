@@ -69,6 +69,7 @@ import {
 export interface LoginCredentials {
   email: string;
   password: string;
+  tenant_slug?: string;
 }
 
 /** The shape of what the login API returns */
@@ -327,7 +328,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * On failure: Throws an error — the login page catches and shows the error message.
    */
   async function login(credentials: LoginCredentials): Promise<void> {
-    const response = await api.post<LoginApiResponse>('/auth/login/', credentials);
+    const payload: { email: string; password: string; tenant_slug?: string } = {
+      email: credentials.email.trim(),
+      password: credentials.password,
+    };
+    if (credentials.tenant_slug && credentials.tenant_slug.trim()) {
+      payload.tenant_slug = credentials.tenant_slug.trim().toLowerCase();
+    }
+    const response = await api.post<LoginApiResponse>('/auth/login/', payload);
     setAccessToken(response.data.access);
     // Fetch full profile so name/locations are immediately available
     await fetchAndSetProfile();

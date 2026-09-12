@@ -13,7 +13,6 @@ export interface Field {
 const CURRENCY = /(price|amount|revenue|mrr|paid|cost|budget|spend|outstanding|tax|salary|fee)/i;
 const PERCENT = /(rate|adherence|utilization|utilisation|conversion|retention|accuracy|score|confidence|engagement|intensity)$/i;
 const LONG_TEXT = /(summary|notes|feedback|recommendation|driver|subject|detail|description|address|guardrails|conditions|actions)/i;
-const HIDDEN = /^(tenantId)$/;
 
 export function humanize(key: string) {
   return key
@@ -173,12 +172,17 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
   ],
 };
 
+const NEVER_ENUM = /(name|phone|email|contact|address|id|title|sku|notes|feedback|description|url|code|password)/i;
+const HIDDEN = /^(tenantId|tenant_id|createdAt|updatedAt|deletedAt|__v)$/i;
+
 /** Derives the editable/displayable field schema for a collection from its rows or default fallbacks. */
 export function inferFields(rows: Row[], collectionKey?: string): Field[] {
+  // Always use explicit curated schema if available for the collection
+  if (collectionKey && DEFAULT_COLLECTION_FIELDS[collectionKey]) {
+    return DEFAULT_COLLECTION_FIELDS[collectionKey]!;
+  }
+
   if (rows.length === 0) {
-    if (collectionKey && DEFAULT_COLLECTION_FIELDS[collectionKey]) {
-      return DEFAULT_COLLECTION_FIELDS[collectionKey]!;
-    }
     return [
       { key: "name", label: "Name", type: "text" },
       { key: "status", label: "Status", type: "enum", options: ["Active", "Inactive", "Pending"] },
@@ -211,7 +215,7 @@ export function inferFields(rows: Row[], collectionKey?: string): Field[] {
         if (isDateTimeStr(sample)) return { key: k, label, type: "datetime" as const };
         if (isDateStr(sample)) return { key: k, label, type: "date" as const };
         const distinct = [...new Set(values.map((v) => String(v)))];
-        if (k !== "id" && distinct.length <= 12 && distinct.length < Math.max(3, rows.length / 2)) {
+        if (!NEVER_ENUM.test(k) && distinct.length > 1 && distinct.length <= 12 && distinct.length < Math.max(3, rows.length / 2)) {
           return { key: k, label, type: "enum" as const, options: distinct.sort() };
         }
         if (LONG_TEXT.test(k)) return { key: k, label, type: "textarea" as const };

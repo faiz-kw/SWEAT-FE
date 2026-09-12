@@ -17,6 +17,7 @@ import {
   Clock,
   Sparkles,
   Trash2,
+  ArrowUpRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,6 +56,27 @@ import {
 } from "@/services/api-admin";
 import { useAuth } from "@/contexts";
 
+export const isPlatformAccount = (
+  u: { tenant_id?: string; role?: string; tenant_name?: string } | null | undefined
+): boolean => {
+  if (!u) return false;
+  return (
+    !u.tenant_id ||
+    u.role === "Super Admin" ||
+    u.role === "Platform Administrator" ||
+    (typeof u.role === "string" && u.role.toLowerCase().includes("platform")) ||
+    u.tenant_name === "Global Platform HQ"
+  );
+};
+
+export const isPlatformRole = (r: RoleDefRow | { name: string; scope?: string }): boolean => {
+  return (
+    r.scope?.toLowerCase() === "platform" ||
+    r.name === "Super Admin" ||
+    r.name.toLowerCase().includes("platform")
+  );
+};
+
 export function UsersWorkspace() {
   const { user: currentUser } = useAuth();
   const isSuperAdmin =
@@ -69,16 +91,36 @@ export function UsersWorkspace() {
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [selectedTenantId, setSelectedTenantId] = React.useState<string>("all");
 
-  // Invite Modal State
+  // User Creation & Invite Modal State
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
+  const [userScope, setUserScope] = React.useState<"tenant" | "platform">("tenant");
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteFirstName, setInviteFirstName] = React.useState("");
   const [inviteLastName, setInviteLastName] = React.useState("");
   const [invitePhone, setInvitePhone] = React.useState("");
+  const [invitePassword, setInvitePassword] = React.useState("Pass1234!");
+  const [useCustomPassword, setUseCustomPassword] = React.useState(true);
   const [inviteRole, setInviteRole] = React.useState("");
   const [inviteTenantId, setInviteTenantId] = React.useState("");
   const [inviteLocationIds, setInviteLocationIds] = React.useState<string[]>([]);
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
+
+  // Available roles filtered by selected scope
+  const availableRolesForScope = React.useMemo(() => {
+    if (userScope === "platform") {
+      return roles.filter(isPlatformRole);
+    }
+    return roles.filter((r) => !isPlatformRole(r));
+  }, [roles, userScope]);
+
+  // Keep inviteRole in sync when scope switches
+  React.useEffect(() => {
+    if (availableRolesForScope.length > 0) {
+      if (!availableRolesForScope.some((r) => r.name === inviteRole)) {
+        setInviteRole(availableRolesForScope[0].name);
+      }
+    }
+  }, [userScope, availableRolesForScope, inviteRole]);
 
   // Edit User Modal State
   const [editModalOpen, setEditModalOpen] = React.useState(false);
@@ -86,6 +128,13 @@ export function UsersWorkspace() {
   const [editRole, setEditRole] = React.useState("");
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
+
+  // Available roles for edit modal, filtered by the user's scope
+  const editAvailableRoles = React.useMemo(() => {
+    if (!editingUser) return roles;
+    const isPlat = isPlatformAccount(editingUser);
+    return roles.filter((r) => (isPlat ? isPlatformRole(r) : !isPlatformRole(r)));
+  }, [editingUser, roles]);
 
   // Load Data
   const loadData = React.useCallback(async () => {
@@ -138,36 +187,46 @@ export function UsersWorkspace() {
     }
   };
 
-  // Handle Invite
-  const handleInvite = async (e: React.FormEvent) => {
+  // Handle Create / Invite User
+  const handleCreateOrInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !inviteFirstName) {
       toast.error("Please provide email and first name");
       return;
     }
+    if (userScope === "tenant" && isSuperAdmin && !inviteTenantId && tenants.length > 0) {
+      toast.error("Please select a target tenant organization for this tenant staff member");
+      return;
+    }
     setInviteSubmitting(true);
     try {
-      const targetRole = inviteRole || (roles.length > 0 ? roles[0].name : "Trainer");
+      const targetRole = inviteRole || (availableRolesForScope.length > 0 ? availableRolesForScope[0].name : "Trainer");
       await inviteUserApi({
         email: inviteEmail.trim(),
         first_name: inviteFirstName.trim(),
         last_name: inviteLastName.trim(),
         phone: invitePhone.trim(),
         role: targetRole,
-        tenant_id: isSuperAdmin && inviteTenantId ? inviteTenantId : currentUser?.tenantId || undefined,
+        password: useCustomPassword && invitePassword.trim() ? invitePassword.trim() : undefined,
+        tenant_id: userScope === "platform" ? undefined : (isSuperAdmin && inviteTenantId ? inviteTenantId : currentUser?.tenantId || undefined),
         location_ids: inviteLocationIds.length > 0 ? inviteLocationIds : undefined,
       });
 
-      toast.success(`Invitation dispatched to ${inviteEmail}`);
+      toast.success(
+        useCustomPassword && invitePassword.trim()
+          ? `User ${inviteEmail} created with password and active credentials!`
+          : `Invitation dispatched to ${inviteEmail}`
+      );
       setInviteModalOpen(false);
       setInviteEmail("");
       setInviteFirstName("");
       setInviteLastName("");
       setInvitePhone("");
+      setInvitePassword("Pass1234!");
       setInviteLocationIds([]);
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to invite user");
+      toast.error(err?.message || "Failed to create user");
     } finally {
       setInviteSubmitting(false);
     }
@@ -220,9 +279,39 @@ export function UsersWorkspace() {
     }
   };
 
+  const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
+
+  const platformUsersCount = React.useMemo(() => {
+    return users.filter(isPlatformAccount).length;
+  }, [users]);
+
+  const tenantUsersCount = users.length - platformUsersCount;
+
+  // Available roles for filter dropdown (filtered by selected scope tab)
+  const availableRolesForFilter = React.useMemo(() => {
+    if (scopeFilter === "platform") {
+      return roles.filter(isPlatformRole);
+    }
+    if (scopeFilter === "tenant") {
+      return roles.filter((r) => !isPlatformRole(r));
+    }
+    return roles;
+  }, [roles, scopeFilter]);
+
+  // Reset role filter if current selection is not available in new scope
+  React.useEffect(() => {
+    if (roleFilter !== "all" && !availableRolesForFilter.some((r) => r.name === roleFilter)) {
+      setRoleFilter("all");
+    }
+  }, [scopeFilter, availableRolesForFilter, roleFilter]);
+
   // Filtered Users List
   const filteredUsers = React.useMemo(() => {
     return users.filter((u) => {
+      const isPlatformUser = isPlatformAccount(u);
+      if (scopeFilter === "platform" && !isPlatformUser) return false;
+      if (scopeFilter === "tenant" && isPlatformUser) return false;
+
       const nameStr = `${u.first_name || ""} ${u.last_name || ""} ${u.full_name || ""}`.toLowerCase();
       const matchesSearch =
         nameStr.includes(search.toLowerCase()) ||
@@ -236,22 +325,7 @@ export function UsersWorkspace() {
 
       return matchesSearch && matchesRole;
     });
-  }, [users, search, roleFilter]);
-
-  // Metrics
-  const trainersCount = users.filter(
-    (u) =>
-      u.role?.toLowerCase().includes("trainer") ||
-      u.role?.toLowerCase().includes("coach") ||
-      u.role?.toLowerCase().includes("instructor")
-  ).length;
-
-  const managersCount = users.filter(
-    (u) =>
-      u.role?.toLowerCase().includes("manager") ||
-      u.role?.toLowerCase().includes("owner") ||
-      u.role?.toLowerCase().includes("admin")
-  ).length;
+  }, [users, search, roleFilter, scopeFilter]);
 
   const pendingCount = users.filter((u) => u.status === "Invited").length;
 
@@ -274,11 +348,14 @@ export function UsersWorkspace() {
             </Button>
             <Button
               size="sm"
-              onClick={() => setInviteModalOpen(true)}
-              className="gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+              onClick={() => {
+                if (!inviteTenantId && tenants.length > 0) setInviteTenantId(tenants[0].id);
+                setInviteModalOpen(true);
+              }}
+              className="gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
             >
               <UserPlus className="size-3.5" />
-              Invite Team Member
+              Add / Invite User
             </Button>
           </div>
         }
@@ -288,21 +365,21 @@ export function UsersWorkspace() {
         {/* KPI Strip */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiTile
-            title="Total Staff Members"
+            title="Total Registered Users"
             value={users.length}
-            change="Across active organization scope"
+            change="All Platform & Tenant Accounts"
             variant="neutral"
           />
           <KpiTile
-            title="Coaches & Trainers"
-            value={trainersCount}
-            change="Personal Training & Group"
+            title="🌐 SaaS Platform Admins"
+            value={platformUsersCount}
+            change="Global Cross-Tenant HQ"
             variant="positive"
           />
           <KpiTile
-            title="Studio Managers & Admins"
-            value={managersCount}
-            change="Branch & Operations"
+            title="🏢 Tenant Gym Staff"
+            value={tenantUsersCount}
+            change="Gym Owners, Managers & Coaches"
             variant="neutral"
           />
           <KpiTile
@@ -311,6 +388,45 @@ export function UsersWorkspace() {
             change="Awaiting Activation"
             variant={pendingCount > 0 ? "warning" : "neutral"}
           />
+        </div>
+
+        {/* Scope Segmentation Tabs */}
+        <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border w-fit text-xs">
+          <button
+            type="button"
+            onClick={() => setScopeFilter("all")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              scopeFilter === "all"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All Accounts ({users.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setScopeFilter("platform")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              scopeFilter === "platform"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+            }`}
+          >
+            <ShieldCheck className="size-3.5" />
+            🌐 SaaS Platform HQ ({platformUsersCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setScopeFilter("tenant")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              scopeFilter === "tenant"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-primary hover:bg-primary/10"
+            }`}
+          >
+            <Building2 className="size-3.5" />
+            🏢 Tenant Gym Staff ({tenantUsersCount})
+          </button>
         </div>
 
         {/* Filters and Scope Controls */}
@@ -351,7 +467,7 @@ export function UsersWorkspace() {
               </SelectTrigger>
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
-                {roles.map((r) => (
+                {availableRolesForFilter.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
                   </SelectItem>
@@ -369,8 +485,8 @@ export function UsersWorkspace() {
         ) : filteredUsers.length === 0 ? (
           <div className="p-12 text-center border border-dashed rounded-xl bg-card">
             <Users className="size-8 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-foreground">No staff members found</p>
-            <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters</p>
+            <p className="text-sm font-semibold text-foreground">No accounts found</p>
+            <p className="text-xs text-muted-foreground mt-1">Try switching tabs or adjusting your search</p>
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
@@ -390,7 +506,7 @@ export function UsersWorkspace() {
                 <tbody className="divide-y divide-border/60">
                   {filteredUsers.map((u) => {
                     const isRootSuperAdmin = u.id === "USR-ADMIN" || u.email === "admin";
-                    const isSuper = u.role === "Super Admin" || !u.tenant_id;
+                    const isSuper = isPlatformAccount(u);
                     const initials = (u.full_name || u.email).slice(0, 2).toUpperCase();
 
                     return (
@@ -431,27 +547,39 @@ export function UsersWorkspace() {
                                   : "bg-primary/10 text-primary border-primary/20"
                               }`}
                             >
-                              {isSuper ? <ShieldCheck className="size-3 mr-1" /> : <Shield className="size-3 mr-1" />}
-                              {u.role}
+                              {isSuper ? (
+                                <>
+                                  <ShieldCheck className="size-3 mr-1 inline" /> 🌐 Platform · {u.role}
+                                </>
+                              ) : (
+                                <>
+                                  <Building2 className="size-3 mr-1 inline" /> 🏢 Tenant · {u.role}
+                                </>
+                              )}
                             </Badge>
                           </div>
                         </td>
 
                         {/* Tenant */}
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Building2 className="size-3.5 text-primary shrink-0" />
-                            <span className="font-medium text-foreground truncate max-w-[150px]">
-                              {u.tenant_name || "Global Platform HQ"}
-                            </span>
-                          </div>
+                          {isSuper ? (
+                            <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-semibold">
+                              <ShieldCheck className="size-3.5 shrink-0" />
+                              <span>Global Platform HQ</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-foreground font-medium">
+                              <Building2 className="size-3.5 text-primary shrink-0" />
+                              <span className="truncate max-w-[150px]">{u.tenant_name || "Assigned Gym"}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Location */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-1 text-muted-foreground">
                             <MapPin className="size-3.5 text-primary shrink-0" />
-                            <span>{u.active_location_name || "Main Studio / All"}</span>
+                            <span>{isSuper ? "All Locations (Global)" : (u.active_location_name || "Main Studio / All")}</span>
                           </div>
                         </td>
 
@@ -517,27 +645,104 @@ export function UsersWorkspace() {
         )}
       </PageBody>
 
-      {/* Invite Modal */}
+      {/* Add / Invite User Modal */}
       <Dialog open={inviteModalOpen} onOpenChange={setInviteModalOpen}>
-        <DialogContent className="sm:max-w-md bg-card border-border rounded-2xl">
+        <DialogContent className="sm:max-w-lg bg-card border-border rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <Sparkles className="size-4 text-primary" /> Invite Team Member
+              <UserPlus className="size-4 text-primary" /> Add & Allot User Access
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Send an invitation email to onboard a new staff member or administrator.
+              Provision a new user account, assign Platform or Tenant scope, set login credentials, and allot roles and permissions.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleInvite} className="space-y-3.5 pt-2">
+          <form onSubmit={handleCreateOrInviteUser} className="space-y-4 pt-2">
+            {/* Scope Selection */}
+            {isSuperAdmin && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">User Type & Clearance Scope</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserScope("tenant");
+                      if (!inviteTenantId && tenants.length > 0) setInviteTenantId(tenants[0].id);
+                    }}
+                    className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      userScope === "tenant"
+                        ? "border-primary bg-primary/5 text-primary font-bold shadow-xs"
+                        : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold flex items-center gap-1.5">
+                      <Building2 className="size-3.5" /> Tenant Staff
+                    </span>
+                    <span className="text-[11px] font-normal opacity-80 mt-0.5">
+                      Single gym organization (Owner, Manager, Trainer, Sales)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserScope("platform");
+                      setInviteTenantId("");
+                    }}
+                    className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      userScope === "platform"
+                        ? "border-purple-500 bg-purple-500/5 text-purple-600 font-bold shadow-xs"
+                        : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold flex items-center gap-1.5">
+                      <ShieldCheck className="size-3.5" /> Platform Staff
+                    </span>
+                    <span className="text-[11px] font-normal opacity-80 mt-0.5">
+                      Global cross-tenant clearance (Super Admin, Support, Auditor)
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* If Tenant: select tenant & studio */}
+            {userScope === "tenant" && isSuperAdmin && tenants.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Target Tenant Organization *</Label>
+                <Select value={inviteTenantId} onValueChange={setInviteTenantId}>
+                  <SelectTrigger className="h-8 text-xs bg-background">
+                    <SelectValue placeholder="Select gym organization" />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    {tenants.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({t.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {userScope === "platform" && (
+              <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                <ShieldCheck className="size-4 shrink-0" />
+                <span>
+                  This account will have <strong>Global Platform clearance</strong> across all gym tenants and staff workspaces, with access to both PerformanceOS and the Django Admin Panel.
+                </span>
+              </div>
+            )}
+
+            {/* Name Fields */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">First Name *</Label>
                 <Input
                   value={inviteFirstName}
                   onChange={(e) => setInviteFirstName(e.target.value)}
-                  placeholder="e.g. John"
-                  className="h-8 text-xs"
+                  placeholder="e.g. Rahul"
+                  className="h-8 text-xs bg-background"
                   required
                 />
               </div>
@@ -546,66 +751,97 @@ export function UsersWorkspace() {
                 <Input
                   value={inviteLastName}
                   onChange={(e) => setInviteLastName(e.target.value)}
-                  placeholder="e.g. Doe"
-                  className="h-8 text-xs"
+                  placeholder="e.g. Sharma"
+                  className="h-8 text-xs bg-background"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Email Address *</Label>
-              <Input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="staff@elevatefitness.com"
-                className="h-8 text-xs"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Phone Number</Label>
-              <Input
-                value={invitePhone}
-                onChange={(e) => setInvitePhone(e.target.value)}
-                placeholder="+91 98765 43210"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {isSuperAdmin && tenants.length > 0 && (
+            {/* Email & Phone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Target Tenant Organization</Label>
-                <Select value={inviteTenantId} onValueChange={setInviteTenantId}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select tenant for this user" />
-                  </SelectTrigger>
-                  <SelectContent className="text-xs">
-                    {tenants.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs font-semibold">Email Address *</Label>
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="user@fitnesshub.com"
+                  className="h-8 text-xs bg-background"
+                  required
+                />
               </div>
-            )}
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Phone Number</Label>
+                <Input
+                  value={invitePhone}
+                  onChange={(e) => setInvitePhone(e.target.value)}
+                  placeholder="+91 98765 43210"
+                  className="h-8 text-xs bg-background"
+                />
+              </div>
+            </div>
 
+            {/* Role Assignment */}
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">Assigned Role</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Allotted Role *</Label>
+                <a
+                  href="/admin/roles"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                >
+                  Configure Permissions Matrix <ArrowUpRight className="size-3" />
+                </a>
+              </div>
               <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
+                <SelectTrigger className="h-8 text-xs bg-background">
+                  <SelectValue placeholder="Select role" />
                 </SelectTrigger>
-                <SelectContent className="text-xs">
-                  {roles.map((r) => (
+                <SelectContent className="text-xs max-h-56">
+                  {availableRolesForScope.map((r) => (
                     <SelectItem key={r.id} value={r.name}>
-                      {r.name} ({r.scope})
+                      <span className="font-semibold">{r.name}</span>
+                      {r.description ? <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span> : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Password & Direct Login Activation */}
+            <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="use-password-toggle" className="text-xs font-semibold cursor-pointer flex items-center gap-1.5">
+                  <Lock className="size-3.5 text-primary" /> Set Login Password & Activate
+                </Label>
+                <input
+                  type="checkbox"
+                  id="use-password-toggle"
+                  checked={useCustomPassword}
+                  onChange={(e) => setUseCustomPassword(e.target.checked)}
+                  className="rounded border-border text-primary size-4 cursor-pointer"
+                />
+              </div>
+              {useCustomPassword ? (
+                <div className="space-y-1 pt-1">
+                  <Input
+                    type="text"
+                    value={invitePassword}
+                    onChange={(e) => setInvitePassword(e.target.value)}
+                    placeholder="Enter initial password (e.g. Pass1234!)"
+                    className="h-8 text-xs font-mono bg-background"
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Account will be created as <strong>Active</strong> immediately. The user can sign in right away to PerformanceOS and Django Admin with this password.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  User will be marked as <strong>Invited</strong> with a secure temporary key until email activation.
+                </p>
+              )}
             </div>
 
             <DialogFooter className="pt-2">
@@ -614,7 +850,7 @@ export function UsersWorkspace() {
                 variant="outline"
                 size="sm"
                 onClick={() => setInviteModalOpen(false)}
-                className="text-xs"
+                className="text-xs cursor-pointer"
               >
                 Cancel
               </Button>
@@ -622,9 +858,13 @@ export function UsersWorkspace() {
                 type="submit"
                 size="sm"
                 disabled={inviteSubmitting}
-                className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
               >
-                {inviteSubmitting ? "Sending Invite..." : "Send Invitation"}
+                {inviteSubmitting
+                  ? "Creating Account..."
+                  : useCustomPassword
+                    ? "Create User Account"
+                    : "Send Invitation"}
               </Button>
             </DialogFooter>
           </form>
@@ -646,10 +886,21 @@ export function UsersWorkspace() {
           {editingUser && (
             <form onSubmit={handleSaveEdit} className="space-y-3.5 pt-2">
               <div className="p-3 bg-muted/40 rounded-xl border border-border">
-                <div className="text-xs font-bold text-foreground">
-                  {editingUser.full_name || editingUser.email}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-bold text-foreground truncate">
+                    {editingUser.full_name || editingUser.email}
+                  </div>
+                  {isPlatformAccount(editingUser) ? (
+                    <Badge variant="outline" className="text-[10px] font-bold bg-purple-500/10 text-purple-600 border-purple-500/30 shrink-0">
+                      <ShieldCheck className="size-3 mr-1 inline" /> 🌐 Platform HQ
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20 shrink-0">
+                      <Building2 className="size-3 mr-1 inline" /> 🏢 {editingUser.tenant_name || "Tenant Staff"}
+                    </Badge>
+                  )}
                 </div>
-                <div className="text-[11px] text-muted-foreground font-mono">
+                <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                   {editingUser.email}
                 </div>
               </div>
@@ -657,13 +908,14 @@ export function UsersWorkspace() {
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Assigned Role</Label>
                 <Select value={editRole} onValueChange={setEditRole}>
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-8 text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="text-xs">
-                    {roles.map((r) => (
+                  <SelectContent className="text-xs max-h-56">
+                    {editAvailableRoles.map((r) => (
                       <SelectItem key={r.id} value={r.name}>
-                        {r.name} ({r.scope})
+                        <span className="font-semibold">{r.name}</span>
+                        {r.description ? <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span> : null}
                       </SelectItem>
                     ))}
                   </SelectContent>

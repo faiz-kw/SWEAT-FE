@@ -151,25 +151,24 @@ export function normalizeMember(item: any): Row {
   const membershipEnd = plan?.end_date || item.membershipEnd || item.membership_end || "";
 
   return {
-    ...item,
-    id: item.id,
+    id: String(item.id),
     tenantId: item.tenant_id ?? item.tenantId,
     locationId: item.location ?? item.locationId,
     location: item.location_name ?? item.location,
-    name: item.name,
-    phone: item.phone,
-    email: item.email,
+    name: item.name || "Unnamed Member",
+    phone: item.phone || "",
+    email: item.email || "",
     gender: item.gender === "M" ? "Male" : item.gender === "F" ? "Female" : item.gender === "O" ? "Other" : (item.gender ?? "Male"),
-    age: item.age ?? 28,
+    age: item.age ? Number(item.age) : 28,
     membership: membershipName,
     membershipEnd: membershipEnd,
-    joinedAt: item.joined_at ?? item.joinedAt ?? new Date().toISOString(),
+    joinedAt: item.joined_at ?? item.joinedAt ?? new Date().toISOString().slice(0, 10),
     coach: item.primary_coach_name || item.coach || "Unassigned",
     coachId: item.primary_coach ?? item.coachId,
     goal: item.fitness_goal ?? item.goal ?? "General Fitness",
     status: item.status ?? "Active",
     attendance30: item.attendance_count_30d !== undefined ? item.attendance_count_30d : (item.attendance30 ?? 0),
-    lastVisit: item.last_visit ?? item.lastVisit ?? new Date().toISOString(),
+    lastVisit: item.last_visit ?? item.lastVisit ?? new Date().toISOString().slice(0, 10),
     renewalDate: membershipEnd,
     revenue: item.revenue ? Number(item.revenue) : 0,
     outstanding: item.outstanding ? Number(item.outstanding) : 0,
@@ -199,17 +198,25 @@ export async function fetchMemberDetail(id: string): Promise<Row> {
 }
 
 export async function createMemberApi(values: Record<string, unknown>): Promise<Row> {
+  const name = String(values["name"] ?? "").trim();
+  const phone = String(values["phone"] ?? "").trim();
+  if (!name) throw new Error("Full name is required");
+  if (!phone) throw new Error("Phone number is required");
+
   // Map display gender values to backend single-char codes
   const genderRaw = String(values["gender"] ?? "Male");
   const genderCode = genderRaw === "Female" ? "F" : genderRaw === "Other" ? "O" : "M";
 
-  // Resolve location: use provided value or fetch first real location from backend
-  const locationId = String(values["locationId"] ?? values["location"] ?? "") || await getDefaultLocationId();
+  // Resolve location: use provided value if valid ID or fetch first real location from backend
+  let locationId = String(values["locationId"] ?? values["location"] ?? "").trim();
+  if (!locationId || locationId.includes(" ")) {
+    locationId = await getDefaultLocationId();
+  }
 
   const payload: Record<string, unknown> = {
-    name: values["name"],
-    phone: values["phone"] ?? "",
-    email: values["email"] ?? "",
+    name,
+    phone,
+    email: String(values["email"] ?? "").trim(),
     gender: genderCode,
     age: values["age"] ? Number(values["age"]) : 28,
     status: values["status"] ?? "Active",

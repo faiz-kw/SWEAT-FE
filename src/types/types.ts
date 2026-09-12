@@ -528,3 +528,10 @@ export interface TimelineEvent {
   title: string;
   detail?: string;
 }
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+  tenant_slug?: string;
+}
+
