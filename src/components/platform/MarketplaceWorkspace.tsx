@@ -119,8 +119,19 @@ export function MarketplaceWorkspace() {
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm border border-primary/20">
-                        {app.icon_text}
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm border border-primary/20 overflow-hidden">
+                        {app.logo_url || (app.logo_storage_key && app.logo_storage_key.startsWith('http')) ? (
+                          <img
+                            src={app.logo_url || app.logo_storage_key || ''}
+                            alt={app.name}
+                            className="h-full w-full object-contain p-1"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <span>{app.icon_text}</span>
+                        )}
                       </div>
                       <div>
                         <h3 className="font-semibold text-sm leading-snug">{app.name}</h3>

@@ -161,6 +161,8 @@ export interface MarketplaceAppRow {
   is_popular: boolean;
   is_active: boolean;
   is_installed: boolean;
+  logo_storage_key?: string | null;
+  logo_url?: string | null;
   installation_id?: string | null;
 }
 
@@ -301,14 +303,24 @@ export async function fetchPlatformInvoicesApi(): Promise<InvoiceItem[]> {
 export interface TenantBrandingData {
   tenant?: string;
   app_name: string;
+  brand_name?: string;
   logo_url?: string;
   favicon_url?: string;
   primary_color: string;
+  secondary_color?: string;
   accent_color: string;
+  theme_preset_code?: string;
+  theme_tokens?: Record<string, any> | null;
   custom_domain?: string;
   cname_verified?: boolean;
   email_footer?: string;
   support_email?: string;
+  support_phone?: string;
+  logo_storage_key?: string | null;
+  favicon_storage_key?: string | null;
+  login_logo_key?: string | null;
+  login_background_key?: string | null;
+  email_logo_key?: string | null;
   remove_watermark?: boolean;
   login_tagline?: string;
   updated_at?: string;

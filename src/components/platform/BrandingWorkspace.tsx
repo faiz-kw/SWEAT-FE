@@ -131,10 +131,11 @@ export function BrandingWorkspace() {
   const [previewTab, setPreviewTab] = React.useState<"shell" | "mobile" | "email">("shell");
   const [previewTheme, setPreviewTheme] = React.useState<"dark" | "light">("light");
 
-  // Form State
   const [appName, setAppName] = React.useState("PerformanceOS");
   const [primaryColor, setPrimaryColor] = React.useState("#0f766e");
   const [accentColor, setAccentColor] = React.useState("#f59e0b");
+  const [themePresetCode, setThemePresetCode] = React.useState<string>("titanium-teal");
+  const [themeTokens, setThemeTokens] = React.useState<Record<string, any> | null>(null);
   const [customDomain, setCustomDomain] = React.useState("");
   const [cnameVerified, setCnameVerified] = React.useState(false);
   const [dnsResult, setDnsResult] = React.useState<DnsVerificationResult | null>(null);
@@ -218,6 +219,8 @@ export function BrandingWorkspace() {
         setAppName(b.app_name || "PerformanceOS");
         setPrimaryColor(b.primary_color || "#0f766e");
         setAccentColor(b.accent_color || "#f59e0b");
+        setThemePresetCode(b.theme_preset_code || "titanium-teal");
+        setThemeTokens(b.theme_tokens || null);
         setCustomDomain(b.custom_domain || "");
         setCnameVerified(Boolean(b.cname_verified));
         setLogoUrl(b.logo_url || "");
@@ -239,6 +242,8 @@ export function BrandingWorkspace() {
       setAppName("PerformanceOS");
       setPrimaryColor("#0f766e");
       setAccentColor("#f59e0b");
+      setThemePresetCode("titanium-teal");
+      setThemeTokens(null);
       setCustomDomain("");
       setCnameVerified(false);
       setLogoUrl("");
@@ -308,6 +313,9 @@ export function BrandingWorkspace() {
   const applyPreset = (preset: (typeof THEME_PRESETS)[0]) => {
     setPrimaryColor(preset.primary);
     setAccentColor(preset.accent);
+    const code = preset.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    setThemePresetCode(code);
+    setThemeTokens({ primary: preset.primary, accent: preset.accent, name: preset.name });
     toast.info(`Applied "${preset.name}" color palette.`);
   };
 
@@ -330,7 +338,7 @@ export function BrandingWorkspace() {
 
   // Copy CSS Tokens
   const handleCopyTokens = () => {
-    const cssTokens = `:root {\n  --brand-primary: ${primaryColor};\n  --brand-accent: ${accentColor};\n  --brand-app-name: "${appName}";\n  --brand-custom-domain: "${customDomain}";\n}`;
+    const cssTokens = `:root {\n  --brand-primary: ${primaryColor};\n  --brand-accent: ${accentColor};\n  --brand-app-name: "${appName}";\n  --brand-custom-domain: "${customDomain}";\n  --brand-theme-preset: "${themePresetCode}";\n}`;
     navigator.clipboard.writeText(cssTokens);
     setCopiedTokens(true);
     toast.success("CSS theme tokens copied to clipboard!");
@@ -343,6 +351,8 @@ export function BrandingWorkspace() {
       setAppName(initialData.app_name || "PerformanceOS");
       setPrimaryColor(initialData.primary_color || "#0f766e");
       setAccentColor(initialData.accent_color || "#f59e0b");
+      setThemePresetCode(initialData.theme_preset_code || "titanium-teal");
+      setThemeTokens(initialData.theme_tokens || null);
       setCustomDomain(initialData.custom_domain || "");
       setCnameVerified(Boolean(initialData.cname_verified));
       setLogoUrl(initialData.logo_url || "");
@@ -388,8 +398,12 @@ export function BrandingWorkspace() {
     try {
       const updated = await updateTenantBrandingApi(selectedTenantId, {
         app_name: appName,
+        brand_name: appName,
         primary_color: primaryColor,
+        secondary_color: accentColor,
         accent_color: accentColor,
+        theme_preset_code: themePresetCode,
+        theme_tokens: themeTokens,
         custom_domain: customDomain,
         cname_verified: cnameVerified,
         logo_url: logoUrl,
