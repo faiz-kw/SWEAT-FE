@@ -12,7 +12,7 @@ Write-Host "[2/3] Starting Vite Frontend on port 5173..." -ForegroundColor Green
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$RootDir'; npm run dev"
 
 Write-Host "[3/3] Starting Celery Worker (Pool=solo for Windows)..." -ForegroundColor Magenta
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$BackendDir'; celery -A config worker -l INFO -P solo"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$BackendDir'; python -m celery -A config worker -l INFO -P solo"
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Yellow
