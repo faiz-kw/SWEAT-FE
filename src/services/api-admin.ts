@@ -339,3 +339,17 @@ export async function updateSecurityPolicyApi(payload: Partial<SecurityPolicyDat
   const res = await api.put<SecurityPolicyData>("/admin-config/security-policy/current/", payload);
   return res.data;
 }
+
+// ── SESSION REVOCATION ────────────────────────────────────────────────
+
+export interface RevokeSessionsResponse {
+  message: string;
+  revoked_count: number;
+  revoked_at: number;
+}
+
+export async function revokeAllSessionsApi(targetUserId?: string): Promise<RevokeSessionsResponse> {
+  const payload = targetUserId ? { target_user_id: targetUserId } : {};
+  const res = await api.post<RevokeSessionsResponse>("/auth/sessions/revoke-all/", payload);
+  return res.data;
+}

@@ -3,7 +3,7 @@
  * Handles JWT Bearer authorization headers and HttpOnly cookie transmission.
  */
 
-import { getAccessToken } from './auth';
+import { getAccessToken, refreshAccessToken } from './auth';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
 
@@ -12,9 +12,13 @@ export interface ApiResponse<T> {
   status: number;
 }
 
+interface CustomRequestInit extends RequestInit {
+  _retry?: boolean;
+}
+
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: CustomRequestInit = {}
 ): Promise<ApiResponse<T>> {
   const token = getAccessToken();
   const headers = new Headers(options.headers || {});
@@ -36,6 +40,29 @@ async function request<T>(
     headers,
     credentials: 'include',
   });
+
+  // Handle 401 Unauthorized: Attempt token refresh once, except for auth endpoints
+  const isAuthEndpoint =
+    endpoint.includes('/auth/login/') ||
+    endpoint.includes('/auth/token/refresh/') ||
+    endpoint.includes('/auth/logout/') ||
+    endpoint.includes('/auth/mfa/');
+
+  if (res.status === 401 && !options._retry && !isAuthEndpoint) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      const retryHeaders = new Headers(options.headers || {});
+      retryHeaders.set('Authorization', `Bearer ${newToken}`);
+      if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      return request<T>(endpoint, {
+        ...options,
+        headers: retryHeaders,
+        _retry: true,
+      });
+    }
+  }
 
   if (!res.ok) {
     let errorData: any;

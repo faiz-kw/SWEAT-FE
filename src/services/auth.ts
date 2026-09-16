@@ -183,36 +183,29 @@ const USER_PROFILE_KEY = 'pos_user_profile';
  */
 const PROFILE_SCHEMA_VERSION = 3;
 
+// Strictly in-memory access token storage
 let _accessToken: string | null = null;
+let _refreshPromise: Promise<string | null> | null = null;
 
-/** Save the access token received after login or token refresh. */
+/** Save the access token received after login or token refresh (in memory ONLY). */
 export function setAccessToken(token: string): void {
   _accessToken = token;
+  // Security hardening: clean up any legacy localStorage entry
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     }
   } catch {}
 }
 
-/** Read the current access token. Returns null if not logged in. */
+/** Read the current access token from memory only. Returns null if not logged in. */
 export function getAccessToken(): string | null {
-  if (_accessToken) return _accessToken;
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-      if (stored) {
-        const payload = decodeToken(stored);
-        if (payload && payload.exp * 1000 > Date.now()) {
-          _accessToken = stored;
-          return stored;
-        } else {
-          // Token expired
-          window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-        }
-      }
-    }
-  } catch {}
+  if (!_accessToken) return null;
+  const payload = decodeToken(_accessToken);
+  if (payload && payload.exp * 1000 > Date.now()) {
+    return _accessToken;
+  }
+  _accessToken = null;
   return null;
 }
 
@@ -224,6 +217,53 @@ export function clearAccessToken(): void {
       window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     }
   } catch {}
+}
+
+/**
+ * Deduplicated token refresh function.
+ * Ensures concurrent requests share a single refresh network call.
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  if (_refreshPromise) {
+    return _refreshPromise;
+  }
+
+  _refreshPromise = (async () => {
+    try {
+      const BASE_URL =
+        (typeof import.meta !== 'undefined' &&
+          (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined)) ??
+        '/api/v1';
+
+      const res = await fetch(`${BASE_URL}/auth/token/refresh/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        clearAccessToken();
+        return null;
+      }
+
+      const data = (await res.json()) as { access?: string };
+      if (!data.access) {
+        clearAccessToken();
+        return null;
+      }
+
+      setAccessToken(data.access);
+      return data.access;
+    } catch {
+      clearAccessToken();
+      return null;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
 }
 
 // -----------------------------------------------------------------
@@ -375,7 +415,7 @@ export async function refreshAndHydrateSession(): Promise<boolean> {
       (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined)) ??
     '/api/v1';
 
-  // 1. Check if we already have a valid unexpired access token in memory/storage
+  // 1. Check if we already have a valid unexpired access token in memory
   const token = getAccessToken();
   if (token) {
     const payload = decodeToken(token);
@@ -386,29 +426,13 @@ export async function refreshAndHydrateSession(): Promise<boolean> {
     }
   }
 
-  // 2. Token missing or expired — try refresh via cookie
-  try {
-    const res = await fetch(`${BASE_URL}/auth/token/refresh/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
+  // 2. Token missing or expired — try refresh via HttpOnly cookie
+  const newToken = await refreshAccessToken();
+  if (!newToken) return false;
 
-    if (!res.ok) return false;
-
-    const data = (await res.json()) as { access?: string };
-    if (!data.access) return false;
-
-    setAccessToken(data.access);
-
-    // Hydrate user profile from /me/
-    await _hydrateUserProfile(BASE_URL, data.access);
-
-    return true;
-  } catch {
-    return false;
-  }
+  // Hydrate user profile from /me/
+  await _hydrateUserProfile(BASE_URL, newToken);
+  return true;
 }
 
 /** Internal helper: fetch /auth/me/ and store result via setUserProfile(). */

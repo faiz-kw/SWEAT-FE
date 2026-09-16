@@ -6,7 +6,7 @@ import { PageHeader, PageBody } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchSecurityPolicyApi, updateSecurityPolicyApi, type SecurityPolicyData } from "@/services/api-admin";
+import { fetchSecurityPolicyApi, updateSecurityPolicyApi, revokeAllSessionsApi, type SecurityPolicyData } from "@/services/api-admin";
 
 export function SecurityWorkspace() {
   const [enforceMfa, setEnforceMfa] = React.useState(false);
@@ -15,6 +15,7 @@ export function SecurityWorkspace() {
   const [maxFailedAttempts, setMaxFailedAttempts] = React.useState(5);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [revoking, setRevoking] = React.useState(false);
 
   React.useEffect(() => {
     fetchSecurityPolicyApi()
@@ -47,8 +48,16 @@ export function SecurityWorkspace() {
     }
   };
 
-  const handleRevokeAllSessions = () => {
-    toast.success("All other active staff sessions have been invalidated.");
+  const handleRevokeAllSessions = async () => {
+    setRevoking(true);
+    try {
+      const res = await revokeAllSessionsApi();
+      toast.success(res?.message || "All active sessions have been invalidated.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to revoke active sessions.");
+    } finally {
+      setRevoking(false);
+    }
   };
 
   return (
@@ -144,8 +153,14 @@ export function SecurityWorkspace() {
               </p>
             </div>
 
-            <Button variant="destructive" size="sm" onClick={handleRevokeAllSessions} className="shrink-0">
-              Revoke All Active Sessions
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleRevokeAllSessions}
+              disabled={revoking}
+              className="shrink-0"
+            >
+              {revoking ? "Revoking..." : "Revoke All Active Sessions"}
             </Button>
           </div>
         </div>
