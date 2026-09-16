@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { AttendanceWorkspace } from "@/components/attendance/AttendanceWorkspace";
 
 export const Route = createFileRoute("/_shell/members/attendance")({
   head: () => ({
@@ -11,5 +10,5 @@ export const Route = createFileRoute("/_shell/members/attendance")({
       { property: "og:description", content: "Attendance workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/members/attendance" />,
+  component: () => <AttendanceWorkspace initialTab="attendance" />,
 });

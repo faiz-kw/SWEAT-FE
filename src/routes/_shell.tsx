@@ -46,8 +46,8 @@ function ShellLayout() {
 
     // Platform Core (including White Label) is STRICTLY Platform Super Admin only
     if (pathname.startsWith("/platform")) {
-      const isSuper = !!user.isSuperAdmin || user.role === 'Super Admin' || !user.tenantId;
-      if (!isSuper) {
+      const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
+      if (!isSuper || user.userType === "tenant") {
         void navigate({ to: "/" });
         return;
       }

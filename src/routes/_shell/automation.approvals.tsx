@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { ApprovalsWorkspace } from "@/components/approvals/ApprovalsWorkspace";
 
 export const Route = createFileRoute("/_shell/automation/approvals")({
   head: () => ({
@@ -11,5 +10,5 @@ export const Route = createFileRoute("/_shell/automation/approvals")({
       { property: "og:description", content: "Approvals workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/automation/approvals" />,
+  component: () => <ApprovalsWorkspace initialTab="pending" />,
 });

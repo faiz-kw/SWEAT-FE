@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { BookingsWorkspace } from "@/components/bookings/BookingsWorkspace";
 
 export const Route = createFileRoute("/_shell/ops/bookings")({
   head: () => ({
@@ -11,5 +10,5 @@ export const Route = createFileRoute("/_shell/ops/bookings")({
       { property: "og:description", content: "Bookings workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/ops/bookings" />,
+  component: () => <BookingsWorkspace initialTab="bookings" />,
 });

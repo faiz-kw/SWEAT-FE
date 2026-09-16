@@ -92,6 +92,19 @@ export const api = {
       method: 'POST',
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
+  idempotentPost: <T>(endpoint: string, body?: any, idempotencyKey?: string, options?: RequestInit) => {
+    const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2));
+    const headers = new Headers(options?.headers || {});
+    if (!headers.has('Idempotency-Key')) {
+      headers.set('Idempotency-Key', key);
+    }
+    return request<T>(endpoint, {
+      ...options,
+      headers,
+      method: 'POST',
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+  },
   patch: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(endpoint, {
       ...options,

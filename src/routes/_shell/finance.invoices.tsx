@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { CommerceWorkspace } from "@/components/commerce/CommerceWorkspace";
 
 export const Route = createFileRoute("/_shell/finance/invoices")({
   head: () => ({
@@ -11,5 +10,6 @@ export const Route = createFileRoute("/_shell/finance/invoices")({
       { property: "og:description", content: "Invoices workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/finance/invoices" />,
+  component: () => <CommerceWorkspace initialTab="invoices" />,
 });
+

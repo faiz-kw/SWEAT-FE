@@ -44,16 +44,22 @@ import {
   type RoleDefRow,
   type PermissionDefRow,
 } from "@/services/api-admin";
+import { useAuth } from "@/contexts";
 
 export function PermissionsWorkspace() {
+  const { user } = useAuth();
+  const isPlatformAdmin =
+    user?.userType === "platform" ||
+    (!user?.tenantId && (!!user?.isSuperAdmin || user?.role === "Super Admin"));
+
   const [roles, setRoles] = React.useState<RoleDefRow[]>([]);
   const [permissions, setPermissions] = React.useState<PermissionDefRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [hasChanges, setHasChanges] = React.useState(false);
 
-  // View Mode: 'matrix' (Full Spreadsheet Matrix - default) vs 'focused' (Role Configurator)
-  const [viewMode, setViewMode] = React.useState<"matrix" | "focused">("matrix");
+  // View Mode: 'focused' (Role Configurator) vs 'matrix' (Spreadsheet Matrix)
+  const [viewMode, setViewMode] = React.useState<"matrix" | "focused">("focused");
 
   // Selected Role in Focused View
   const [selectedRoleId, setSelectedRoleId] = React.useState<string>("");
@@ -66,9 +72,6 @@ export function PermissionsWorkspace() {
   // Matrix state: roleId -> Set of granted permissionIds
   const [matrix, setMatrix] = React.useState<Record<string, Set<string>>>({});
   const [initialMatrix, setInitialMatrix] = React.useState<Record<string, Set<string>>>({});
-
-  // Module collapse state for matrix view
-  const [collapsedModules, setCollapsedModules] = React.useState<Record<string, boolean>>({});
 
   // Load Data
   const loadData = React.useCallback(async () => {
@@ -100,14 +103,12 @@ export function PermissionsWorkspace() {
       setInitialMatrix(initialMap);
       setHasChanges(false);
 
-      // Set default selected role
       if (fetchedRoles.length > 0 && !selectedRoleId) {
-        // Default to Studio Owner/Admin or first non-superadmin role
         const defaultRole = fetchedRoles.find((r) => r.code === "admin") || fetchedRoles[0];
         setSelectedRoleId(defaultRole.id);
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to load permissions and roles matrix.");
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to load permissions and roles matrix.");
     } finally {
       setLoading(false);
     }
@@ -122,7 +123,7 @@ export function PermissionsWorkspace() {
     return roles.find((r) => r.id === selectedRoleId) || roles[0];
   }, [roles, selectedRoleId]);
 
-  const isSuperAdmin = selectedRole?.code === "super_admin";
+  const isSuperAdminRole = selectedRole?.code === "super_admin";
 
   // Toggle single permission for a role
   const togglePermission = (roleId: string, permId: string) => {
@@ -212,17 +213,17 @@ export function PermissionsWorkspace() {
       });
 
       await Promise.all(promises);
-      toast.success("Permission rules saved to database successfully.");
+      toast.success("Permission rules saved to tenant database successfully.");
       setInitialMatrix(matrix);
       setHasChanges(false);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save permission changes.");
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to save permission changes.");
     } finally {
       setSaving(false);
     }
   };
 
-  // Group permissions by Module
+  // Group permissions by Module -> Submodule
   const groupedPermissions = React.useMemo(() => {
     const groups: Record<string, PermissionDefRow[]> = {};
     permissions.forEach((perm) => {
@@ -230,7 +231,8 @@ export function PermissionsWorkspace() {
         perm.label.toLowerCase().includes(search.toLowerCase()) ||
         perm.id.toLowerCase().includes(search.toLowerCase()) ||
         perm.module.toLowerCase().includes(search.toLowerCase()) ||
-        perm.description.toLowerCase().includes(search.toLowerCase());
+        (perm.description || "").toLowerCase().includes(search.toLowerCase()) ||
+        perm.code.toLowerCase().includes(search.toLowerCase());
 
       const matchesModule = moduleFilter === "all" || perm.module === moduleFilter;
 
@@ -250,24 +252,28 @@ export function PermissionsWorkspace() {
 
   // Filtered Roles List for Left Sidebar
   const filteredRoles = React.useMemo(() => {
-    return roles.filter((r) =>
-      r.name.toLowerCase().includes(roleSearch.toLowerCase()) ||
-      r.code.toLowerCase().includes(roleSearch.toLowerCase())
-    );
-  }, [roles, roleSearch]);
-
-  const platformRoles = filteredRoles.filter((r) => r.scope === "platform");
-  const tenantRoles = filteredRoles.filter((r) => r.scope !== "platform");
+    return roles.filter((r) => {
+      const matchesSearch =
+        r.name.toLowerCase().includes(roleSearch.toLowerCase()) ||
+        r.code.toLowerCase().includes(roleSearch.toLowerCase());
+      if (isPlatformAdmin) return matchesSearch;
+      return matchesSearch && r.scope !== "platform";
+    });
+  }, [roles, roleSearch, isPlatformAdmin]);
 
   return (
     <>
       <PageHeader
-        title="Role Permissions & Access Control"
-        subtitle="Easily manage what each role can see, edit, and operate across all system modules."
+        title={isPlatformAdmin ? "Role Permissions & Control Matrix" : "Tenant Permission Catalogue"}
+        subtitle={
+          isPlatformAdmin
+            ? "Configure global platform permission sets and tenant module accessibility rules."
+            : "Review and configure operational permissions, action capabilities, and role entitlements for your gym."
+        }
         actions={
           <div className="flex items-center gap-2">
-            {/* View Switcher: Easy Role-Centric vs Full Matrix */}
-            <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
+            {/* View Switcher: Role Configurator vs Comparison Matrix */}
+            <div className="hidden sm:flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
               <Button
                 variant={viewMode === "focused" ? "secondary" : "ghost"}
                 size="sm"
@@ -322,12 +328,13 @@ export function PermissionsWorkspace() {
 
       <PageBody>
         {loading ? (
-          <div className="flex h-64 items-center justify-center">
+          <div className="flex flex-col h-64 items-center justify-center gap-3 border border-border rounded-xl bg-card">
             <RefreshCw className="size-6 animate-spin text-primary" />
+            <p className="text-xs font-semibold text-muted-foreground">Loading permission catalogue...</p>
           </div>
         ) : viewMode === "focused" ? (
           /* ========================================================================= */
-          /* 1. EASY & USER-FRIENDLY ROLE EDITOR (Select Role on Left, Configure on Right) */
+          /* ROLE-CENTRIC ACCORDION EDITOR (Full responsiveness for 320px - 1440px+)   */
           /* ========================================================================= */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* ── LEFT COLUMN: Role Selector ── */}
@@ -335,10 +342,10 @@ export function PermissionsWorkspace() {
               <div className="bg-card p-3 rounded-xl border border-border flex flex-col gap-2.5 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Shield className="size-4 text-primary" /> Select Role to Configure
+                    <Shield className="size-4 text-primary" /> Select Role
                   </div>
                   <span className="text-[10.5px] font-semibold text-muted-foreground">
-                    {roles.length} Roles
+                    {filteredRoles.length} Roles
                   </span>
                 </div>
 
@@ -354,102 +361,47 @@ export function PermissionsWorkspace() {
               </div>
 
               {/* Roles List */}
-              <div className="flex flex-col gap-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
-                {/* Platform Roles */}
-                {platformRoles.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="text-[10.5px] font-bold text-muted-foreground uppercase tracking-wider px-1">
-                      Platform Roles (Super Admin / Global)
-                    </div>
-                    {platformRoles.map((role) => {
-                      const isSelected = selectedRole?.id === role.id;
-                      const isSuper = role.code === "super_admin";
-                      const grantedCount = isSuper
-                        ? permissions.length
-                        : (matrix[role.id]?.size || 0);
+              <div className="flex flex-col gap-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
+                {filteredRoles.map((role) => {
+                  const isSelected = selectedRole?.id === role.id;
+                  const isSuper = role.code === "super_admin";
+                  const grantedCount = isSuper ? permissions.length : (matrix[role.id]?.size || 0);
 
-                      return (
-                        <button
-                          key={role.id}
-                          type="button"
-                          onClick={() => setSelectedRoleId(role.id)}
-                          className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30 text-foreground"
-                              : "bg-card border-border hover:border-primary/40 text-foreground"
-                          }`}
+                  return (
+                    <button
+                      key={role.id}
+                      type="button"
+                      onClick={() => setSelectedRoleId(role.id)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30 text-foreground"
+                          : "bg-card border-border hover:border-primary/40 text-foreground"
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="text-xs font-bold flex items-center gap-1.5">
+                          <span className="truncate">{role.name}</span>
+                          {isSuper && <Lock className="size-3 text-amber-500 shrink-0" />}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate mt-0.5 font-mono">
+                          {role.code}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        <Badge
+                          variant="outline"
+                          className="text-[9.5px] font-bold uppercase px-1.5 py-0"
                         >
-                          <div className="min-w-0 pr-2">
-                            <div className="text-xs font-bold flex items-center gap-1.5">
-                              <span className="truncate">{role.name}</span>
-                              {isSuper && <Lock className="size-3 text-amber-500 shrink-0" />}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground truncate mt-0.5 font-mono">
-                              {role.code}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end shrink-0 gap-1">
-                            <Badge
-                              variant="outline"
-                              className="text-[9.5px] font-bold bg-purple-500/10 text-purple-600 border-purple-500/30 uppercase px-1.5 py-0"
-                            >
-                              Platform
-                            </Badge>
-                            <span className="text-[10.5px] font-medium text-muted-foreground">
-                              {grantedCount}/{permissions.length} allowed
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Tenant Roles */}
-                {tenantRoles.length > 0 && (
-                  <div className="space-y-1.5 mt-1">
-                    <div className="text-[10.5px] font-bold text-muted-foreground uppercase tracking-wider px-1">
-                      Tenant / Gym Roles (Staff & Trainers)
-                    </div>
-                    {tenantRoles.map((role) => {
-                      const isSelected = selectedRole?.id === role.id;
-                      const grantedCount = matrix[role.id]?.size || 0;
-
-                      return (
-                        <button
-                          key={role.id}
-                          type="button"
-                          onClick={() => setSelectedRoleId(role.id)}
-                          className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30 text-foreground"
-                              : "bg-card border-border hover:border-primary/40 text-foreground"
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="text-xs font-bold truncate">{role.name}</div>
-                            <div className="text-[11px] text-muted-foreground truncate mt-0.5 font-mono">
-                              {role.code}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end shrink-0 gap-1">
-                            <Badge
-                              variant="outline"
-                              className="text-[9.5px] font-bold bg-teal-500/10 text-teal-600 border-teal-500/30 uppercase px-1.5 py-0"
-                            >
-                              Tenant
-                            </Badge>
-                            <span className="text-[10.5px] font-medium text-muted-foreground">
-                              {grantedCount}/{permissions.length} allowed
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                          {role.scope} Scope
+                        </Badge>
+                        <span className="text-[10.5px] font-medium text-muted-foreground">
+                          {grantedCount}/{permissions.length} allowed
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -487,7 +439,7 @@ export function PermissionsWorkspace() {
                   <div className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 rounded-lg border border-border/80 shrink-0">
                     <CheckCircle2 className="size-4 text-emerald-500" />
                     <span className="text-xs font-bold text-foreground">
-                      {isSuperAdmin ? permissions.length : (matrix[selectedRole?.id]?.size || 0)} of {permissions.length} Capabilities Allowed
+                      {isSuperAdminRole ? permissions.length : (matrix[selectedRole?.id]?.size || 0)} of {permissions.length} Capabilities Allowed
                     </span>
                   </div>
                 </div>
@@ -498,7 +450,7 @@ export function PermissionsWorkspace() {
                     {selectedRole?.description || "Configure which features this role can access."}
                   </p>
 
-                  {!isSuperAdmin ? (
+                  {!isSuperAdminRole ? (
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -524,7 +476,7 @@ export function PermissionsWorkspace() {
                           <SelectValue placeholder="Copy from..." />
                         </SelectTrigger>
                         <SelectContent className="text-xs">
-                          {roles
+                          {filteredRoles
                             .filter((r) => r.id !== selectedRole?.id)
                             .map((r) => (
                               <SelectItem key={r.id} value={r.id}>
@@ -573,11 +525,8 @@ export function PermissionsWorkspace() {
               <div className="space-y-4">
                 {Object.entries(groupedPermissions).map(([moduleName, perms]) => {
                   const allGranted =
-                    !isSuperAdmin &&
+                    !isSuperAdminRole &&
                     perms.every((p) => matrix[selectedRole?.id]?.has(p.id));
-                  const someGranted =
-                    !isSuperAdmin &&
-                    perms.some((p) => matrix[selectedRole?.id]?.has(p.id));
 
                   return (
                     <div
@@ -591,11 +540,11 @@ export function PermissionsWorkspace() {
                             {moduleName} Module
                           </span>
                           <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.2 rounded font-bold">
-                            {perms.length} {perms.length === 1 ? "action" : "actions"}
+                            {perms.length} {perms.length === 1 ? "capability" : "capabilities"}
                           </span>
                         </div>
 
-                        {!isSuperAdmin && (
+                        {!isSuperAdminRole && (
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -614,41 +563,38 @@ export function PermissionsWorkspace() {
                       <div className="divide-y divide-border/60">
                         {perms.map((perm) => {
                           const isGranted =
-                            isSuperAdmin || (matrix[selectedRole?.id]?.has(perm.id) ?? false);
+                            isSuperAdminRole || (matrix[selectedRole?.id]?.has(perm.id) ?? false);
 
                           return (
                             <div
                               key={perm.id}
                               onClick={() => {
-                                if (!isSuperAdmin) togglePermission(selectedRole.id, perm.id);
+                                if (!isSuperAdminRole) togglePermission(selectedRole.id, perm.id);
                               }}
                               className={`p-3 sm:px-4 flex items-center justify-between gap-4 transition-colors cursor-pointer ${
                                 isGranted ? "bg-emerald-500/[0.03]" : "hover:bg-muted/30"
-                              } ${isSuperAdmin ? "cursor-not-allowed" : ""}`}
+                              } ${isSuperAdminRole ? "cursor-not-allowed" : ""}`}
                             >
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-bold text-foreground">
-                                    {perm.label}
+                                    {perm.label || perm.name}
                                   </span>
                                   <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
-                                    {perm.id}
+                                    {perm.code || perm.id}
                                   </span>
-                                  {perm.scope === "platform" && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[9px] px-1 py-0 bg-purple-500/10 text-purple-600 border-purple-500/30 uppercase"
-                                    >
-                                      Platform
+                                  {perm.submodule && (
+                                    <Badge variant="outline" className="text-[9px] py-0">
+                                      {perm.submodule}
                                     </Badge>
                                   )}
                                 </div>
                                 <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-normal">
-                                  {perm.description || `Allow users with this role to ${perm.action} ${perm.module}.`}
+                                  {perm.description || `Allow staff to ${perm.action || "manage"} ${perm.module}.`}
                                 </p>
                               </div>
 
-                              {/* Toggle Button / Status */}
+                              {/* Status Badge */}
                               <div className="shrink-0 flex items-center gap-2">
                                 <span
                                   className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-all select-none ${
@@ -680,7 +626,7 @@ export function PermissionsWorkspace() {
           </div>
         ) : (
           /* ========================================================================= */
-          /* 2. FULL COMPARISON MATRIX SPREADSHEET (Secondary View) */
+          /* FULL COMPARISON MATRIX SPREADSHEET (Desktop & Tablet)                     */
           /* ========================================================================= */
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
@@ -702,7 +648,7 @@ export function PermissionsWorkspace() {
                   <SelectItem value="all">All Modules ({permissions.length})</SelectItem>
                   {uniqueModules.map((m) => (
                     <SelectItem key={m} value={m}>
-                      {m}
+                      {m} Module
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -711,14 +657,14 @@ export function PermissionsWorkspace() {
 
             <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[900px]">
+                <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
                     <tr className="border-b border-border bg-muted text-xs">
-                      <th className="py-3 px-4 font-bold text-foreground w-[320px] min-w-[320px] sticky left-0 bg-muted z-20 shadow-[1px_0_0_0_hsl(var(--border))]">
-                        Capability
+                      <th className="py-3 px-4 font-bold text-foreground w-[280px] min-w-[280px] sticky left-0 bg-muted z-20 shadow-[1px_0_0_0_hsl(var(--border))]">
+                        Module & Capability
                       </th>
-                      {roles.map((role) => (
-                        <th key={role.id} className="py-3 px-3 text-center min-w-[120px]">
+                      {filteredRoles.map((role) => (
+                        <th key={role.id} className="py-3 px-3 text-center min-w-[110px]">
                           <div className="flex flex-col items-center">
                             <span className="font-bold text-xs text-foreground truncate max-w-[110px]" title={role.name}>
                               {role.name}
@@ -736,13 +682,13 @@ export function PermissionsWorkspace() {
                     {Object.entries(groupedPermissions).map(([moduleName, perms]) => (
                       <React.Fragment key={moduleName}>
                         <tr className="bg-muted/60 font-bold border-t border-b border-border/80">
-                          <td colSpan={roles.length + 1} className="py-2 px-4 bg-muted/60">
+                          <td colSpan={filteredRoles.length + 1} className="py-2 px-4 bg-muted/60">
                             <div className="sticky left-4 inline-flex items-center gap-2">
                               <span className="text-xs font-bold text-primary uppercase tracking-wider">
                                 {moduleName} Module
                               </span>
                               <span className="text-[10px] font-semibold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-md border border-border">
-                                {perms.length} {perms.length === 1 ? "Action" : "Actions"}
+                                {perms.length} Capabilities
                               </span>
                             </div>
                           </td>
@@ -750,33 +696,29 @@ export function PermissionsWorkspace() {
 
                         {perms.map((perm) => (
                           <tr key={perm.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="py-2.5 px-4 w-[320px] min-w-[320px] sticky left-0 bg-card z-10 shadow-[1px_0_0_0_hsl(var(--border))]">
-                              <div className="font-semibold text-foreground text-xs">{perm.label}</div>
-                              <div className="text-[10.5px] text-muted-foreground font-mono">{perm.id}</div>
+                            <td className="py-2.5 px-4 sticky left-0 bg-card z-10 shadow-[1px_0_0_0_hsl(var(--border))]">
+                              <div className="font-semibold text-foreground text-xs">{perm.label || perm.name}</div>
+                              <div className="font-mono text-[10px] text-muted-foreground">{perm.code || perm.id}</div>
                             </td>
 
-                            {roles.map((role) => {
+                            {filteredRoles.map((role) => {
                               const isSuper = role.code === "super_admin";
                               const isGranted = isSuper || (matrix[role.id]?.has(perm.id) ?? false);
 
                               return (
-                                <td key={role.id} className="py-2 px-3 text-center align-middle">
+                                <td key={role.id} className="py-2 px-3 text-center">
                                   <button
                                     type="button"
-                                    disabled={isSuper}
-                                    onClick={() => togglePermission(role.id, perm.id)}
-                                    className={`size-7 rounded-lg inline-flex items-center justify-center transition-all cursor-pointer ${
+                                    onClick={() => {
+                                      if (!isSuper) togglePermission(role.id, perm.id);
+                                    }}
+                                    className={`size-7 rounded-lg inline-flex items-center justify-center transition-all ${
                                       isGranted
-                                        ? "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 hover:bg-emerald-500/25"
-                                        : "bg-muted/40 text-muted-foreground/40 border border-border hover:bg-muted/80"
-                                    } ${isSuper ? "opacity-80 cursor-not-allowed" : ""}`}
-                                    title={
-                                      isSuper
-                                        ? "Super Admin holds permanent clearance"
-                                        : `${isGranted ? "Revoke" : "Grant"} ${perm.label} for ${role.name}`
-                                    }
+                                        ? "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 shadow-2xs"
+                                        : "bg-muted/60 text-muted-foreground/50 border border-border/60 hover:border-primary/40 hover:text-primary"
+                                    } ${isSuper ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
                                   >
-                                    {isGranted ? <Check className="size-4 stroke-[2.5]" /> : <X className="size-3.5" />}
+                                    {isGranted ? <Check className="size-3.5 stroke-[2.5]" /> : <X className="size-3.5" />}
                                   </button>
                                 </td>
                               );

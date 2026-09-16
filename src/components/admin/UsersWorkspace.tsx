@@ -18,6 +18,8 @@ import {
   Sparkles,
   Trash2,
   ArrowUpRight,
+  AlertCircle,
+  Briefcase,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +50,8 @@ import {
   updateUserApi,
   deleteUserApi,
   fetchRolesApi,
+  fetchBranchesApi,
+  fetchDepartmentsApi,
   fetchLocationsApi,
   fetchTenantsForDropdownApi,
   type AdminUserRow,
@@ -77,71 +81,85 @@ export const isPlatformRole = (r: RoleDefRow | { name: string; scope?: string })
   );
 };
 
+export function extractApiError(err: any, fallback: string = "Operation failed"): string {
+  const data = err?.response?.data;
+  if (!data) return err?.message || fallback;
+  if (typeof data === "string") return data;
+  if (data.detail) return String(data.detail);
+  if (data.message) return String(data.message);
+
+  const fieldErrors: string[] = [];
+  for (const [key, value] of Object.entries(data)) {
+    const fieldLabel = key === "non_field_errors" ? "" : `${key.replace(/_/g, " ")}: `;
+    if (Array.isArray(value)) {
+      fieldErrors.push(`${fieldLabel}${value.join(", ")}`);
+    } else if (typeof value === "string") {
+      fieldErrors.push(`${fieldLabel}${value}`);
+    } else if (typeof value === "object" && value !== null) {
+      fieldErrors.push(`${fieldLabel}${JSON.stringify(value)}`);
+    }
+  }
+  if (fieldErrors.length > 0) {
+    return fieldErrors.join(" | ");
+  }
+  return err?.message || fallback;
+}
+
 export function UsersWorkspace() {
   const { user: currentUser } = useAuth();
-  const isSuperAdmin =
-    !!currentUser?.isSuperAdmin || currentUser?.role === "Super Admin" || !currentUser?.tenantId;
+  const isPlatformAdmin =
+    currentUser?.userType === "platform" ||
+    (!currentUser?.tenantId && (!!currentUser?.isSuperAdmin || currentUser?.role === "Super Admin"));
 
   const [users, setUsers] = React.useState<AdminUserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDefRow[]>([]);
-  const [locations, setLocations] = React.useState<LocationRow[]>([]);
+  const [branches, setBranches] = React.useState<{ id: string; name: string; code?: string }[]>([]);
+  const [departments, setDepartments] = React.useState<{ id: string; name: string; code?: string }[]>([]);
   const [tenants, setTenants] = React.useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+
+  // Filters
   const [search, setSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("all");
+  const [departmentFilter, setDepartmentFilter] = React.useState("all");
+  const [branchFilter, setBranchFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
   const [selectedTenantId, setSelectedTenantId] = React.useState<string>("all");
+  const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
 
   // User Creation & Invite Modal State
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
-  const [userScope, setUserScope] = React.useState<"tenant" | "platform">("tenant");
+  const [userScope, setUserScope] = React.useState<"tenant" | "platform">(isPlatformAdmin ? "platform" : "tenant");
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteFirstName, setInviteFirstName] = React.useState("");
   const [inviteLastName, setInviteLastName] = React.useState("");
   const [invitePhone, setInvitePhone] = React.useState("");
-  const [invitePassword, setInvitePassword] = React.useState("Pass1234!");
+  const [invitePassword, setInvitePassword] = React.useState("Performance123!");
   const [useCustomPassword, setUseCustomPassword] = React.useState(true);
   const [inviteRole, setInviteRole] = React.useState("");
+  const [inviteDepartmentId, setInviteDepartmentId] = React.useState("");
+  const [inviteBranchId, setInviteBranchId] = React.useState("");
   const [inviteTenantId, setInviteTenantId] = React.useState("");
-  const [inviteLocationIds, setInviteLocationIds] = React.useState<string[]>([]);
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
-
-  // Available roles filtered by selected scope
-  const availableRolesForScope = React.useMemo(() => {
-    if (userScope === "platform") {
-      return roles.filter(isPlatformRole);
-    }
-    return roles.filter((r) => !isPlatformRole(r));
-  }, [roles, userScope]);
-
-  // Keep inviteRole in sync when scope switches
-  React.useEffect(() => {
-    if (availableRolesForScope.length > 0) {
-      if (!availableRolesForScope.some((r) => r.name === inviteRole)) {
-        setInviteRole(availableRolesForScope[0].name);
-      }
-    }
-  }, [userScope, availableRolesForScope, inviteRole]);
 
   // Edit User Modal State
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<AdminUserRow | null>(null);
   const [editRole, setEditRole] = React.useState("");
+  const [editDepartmentId, setEditDepartmentId] = React.useState("");
+  const [editBranchId, setEditBranchId] = React.useState("");
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
-
-  // Available roles for edit modal, filtered by the user's scope
-  const editAvailableRoles = React.useMemo(() => {
-    if (!editingUser) return roles;
-    const isPlat = isPlatformAccount(editingUser);
-    return roles.filter((r) => (isPlat ? isPlatformRole(r) : !isPlatformRole(r)));
-  }, [editingUser, roles]);
 
   // Load Data
   const loadData = React.useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
-      const [fetchedUsers, fetchedRoles, fetchedLocations, fetchedTenants] =
-        await Promise.all([
+      if (isPlatformAdmin) {
+        // Platform Mode: Fetch across platform and optionally all tenants
+        const [fetchedUsers, fetchedRoles, fetchedLocations, fetchedTenants] = await Promise.all([
           fetchUsersApi(
             roleFilter === "all" ? undefined : roleFilter,
             undefined,
@@ -150,23 +168,54 @@ export function UsersWorkspace() {
           ),
           fetchRolesApi(selectedTenantId === "all" ? undefined : selectedTenantId),
           fetchLocationsApi(selectedTenantId === "all" ? undefined : selectedTenantId),
-          isSuperAdmin ? fetchTenantsForDropdownApi() : Promise.resolve([]),
+          fetchTenantsForDropdownApi(),
         ]);
 
-      setUsers(fetchedUsers);
-      setRoles(fetchedRoles);
-      setLocations(fetchedLocations);
-      setTenants(fetchedTenants);
+        setUsers(fetchedUsers);
+        setRoles(fetchedRoles);
+        setBranches(fetchedLocations);
+        setTenants(fetchedTenants);
+      } else {
+        // Tenant Mode: Strictly fetch tenant users, tenant roles, tenant departments, and tenant branches
+        const [fetchedUsers, fetchedRoles, fetchedBranches, fetchedDepts] = await Promise.all([
+          fetchUsersApi(
+            roleFilter === "all" ? undefined : roleFilter,
+            branchFilter === "all" ? undefined : branchFilter,
+            search ? search.trim() : undefined
+          ),
+          fetchRolesApi(),
+          fetchBranchesApi(),
+          fetchDepartmentsApi(),
+        ]);
 
-      if (fetchedRoles.length > 0 && !inviteRole) {
-        setInviteRole(fetchedRoles[0].name);
+        setUsers(fetchedUsers);
+        setRoles(fetchedRoles);
+        setBranches(fetchedBranches);
+        setDepartments(fetchedDepts);
+
+        // Pre-select default staff role if none selected
+        if (!inviteRole && fetchedRoles.length > 0) {
+          const defaultRole =
+            fetchedRoles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
+            fetchedRoles[0];
+          setInviteRole(defaultRole.id);
+        }
+
+        // Branch-scoped user: restrict branch selector if not org-wide
+        if (currentUser?.isOrgWide === false && fetchedBranches.length > 0) {
+          if (branchFilter === "all") {
+            setBranchFilter(fetchedBranches[0].id);
+          }
+        }
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to load staff users and roles");
+      const msg = extractApiError(err, "Failed to load user records from database");
+      setFetchError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
-  }, [roleFilter, selectedTenantId, inviteRole, isSuperAdmin]);
+  }, [isPlatformAdmin, roleFilter, branchFilter, search, selectedTenantId, currentUser?.isOrgWide, inviteRole]);
 
   React.useEffect(() => {
     loadData();
@@ -183,60 +232,76 @@ export function UsersWorkspace() {
       toast.success(`Status updated for ${user.full_name || user.email}`);
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to update user status");
+      toast.error(extractApiError(err, "Failed to update user status"));
     }
   };
 
   // Handle Create / Invite User
   const handleCreateOrInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail || !inviteFirstName) {
+    if (!inviteEmail.trim() || !inviteFirstName.trim()) {
       toast.error("Please provide email and first name");
       return;
     }
-    if (userScope === "tenant" && isSuperAdmin && !inviteTenantId && tenants.length > 0) {
+
+    if (useCustomPassword && invitePassword.trim().length < 10) {
+      toast.error("Initial password must contain at least 10 characters.");
+      return;
+    }
+
+    if (isPlatformAdmin && userScope === "tenant" && !inviteTenantId && tenants.length > 0) {
       toast.error("Please select a target tenant organization for this tenant staff member");
       return;
     }
+
     setInviteSubmitting(true);
     try {
-      const targetRole = inviteRole || (availableRolesForScope.length > 0 ? availableRolesForScope[0].name : "Trainer");
+      const selectedRoleObj = roles.find((r) => r.id === inviteRole || r.name === inviteRole) || roles[0];
+      const targetRole = selectedRoleObj ? selectedRoleObj.name : inviteRole || "Staff";
+
       await inviteUserApi({
         email: inviteEmail.trim(),
         first_name: inviteFirstName.trim(),
         last_name: inviteLastName.trim(),
         phone: invitePhone.trim(),
         role: targetRole,
+        role_id: selectedRoleObj?.id,
+        department_id: inviteDepartmentId || undefined,
+        location_ids: inviteBranchId ? [inviteBranchId] : undefined,
         password: useCustomPassword && invitePassword.trim() ? invitePassword.trim() : undefined,
-        tenant_id: userScope === "platform" ? undefined : (isSuperAdmin && inviteTenantId ? inviteTenantId : currentUser?.tenantId || undefined),
-        location_ids: inviteLocationIds.length > 0 ? inviteLocationIds : undefined,
+        tenant_id: isPlatformAdmin && userScope === "tenant" ? inviteTenantId : undefined,
       });
 
       toast.success(
         useCustomPassword && invitePassword.trim()
-          ? `User ${inviteEmail} created with password and active credentials!`
+          ? `User account ${inviteEmail} activated successfully with assigned credentials!`
           : `Invitation dispatched to ${inviteEmail}`
       );
+
       setInviteModalOpen(false);
       setInviteEmail("");
       setInviteFirstName("");
       setInviteLastName("");
       setInvitePhone("");
-      setInvitePassword("Pass1234!");
-      setInviteLocationIds([]);
+      setInvitePassword("Performance123!");
+      setInviteDepartmentId("");
+      setInviteBranchId("");
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to create user");
+      const msg = extractApiError(err, "Failed to create user");
+      toast.error(msg);
     } finally {
       setInviteSubmitting(false);
     }
   };
 
-  // Open Edit User
+  // Open Edit User Modal
   const handleOpenEdit = (user: AdminUserRow) => {
     setEditingUser(user);
-    setEditRole(user.role || "Trainer");
-    setEditStatus(user.status || "Active");
+    setEditRole(user.role || (roles.length > 0 ? roles[0].name : "Staff"));
+    setEditStatus(user.status || (user.is_active ? "Active" : "Inactive"));
+    setEditDepartmentId("");
+    setEditBranchId(user.active_location_id || "");
     setEditModalOpen(true);
   };
 
@@ -248,15 +313,17 @@ export function UsersWorkspace() {
     try {
       await updateUserApi(editingUser.id, {
         role: editRole,
-        status: editStatus,
+        status: editStatus === "Active" ? "ACTIVE" : editStatus === "Invited" ? "INVITED" : "INACTIVE",
         is_active: editStatus === "Active",
+        department_id: editDepartmentId || undefined,
+        branch_id: editBranchId || undefined,
       });
-      toast.success(`Updated role and status for ${editingUser.full_name}`);
+      toast.success(`Updated role and status for ${editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
       setEditingUser(null);
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to update user");
+      toast.error(extractApiError(err, "Failed to update user"));
     } finally {
       setEditSubmitting(false);
     }
@@ -275,65 +342,83 @@ export function UsersWorkspace() {
       toast.success(`User "${user.email}" removed.`);
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to remove user");
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to remove user");
     }
   };
 
-  const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
+  // ── Metrics Calculation ──────────────────────────────────────────────────
+  const totalUsersCount = users.length;
+  const activeCount = users.filter((u) => u.is_active || u.status === "Active" || u.status === "ACTIVE").length;
+  const inactiveCount = users.filter((u) => (!u.is_active && u.status !== "Invited" && u.status !== "INVITED") || u.status === "Inactive" || u.status === "INACTIVE").length;
+  const pendingCount = users.filter((u) => u.status === "Invited" || u.status === "INVITED").length;
 
-  const platformUsersCount = React.useMemo(() => {
-    return users.filter(isPlatformAccount).length;
-  }, [users]);
+  const platformUsersCount = React.useMemo(() => users.filter(isPlatformAccount).length, [users]);
+  const tenantUsersCount = totalUsersCount - platformUsersCount;
 
-  const tenantUsersCount = users.length - platformUsersCount;
-
-  // Available roles for filter dropdown (filtered by selected scope tab)
-  const availableRolesForFilter = React.useMemo(() => {
-    if (scopeFilter === "platform") {
-      return roles.filter(isPlatformRole);
-    }
-    if (scopeFilter === "tenant") {
-      return roles.filter((r) => !isPlatformRole(r));
-    }
-    return roles;
-  }, [roles, scopeFilter]);
-
-  // Reset role filter if current selection is not available in new scope
-  React.useEffect(() => {
-    if (roleFilter !== "all" && !availableRolesForFilter.some((r) => r.name === roleFilter)) {
-      setRoleFilter("all");
-    }
-  }, [scopeFilter, availableRolesForFilter, roleFilter]);
-
-  // Filtered Users List
+  // ── Filtering logic ──────────────────────────────────────────────────────
   const filteredUsers = React.useMemo(() => {
     return users.filter((u) => {
-      const isPlatformUser = isPlatformAccount(u);
-      if (scopeFilter === "platform" && !isPlatformUser) return false;
-      if (scopeFilter === "tenant" && isPlatformUser) return false;
+      if (isPlatformAdmin) {
+        const isPlatformUser = isPlatformAccount(u);
+        if (scopeFilter === "platform" && !isPlatformUser) return false;
+        if (scopeFilter === "tenant" && isPlatformUser) return false;
+      }
 
-      const nameStr = `${u.first_name || ""} ${u.last_name || ""} ${u.full_name || ""}`.toLowerCase();
-      const matchesSearch =
-        nameStr.includes(search.toLowerCase()) ||
-        (u.email && u.email.toLowerCase().includes(search.toLowerCase())) ||
-        (u.phone && u.phone.includes(search)) ||
-        (u.role && u.role.toLowerCase().includes(search.toLowerCase())) ||
-        (u.tenant_name && u.tenant_name.toLowerCase().includes(search.toLowerCase()));
+      // Search matching
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const nameStr = `${u.first_name || ""} ${u.last_name || ""} ${u.full_name || ""}`.toLowerCase();
+        const emailStr = (u.email || "").toLowerCase();
+        const phoneStr = u.phone || "";
+        const roleStr = (u.role || u.role_name || "").toLowerCase();
+        const deptStr = (u.department || "").toLowerCase();
+        const branchStr = (u.active_location_name || "").toLowerCase();
 
-      const matchesRole =
-        roleFilter === "all" || u.role === roleFilter || u.role_name === roleFilter;
+        const match =
+          nameStr.includes(q) ||
+          emailStr.includes(q) ||
+          phoneStr.includes(q) ||
+          roleStr.includes(q) ||
+          deptStr.includes(q) ||
+          branchStr.includes(q);
 
-      return matchesSearch && matchesRole;
+        if (!match) return false;
+      }
+
+      // Role filter
+      if (roleFilter !== "all") {
+        if (u.role !== roleFilter && u.role_name !== roleFilter) return false;
+      }
+
+      // Department filter (Tenant mode)
+      if (!isPlatformAdmin && departmentFilter !== "all") {
+        if (u.department !== departmentFilter) return false;
+      }
+
+      // Branch filter
+      if (branchFilter !== "all") {
+        if (u.active_location_id !== branchFilter && u.active_location_name !== branchFilter) return false;
+      }
+
+      // Status filter
+      if (statusFilter !== "all") {
+        const normStatus = (u.status || (u.is_active ? "Active" : "Inactive")).toLowerCase();
+        if (normStatus !== statusFilter.toLowerCase()) return false;
+      }
+
+      return true;
     });
-  }, [users, search, roleFilter, scopeFilter]);
-
-  const pendingCount = users.filter((u) => u.status === "Invited").length;
+  }, [users, isPlatformAdmin, scopeFilter, search, roleFilter, departmentFilter, branchFilter, statusFilter]);
 
   return (
     <>
       <PageHeader
-        title="Staff & User Management"
-        subtitle="Manage team accounts, platform administrators, tenant staff clearances, and branch assignments."
+        title={isPlatformAdmin ? "Platform & Tenant Account Administration" : "Tenant Users & Staff"}
+        subtitle={
+          isPlatformAdmin
+            ? "Manage cross-tenant platform administrators, tenant staff clearances, and global account privileges."
+            : "Manage team accounts, departmental staff assignments, branch clearances, and security credentials."
+        }
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -349,13 +434,15 @@ export function UsersWorkspace() {
             <Button
               size="sm"
               onClick={() => {
-                if (!inviteTenantId && tenants.length > 0) setInviteTenantId(tenants[0].id);
+                if (!inviteRole && roles.length > 0) setInviteRole(roles[0].name);
+                if (!inviteBranchId && branches.length > 0) setInviteBranchId(branches[0].id);
+                if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
                 setInviteModalOpen(true);
               }}
               className="gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
             >
               <UserPlus className="size-3.5" />
-              Add / Invite User
+              Add / Invite Staff
             </Button>
           </div>
         }
@@ -363,86 +450,120 @@ export function UsersWorkspace() {
 
       <PageBody>
         {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiTile
-            title="Total Registered Users"
-            value={users.length}
-            change="All Platform & Tenant Accounts"
-            variant="neutral"
-          />
-          <KpiTile
-            title="🌐 SaaS Platform Admins"
-            value={platformUsersCount}
-            change="Global Cross-Tenant HQ"
-            variant="positive"
-          />
-          <KpiTile
-            title="🏢 Tenant Gym Staff"
-            value={tenantUsersCount}
-            change="Gym Owners, Managers & Coaches"
-            variant="neutral"
-          />
-          <KpiTile
-            title="Invited / Pending"
-            value={pendingCount}
-            change="Awaiting Activation"
-            variant={pendingCount > 0 ? "warning" : "neutral"}
-          />
-        </div>
+        {isPlatformAdmin ? (
+          /* PLATFORM KPI TILES */
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiTile
+              title="Total Registered Users"
+              value={totalUsersCount}
+              change="All Platform & Tenant Accounts"
+              variant="neutral"
+            />
+            <KpiTile
+              title="🌐 SaaS Platform Admins"
+              value={platformUsersCount}
+              change="Global Cross-Tenant HQ"
+              variant="positive"
+            />
+            <KpiTile
+              title="🏢 Tenant Gym Staff"
+              value={tenantUsersCount}
+              change="Gym Owners, Managers & Coaches"
+              variant="neutral"
+            />
+            <KpiTile
+              title="Invited / Pending"
+              value={pendingCount}
+              change="Awaiting Activation"
+              variant={pendingCount > 0 ? "warning" : "neutral"}
+            />
+          </div>
+        ) : (
+          /* STRICT TENANT KPI TILES (No Platform terms) */
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiTile
+              title="Total Tenant Users"
+              value={totalUsersCount}
+              change="Current Organization Staff"
+              variant="neutral"
+            />
+            <KpiTile
+              title="Active Staff"
+              value={activeCount}
+              change="Operational & Authorized"
+              variant="positive"
+            />
+            <KpiTile
+              title="Inactive / Disabled"
+              value={inactiveCount}
+              change="Deactivated Accounts"
+              variant={inactiveCount > 0 ? "warning" : "neutral"}
+            />
+            <KpiTile
+              title="Invited / Pending"
+              value={pendingCount}
+              change="Awaiting Credentials Setup"
+              variant={pendingCount > 0 ? "warning" : "neutral"}
+            />
+          </div>
+        )}
 
-        {/* Scope Segmentation Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border w-fit text-xs">
-          <button
-            type="button"
-            onClick={() => setScopeFilter("all")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-              scopeFilter === "all"
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            All Accounts ({users.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setScopeFilter("platform")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              scopeFilter === "platform"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
-            }`}
-          >
-            <ShieldCheck className="size-3.5" />
-            🌐 SaaS Platform HQ ({platformUsersCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setScopeFilter("tenant")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              scopeFilter === "tenant"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-primary hover:bg-primary/10"
-            }`}
-          >
-            <Building2 className="size-3.5" />
-            🏢 Tenant Gym Staff ({tenantUsersCount})
-          </button>
-        </div>
+        {/* Platform-Only Scope Segmentation Tabs */}
+        {isPlatformAdmin && (
+          <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border w-fit text-xs">
+            <button
+              type="button"
+              onClick={() => setScopeFilter("all")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                scopeFilter === "all"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All Accounts ({users.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setScopeFilter("platform")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                scopeFilter === "platform"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+              }`}
+            >
+              <ShieldCheck className="size-3.5" />
+              🌐 SaaS Platform HQ ({platformUsersCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setScopeFilter("tenant")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                scopeFilter === "tenant"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-primary hover:bg-primary/10"
+              }`}
+            >
+              <Building2 className="size-3.5" />
+              🏢 Tenant Gym Staff ({tenantUsersCount})
+            </button>
+          </div>
+        )}
 
-        {/* Filters and Scope Controls */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
-          <div className="relative flex-1 max-w-sm">
+        {/* Filters and Search Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, email, role, or studio..."
+              placeholder="Search by name, email, phone, role..."
               className="h-8 pl-8 text-xs bg-background"
             />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {isSuperAdmin && tenants.length > 0 && (
+            {/* Platform mode tenant selector */}
+            {isPlatformAdmin && tenants.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <Building2 className="size-3.5 text-muted-foreground" />
                 <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
@@ -461,187 +582,362 @@ export function UsersWorkspace() {
               </div>
             )}
 
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
+            {/* Branch Filter */}
+            <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger className="h-8 text-xs w-36 bg-background">
-                <SelectValue placeholder="Role Filter" />
+                <SelectValue placeholder="Branch" />
+              </SelectTrigger>
+              <SelectContent className="text-xs">
+                {(currentUser?.isOrgWide !== false || isPlatformAdmin) && (
+                  <SelectItem value="all">All Branches</SelectItem>
+                )}
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Department Filter (Tenant Mode) */}
+            {!isPlatformAdmin && departments.length > 0 && (
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger className="h-8 text-xs w-36 bg-background">
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.name}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Role Filter */}
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="h-8 text-xs w-32 bg-background">
+                <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
-                {availableRolesForFilter.map((r) => (
+                {roles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Status Filter */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 text-xs w-28 bg-background">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="text-xs">
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+                <SelectItem value="Invited">Invited</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        {/* Users Table */}
+        {/* Content States: Loading, Error, Empty, Success */}
         {loading ? (
-          <div className="flex h-64 items-center justify-center">
+          <div className="flex flex-col h-64 items-center justify-center gap-3 border border-border rounded-xl bg-card">
             <RefreshCw className="size-6 animate-spin text-primary" />
+            <p className="text-xs font-semibold text-muted-foreground">Loading authorized staff directory...</p>
+          </div>
+        ) : fetchError ? (
+          <div className="p-8 text-center border border-destructive/20 rounded-xl bg-destructive/5 space-y-3">
+            <AlertCircle className="size-8 text-destructive mx-auto" />
+            <div>
+              <p className="text-sm font-bold text-destructive">Failed to load directory</p>
+              <p className="text-xs text-muted-foreground mt-1">{fetchError}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadData} className="text-xs">
+              <RefreshCw className="size-3.5 mr-1" /> Retry
+            </Button>
           </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="p-12 text-center border border-dashed rounded-xl bg-card">
-            <Users className="size-8 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-foreground">No accounts found</p>
-            <p className="text-xs text-muted-foreground mt-1">Try switching tabs or adjusting your search</p>
+          <div className="p-12 text-center border border-dashed rounded-xl bg-card space-y-3">
+            <Users className="size-10 text-muted-foreground/40 mx-auto" />
+            <div>
+              <p className="text-sm font-bold text-foreground">No staff members found</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {search || roleFilter !== "all" || statusFilter !== "all"
+                  ? "Try resetting filters or adjusting search keywords."
+                  : "Get started by adding your gym's first staff member."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setInviteModalOpen(true)}
+              className="text-xs font-semibold bg-primary text-primary-foreground"
+            >
+              <UserPlus className="size-3.5 mr-1" /> Add Staff Member
+            </Button>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">Role & Scope</th>
-                    <th className="py-3 px-4">Tenant / Organization</th>
-                    <th className="py-3 px-4">Active Studio</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
+          <>
+            {/* Desktop / Tablet Table View (>= 768px) */}
+            <div className="hidden md:block rounded-xl border border-border bg-card overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
+                      <th className="py-3 px-4">Staff Member</th>
+                      <th className="py-3 px-4">Role & Scope</th>
+                      {!isPlatformAdmin && <th className="py-3 px-4">Department</th>}
+                      <th className="py-3 px-4">Branch / Studio</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
 
-                <tbody className="divide-y divide-border/60">
-                  {filteredUsers.map((u) => {
-                    const isRootSuperAdmin = u.id === "USR-ADMIN" || u.email === "admin";
-                    const isSuper = isPlatformAccount(u);
-                    const initials = (u.full_name || u.email).slice(0, 2).toUpperCase();
+                  <tbody className="divide-y divide-border/60">
+                    {filteredUsers.map((u) => {
+                      const isRoot = u.id === "USR-ADMIN" || u.email === "admin";
+                      const isPlat = isPlatformAccount(u);
+                      const initials = (u.full_name || u.email).slice(0, 2).toUpperCase();
 
-                    return (
-                      <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-                        {/* User Identity */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-500 font-bold text-white shadow-2xs text-xs">
-                              {initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-foreground flex items-center gap-1.5">
-                                <span className="truncate">{u.full_name || u.email}</span>
-                                {isRootSuperAdmin && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/30"
-                                  >
-                                    <Lock className="size-2.5 mr-0.5 inline" /> Root
-                                  </Badge>
-                                )}
+                      return (
+                        <tr key={u.id} className="hover:bg-muted/30 transition-colors">
+                          {/* User Identity */}
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-500 font-bold text-white shadow-2xs text-xs">
+                                {initials}
                               </div>
-                              <div className="text-[11px] text-muted-foreground font-mono truncate">
-                                {u.email} {u.phone ? `· ${u.phone}` : ""}
+                              <div className="min-w-0">
+                                <div className="font-bold text-foreground flex items-center gap-1.5">
+                                  <span className="truncate">{u.full_name || u.email}</span>
+                                  {isRoot && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/30"
+                                    >
+                                      <Lock className="size-2.5 mr-0.5 inline" /> Root
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground font-mono truncate">
+                                  {u.email} {u.phone ? `· ${u.phone}` : ""}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Role & Scope */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5">
+                          {/* Role & Scope */}
+                          <td className="py-3 px-4">
                             <Badge
                               variant="outline"
                               className={`text-[10px] font-semibold ${
-                                isSuper
+                                isPlat
                                   ? "bg-purple-500/10 text-purple-600 border-purple-500/30"
                                   : "bg-primary/10 text-primary border-primary/20"
                               }`}
                             >
-                              {isSuper ? (
+                              {isPlat ? (
                                 <>
-                                  <ShieldCheck className="size-3 mr-1 inline" /> 🌐 Platform · {u.role}
+                                  <ShieldCheck className="size-3 mr-1 inline" /> Platform · {u.role || "Admin"}
                                 </>
                               ) : (
                                 <>
-                                  <Building2 className="size-3 mr-1 inline" /> 🏢 Tenant · {u.role}
+                                  <Building2 className="size-3 mr-1 inline" /> {u.role || u.role_name || "Staff"}
                                 </>
                               )}
                             </Badge>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Tenant */}
-                        <td className="py-3 px-4">
-                          {isSuper ? (
-                            <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-semibold">
-                              <ShieldCheck className="size-3.5 shrink-0" />
-                              <span>Global Platform HQ</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-foreground font-medium">
-                              <Building2 className="size-3.5 text-primary shrink-0" />
-                              <span className="truncate max-w-[150px]">{u.tenant_name || "Assigned Gym"}</span>
-                            </div>
+                          {/* Department (Tenant Mode) */}
+                          {!isPlatformAdmin && (
+                            <td className="py-3 px-4">
+                              {u.department ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-foreground font-medium">
+                                  <Briefcase className="size-3 text-muted-foreground" />
+                                  {u.department}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground italic">General</span>
+                              )}
+                            </td>
                           )}
-                        </td>
 
-                        {/* Location */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <MapPin className="size-3.5 text-primary shrink-0" />
-                            <span>{isSuper ? "All Locations (Global)" : (u.active_location_name || "Main Studio / All")}</span>
-                          </div>
-                        </td>
+                          {/* Branch / Studio */}
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <MapPin className="size-3.5 text-primary shrink-0" />
+                              <span className="truncate max-w-[150px]">
+                                {u.active_location_name || "All Branches"}
+                              </span>
+                            </div>
+                          </td>
 
-                        {/* Status */}
-                        <td className="py-3 px-4">
-                          {u.status === "Active" ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                              <CheckCircle2 className="size-3" /> Active
-                            </span>
-                          ) : u.status === "Invited" ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
-                              <Clock className="size-3" /> Invited
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                              <XCircle className="size-3" /> Inactive
-                            </span>
-                          )}
-                        </td>
+                          {/* Status */}
+                          <td className="py-3 px-4">
+                            {u.status === "Active" || u.status === "ACTIVE" ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="size-3" /> Active
+                              </span>
+                            ) : u.status === "Invited" || u.status === "INVITED" ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                                <Clock className="size-3" /> Invited
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                                <XCircle className="size-3" /> Inactive
+                              </span>
+                            )}
+                          </td>
 
-                        {/* Actions */}
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenEdit(u)}
-                              className="h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 cursor-pointer"
-                            >
-                              <Edit2 className="size-3 mr-1" /> Edit
-                            </Button>
+                          {/* Actions */}
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEdit(u)}
+                                className="h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 cursor-pointer"
+                              >
+                                <Edit2 className="size-3 mr-1" /> Edit
+                              </Button>
 
-                            {!isRootSuperAdmin && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleToggleActive(u)}
-                                  className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                                >
-                                  {u.is_active ? "Deactivate" : "Activate"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDeleteUser(u)}
-                                  className="size-7 text-destructive hover:bg-destructive/10 cursor-pointer"
-                                  title="Delete user"
-                                >
-                                  <Trash2 className="size-3" />
-                                </Button>
-                              </>
+                              {!isRoot && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleToggleActive(u)}
+                                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                                  >
+                                    {u.is_active ? "Deactivate" : "Activate"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="size-7 text-destructive hover:bg-destructive/10 cursor-pointer"
+                                    title="Delete user"
+                                  >
+                                    <Trash2 className="size-3" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Cards View (< 768px: optimized for 320px, 375px, 480px) */}
+            <div className="md:hidden space-y-2.5">
+              {filteredUsers.map((u) => {
+                const isRoot = u.id === "USR-ADMIN" || u.email === "admin";
+                const isPlat = isPlatformAccount(u);
+                const initials = (u.full_name || u.email).slice(0, 2).toUpperCase();
+
+                return (
+                  <div
+                    key={u.id}
+                    className="p-3 bg-card rounded-xl border border-border space-y-2.5 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-500 font-bold text-white shadow-2xs text-xs">
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-foreground text-xs truncate flex items-center gap-1">
+                            <span>{u.full_name || u.email}</span>
+                            {isRoot && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/30">
+                                Root
+                              </Badge>
                             )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <div className="text-[11px] text-muted-foreground font-mono truncate">
+                            {u.email}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {u.status === "Active" || u.status === "ACTIVE" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+                            <CheckCircle2 className="size-2.5" /> Active
+                          </span>
+                        ) : u.status === "Invited" || u.status === "INVITED" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                            <Clock className="size-2.5" /> Invited
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                            <XCircle className="size-2.5" /> Inactive
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                        {u.role || u.role_name || "Staff"}
+                      </Badge>
+                      {u.department && (
+                        <span className="flex items-center gap-1">
+                          <Briefcase className="size-3 text-muted-foreground" />
+                          {u.department}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <MapPin className="size-3 text-primary" />
+                        {u.active_location_name || "All Branches"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEdit(u)}
+                        className="h-7 px-2 text-[11px] font-semibold text-primary"
+                      >
+                        <Edit2 className="size-3 mr-1" /> Edit
+                      </Button>
+                      {!isRoot && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleActive(u)}
+                            className="h-7 px-2 text-[11px] text-muted-foreground"
+                          >
+                            {u.is_active ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteUser(u)}
+                            className="size-7 text-destructive"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </>
         )}
       </PageBody>
 
@@ -650,25 +946,25 @@ export function UsersWorkspace() {
         <DialogContent className="sm:max-w-lg bg-card border-border rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <UserPlus className="size-4 text-primary" /> Add & Allot User Access
+              <UserPlus className="size-4 text-primary" />
+              {isPlatformAdmin ? "Add & Allot User Access" : "Provision New Staff Member"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Provision a new user account, assign Platform or Tenant scope, set login credentials, and allot roles and permissions.
+              {isPlatformAdmin
+                ? "Provision a user account, assign Platform or Tenant scope, and set access clearances."
+                : "Create an active employee or coach account for your gym with role and branch allotments."}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateOrInviteUser} className="space-y-4 pt-2">
-            {/* Scope Selection */}
-            {isSuperAdmin && (
+            {/* Scope Selection (Platform Admin only) */}
+            {isPlatformAdmin && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">User Type & Clearance Scope</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setUserScope("tenant");
-                      if (!inviteTenantId && tenants.length > 0) setInviteTenantId(tenants[0].id);
-                    }}
+                    onClick={() => setUserScope("tenant")}
                     className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       userScope === "tenant"
                         ? "border-primary bg-primary/5 text-primary font-bold shadow-xs"
@@ -679,7 +975,7 @@ export function UsersWorkspace() {
                       <Building2 className="size-3.5" /> Tenant Staff
                     </span>
                     <span className="text-[11px] font-normal opacity-80 mt-0.5">
-                      Single gym organization (Owner, Manager, Trainer, Sales)
+                      Single gym organization (Owner, Manager, Trainer)
                     </span>
                   </button>
 
@@ -699,15 +995,15 @@ export function UsersWorkspace() {
                       <ShieldCheck className="size-3.5" /> Platform Staff
                     </span>
                     <span className="text-[11px] font-normal opacity-80 mt-0.5">
-                      Global cross-tenant clearance (Super Admin, Support, Auditor)
+                      Global cross-tenant clearance (Super Admin, Support)
                     </span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* If Tenant: select tenant & studio */}
-            {userScope === "tenant" && isSuperAdmin && tenants.length > 0 && (
+            {/* If Tenant and Platform Admin: select target organization */}
+            {isPlatformAdmin && userScope === "tenant" && tenants.length > 0 && (
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Target Tenant Organization *</Label>
                 <Select value={inviteTenantId} onValueChange={setInviteTenantId}>
@@ -722,15 +1018,6 @@ export function UsersWorkspace() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            )}
-
-            {userScope === "platform" && (
-              <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-700 dark:text-purple-300 flex items-center gap-2">
-                <ShieldCheck className="size-4 shrink-0" />
-                <span>
-                  This account will have <strong>Global Platform clearance</strong> across all gym tenants and staff workspaces, with access to both PerformanceOS and the Django Admin Panel.
-                </span>
               </div>
             )}
 
@@ -765,7 +1052,7 @@ export function UsersWorkspace() {
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="user@fitnesshub.com"
+                  placeholder="staff@gym.com"
                   className="h-8 text-xs bg-background"
                   required
                 />
@@ -781,39 +1068,83 @@ export function UsersWorkspace() {
               </div>
             </div>
 
-            {/* Role Assignment */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Allotted Role *</Label>
-                <a
-                  href="/admin/roles"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
-                >
-                  Configure Permissions Matrix <ArrowUpRight className="size-3" />
-                </a>
+            {/* Role & Department */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Assigned Role *</Label>
+                  <a
+                    href="/admin/roles"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+                  >
+                    Manage Roles <ArrowUpRight className="size-2.5" />
+                  </a>
+                </div>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger className="h-8 text-xs bg-background">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs max-h-56">
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        <span className="font-semibold">{r.name}</span>
+                        {r.description ? (
+                          <span className="text-muted-foreground ml-1 text-[10px]">({r.description})</span>
+                        ) : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger className="h-8 text-xs bg-background">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent className="text-xs max-h-56">
-                  {availableRolesForScope.map((r) => (
-                    <SelectItem key={r.id} value={r.name}>
-                      <span className="font-semibold">{r.name}</span>
-                      {r.description ? <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span> : null}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+              {!isPlatformAdmin && departments.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Department</Label>
+                  <Select value={inviteDepartmentId} onValueChange={setInviteDepartmentId}>
+                    <SelectTrigger className="h-8 text-xs bg-background">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs">
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+
+            {/* Branch Assignment */}
+            {branches.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Primary Branch Assignment</Label>
+                <Select value={inviteBranchId} onValueChange={setInviteBranchId}>
+                  <SelectTrigger className="h-8 text-xs bg-background">
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Password & Direct Login Activation */}
             <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="use-password-toggle" className="text-xs font-semibold cursor-pointer flex items-center gap-1.5">
-                  <Lock className="size-3.5 text-primary" /> Set Login Password & Activate
+                <Label
+                  htmlFor="use-password-toggle"
+                  className="text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                >
+                  <Lock className="size-3.5 text-primary" /> Set Direct Login Password
                 </Label>
                 <input
                   type="checkbox"
@@ -829,17 +1160,17 @@ export function UsersWorkspace() {
                     type="text"
                     value={invitePassword}
                     onChange={(e) => setInvitePassword(e.target.value)}
-                    placeholder="Enter initial password (e.g. Pass1234!)"
+                    placeholder="Enter initial password (minimum 10 characters, e.g. Performance123!)"
                     className="h-8 text-xs font-mono bg-background"
                     required
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Account will be created as <strong>Active</strong> immediately. The user can sign in right away to PerformanceOS and Django Admin with this password.
+                    Staff account will be created as <strong>Active</strong> immediately and able to log in right away (minimum 10 characters required).
                   </p>
                 </div>
               ) : (
                 <p className="text-[10px] text-muted-foreground">
-                  User will be marked as <strong>Invited</strong> with a secure temporary key until email activation.
+                  User will be created in <strong>Invited</strong> status with an activation workflow.
                 </p>
               )}
             </div>
@@ -861,10 +1192,10 @@ export function UsersWorkspace() {
                 className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
               >
                 {inviteSubmitting
-                  ? "Creating Account..."
+                  ? "Saving..."
                   : useCustomPassword
-                    ? "Create User Account"
-                    : "Send Invitation"}
+                  ? "Create Staff Account"
+                  : "Send Invitation"}
               </Button>
             </DialogFooter>
           </form>
@@ -876,29 +1207,18 @@ export function UsersWorkspace() {
         <DialogContent className="sm:max-w-md bg-card border-border rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <Edit2 className="size-4 text-primary" /> Edit User Profile
+              <Edit2 className="size-4 text-primary" /> Edit Staff Profile
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Update role assignment and account authorization status.
+              Update role assignment, branch location, and authorization status.
             </DialogDescription>
           </DialogHeader>
 
           {editingUser && (
             <form onSubmit={handleSaveEdit} className="space-y-3.5 pt-2">
               <div className="p-3 bg-muted/40 rounded-xl border border-border">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-bold text-foreground truncate">
-                    {editingUser.full_name || editingUser.email}
-                  </div>
-                  {isPlatformAccount(editingUser) ? (
-                    <Badge variant="outline" className="text-[10px] font-bold bg-purple-500/10 text-purple-600 border-purple-500/30 shrink-0">
-                      <ShieldCheck className="size-3 mr-1 inline" /> 🌐 Platform HQ
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20 shrink-0">
-                      <Building2 className="size-3 mr-1 inline" /> 🏢 {editingUser.tenant_name || "Tenant Staff"}
-                    </Badge>
-                  )}
+                <div className="text-xs font-bold text-foreground truncate">
+                  {editingUser.full_name || editingUser.email}
                 </div>
                 <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                   {editingUser.email}
@@ -912,15 +1232,53 @@ export function UsersWorkspace() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56">
-                    {editAvailableRoles.map((r) => (
+                    {roles.map((r) => (
                       <SelectItem key={r.id} value={r.name}>
                         <span className="font-semibold">{r.name}</span>
-                        {r.description ? <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span> : null}
+                        {r.description ? (
+                          <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span>
+                        ) : null}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {!isPlatformAdmin && departments.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Department</Label>
+                  <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
+                    <SelectTrigger className="h-8 text-xs bg-background">
+                      <SelectValue placeholder="Keep current or select department" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs">
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {branches.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Branch Assignment</Label>
+                  <Select value={editBranchId} onValueChange={setEditBranchId}>
+                    <SelectTrigger className="h-8 text-xs bg-background">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs">
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Account Status</Label>

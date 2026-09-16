@@ -29,12 +29,16 @@ export interface RoleDefRow extends Row {
   name: string;
   code: string;
   description: string;
-  scope: "platform" | "tenant";
+  scope: "ORG" | "BRANCH" | "platform" | "tenant";
   is_system: boolean;
+  is_active?: boolean;
   tenant?: string;
   tenant_name?: string;
   users_count?: number;
-  permissions?: { permission: { id: string; module: string; action: string; label: string; scope: "platform" | "tenant" }; granted: boolean }[];
+  permission_set_id?: string;
+  permissions?: { permission_id?: string; permission_code?: string; permission?: { id: string; module: string; action: string; label: string; scope?: string }; granted: boolean }[];
+  module_access?: { module_code: string; can_access: boolean; is_visible: boolean }[];
+  submodule_access?: { module_code: string; submodule_code: string; can_access: boolean; is_visible: boolean }[];
   created_at?: string;
 }
 
@@ -128,6 +132,14 @@ export interface SecurityPolicyData {
   ip_whitelist: string[];
 }
 
+function toArray<T>(data: any): T[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.results)) return data.results;
+  if (Array.isArray(data.data)) return data.data;
+  return [];
+}
+
 // ── USERS ─────────────────────────────────────────────────────────────
 
 export async function fetchUsersApi(role?: string, location?: string, search?: string, tenantId?: string): Promise<AdminUserRow[]> {
@@ -137,8 +149,8 @@ export async function fetchUsersApi(role?: string, location?: string, search?: s
   if (search) params.set("search", search);
   if (tenantId && tenantId !== "all") params.set("tenant", tenantId);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<AdminUserRow[]>(`/tenant/users/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/tenant/users/${query}`);
+  return toArray<AdminUserRow>(res.data);
 }
 
 export async function createUserApi(payload: Record<string, unknown>): Promise<AdminUserRow> {
@@ -166,10 +178,41 @@ export async function inviteUserApi(payload: {
   last_name?: string;
   phone?: string;
   role: string;
+  role_id?: string;
+  department_id?: string;
   password?: string;
   location_ids?: string[];
   tenant_id?: string;
 }): Promise<any> {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
+  let isTenant = false;
+  try {
+    if (token) {
+      const parsed = JSON.parse(token);
+      if (parsed.user_type === "tenant" || (parsed.tenantId && !parsed.isSuperAdmin)) {
+        isTenant = true;
+      }
+    }
+  } catch {}
+
+  if (isTenant || !payload.tenant_id) {
+    const locId = payload.location_ids?.[0];
+    return await createUserApi({
+      email: payload.email,
+      first_name: payload.first_name,
+      last_name: payload.last_name || "",
+      phone: payload.phone || "",
+      role: payload.role,
+      role_id: payload.role_id,
+      department_id: payload.department_id,
+      branch: locId,
+      branch_id: locId,
+      home_branch: locId,
+      password: payload.password || "",
+      status: payload.password ? "ACTIVE" : "INVITED",
+    });
+  }
+
   const res = await api.post<any>("/users/invite/", payload);
   return res.data;
 }
@@ -181,8 +224,8 @@ export async function fetchRolesApi(tenantId?: string, scope?: string): Promise<
   if (tenantId && tenantId !== "all") params.set("tenant", tenantId);
   if (scope && scope !== "all") params.set("scope", scope);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<RoleDefRow[]>(`/tenant/roles/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/tenant/roles/${query}`);
+  return toArray<RoleDefRow>(res.data);
 }
 
 export async function fetchPermissionsApi(module?: string, scope?: string): Promise<PermissionDefRow[]> {
@@ -190,24 +233,49 @@ export async function fetchPermissionsApi(module?: string, scope?: string): Prom
   if (module && module !== "all") params.set("module", module);
   if (scope && scope !== "all") params.set("scope", scope);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<PermissionDefRow[]>(`/tenant/permissions/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/tenant/permissions/${query}`);
+  return toArray<PermissionDefRow>(res.data);
 }
 
 export async function createRoleApi(payload: {
   name: string;
   code?: string;
-  scope?: "platform" | "tenant";
+  scope?: "ORG" | "BRANCH" | "platform" | "tenant";
   tenant?: string;
   description?: string;
   permissions?: { permission_id: string; granted: boolean }[];
 }): Promise<RoleDefRow> {
   const code = payload.code || payload.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  let backendScope = 'BRANCH';
+  if (payload.scope === 'ORG' || payload.scope === 'platform') {
+    backendScope = 'ORG';
+  } else if (payload.scope === 'BRANCH' || payload.scope === 'tenant') {
+    backendScope = 'BRANCH';
+  }
+
   const res = await api.post<RoleDefRow>("/tenant/roles/", {
-    ...payload,
+    name: payload.name,
     code,
     description: payload.description || "",
+    scope: backendScope,
   });
+
+  if (payload.permissions && payload.permissions.length > 0 && res.data?.id) {
+    try {
+      await updateRolePermissionsApi(res.data.id, payload.permissions);
+    } catch {}
+  }
+
+  return res.data;
+}
+
+export async function updateRoleApi(roleId: string, payload: Partial<RoleDefRow>): Promise<RoleDefRow> {
+  const res = await api.patch<RoleDefRow>(`/tenant/roles/${roleId}/`, payload);
+  return res.data;
+}
+
+export async function toggleRoleActiveApi(roleId: string, isActive: boolean): Promise<RoleDefRow> {
+  const res = await api.patch<RoleDefRow>(`/tenant/roles/${roleId}/`, { is_active: isActive });
   return res.data;
 }
 
@@ -215,22 +283,81 @@ export async function deleteRoleApi(roleId: string): Promise<void> {
   await api.delete(`/tenant/roles/${roleId}/`);
 }
 
-export async function updateRolePermissionsApi(roleId: string, permissions: { permission_id: string; granted: boolean }[]): Promise<any> {
-  const res = await api.post<any>(`/tenant/roles/${roleId}/update-permissions/`, { permissions });
+export async function updateRolePermissionsApi(
+  roleId: string,
+  permissions: { permission_id?: string; permission_code?: string; granted: boolean }[],
+  options?: { module_access?: any[]; submodule_access?: any[] }
+): Promise<any> {
+  const payload = {
+    permissions,
+    ...(options?.module_access ? { module_access: options.module_access } : {}),
+    ...(options?.submodule_access ? { submodule_access: options.submodule_access } : {}),
+  };
+  const res = await api.post<any>(`/tenant/roles/${roleId}/update-permissions/`, payload);
   return res.data;
 }
 
-// ── LOCATIONS ─────────────────────────────────────────────────────────
+// ── LOCATIONS & BRANCHES ──────────────────────────────────────────────
+
+export async function fetchBranchesApi(): Promise<{ id: string; name: string; code: string; is_active?: boolean }[]> {
+  const res = await api.get<any>('/tenant/branches/');
+  return toArray<any>(res.data).map((b: any) => ({
+    id: b.id,
+    name: b.name,
+    code: b.code,
+    is_active: b.is_active ?? (b.status === 'ACTIVE'),
+  }));
+}
+
+export async function fetchDepartmentsApi(): Promise<{ id: string; name: string; code: string }[]> {
+  const res = await api.get<any>('/tenant/departments/');
+  return toArray<any>(res.data).map((d: any) => ({
+    id: d.id,
+    name: d.name,
+    code: d.code,
+  }));
+}
 
 export async function fetchLocationsApi(tenantId?: string): Promise<LocationRow[]> {
+  const token = typeof window !== 'undefined' ? window.localStorage.getItem('pos_user_profile') : null;
+  let isTenant = false;
+  try {
+    if (token) {
+      const parsed = JSON.parse(token);
+      if (parsed.user_type === 'tenant' || (parsed.tenantId && !parsed.isSuperAdmin)) {
+        isTenant = true;
+      }
+    }
+  } catch {}
+
+  // In tenant session, query tenant branches endpoint (prevents 403 on /platform/locations/)
+  if (isTenant) {
+    try {
+      const res = await api.get<any>('/tenant/branches/');
+      return toArray<any>(res.data).map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        city: b.city || b.address || 'Studio',
+        address: b.address || '',
+        phone: b.phone || '',
+        capacity: b.capacity || 100,
+        operating_hours: b.operating_hours || '06:00 - 22:00',
+        is_active: b.is_active ?? (b.status === 'ACTIVE'),
+        created_at: b.created_at,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   const params = tenantId ? `?tenant=${tenantId}` : '';
-  const res = await api.get<LocationRow[]>(`/platform/locations/${params}`);
-  return res.data || [];
+  const res = await api.get<any>(`/platform/locations/${params}`);
+  return toArray<LocationRow>(res.data);
 }
 
 export async function fetchTenantsForDropdownApi(): Promise<{ id: string; name: string }[]> {
-  const res = await api.get<any[]>('/platform/tenants/?ordering=name');
-  return (res.data || []).map((t: any) => ({ id: t.id, name: t.name }));
+  const res = await api.get<any>('/platform/tenants/?ordering=name');
+  return toArray<any>(res.data).map((t: any) => ({ id: t.id, name: t.name }));
 }
 
 export async function createLocationApi(payload: Partial<LocationRow>): Promise<LocationRow> {

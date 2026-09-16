@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { RewardsWorkspace } from "@/components/rewards/RewardsWorkspace";
 
 export const Route = createFileRoute("/_shell/crm/campaigns")({
   head: () => ({
     meta: [
-      { title: "Campaigns · PerformanceOS Admin" },
-      { name: "description", content: "Campaigns workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Campaigns · PerformanceOS Admin" },
-      { property: "og:description", content: "Campaigns workspace in the PerformanceOS fitness business operating system." },
+      { title: "Campaigns & Referrals · PerformanceOS Admin" },
+      { name: "description", content: "Campaigns and referral engine in the PerformanceOS fitness business operating system." },
+      { property: "og:title", content: "Campaigns & Referrals · PerformanceOS Admin" },
+      { property: "og:description", content: "Campaigns and referral engine in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/crm/campaigns" />,
+  component: () => <RewardsWorkspace initialTab="programs" />,
 });

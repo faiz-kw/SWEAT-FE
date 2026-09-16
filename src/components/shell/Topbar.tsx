@@ -85,6 +85,17 @@ export function Topbar() {
     return [];
   }, [rawLocations]);
 
+  const isOrgWide = user?.isOrgWide !== false;
+
+  // Enforce branch scope: if branch-scoped, user cannot select 'all'
+  React.useEffect(() => {
+    if (!isOrgWide && validLocations.length > 0) {
+      if (locationId === "all" || !validLocations.some((l) => l.id === locationId)) {
+        setLocationId(validLocations[0].id);
+      }
+    }
+  }, [isOrgWide, validLocations, locationId, setLocationId]);
+
   // ── Search State ──
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchFocused, setSearchFocused] = React.useState(false);
@@ -365,9 +376,11 @@ export function Topbar() {
               </div>
             </SelectTrigger>
             <SelectContent align="end" className="rounded-xl border-border bg-popover text-popover-foreground shadow-xl min-w-[13rem]">
-              <SelectItem value="all" className="text-xs font-bold text-primary">
-                All Studio Branches
-              </SelectItem>
+              {isOrgWide && (
+                <SelectItem value="all" className="text-xs font-bold text-primary">
+                  All Studio Branches
+                </SelectItem>
+              )}
               {validLocations.map((l) => (
                 <SelectItem key={l.id} value={l.id} className="text-xs hover:bg-muted">
                   {l.city} · {l.name}

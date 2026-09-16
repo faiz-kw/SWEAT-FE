@@ -91,6 +91,8 @@ export interface AuthUser {
   tenantName: string;
   role: string;
   isSuperAdmin: boolean; // True for platform super admins (no tenant)
+  userType: 'platform' | 'tenant';
+  isOrgWide: boolean;
   branding?: TenantBrandingProfile | null;
   /**
    * Tenant's provisioned module/submodule list from Tenant.enabled_modules.
@@ -145,6 +147,8 @@ const DEMO_USER: AuthUser = {
   tenantName: 'Global Platform HQ',
   role: 'Super Admin',
   isSuperAdmin: true,
+  userType: 'platform',
+  isOrgWide: true,
   enabledModules: null, // Super admin — unrestricted
   allowedLocationIds: [],
   locations: [],
@@ -358,12 +362,18 @@ export function getCurrentUser(): AuthUser | null {
   // Build base user from JWT claims
   // isSuperAdmin: is_superuser in JWT, OR role is 'Super Admin', OR no tenant assigned
   const isSuperAdmin = !!(payload.is_superuser) || payload.role === 'Super Admin' || !payload.tid;
+  const userType: 'platform' | 'tenant' = (_userProfile as any)?.user_type ?? (isSuperAdmin ? 'platform' : 'tenant');
+  const allowedLocationIds = payload.loc || [];
+  const isOrgWide = isSuperAdmin || allowedLocationIds.includes('*') || allowedLocationIds.length === 0 || payload.role === 'ORG_ADMIN' || (_userProfile as any)?.roles?.some((r: any) => r.scope === 'ORG');
+
   const base: AuthUser = {
     userId: payload.sub,
     tenantId: payload.tid || '',
     tenantName: _userProfile?.tenantName ?? (isSuperAdmin ? 'Global Platform HQ' : 'Tenant Organization'),
     role: payload.role,
     isSuperAdmin,
+    userType,
+    isOrgWide,
     // Super admins get null (unrestricted). Tenant users get their provisioned list.
     // IMPORTANT: If a tenant user's cache is stale (enabledModules not present),
     // fall back to [] (deny all) NOT null (allow all) — safe-fail, not safe-open.
@@ -373,7 +383,7 @@ export function getCurrentUser(): AuthUser | null {
       : (Object.prototype.hasOwnProperty.call(_userProfile ?? {}, 'enabledModules')
           ? (_userProfile?.enabledModules ?? [])
           : []),  // stale cache without enabledModules → deny all until /me/ refreshes it
-    allowedLocationIds: payload.loc || [],
+    allowedLocationIds,
     locations: _userProfile?.locations ?? [],
     activeLocationId: payload.act_loc || '',
     firstName: _userProfile?.firstName ?? '',
