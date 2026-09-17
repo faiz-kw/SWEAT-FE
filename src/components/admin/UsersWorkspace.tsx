@@ -135,8 +135,9 @@ export function UsersWorkspace() {
   const [inviteFirstName, setInviteFirstName] = React.useState("");
   const [inviteLastName, setInviteLastName] = React.useState("");
   const [invitePhone, setInvitePhone] = React.useState("");
-  const [invitePassword, setInvitePassword] = React.useState("Performance123!");
-  const [useCustomPassword, setUseCustomPassword] = React.useState(true);
+  const [invitePassword, setInvitePassword] = React.useState("");
+  const [useCustomPassword, setUseCustomPassword] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
   const [inviteRole, setInviteRole] = React.useState("");
   const [inviteDepartmentId, setInviteDepartmentId] = React.useState("");
   const [inviteBranchId, setInviteBranchId] = React.useState("");
@@ -283,7 +284,9 @@ export function UsersWorkspace() {
       setInviteFirstName("");
       setInviteLastName("");
       setInvitePhone("");
-      setInvitePassword("Performance123!");
+      setInvitePassword("");
+      setUseCustomPassword(false);
+      setShowPassword(false);
       setInviteDepartmentId("");
       setInviteBranchId("");
       loadData();
@@ -329,20 +332,20 @@ export function UsersWorkspace() {
     }
   };
 
-  // Handle Delete User
+  // Handle Deactivate / Delete User
   const handleDeleteUser = async (user: AdminUserRow) => {
     if (user.id === "USR-ADMIN" || user.email === "admin") {
-      toast.error("Root Super Admin cannot be deleted.");
+      toast.error("Root Super Admin cannot be deactivated.");
       return;
     }
-    if (!confirm(`Are you sure you want to remove user "${user.full_name || user.email}"?`)) return;
+    if (!confirm(`Are you sure you want to deactivate user "${user.full_name || user.email}"? Their active access will be revoked immediately while business and audit history is preserved.`)) return;
 
     try {
       await deleteUserApi(user.id);
-      toast.success(`User "${user.email}" removed.`);
+      toast.success(`User "${user.email}" has been deactivated.`);
       loadData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || "Failed to remove user");
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to deactivate user");
     }
   };
 
@@ -1144,7 +1147,7 @@ export function UsersWorkspace() {
                   htmlFor="use-password-toggle"
                   className="text-xs font-semibold cursor-pointer flex items-center gap-1.5"
                 >
-                  <Lock className="size-3.5 text-primary" /> Set Direct Login Password
+                  <Lock className="size-3.5 text-primary" /> Create Active User With Direct Password
                 </Label>
                 <input
                   type="checkbox"
@@ -1156,21 +1159,30 @@ export function UsersWorkspace() {
               </div>
               {useCustomPassword ? (
                 <div className="space-y-1 pt-1">
-                  <Input
-                    type="text"
-                    value={invitePassword}
-                    onChange={(e) => setInvitePassword(e.target.value)}
-                    placeholder="Enter initial password (minimum 10 characters, e.g. Performance123!)"
-                    className="h-8 text-xs font-mono bg-background"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={invitePassword}
+                      onChange={(e) => setInvitePassword(e.target.value)}
+                      placeholder="Enter user password (minimum 10 characters)"
+                      className="h-8 text-xs font-mono bg-background pr-16"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground hover:text-foreground font-medium"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                   <p className="text-[10px] text-muted-foreground">
-                    Staff account will be created as <strong>Active</strong> immediately and able to log in right away (minimum 10 characters required).
+                    Staff account will be created as <strong>Active</strong> immediately. Must satisfy system password security validators.
                   </p>
                 </div>
               ) : (
                 <p className="text-[10px] text-muted-foreground">
-                  User will be created in <strong>Invited</strong> status with an activation workflow.
+                  <strong>Recommended:</strong> User will be created in <strong>Invited</strong> mode. No shared or predictable password is stored.
                 </p>
               )}
             </div>

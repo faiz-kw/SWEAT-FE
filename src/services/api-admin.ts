@@ -143,10 +143,37 @@ function toArray<T>(data: any): T[] {
 // ── USERS ─────────────────────────────────────────────────────────────
 
 export async function fetchUsersApi(role?: string, location?: string, search?: string, tenantId?: string): Promise<AdminUserRow[]> {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
+  let isPlatform = false;
+  try {
+    if (token) {
+      const parsed = JSON.parse(token);
+      if (parsed.userType === "platform" || (!parsed.tenantId && parsed.isSuperAdmin)) {
+        isPlatform = true;
+      }
+    }
+  } catch {}
+
   const params = new URLSearchParams();
   if (role && role !== "all") params.set("role", role);
   if (location && location !== "all") params.set("location", location);
   if (search) params.set("search", search);
+
+  if (isPlatform) {
+    if (tenantId && tenantId !== "all") {
+      // Control-plane cross-tenant staff endpoint
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await api.get<any>(`/platform/tenants/${tenantId}/staff/${query}`);
+      return toArray<AdminUserRow>(res.data);
+    } else {
+      // Platform users
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const res = await api.get<any>(`/platform/platform-users/${query}`);
+      return toArray<AdminUserRow>(res.data);
+    }
+  }
+
+  // Tenant mode
   if (tenantId && tenantId !== "all") params.set("tenant", tenantId);
   const query = params.toString() ? `?${params.toString()}` : "";
   const res = await api.get<any>(`/tenant/users/${query}`);
