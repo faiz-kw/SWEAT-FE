@@ -13,18 +13,18 @@ import {
 export const rewardsApi = {
   // Referral Programs
   getPrograms: async (): Promise<ReferralProgram[]> => {
-    const res = await api.get('/referral-programs/');
+    const res = await api.get('/tenant/referral-programs/');
     return res.data.results || res.data;
   },
 
   createProgram: async (data: Partial<ReferralProgram>): Promise<ReferralProgram> => {
-    const res = await api.post('/referral-programs/', data);
+    const res = await api.post('/tenant/referral-programs/', data);
     return res.data;
   },
 
   // Referral Identifiers (Codes)
   getIdentifiers: async (params?: { owner_user_id?: string }): Promise<ReferralIdentifier[]> => {
-    const res = await api.get('/referral-identifiers/', { params });
+    const res = await api.get('/tenant/referral-identifiers/', { params });
     return res.data.results || res.data;
   },
 
@@ -34,13 +34,13 @@ export const rewardsApi = {
     identifier_type?: string;
     custom_code?: string;
   }): Promise<ReferralIdentifier> => {
-    const res = await api.post('/referral-identifiers/generate/', data);
+    const res = await api.post('/tenant/referral-identifiers/generate/', data);
     return res.data;
   },
 
   // Referrals
   getReferrals: async (params?: { program_id?: string; status?: string }): Promise<Referral[]> => {
-    const res = await api.get('/referrals/', { params });
+    const res = await api.get('/tenant/referrals/', { params });
     return res.data.results || res.data;
   },
 
@@ -51,35 +51,35 @@ export const rewardsApi = {
     referred_phone?: string;
     source?: string;
   }): Promise<Referral> => {
-    const res = await api.post('/referrals/register/', data);
+    const res = await api.post('/tenant/referrals/register/', data);
     return res.data;
   },
 
   qualifyReferral: async (referralId: string, data?: { event_type?: string; order_id?: string }): Promise<Referral> => {
-    const res = await api.post(`/referrals/${referralId}/qualify/`, data || {});
+    const res = await api.post(`/tenant/referrals/${referralId}/qualify/`, data || {});
     return res.data;
   },
 
   // Rules
   getQualificationRules: async (): Promise<ReferralQualificationRule[]> => {
-    const res = await api.get('/referral-qualification-rules/');
+    const res = await api.get('/tenant/referral-qualification-rules/');
     return res.data.results || res.data;
   },
 
   getBenefitRules: async (): Promise<ReferralBenefitRule[]> => {
-    const res = await api.get('/referral-benefit-rules/');
+    const res = await api.get('/tenant/referral-benefit-rules/');
     return res.data.results || res.data;
   },
 
   // Reward Accounts
   getRewardAccounts: async (params?: { user_profile_id?: string }): Promise<RewardAccount[]> => {
-    const res = await api.get('/reward-accounts/', { params });
+    const res = await api.get('/tenant/reward-accounts/', { params });
     return res.data.results || res.data;
   },
 
   // Reward Ledgers
   getRewardLedgers: async (params?: { user_profile_id?: string }): Promise<RewardLedger[]> => {
-    const res = await api.get('/reward-ledgers/', { params });
+    const res = await api.get('/tenant/reward-ledgers/', { params });
     return res.data.results || res.data;
   },
 
@@ -90,7 +90,7 @@ export const rewardsApi = {
     reason_code?: string;
     reason?: string;
   }): Promise<RewardLedger> => {
-    const res = await api.post('/reward-ledgers/earn/', data);
+    const res = await api.post('/tenant/reward-ledgers/earn/', data);
     return res.data;
   },
 
@@ -101,13 +101,13 @@ export const rewardsApi = {
     reason_code?: string;
     reason?: string;
   }): Promise<RewardLedger> => {
-    const res = await api.post('/reward-ledgers/redeem/', data);
+    const res = await api.post('/tenant/reward-ledgers/redeem/', data);
     return res.data;
   },
 
   // Order Redemptions
   getOrderRedemptions: async (): Promise<OrderRewardRedemption[]> => {
-    const res = await api.get('/order-reward-redemptions/');
+    const res = await api.get('/tenant/order-reward-redemptions/');
     return res.data.results || res.data;
   },
 };

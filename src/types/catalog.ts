@@ -5,7 +5,8 @@ export type ProgramType =
   | 'PILATES'
   | 'ONLINE'
   | 'HYBRID'
-  | 'OTHER';
+  | 'OTHER'
+  | string;
 
 export type DurationUnit = 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
 
@@ -19,6 +20,18 @@ export type EntitlementType =
   | 'ASSESSMENT'
   | 'OPEN_ACCESS'
   | 'OTHER';
+
+export interface ProgramTypeItem {
+  id: string;
+  organization: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  display_order: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  created_at: string;
+  updated_at: string;
+}
 
 export interface ProgramCategory {
   id: string;
@@ -42,6 +55,9 @@ export interface Program {
   name: string;
   description?: string | null;
   program_type: ProgramType;
+  program_type_id?: string | null;
+  program_type_name?: string | null;
+  program_type_code?: string | null;
   trial_allowed: boolean;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   packages_count?: number;
@@ -56,7 +72,11 @@ export interface PackagePrice {
   branch_name?: string | null;
   currency: string;
   base_price: string;
+  sale_price?: string;
+  display_price?: string | null;
+  prices_include_tax?: boolean;
   tax_percent: string;
+  tax_percentage?: string;
   total_price: string;
   effective_from: string;
   effective_until?: string | null;
@@ -99,8 +119,14 @@ export interface PackageVersion {
   description_snapshot?: string | null;
   duration_value: number;
   duration_unit: DurationUnit;
+  total_days?: number | null;
   validity_days?: number | null;
-  is_trial_package: boolean;
+  is_trial_package?: boolean;
+  is_trial?: boolean;
+  only_for_trial?: boolean;
+  show_on_web?: boolean;
+  show_on_app?: boolean;
+  published_at?: string | null;
   effective_from: string;
   effective_until?: string | null;
   status: PackageVersionStatus;
@@ -132,11 +158,26 @@ export interface Package {
     name_snapshot: string;
     duration_value: number;
     duration_unit: DurationUnit;
+    total_days?: number | null;
+    validity_days?: number | null;
+    show_on_web?: boolean;
+    show_on_app?: boolean;
+    status?: PackageVersionStatus;
     prices: Array<{
       branch_id?: string | null;
       currency: string;
       base_price: string;
+      sale_price?: string;
+      display_price?: string | null;
+      prices_include_tax?: boolean;
+      tax_percent?: string;
+      tax_percentage?: string;
       total_price: string;
+    }>;
+    entitlements?: Array<{
+      entitlement_type: string;
+      allocated_units?: string | null;
+      extra_unit_price?: string | null;
     }>;
   } | null;
   branch_availabilities?: PackageBranchAvailability[];

@@ -21,12 +21,12 @@ export const commerceApi = {
     lead_id?: string;
     status?: string;
   }): Promise<Order[]> {
-    const res = await api.get<any>('/api/v1/tenant/orders/', { params: filters });
+    const res = await api.get<any>('/tenant/orders/', { params: filters });
     return res.data?.results || res.data || [];
   },
 
   async createOrder(data: Partial<Order> & { items_data?: any[] }): Promise<Order> {
-    const res = await api.post<Order>('/api/v1/tenant/orders/', data);
+    const res = await api.post<Order>('/tenant/orders/', data);
     return res.data;
   },
 
@@ -41,7 +41,7 @@ export const commerceApi = {
       metadata?: Record<string, any>;
     }
   ): Promise<{ payment: PaymentTransaction; invoice?: MemberInvoice }> {
-    const res = await api.post<any>(`/api/v1/tenant/orders/${orderId}/record-payment/`, paymentData);
+    const res = await api.post<any>(`/tenant/orders/${orderId}/record-payment/`, paymentData);
     return res.data;
   },
 
@@ -50,7 +50,7 @@ export const commerceApi = {
     options?: { expiry_hours?: number; provider?: string }
   ): Promise<PaymentLink> {
     const res = await api.post<PaymentLink>(
-      `/api/v1/tenant/orders/${orderId}/create-payment-link/`,
+      `/tenant/orders/${orderId}/create-payment-link/`,
       options || {}
     );
     return res.data;
@@ -59,7 +59,7 @@ export const commerceApi = {
   // --- Transactions ---
   async getTransactions(orderId?: string): Promise<PaymentTransaction[]> {
     const params = orderId ? { order_id: orderId } : {};
-    const res = await api.get<any>('/api/v1/tenant/payment-transactions/', { params });
+    const res = await api.get<any>('/tenant/payment-transactions/', { params });
     return res.data?.results || res.data || [];
   },
 
@@ -67,19 +67,19 @@ export const commerceApi = {
     transactionId: string,
     data: { amount: string | number; reason_text?: string; reason_code?: string; provider_reference?: string }
   ): Promise<Refund> {
-    const res = await api.post<Refund>(`/api/v1/tenant/payment-transactions/${transactionId}/refund/`, data);
+    const res = await api.post<Refund>(`/tenant/payment-transactions/${transactionId}/refund/`, data);
     return res.data;
   },
 
   // --- Invoices ---
   async getInvoices(filters?: { user_profile_id?: string; branch_id?: string }): Promise<MemberInvoice[]> {
-    const res = await api.get<any>('/api/v1/tenant/member-invoices/', { params: filters });
+    const res = await api.get<any>('/tenant/member-invoices/', { params: filters });
     return res.data?.results || res.data || [];
   },
 
   // --- Refunds ---
   async getRefunds(): Promise<Refund[]> {
-    const res = await api.get<any>('/api/v1/tenant/refunds/');
+    const res = await api.get<any>('/tenant/refunds/');
     return res.data?.results || res.data || [];
   },
 };

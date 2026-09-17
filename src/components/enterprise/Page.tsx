@@ -4,19 +4,22 @@ import { cn } from "@/lib/utils";
 export function PageHeader({
   title,
   subtitle,
+  description,
   actions,
   meta,
 }: {
   title: string;
   subtitle?: string;
+  description?: string;
   actions?: React.ReactNode;
   meta?: React.ReactNode;
 }) {
+  const effectiveSubtitle = subtitle || description;
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-surface/60 backdrop-blur-md px-5 py-4">
       <div className="min-w-0">
         <h1 className="truncate text-base sm:text-lg font-bold tracking-tight text-foreground">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{subtitle}</p>}
+        {effectiveSubtitle && <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{effectiveSubtitle}</p>}
         {meta && <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">{meta}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -66,6 +69,7 @@ export function KpiTile({
   delta,
   change,
   hint,
+  badge,
   tone = "neutral",
   variant,
 }: {
@@ -75,16 +79,18 @@ export function KpiTile({
   delta?: string;
   change?: string;
   hint?: string;
+  badge?: { text: string; variant?: string };
   tone?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
   variant?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
 }) {
   const effectiveLabel = label || title || "";
-  const effectiveDelta = delta || change;
+  const effectiveDelta = delta || change || (badge ? badge.text : undefined);
   const effectiveTone = variant || tone;
 
-  const isPos = effectiveTone === "positive";
-  const isNeg = effectiveTone === "negative";
-  const isWarn = effectiveTone === "warning" || effectiveTone === "warn";
+  const isPos = effectiveTone === "positive" || badge?.variant === "success";
+  const isNeg = effectiveTone === "negative" || badge?.variant === "danger";
+  const isWarn = effectiveTone === "warning" || effectiveTone === "warn" || badge?.variant === "warning";
+  const isInfo = badge?.variant === "info";
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-3.5 sm:p-4 shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between min-w-0">
@@ -102,7 +108,8 @@ export function KpiTile({
               isPos && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
               isNeg && "bg-rose-500/10 text-rose-600 dark:text-rose-400",
               isWarn && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-              !isPos && !isNeg && !isWarn && "bg-muted text-muted-foreground"
+              isInfo && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+              !isPos && !isNeg && !isWarn && !isInfo && "bg-muted text-muted-foreground"
             )}
             title={effectiveDelta}
           >

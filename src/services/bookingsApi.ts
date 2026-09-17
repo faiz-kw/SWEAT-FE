@@ -18,12 +18,12 @@ export const bookingsApi = {
     occurrence_id?: string;
     user_id?: string;
   }): Promise<Booking[]> => {
-    const res = await api.get('/bookings/', { params });
+    const res = await api.get('/tenant/bookings/', { params });
     return res.data.results || res.data;
   },
 
   getBooking: async (id: string): Promise<Booking> => {
-    const res = await api.get(`/bookings/${id}/`);
+    const res = await api.get(`/tenant/bookings/${id}/`);
     return res.data;
   },
 
@@ -34,7 +34,7 @@ export const bookingsApi = {
     booking_source?: string;
     membership?: string;
   }): Promise<Booking> => {
-    const res = await api.post('/bookings/', data);
+    const res = await api.post('/tenant/bookings/', data);
     return res.data;
   },
 
@@ -45,7 +45,7 @@ export const bookingsApi = {
       reason_text?: string;
     }
   ): Promise<any> => {
-    const res = await api.post(`/bookings/${bookingId}/cancel/`, data);
+    const res = await api.post(`/tenant/bookings/${bookingId}/cancel/`, data);
     return res.data;
   },
 
@@ -56,12 +56,12 @@ export const bookingsApi = {
       check_in_method?: string;
     }
   ): Promise<AttendanceRecord> => {
-    const res = await api.post(`/bookings/${bookingId}/record-attendance/`, data);
+    const res = await api.post(`/tenant/bookings/${bookingId}/record-attendance/`, data);
     return res.data;
   },
 
   promoteWaitlist: async (occurrenceId: string): Promise<Booking> => {
-    const res = await api.post('/bookings/promote-waitlist/', { occurrence_id: occurrenceId });
+    const res = await api.post('/tenant/bookings/promote-waitlist/', { occurrence_id: occurrenceId });
     return res.data;
   },
 
@@ -72,7 +72,7 @@ export const bookingsApi = {
     occurrence_id?: string;
     user_id?: string;
   }): Promise<AttendanceRecord[]> => {
-    const res = await api.get('/attendance-records/', { params });
+    const res = await api.get('/tenant/attendance-records/', { params });
     return res.data.results || res.data;
   },
 
@@ -82,7 +82,7 @@ export const bookingsApi = {
     event_type?: string;
     status?: string;
   }): Promise<AccessEvent[]> => {
-    const res = await api.get('/access-events/', { params });
+    const res = await api.get('/tenant/access-events/', { params });
     return res.data.results || res.data;
   },
 
@@ -91,28 +91,28 @@ export const bookingsApi = {
     is_suspended?: boolean;
     user_id?: string;
   }): Promise<MemberAttendanceState[]> => {
-    const res = await api.get('/member-attendance-states/', { params });
+    const res = await api.get('/tenant/member-attendance-states/', { params });
     return res.data.results || res.data;
   },
 
   // Policies & Rules
   getBookingPolicySets: async (): Promise<BookingPolicySet[]> => {
-    const res = await api.get('/booking-policy-sets/');
+    const res = await api.get('/tenant/booking-policy-sets/');
     return res.data.results || res.data;
   },
 
   getBookingCancellationRules: async (): Promise<BookingCancellationRule[]> => {
-    const res = await api.get('/booking-cancellation-rules/');
+    const res = await api.get('/tenant/booking-cancellation-rules/');
     return res.data.results || res.data;
   },
 
   getAttendancePolicySets: async (): Promise<AttendancePolicySet[]> => {
-    const res = await api.get('/attendance-policy-sets/');
+    const res = await api.get('/tenant/attendance-policy-sets/');
     return res.data.results || res.data;
   },
 
   getAttendancePenaltyRules: async (): Promise<AttendancePenaltyRule[]> => {
-    const res = await api.get('/attendance-penalty-rules/');
+    const res = await api.get('/tenant/attendance-penalty-rules/');
     return res.data.results || res.data;
   },
 };

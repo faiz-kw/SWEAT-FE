@@ -5,27 +5,28 @@ import {
   Receipt,
   RotateCcw,
   Search,
-  Plus,
   RefreshCw,
   CheckCircle2,
-  AlertCircle,
   Link,
-  ChevronRight,
-  ShieldCheck,
   FileText,
-  DollarSign,
-  ArrowUpRight,
-  Clock,
-  Send,
 } from 'lucide-react';
 import { commerceApi } from '../../services/commerceApi';
 import {
   Order,
   PaymentTransaction,
-  MemberInvoice,
-  Refund,
   PaymentProvider,
 } from '../../types/commerce';
+import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 interface CommerceWorkspaceProps {
   initialTab?: 'orders' | 'invoices' | 'transactions' | 'refunds';
@@ -66,7 +67,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
     isLoading: loadingInvoices,
     refetch: refetchInvoices,
   } = useQuery({
-    queryKey: ['member-invoices'],
+    queryKey: ['invoices'],
     queryFn: () => commerceApi.getInvoices(),
   });
 
@@ -75,7 +76,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
     isLoading: loadingTransactions,
     refetch: refetchTransactions,
   } = useQuery({
-    queryKey: ['payment-transactions'],
+    queryKey: ['transactions'],
     queryFn: () => commerceApi.getTransactions(),
   });
 
@@ -90,17 +91,21 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
 
   // Mutations
   const recordPaymentMutation = useMutation({
-    mutationFn: ({ orderId, amount, provider, method }: { orderId: string; amount: string; provider: string; method: string }) =>
-      commerceApi.recordPayment(orderId, {
-        amount,
-        provider,
-        payment_method: method,
-        idempotency_key: `IDEM-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      }),
+    mutationFn: ({
+      orderId,
+      amount,
+      provider,
+      method,
+    }: {
+      orderId: string;
+      amount: string;
+      provider: PaymentProvider;
+      method: string;
+    }) => commerceApi.recordManualPayment(orderId, { amount, payment_provider: provider, payment_method: method }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['member-invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setIsRecordPaymentOpen(false);
       setSelectedOrder(null);
       setPaymentAmount('');
@@ -108,12 +113,19 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
   });
 
   const refundMutation = useMutation({
-    mutationFn: ({ txnId, amount, reason }: { txnId: string; amount: string; reason: string }) =>
-      commerceApi.processRefund(txnId, { amount, reason_text: reason }),
+    mutationFn: ({
+      txnId,
+      amount,
+      reason,
+    }: {
+      txnId: string;
+      amount: string;
+      reason: string;
+    }) => commerceApi.processRefund(txnId, { amount, reason_text: reason }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['refunds'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       setIsRefundOpen(false);
       setSelectedTxn(null);
       setRefundAmount('');
@@ -123,8 +135,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
 
   const createPaymentLinkMutation = useMutation({
     mutationFn: (orderId: string) => commerceApi.createPaymentLink(orderId),
-    onSuccess: (data) => {
-      alert(`Payment link generated successfully: ${data.payment_url || 'Created'}`);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
   });
@@ -143,107 +154,132 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
     return num.includes(term) || customer.includes(term);
   });
 
-  return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100 min-h-screen">
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded">
-                Layer 2 Module G
-              </span>
-              <span className="text-xs text-slate-400">Commerce, Billing & Settlement</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-              Commerce & Payments Hub
-            </h1>
-          </div>
+  // Calculate Metrics
+  const paidOrdersCount = orders.filter((o) => o.status === 'PAID').length;
+  const pendingOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'PARTIALLY_PAID').length;
+  const totalSettledAmount = transactions
+    .filter((t) => t.status === 'SUCCESS')
+    .reduce((acc, t) => acc + parseFloat(t.amount || '0'), 0);
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => {
-                refetchOrders();
-                refetchInvoices();
-                refetchTransactions();
-                refetchRefunds();
-              }}
-              className="p-2 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 rounded-lg transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+  return (
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
+      {/* Unified Platform Header */}
+      <PageHeader
+        title="Commerce & Payments Hub"
+        subtitle="Commercial checkout, POS settlement, tax-compliant invoice generation, and refund audits."
+        meta={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
+              Finance · Commerce
+            </span>
+            <span className="text-muted-foreground text-xs">
+              <span className="font-semibold text-foreground">{orders.length}</span> total orders
+            </span>
           </div>
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetchOrders();
+              refetchInvoices();
+              refetchTransactions();
+              refetchRefunds();
+            }}
+            title="Refresh"
+            className="gap-1.5"
+          >
+            <RefreshCw className="size-3.5" />
+            <span>Refresh</span>
+          </Button>
+        }
+      />
+
+      <PageBody>
+        {/* Responsive KPI Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <KpiTile label="Total Orders" value={orders.length} hint="Commercial transactions" />
+          <KpiTile label="Settled Orders" value={paidOrdersCount} hint="Fully paid & invoiced" tone="positive" />
+          <KpiTile label="Pending Payment" value={pendingOrdersCount} hint="Awaiting settlement" tone="warning" />
+          <KpiTile
+            label="Total Settled"
+            value={`₹${totalSettledAmount.toLocaleString('en-IN')}`}
+            hint="Recorded revenues"
+            tone="positive"
+          />
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 sm:gap-2 mt-4 overflow-x-auto pb-1">
+        {/* Navigation Tabs - Responsive Horizontal Scroll */}
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scrollbar-thin">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'orders'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Orders & Checkout ({orders.length})
           </button>
           <button
             onClick={() => setActiveTab('invoices')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'invoices'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Invoices & Tax Slips ({invoices.length})
           </button>
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'transactions'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Payment Transactions ({transactions.length})
           </button>
           <button
             onClick={() => setActiveTab('refunds')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'refunds'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Refunds ({refunds.length})
           </button>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
         {/* TAB 1: ORDERS */}
         {activeTab === 'orders' && (
           <div className="space-y-4">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 type="text"
                 placeholder="Search orders by number or customer name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className="pl-9 bg-card"
               />
             </div>
 
             {loadingOrders ? (
-              <div className="p-8 text-center text-slate-400">Loading commercial orders...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading commercial orders...
+              </div>
             ) : filteredOrders.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <Receipt className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Orders Recorded</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <Receipt className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Orders Recorded</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   Commercial sales orders generated for memberships, classes, and appointments will appear here.
                 </p>
               </div>
@@ -252,56 +288,56 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                 {filteredOrders.map((order) => (
                   <div
                     key={order.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg"
+                    className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <span className="text-xs font-mono font-bold text-amber-400">{order.order_number}</span>
-                          <h3 className="text-base font-semibold text-white mt-1">
+                          <span className="text-xs font-mono font-bold text-primary">{order.order_number}</span>
+                          <h3 className="text-base font-semibold text-foreground mt-1">
                             {order.member_name || order.lead_name || 'Walk-in Customer'}
                           </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">{order.order_type}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{order.order_type}</p>
                         </div>
                         <span
                           className={`text-xs px-2 py-0.5 rounded font-medium ${
                             order.status === 'PAID'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                               : order.status === 'PARTIALLY_PAID'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
                               : order.status === 'REFUNDED'
-                              ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                           }`}
                         >
                           {order.status}
                         </span>
                       </div>
 
-                      <div className="mt-4 p-3 bg-slate-950 rounded-lg border border-slate-800/80 space-y-1.5 text-xs">
-                        <div className="flex justify-between text-slate-400">
+                      <div className="mt-4 p-3 bg-muted/40 rounded-lg border border-border/60 space-y-1.5 text-xs">
+                        <div className="flex justify-between text-muted-foreground">
                           <span>Subtotal:</span>
                           <span>{order.subtotal} {order.currency}</span>
                         </div>
                         {Number(order.discount_amount) > 0 && (
-                          <div className="flex justify-between text-emerald-400">
+                          <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
                             <span>Discount:</span>
                             <span>-{order.discount_amount} {order.currency}</span>
                           </div>
                         )}
-                        <div className="flex justify-between text-slate-400">
+                        <div className="flex justify-between text-muted-foreground">
                           <span>Tax:</span>
                           <span>+{order.tax_amount} {order.currency}</span>
                         </div>
-                        <div className="flex justify-between font-bold text-white pt-1 border-t border-slate-800">
+                        <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border">
                           <span>Total Amount:</span>
-                          <span className="text-amber-400">{order.total_amount} {order.currency}</span>
+                          <span className="text-primary">{order.total_amount} {order.currency}</span>
                         </div>
                       </div>
 
                       {order.items && order.items.length > 0 && (
-                        <div className="mt-3 text-xs text-slate-400">
-                          <span className="text-slate-500 block mb-1">Items ({order.items.length}):</span>
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          <span className="text-foreground font-medium block mb-1">Items ({order.items.length}):</span>
                           <ul className="space-y-0.5">
                             {order.items.map((it) => (
                               <li key={it.id} className="truncate">
@@ -313,31 +349,34 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                       )}
                     </div>
 
-                    <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                    <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2">
                       {order.status !== 'PAID' && order.status !== 'REFUNDED' && (
                         <>
-                          <button
+                          <Button
+                            size="sm"
                             onClick={() => {
                               setSelectedOrder(order);
                               setPaymentAmount(String(order.total_amount));
                               setIsRecordPaymentOpen(true);
                             }}
-                            className="flex-1 py-1.5 px-2 text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors text-center"
+                            className="flex-1 text-xs"
                           >
                             Record Payment
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => createPaymentLinkMutation.mutate(order.id)}
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
                             title="Generate Payment Link"
+                            className="px-2"
                           >
                             <Link className="w-4 h-4" />
-                          </button>
+                          </Button>
                         </>
                       )}
                       {order.status === 'PAID' && (
-                        <div className="w-full text-center py-1 text-xs text-emerald-400 font-medium flex items-center justify-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4" /> Settled & Invoiced
+                        <div className="w-full text-center py-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center justify-center gap-1.5">
+                          <CheckCircle2 className="size-4" /> Settled & Invoiced
                         </div>
                       )}
                     </div>
@@ -352,60 +391,67 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
         {activeTab === 'invoices' && (
           <div className="space-y-4">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 type="text"
                 placeholder="Search invoices by invoice number or member..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className="pl-9 bg-card"
               />
             </div>
 
             {loadingInvoices ? (
-              <div className="p-8 text-center text-slate-400">Loading invoices...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading invoices...
+              </div>
             ) : filteredInvoices.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Member Invoices Issued</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <FileText className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Member Invoices Issued</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   Invoices are automatically issued with immutable financial snapshots upon full payment of orders.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-800 rounded-xl">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="px-4 py-3">Invoice #</th>
-                      <th className="px-4 py-3">Member</th>
-                      <th className="px-4 py-3">Branch</th>
-                      <th className="px-4 py-3">Issue Date</th>
-                      <th className="px-4 py-3">Total Amount</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 bg-slate-950">
-                    {filteredInvoices.map((inv) => (
-                      <tr key={inv.id} className="hover:bg-slate-900/40">
-                        <td className="px-4 py-3 font-mono font-bold text-amber-400">{inv.invoice_number}</td>
-                        <td className="px-4 py-3 text-white">{inv.member_name || 'Anonymous'}</td>
-                        <td className="px-4 py-3 text-slate-400">{inv.branch_name}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
-                          {inv.issued_at ? new Date(inv.issued_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-white">
-                          {inv.total_amount} {inv.currency}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {inv.status}
-                          </span>
-                        </td>
+              <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3">Invoice #</th>
+                        <th className="px-4 py-3">Member</th>
+                        <th className="px-4 py-3">Branch</th>
+                        <th className="px-4 py-3">Issue Date</th>
+                        <th className="px-4 py-3">Total Amount</th>
+                        <th className="px-4 py-3">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {filteredInvoices.map((inv) => (
+                        <tr key={inv.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3.5 font-mono font-bold text-primary">{inv.invoice_number}</td>
+                          <td className="px-4 py-3.5 font-medium text-foreground">{inv.member_name || 'Anonymous'}</td>
+                          <td className="px-4 py-3.5 text-muted-foreground">{inv.branch_name}</td>
+                          <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                            {inv.issued_at ? new Date(inv.issued_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="px-4 py-3.5 font-bold text-foreground">
+                            {inv.total_amount} {inv.currency}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+                              {inv.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -415,68 +461,77 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
         {activeTab === 'transactions' && (
           <div className="space-y-4">
             {loadingTransactions ? (
-              <div className="p-8 text-center text-slate-400">Loading payment transactions...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading payment transactions...
+              </div>
             ) : transactions.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <CreditCard className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Payment Transactions Recorded</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <CreditCard className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Payment Transactions Recorded</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   Settlements through POS machines, Cash, or Razorpay gateways appear here.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-800 rounded-xl">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="px-4 py-3">Provider</th>
-                      <th className="px-4 py-3">Method</th>
-                      <th className="px-4 py-3">Amount</th>
-                      <th className="px-4 py-3">Paid At</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 bg-slate-950">
-                    {transactions.map((txn) => (
-                      <tr key={txn.id} className="hover:bg-slate-900/40">
-                        <td className="px-4 py-3 font-semibold text-white">{txn.provider}</td>
-                        <td className="px-4 py-3 text-slate-400">{txn.payment_method || 'N/A'}</td>
-                        <td className="px-4 py-3 font-bold text-white">
-                          {txn.amount} {txn.currency}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
-                          {txn.paid_at ? new Date(txn.paid_at).toLocaleString() : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded font-medium ${
-                              txn.status === 'SUCCESS'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                            }`}
-                          >
-                            {txn.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {txn.status === 'SUCCESS' && (
-                            <button
-                              onClick={() => {
-                                setSelectedTxn(txn);
-                                setRefundAmount(String(txn.amount));
-                                setIsRefundOpen(true);
-                              }}
-                              className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-colors"
-                            >
-                              Refund
-                            </button>
-                          )}
-                        </td>
+              <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3">Provider</th>
+                        <th className="px-4 py-3">Method</th>
+                        <th className="px-4 py-3">Amount</th>
+                        <th className="px-4 py-3">Paid At</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {transactions.map((txn) => (
+                        <tr key={txn.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3.5 font-semibold text-foreground">{txn.provider}</td>
+                          <td className="px-4 py-3.5 text-muted-foreground">{txn.payment_method || 'N/A'}</td>
+                          <td className="px-4 py-3.5 font-bold text-foreground">
+                            {txn.amount} {txn.currency}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                            {txn.paid_at ? new Date(txn.paid_at).toLocaleString() : 'N/A'}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                txn.status === 'SUCCESS'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                              }`}
+                            >
+                              {txn.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            {txn.status === 'SUCCESS' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedTxn(txn);
+                                  setRefundAmount(String(txn.amount));
+                                  setIsRefundOpen(true);
+                                }}
+                                className="h-7 text-xs"
+                              >
+                                Refund
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -486,77 +541,86 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
         {activeTab === 'refunds' && (
           <div className="space-y-4">
             {loadingRefunds ? (
-              <div className="p-8 text-center text-slate-400">Loading refunds...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading refunds...
+              </div>
             ) : refunds.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <RotateCcw className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Refunds Processed</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <RotateCcw className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Refunds Processed</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   Refund events and credit notes will appear here.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-800 rounded-xl">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="px-4 py-3">Refund ID</th>
-                      <th className="px-4 py-3">Amount</th>
-                      <th className="px-4 py-3">Reason</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 bg-slate-950">
-                    {refunds.map((ref) => (
-                      <tr key={ref.id} className="hover:bg-slate-900/40">
-                        <td className="px-4 py-3 font-mono text-xs text-slate-400">{ref.id.substring(0, 8)}...</td>
-                        <td className="px-4 py-3 font-bold text-white">{ref.amount}</td>
-                        <td className="px-4 py-3 text-slate-300">{ref.reason_text || 'No reason specified'}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
-                          {ref.created_at ? new Date(ref.created_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                            {ref.status}
-                          </span>
-                        </td>
+              <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3">Refund ID</th>
+                        <th className="px-4 py-3">Amount</th>
+                        <th className="px-4 py-3">Reason</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {refunds.map((ref) => (
+                        <tr key={ref.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground">{ref.id.substring(0, 8)}...</td>
+                          <td className="px-4 py-3.5 font-bold text-foreground">{ref.amount}</td>
+                          <td className="px-4 py-3.5 text-foreground">{ref.reason_text || 'No reason specified'}</td>
+                          <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                            {ref.created_at ? new Date(ref.created_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">
+                              {ref.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
         )}
-      </main>
+      </PageBody>
 
       {/* RECORD PAYMENT MODAL */}
-      {isRecordPaymentOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Record Order Payment</h3>
-            <p className="text-xs text-slate-400">
-              Order <strong className="text-slate-200">{selectedOrder.order_number}</strong> • Total:{' '}
-              <strong className="text-amber-400">{selectedOrder.total_amount} {selectedOrder.currency}</strong>
-            </p>
+      <Dialog open={isRecordPaymentOpen && !!selectedOrder} onOpenChange={setIsRecordPaymentOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Order Payment</DialogTitle>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-4 py-2 text-xs sm:text-sm">
+              <p className="text-xs text-muted-foreground">
+                Order <strong className="text-foreground">{selectedOrder.order_number}</strong> • Total:{' '}
+                <strong className="text-primary">{selectedOrder.total_amount} {selectedOrder.currency}</strong>
+              </p>
 
-            <div className="space-y-3 text-xs sm:text-sm">
               <div>
-                <label className="block text-slate-400 mb-1">Amount to Collect ({selectedOrder.currency})</label>
-                <input
+                <Label className="mb-1 block">Amount to Collect ({selectedOrder.currency})</Label>
+                <Input
                   type="number"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
                 />
               </div>
+
               <div>
-                <label className="block text-slate-400 mb-1">Provider / Channel</label>
+                <Label className="mb-1 block">Provider / Channel</Label>
                 <select
                   value={paymentProvider}
                   onChange={(e) => setPaymentProvider(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="CASH">Cash / Front Desk</option>
                   <option value="RAZORPAY">Razorpay Gateway</option>
@@ -564,12 +628,13 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-slate-400 mb-1">Payment Method</label>
+                <Label className="mb-1 block">Payment Method</Label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="CASH">Cash</option>
                   <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
@@ -579,89 +644,90 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                 </select>
               </div>
             </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setIsRecordPaymentOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  recordPaymentMutation.mutate({
-                    orderId: selectedOrder.id,
-                    amount: paymentAmount,
-                    provider: paymentProvider,
-                    method: paymentMethod,
-                  })
-                }
-                disabled={!paymentAmount || recordPaymentMutation.isPending}
-                className="px-4 py-2 text-xs font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-              >
-                {recordPaymentMutation.isPending ? 'Processing...' : 'Confirm Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsRecordPaymentOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                selectedOrder &&
+                recordPaymentMutation.mutate({
+                  orderId: selectedOrder.id,
+                  amount: paymentAmount,
+                  provider: paymentProvider,
+                  method: paymentMethod,
+                })
+              }
+              disabled={!paymentAmount || recordPaymentMutation.isPending}
+            >
+              {recordPaymentMutation.isPending ? 'Processing...' : 'Confirm Payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* PROCESS REFUND MODAL */}
-      {isRefundOpen && selectedTxn && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Process Payment Refund</h3>
-            <p className="text-xs text-slate-400">
-              Transaction ID: <span className="font-mono text-slate-300">{selectedTxn.id.substring(0, 8)}...</span> • Original:{' '}
-              <strong className="text-slate-200">{selectedTxn.amount} {selectedTxn.currency}</strong>
-            </p>
+      <Dialog open={isRefundOpen && !!selectedTxn} onOpenChange={setIsRefundOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Process Payment Refund</DialogTitle>
+          </DialogHeader>
+          {selectedTxn && (
+            <div className="space-y-4 py-2 text-xs sm:text-sm">
+              <p className="text-xs text-muted-foreground">
+                Transaction ID: <span className="font-mono text-foreground">{selectedTxn.id.substring(0, 8)}...</span> • Original:{' '}
+                <strong className="text-foreground">{selectedTxn.amount} {selectedTxn.currency}</strong>
+              </p>
 
-            <div className="space-y-3 text-xs sm:text-sm">
               <div>
-                <label className="block text-slate-400 mb-1">Refund Amount ({selectedTxn.currency})</label>
-                <input
+                <Label className="mb-1 block">Refund Amount ({selectedTxn.currency})</Label>
+                <Input
                   type="number"
                   value={refundAmount}
                   onChange={(e) => setRefundAmount(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
                 />
               </div>
+
               <div>
-                <label className="block text-slate-400 mb-1">Reason for Refund</label>
+                <Label className="mb-1 block">Reason for Refund</Label>
                 <textarea
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   placeholder="e.g. Member relocated / service cancellation"
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 text-xs"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setIsRefundOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  refundMutation.mutate({
-                    txnId: selectedTxn.id,
-                    amount: refundAmount,
-                    reason: refundReason,
-                  })
-                }
-                disabled={!refundAmount || refundMutation.isPending}
-                className="px-4 py-2 text-xs font-medium bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-              >
-                {refundMutation.isPending ? 'Processing...' : 'Confirm Refund'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsRefundOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                selectedTxn &&
+                refundMutation.mutate({
+                  txnId: selectedTxn.id,
+                  amount: refundAmount,
+                  reason: refundReason,
+                })
+              }
+              disabled={!refundAmount || refundMutation.isPending}
+            >
+              {refundMutation.isPending ? 'Processing...' : 'Confirm Refund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

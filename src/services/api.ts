@@ -31,9 +31,29 @@ async function request<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  let normalizedEndpoint = endpoint;
+  if (!endpoint.startsWith('http')) {
+    const baseClean = BASE_URL.replace(/\/+$/, '');
+    if (baseClean.endsWith('/api/v1')) {
+      if (normalizedEndpoint.startsWith('/api/v1/')) {
+        normalizedEndpoint = normalizedEndpoint.substring('/api/v1'.length);
+      } else if (normalizedEndpoint.startsWith('api/v1/')) {
+        normalizedEndpoint = '/' + normalizedEndpoint.substring('api/v1/'.length);
+      }
+    }
+
+    // Auto-route tenant-scoped endpoints under /tenant/ if not already prefixed with a known root
+    const cleanPath = normalizedEndpoint.replace(/^\/+/, '');
+    const knownRoots = ['tenant/', 'admin/', 'platform/', 'auth/', 'billing/', 'admin-config/'];
+    const hasKnownRoot = knownRoots.some((root) => cleanPath.startsWith(root));
+    if (!hasKnownRoot && cleanPath.length > 0) {
+      normalizedEndpoint = `/tenant/${cleanPath}`;
+    }
+  }
+
   const url = endpoint.startsWith('http')
     ? endpoint
-    : `${BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    : `${BASE_URL}${normalizedEndpoint.startsWith('/') ? '' : '/'}${normalizedEndpoint}`;
 
   const res = await fetch(url, {
     ...options,

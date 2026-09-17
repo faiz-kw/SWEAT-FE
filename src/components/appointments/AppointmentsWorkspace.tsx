@@ -1,30 +1,31 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  User,
   Calendar,
   Clock,
   Plus,
   Search,
-  CheckCircle2,
-  XCircle,
   RefreshCw,
   Award,
-  Video,
-  AlertCircle,
-  Filter,
   UserCheck,
-  ChevronRight,
-  ShieldCheck,
   Activity,
 } from 'lucide-react';
 import { appointmentsApi } from '../../services/appointmentsApi';
 import {
   Appointment,
-  AppointmentType,
   AppointmentDeliveryMode,
-  AppointmentStatus,
 } from '../../types/appointments';
+import { PageHeader, PageBody } from '@/components/enterprise/Page';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 export const AppointmentsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
@@ -140,106 +141,113 @@ export const AppointmentsWorkspace: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100 min-h-screen">
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded">
-                Layer 2 Module F
-              </span>
-              <span className="text-xs text-slate-400">Personal Training & Consultations</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-              Individual Appointments Workspace
-            </h1>
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
+      {/* Unified Platform Header */}
+      <PageHeader
+        title="Individual Appointments Workspace"
+        subtitle="Personal Training, 1-on-1 Consultations & Assessments"
+        meta={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
+              Layer 2 Module F
+            </span>
+            <span className="text-muted-foreground text-xs">
+              Showing {appointments.length} appointments for {selectedDate}
+            </span>
           </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
+        }
+        actions={
+          <div className="flex items-center gap-2">
             {activeTab === 'types' && (
-              <button
+              <Button
+                size="sm"
                 onClick={() => setIsCreateTypeOpen(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                className="gap-1.5"
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Service Type</span>
-                <span className="sm:hidden">Service</span>
-              </button>
+                <Plus className="size-3.5" />
+                <span>New Service Type</span>
+              </Button>
             )}
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 refetchAppointments();
                 refetchTypes();
               }}
-              className="p-2 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 rounded-lg transition-colors"
               title="Refresh"
+              className="gap-1.5"
             >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+              <RefreshCw className="size-3.5" />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
           </div>
-        </div>
+        }
+      />
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 sm:gap-2 mt-4 overflow-x-auto pb-1">
+      <PageBody>
+        {/* Navigation Tabs - Responsive Scroll */}
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scrollbar-thin">
           <button
             onClick={() => setActiveTab('appointments')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'appointments'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Individual Sessions ({appointments.length})
           </button>
           <button
             onClick={() => setActiveTab('types')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'types'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             Service Catalog ({appointmentTypes.length})
           </button>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
         {/* TAB 1: APPOINTMENTS */}
         {activeTab === 'appointments' && (
           <div className="space-y-4">
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
                   type="text"
                   placeholder="Search by member name, number or service..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className="pl-9 bg-background"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-emerald-400 hidden sm:block" />
-                <input
+                <Calendar className="w-4 h-4 text-primary shrink-0 hidden sm:block" />
+                <Input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                  className="bg-background w-full sm:w-auto"
                 />
               </div>
             </div>
 
             {loadingAppointments ? (
-              <div className="p-8 text-center text-slate-400">Loading appointments from tenant database...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading appointments from tenant database...
+              </div>
             ) : filteredAppointments.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <Activity className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Appointments for {selectedDate}</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <Activity className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Appointments for {selectedDate}</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   No personal training or consultation sessions scheduled on this date.
                 </p>
               </div>
@@ -248,44 +256,44 @@ export const AppointmentsWorkspace: React.FC = () => {
                 {filteredAppointments.map((appt) => (
                   <div
                     key={appt.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg"
+                    className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
                             {appt.delivery_mode}
                           </span>
-                          <h3 className="text-base font-semibold text-white mt-2">
+                          <h3 className="text-base font-semibold text-foreground mt-2">
                             {appt.appointment_type_name || '1-on-1 Session'}
                           </h3>
-                          <p className="text-xs text-slate-300 font-medium mt-0.5">
-                            Member: {appt.member_name || 'Anonymous'} ({appt.member_number || 'No ID'})
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Member: <span className="font-semibold text-foreground">{appt.member_name || 'Anonymous'}</span> ({appt.member_number || 'No ID'})
                           </p>
                         </div>
                         <span
                           className={`text-xs px-2 py-0.5 rounded font-medium ${
                             appt.status === 'CONFIRMED'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                               : appt.status === 'COMPLETED'
-                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20'
+                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                           }`}
                         >
                           {appt.status}
                         </span>
                       </div>
 
-                      <div className="mt-4 space-y-2 text-xs text-slate-300">
+                      <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                         <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                          <Clock className="size-3.5 text-muted-foreground shrink-0" />
                           <span>
                             {new Date(appt.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
                             {new Date(appt.end_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <UserCheck className="w-4 h-4 text-slate-500 shrink-0" />
+                          <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
                           <span>
                             Trainer:{' '}
                             {appt.assigned_trainers && appt.assigned_trainers.length > 0
@@ -294,37 +302,43 @@ export const AppointmentsWorkspace: React.FC = () => {
                           </span>
                         </div>
                         {appt.notes && (
-                          <p className="text-xs text-slate-400 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+                          <p className="text-xs text-muted-foreground mt-2 bg-muted/40 p-2 rounded-lg border border-border/60">
                             {appt.notes}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                    <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2">
                       {appt.status === 'CONFIRMED' && (
                         <>
-                          <button
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => {
                               setSelectedAppointment(appt);
                               setIsAssignTrainerOpen(true);
                             }}
-                            className="flex-1 py-1.5 px-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-center"
+                            className="flex-1 text-xs"
                           >
                             Assign Coach
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
                             onClick={() => completeAppointmentMutation.mutate(appt.id)}
-                            className="flex-1 py-1.5 px-2 text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/20 rounded-lg transition-colors text-center"
+                            className="flex-1 text-xs text-emerald-600 dark:text-emerald-400"
                           >
                             Complete
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => cancelAppointmentMutation.mutate({ apptId: appt.id, reason: 'Front desk cancellation' })}
-                            className="py-1.5 px-2 text-xs font-medium bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 rounded-lg transition-colors text-center"
+                            className="text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </>
                       )}
                     </div>
@@ -339,12 +353,17 @@ export const AppointmentsWorkspace: React.FC = () => {
         {activeTab === 'types' && (
           <div className="space-y-4">
             {loadingTypes ? (
-              <div className="p-8 text-center text-slate-400">Loading service types...</div>
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading service types...
+              </div>
             ) : filteredTypes.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center">
-                <Award className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-200">No Service Types Configured</h3>
-                <p className="text-sm text-slate-400 max-w-sm mx-auto mt-1">
+              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                  <Award className="size-6" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No Service Types Configured</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1">
                   Create personal training, nutrition coaching, or assessment service catalog items.
                 </p>
               </div>
@@ -353,39 +372,39 @@ export const AppointmentsWorkspace: React.FC = () => {
                 {filteredTypes.map((t) => (
                   <div
                     key={t.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg"
+                    className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
                   >
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-emerald-400">{t.code}</span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="text-xs font-mono font-bold text-primary">{t.code}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
                           {t.status}
                         </span>
                       </div>
-                      <h3 className="text-base font-semibold text-white mt-2">{t.name}</h3>
+                      <h3 className="text-base font-semibold text-foreground mt-2">{t.name}</h3>
                       {t.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
                       )}
 
                       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                          <span className="text-slate-500 block">Default Duration</span>
-                          <span className="font-semibold text-slate-200">{t.default_duration_minutes} mins</span>
+                        <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                          <span className="text-muted-foreground block text-[11px]">Default Duration</span>
+                          <span className="font-semibold text-foreground">{t.default_duration_minutes} mins</span>
                         </div>
-                        <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                          <span className="text-slate-500 block">Delivery</span>
-                          <span className="font-semibold text-slate-200">{t.default_delivery_mode}</span>
+                        <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                          <span className="text-muted-foreground block text-[11px]">Delivery</span>
+                          <span className="font-semibold text-foreground">{t.default_delivery_mode}</span>
                         </div>
                       </div>
 
                       {t.specialty_requirements && t.specialty_requirements.length > 0 && (
                         <div className="mt-3 text-xs">
-                          <span className="text-slate-500 block mb-1">Required Specialties:</span>
+                          <span className="text-muted-foreground block mb-1 text-[11px]">Required Specialties:</span>
                           <div className="flex flex-wrap gap-1">
                             {t.specialty_requirements.map((req) => (
                               <span
                                 key={req.id}
-                                className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                                className="px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border text-[11px]"
                               >
                                 {req.specialty_name || req.specialty_code} ({req.minimum_proficiency_level})
                               </span>
@@ -400,131 +419,124 @@ export const AppointmentsWorkspace: React.FC = () => {
             )}
           </div>
         )}
-      </main>
+      </PageBody>
 
       {/* CREATE SERVICE TYPE MODAL */}
-      {isCreateTypeOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">New Appointment Service Type</h3>
-            <div className="space-y-3 text-xs sm:text-sm">
-              <div>
-                <label className="block text-slate-400 mb-1">Code</label>
-                <input
-                  type="text"
-                  value={typeForm.code}
-                  onChange={(e) => setTypeForm({ ...typeForm, code: e.target.value })}
-                  placeholder="e.g. PT-60"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Service Name</label>
-                <input
-                  type="text"
-                  value={typeForm.name}
-                  onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })}
-                  placeholder="e.g. 1-on-1 Personal Training 60min"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Default Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={typeForm.default_duration_minutes}
-                  onChange={(e) => setTypeForm({ ...typeForm, default_duration_minutes: parseInt(e.target.value) || 60 })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
-                />
-              </div>
+      <Dialog open={isCreateTypeOpen} onOpenChange={setIsCreateTypeOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Appointment Service Type</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-xs sm:text-sm">
+            <div>
+              <Label className="mb-1 block">Code</Label>
+              <Input
+                type="text"
+                value={typeForm.code}
+                onChange={(e) => setTypeForm({ ...typeForm, code: e.target.value })}
+                placeholder="e.g. PT-60"
+              />
             </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setIsCreateTypeOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => createTypeMutation.mutate(typeForm)}
-                disabled={!typeForm.code || !typeForm.name || createTypeMutation.isPending}
-                className="px-4 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-              >
-                {createTypeMutation.isPending ? 'Saving...' : 'Save Service Type'}
-              </button>
+            <div>
+              <Label className="mb-1 block">Service Name</Label>
+              <Input
+                type="text"
+                value={typeForm.name}
+                onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })}
+                placeholder="e.g. 1-on-1 Personal Training 60min"
+              />
+            </div>
+            <div>
+              <Label className="mb-1 block">Default Duration (minutes)</Label>
+              <Input
+                type="number"
+                value={typeForm.default_duration_minutes}
+                onChange={(e) => setTypeForm({ ...typeForm, default_duration_minutes: parseInt(e.target.value) || 60 })}
+              />
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsCreateTypeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createTypeMutation.mutate(typeForm)}
+              disabled={!typeForm.code || !typeForm.name || createTypeMutation.isPending}
+            >
+              {createTypeMutation.isPending ? 'Saving...' : 'Save Service Type'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ASSIGN TRAINER MODAL */}
-      {isAssignTrainerOpen && selectedAppointment && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Assign Trainer to Appointment</h3>
-            <p className="text-xs text-slate-400">
-              Service: <strong className="text-slate-200">{selectedAppointment.appointment_type_name}</strong> for{' '}
-              <strong className="text-slate-200">{selectedAppointment.member_name}</strong>
-            </p>
+      <Dialog open={isAssignTrainerOpen && !!selectedAppointment} onOpenChange={setIsAssignTrainerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Trainer to Appointment</DialogTitle>
+          </DialogHeader>
+          {selectedAppointment && (
+            <div className="space-y-4 py-2 text-xs sm:text-sm">
+              <p className="text-xs text-muted-foreground">
+                Service: <strong className="text-foreground">{selectedAppointment.appointment_type_name}</strong> for{' '}
+                <strong className="text-foreground">{selectedAppointment.member_name}</strong>
+              </p>
 
-            <div className="space-y-3 text-xs sm:text-sm">
               <div>
-                <label className="block text-slate-400 mb-1">Trainer Profile ID (UUID)</label>
-                <input
+                <Label className="mb-1 block">Trainer Profile ID (UUID)</Label>
+                <Input
                   type="text"
                   value={trainerProfileIdInput}
                   onChange={(e) => setTrainerProfileIdInput(e.target.value)}
                   placeholder="Paste Trainer Profile UUID"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 font-mono text-xs"
+                  className="font-mono text-xs"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Role</label>
+                <Label className="mb-1 block">Role</Label>
                 <select
                   value={trainerRoleInput}
                   onChange={(e) => setTrainerRoleInput(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="LEAD">Lead Trainer</option>
                   <option value="ASSISTANT">Assistant Coach</option>
                 </select>
               </div>
-            </div>
 
-            {assignTrainerMutation.isError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs">
-                Eligibility error: {(assignTrainerMutation.error as any)?.response?.data?.error || 'Validation failed'}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => {
-                  setIsAssignTrainerOpen(false);
-                  setSelectedAppointment(null);
-                }}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  assignTrainerMutation.mutate({
-                    apptId: selectedAppointment.id,
-                    trainerId: trainerProfileIdInput,
-                    role: trainerRoleInput,
-                  })
-                }
-                disabled={!trainerProfileIdInput || assignTrainerMutation.isPending}
-                className="px-4 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-              >
-                {assignTrainerMutation.isPending ? 'Validating...' : 'Confirm Assignment'}
-              </button>
+              {assignTrainerMutation.isError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs">
+                  Eligibility error: {(assignTrainerMutation.error as any)?.response?.data?.error || 'Validation failed'}
+                </div>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAssignTrainerOpen(false);
+                setSelectedAppointment(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                selectedAppointment &&
+                assignTrainerMutation.mutate({
+                  apptId: selectedAppointment.id,
+                  trainerId: trainerProfileIdInput,
+                  role: trainerRoleInput,
+                })
+              }
+              disabled={!trainerProfileIdInput || assignTrainerMutation.isPending}
+            >
+              {assignTrainerMutation.isPending ? 'Validating...' : 'Confirm Assignment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

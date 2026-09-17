@@ -14,12 +14,12 @@ import {
 export const appointmentsApi = {
   // --- Appointment Types ---
   async getAppointmentTypes(): Promise<AppointmentType[]> {
-    const res = await api.get<any>('/api/v1/tenant/appointment-types/');
+    const res = await api.get<any>('/tenant/appointment-types/');
     return res.data?.results || res.data || [];
   },
 
   async createAppointmentType(data: Partial<AppointmentType>): Promise<AppointmentType> {
-    const res = await api.post<AppointmentType>('/api/v1/tenant/appointment-types/', data);
+    const res = await api.post<AppointmentType>('/tenant/appointment-types/', data);
     return res.data;
   },
 
@@ -30,12 +30,12 @@ export const appointmentsApi = {
     date?: string;
     status?: string;
   }): Promise<Appointment[]> {
-    const res = await api.get<any>('/api/v1/tenant/appointments/', { params: filters });
+    const res = await api.get<any>('/tenant/appointments/', { params: filters });
     return res.data?.results || res.data || [];
   },
 
   async createAppointment(data: Partial<Appointment>): Promise<Appointment> {
-    const res = await api.post<Appointment>('/api/v1/tenant/appointments/', data);
+    const res = await api.post<Appointment>('/tenant/appointments/', data);
     return res.data;
   },
 
@@ -45,7 +45,7 @@ export const appointmentsApi = {
     role: string = 'LEAD'
   ): Promise<AppointmentTrainerInfo> {
     const res = await api.post<AppointmentTrainerInfo>(
-      `/api/v1/tenant/appointments/${appointmentId}/assign-trainer/`,
+      `/tenant/appointments/${appointmentId}/assign-trainer/`,
       { trainer_profile_id: trainerProfileId, role }
     );
     return res.data;
@@ -53,7 +53,7 @@ export const appointmentsApi = {
 
   async cancelAppointment(appointmentId: string, reason?: string): Promise<Appointment> {
     const res = await api.post<Appointment>(
-      `/api/v1/tenant/appointments/${appointmentId}/cancel/`,
+      `/tenant/appointments/${appointmentId}/cancel/`,
       { reason }
     );
     return res.data;
@@ -61,7 +61,7 @@ export const appointmentsApi = {
 
   async completeAppointment(appointmentId: string): Promise<Appointment> {
     const res = await api.post<Appointment>(
-      `/api/v1/tenant/appointments/${appointmentId}/complete/`
+      `/tenant/appointments/${appointmentId}/complete/`
     );
     return res.data;
   },

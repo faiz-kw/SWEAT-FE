@@ -2,62 +2,52 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users,
-  ShieldCheck,
-  Calendar,
-  Clock,
-  Snowflake,
-  ArrowUpRight,
-  Search,
-  Plus,
-  RefreshCw,
-  FileText,
   Activity,
-  CheckCircle2,
-  AlertCircle,
+  Snowflake,
   Sliders,
-  ChevronRight,
-  TrendingUp,
-  Award,
+  FileText,
+  Search,
+  RefreshCw,
 } from 'lucide-react';
 import { membershipsApi } from '../../services/membershipsApi';
 import {
   Membership,
-  MembershipContractSnapshot,
-  MembershipEntitlement,
-  MembershipFreeze,
-  MembershipChangePolicy,
+  ContractSnapshot,
 } from '../../types/memberships';
+import { PageHeader, PageBody } from '@/components/enterprise/Page';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
-interface MembershipsWorkspaceProps {
-  initialTab?: 'memberships' | 'entitlements' | 'freezes' | 'policies';
-}
-
-export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
-  initialTab = 'memberships',
-}) => {
+export const MembershipsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>(
-    initialTab
-  );
+  const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>('memberships');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  // Modals
+  // Modal states
   const [selectedMembership, setSelectedMembership] = useState<Membership | null>(null);
-  const [contractSnapshot, setContractSnapshot] = useState<MembershipContractSnapshot | null>(null);
+  const [contractSnapshot, setContractSnapshot] = useState<ContractSnapshot | null>(null);
   const [isContractOpen, setIsContractOpen] = useState(false);
   const [isFreezeOpen, setIsFreezeOpen] = useState(false);
   const [isConsumeOpen, setIsConsumeOpen] = useState(false);
 
-  // Freeze Form
+  // Freeze form
   const [freezeFrom, setFreezeFrom] = useState('');
   const [freezeUntil, setFreezeUntil] = useState('');
   const [freezeReason, setFreezeReason] = useState('');
 
-  // Consume Form
+  // Entitlement consume form
   const [consumeType, setConsumeType] = useState('CLASS_SESSIONS');
-  const [consumeUnits, setConsumeUnits] = useState('1.00');
-  const [consumeReason, setConsumeReason] = useState('Front desk session check-in');
+  const [consumeUnits, setConsumeUnits] = useState('1.0');
+  const [consumeReason] = useState('Session check-in');
 
   // Queries
   const {
@@ -154,125 +144,111 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
   });
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
-      {/* Top Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
-                <Users className="w-5 h-5" />
-              </span>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Memberships & Entitlements</h1>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Active subscriptions, immutable contract snapshots, session quotas, and lifecycle freezes.
-            </p>
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
+      {/* Unified Platform Header */}
+      <PageHeader
+        title="Memberships & Entitlements"
+        subtitle="Active subscriptions, immutable contract snapshots, session quotas, and lifecycle freezes."
+        meta={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
+              Members · Lifecycle
+            </span>
+            <span className="text-muted-foreground text-xs">
+              <span className="font-semibold text-foreground">{memberships.length}</span> active plans
+            </span>
           </div>
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetchMemberships();
+              refetchEntitlements();
+              refetchFreezes();
+              refetchPolicies();
+            }}
+            title="Refresh Data"
+            className="gap-1.5"
+          >
+            <RefreshCw className="size-3.5" />
+            <span>Refresh</span>
+          </Button>
+        }
+      />
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                refetchMemberships();
-                refetchEntitlements();
-                refetchFreezes();
-                refetchPolicies();
-              }}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition"
-              title="Refresh Data"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-6 mt-6 border-b border-slate-200 dark:border-slate-800 text-sm font-medium">
+      <PageBody>
+        {/* Navigation Tabs - Responsive Scroll */}
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scrollbar-thin">
           <button
             onClick={() => setActiveTab('memberships')}
-            className={`pb-3 relative transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'memberships'
-                ? 'text-emerald-600 dark:text-emerald-400 font-semibold border-b-2 border-emerald-600 dark:border-emerald-400'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span>Active Memberships</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              {memberships.length}
-            </span>
+            <Users className="size-3.5" />
+            <span>Active Memberships ({memberships.length})</span>
           </button>
-
           <button
             onClick={() => setActiveTab('entitlements')}
-            className={`pb-3 relative transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'entitlements'
-                ? 'text-emerald-600 dark:text-emerald-400 font-semibold border-b-2 border-emerald-600 dark:border-emerald-400'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Activity className="w-4 h-4" />
-            <span>Session Quotas & Ledger</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              {entitlements.length}
-            </span>
+            <Activity className="size-3.5" />
+            <span>Session Quotas & Ledger ({entitlements.length})</span>
           </button>
-
           <button
             onClick={() => setActiveTab('freezes')}
-            className={`pb-3 relative transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'freezes'
-                ? 'text-emerald-600 dark:text-emerald-400 font-semibold border-b-2 border-emerald-600 dark:border-emerald-400'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Snowflake className="w-4 h-4" />
-            <span>Freezes & Extensions</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              {freezes.length}
-            </span>
+            <Snowflake className="size-3.5" />
+            <span>Freezes & Extensions ({freezes.length})</span>
           </button>
-
           <button
             onClick={() => setActiveTab('policies')}
-            className={`pb-3 relative transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'policies'
-                ? 'text-emerald-600 dark:text-emerald-400 font-semibold border-b-2 border-emerald-600 dark:border-emerald-400'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Sliders className="w-4 h-4" />
-            <span>Upgrade & Change Rules</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              {policies.length}
-            </span>
+            <Sliders className="size-3.5" />
+            <span>Upgrade Rules ({policies.length})</span>
           </button>
         </div>
-      </div>
 
-      {/* Main Tab Content */}
-      <div className="flex-1 p-6 overflow-y-auto">
+        {/* Main Tab Content */}
         {activeTab === 'memberships' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
+          <div className="space-y-4">
             {/* Filter Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
                   type="text"
                   placeholder="Search member, ID, or package..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="pl-9 bg-background"
                 />
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-xs text-slate-500 font-medium">Status:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium">Status:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-700 dark:text-slate-300"
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="ACTIVE">ACTIVE</option>
@@ -284,73 +260,73 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
             </div>
 
             {/* Memberships Table */}
-            {loadingMemberships ? (
-              <div className="p-12 text-center text-slate-500">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                Loading memberships...
-              </div>
-            ) : filteredMemberships.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-xl p-12 text-center border border-slate-200 dark:border-slate-800">
-                <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-medium text-slate-900 dark:text-white">No memberships found</h3>
-                <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-                  Memberships are automatically issued when package orders are settled.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 font-semibold uppercase tracking-wider">
+            <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3">Member & ID</th>
+                      <th className="px-4 py-3">Package</th>
+                      <th className="px-4 py-3">Branch</th>
+                      <th className="px-4 py-3">Validity</th>
+                      <th className="px-4 py-3">Session Quota</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {loadingMemberships ? (
                       <tr>
-                        <th className="px-6 py-3">Member & ID</th>
-                        <th className="px-6 py-3">Package</th>
-                        <th className="px-6 py-3">Branch</th>
-                        <th className="px-6 py-3">Validity</th>
-                        <th className="px-6 py-3">Session Quota</th>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3 text-right">Actions</th>
+                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                          <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                          Loading memberships...
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {filteredMemberships.map((mem) => {
+                    ) : filteredMemberships.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                          No memberships found matching current filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMemberships.map((mem) => {
                         const ent = mem.entitlements && mem.entitlements[0];
                         const consumed = ent ? parseFloat(ent.consumed_units) : 0;
                         const allocated = ent && ent.allocated_units ? parseFloat(ent.allocated_units) : 0;
                         const pct = allocated > 0 ? Math.min(100, Math.round((consumed / allocated) * 100)) : 0;
 
                         return (
-                          <tr key={mem.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                            <td className="px-6 py-4">
-                              <div className="font-semibold text-slate-900 dark:text-white">
+                          <tr key={mem.id} className="hover:bg-muted/40 transition-colors">
+                            <td className="px-4 py-3.5">
+                              <div className="font-semibold text-foreground">
                                 {mem.member_name || 'Member'}
                               </div>
-                              <div className="text-xs font-mono text-slate-400">{mem.membership_number}</div>
+                              <div className="text-xs font-mono text-muted-foreground">{mem.membership_number}</div>
                             </td>
-                            <td className="px-6 py-4">
-                              <div className="font-medium text-slate-900 dark:text-white">{mem.package_name}</div>
-                              <div className="text-xs text-slate-400">Standard Plan</div>
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-foreground">{mem.package_name}</div>
+                              <div className="text-[11px] text-muted-foreground">Standard Plan</div>
                             </td>
-                            <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
+                            <td className="px-4 py-3.5 text-xs text-muted-foreground">
                               {mem.home_branch_name || 'Main Branch'}
                             </td>
-                            <td className="px-6 py-4 text-xs">
-                              <div className="text-slate-700 dark:text-slate-300">
+                            <td className="px-4 py-3.5 text-xs">
+                              <div className="text-foreground">
                                 {mem.start_date} → {mem.end_date}
                               </div>
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-4 py-3.5">
                               {ent ? (
                                 <div className="w-32">
-                                  <div className="flex justify-between text-xs font-mono text-slate-500 mb-1">
+                                  <div className="flex justify-between text-xs font-mono text-muted-foreground mb-1">
                                     <span>{consumed} used</span>
                                     <span>{ent.is_unlimited ? '∞' : `${allocated}`}</span>
                                   </div>
                                   {!ent.is_unlimited && (
-                                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                    <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                                       <div
                                         className={`h-full rounded-full ${
-                                          pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                                          pct >= 80 ? 'bg-amber-500' : 'bg-primary'
                                         }`}
                                         style={{ width: `${pct}%` }}
                                       />
@@ -358,97 +334,103 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-xs text-slate-400 italic">No quota</span>
+                                <span className="text-xs text-muted-foreground italic">No quota</span>
                               )}
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-4 py-3.5">
                               <span
-                                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                                className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
                                   mem.status === 'ACTIVE'
-                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                                     : mem.status === 'FROZEN'
-                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600'
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                    : 'bg-muted text-muted-foreground'
                                 }`}
                               >
                                 {mem.status}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
+                            <td className="px-4 py-3.5 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
                                   onClick={() => handleOpenContract(mem)}
-                                  className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                                   title="View Contract Snapshot"
                                 >
-                                  <FileText className="w-4 h-4" />
-                                </button>
-                                <button
+                                  <FileText className="size-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
                                   onClick={() => handleOpenConsume(mem)}
-                                  className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded"
+                                  className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
                                   title="Check-In / Consume Session"
                                 >
-                                  <Activity className="w-4 h-4" />
-                                </button>
-                                <button
+                                  <Activity className="size-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
                                   onClick={() => handleOpenFreeze(mem)}
-                                  className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 rounded"
+                                  className="h-7 w-7 p-0 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
                                   title="Freeze Membership"
                                 >
-                                  <Snowflake className="w-4 h-4" />
-                                </button>
+                                  <Snowflake className="size-3.5" />
+                                </Button>
                               </div>
                             </td>
                           </tr>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
           </div>
         )}
 
         {activeTab === 'entitlements' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Active Entitlement Instances</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+          <div className="space-y-4">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
+              <h2 className="text-base font-semibold text-foreground">Active Entitlement Instances</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Consumable session buckets with automatic deduction and cancellation reversal tracking.
               </p>
 
               {loadingEntitlements ? (
-                <div className="p-8 text-center text-slate-500">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                <div className="p-12 text-center text-muted-foreground text-sm">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
                   Loading entitlements...
                 </div>
               ) : entitlements.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">No entitlements found.</div>
+                <div className="p-8 text-center text-muted-foreground text-sm">No entitlements found.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                   {entitlements.map((e) => (
                     <div
                       key={e.id}
-                      className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl"
+                      className="p-4 bg-muted/40 border border-border/60 rounded-xl"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                        <span className="text-xs font-mono font-semibold text-primary">
                           {e.entitlement_type}
                         </span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
                           {e.status}
                         </span>
                       </div>
                       <div className="mt-3 flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-slate-900 dark:text-white">
+                        <span className="text-2xl font-bold text-foreground">
                           {e.is_unlimited ? 'Unlimited' : `${e.remaining_units || 0}`}
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-muted-foreground">
                           / {e.allocated_units ? `${e.allocated_units} allocated` : 'unlimited'}
                         </span>
                       </div>
-                      <div className="mt-2 text-xs text-slate-500">
+                      <div className="mt-2 text-xs text-muted-foreground">
                         Consumed: {e.consumed_units} session(s)
                       </div>
                     </div>
@@ -460,38 +442,41 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
         )}
 
         {activeTab === 'freezes' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Membership Freezes & Leaves</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+          <div className="space-y-4">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
+              <h2 className="text-base font-semibold text-foreground">Membership Freezes & Leaves</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Approved medical and personal freeze intervals automatically extending membership validity.
               </p>
 
               {loadingFreezes ? (
-                <div className="p-8 text-center text-slate-500">Loading freezes...</div>
+                <div className="p-12 text-center text-muted-foreground text-sm">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                  Loading freezes...
+                </div>
               ) : freezes.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">No freeze records on file.</div>
+                <div className="p-8 text-center text-muted-foreground text-sm">No freeze records on file.</div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 mt-4">
+                <div className="divide-y divide-border/60 mt-4">
                   {freezes.map((f) => (
-                    <div key={f.id} className="py-4 flex items-center justify-between">
+                    <div key={f.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <Snowflake className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                          <Snowflake className="size-4 text-blue-500 shrink-0" />
+                          <span className="text-sm font-semibold text-foreground">
                             {f.freeze_from} → {f.freeze_until}
                           </span>
-                          <span className="text-xs px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded">
+                          <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded-md font-medium">
                             {f.status}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">{f.reason_text || 'No reason provided'}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{f.reason_text || 'No reason provided'}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                      <div className="sm:text-right">
+                        <span className="text-sm font-bold text-primary">
                           +{f.extend_membership_days || 0} days
                         </span>
-                        <span className="text-xs text-slate-400 block">Extended</span>
+                        <span className="text-xs text-muted-foreground block">Validity Extended</span>
                       </div>
                     </div>
                   ))}
@@ -502,30 +487,33 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
         )}
 
         {activeTab === 'policies' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Change & Upgrade Policies</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+          <div className="space-y-4">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
+              <h2 className="text-base font-semibold text-foreground">Change & Upgrade Policies</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Versioned contractual rules governing proration, cancellation fees, and package transitions.
               </p>
 
               {loadingPolicies ? (
-                <div className="p-8 text-center text-slate-500">Loading policies...</div>
+                <div className="p-12 text-center text-muted-foreground text-sm">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                  Loading policies...
+                </div>
               ) : policies.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">No change policies defined.</div>
+                <div className="p-8 text-center text-muted-foreground text-sm">No change policies defined.</div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 mt-4">
+                <div className="divide-y divide-border/60 mt-4">
                   {policies.map((p) => (
                     <div key={p.id} className="py-4">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        <h4 className="text-sm font-semibold text-foreground">
                           {p.policy_name} v{p.version_number}
                         </h4>
-                        <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded">
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
                           {p.status}
                         </span>
                       </div>
-                      <div className="mt-2 text-xs text-slate-500">
+                      <div className="mt-2 text-xs text-muted-foreground">
                         {p.rules?.length || 0} active rule(s) configured for upgrades, downgrades, and cancellations.
                       </div>
                     </div>
@@ -535,88 +523,72 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
             </div>
           </div>
         )}
-      </div>
+      </PageBody>
 
       {/* Contract Snapshot Modal */}
-      {isContractOpen && contractSnapshot && selectedMembership && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Immutable Contract Snapshot</h3>
-                <p className="text-xs text-slate-500">Membership: {selectedMembership.membership_number}</p>
-              </div>
-              <button
-                onClick={() => setIsContractOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm"
-              >
-                ✕
-              </button>
-            </div>
+      <Dialog open={isContractOpen && !!contractSnapshot && !!selectedMembership} onOpenChange={setIsContractOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Immutable Contract Snapshot</DialogTitle>
+          </DialogHeader>
+          {contractSnapshot && selectedMembership && (
+            <div className="space-y-4 py-2 text-xs sm:text-sm">
+              <p className="text-xs text-muted-foreground">
+                Membership: <span className="font-mono text-foreground font-semibold">{selectedMembership.membership_number}</span>
+              </p>
 
-            <div className="mt-4 space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-muted/40 p-4 rounded-xl text-xs border border-border/60">
                 <div>
-                  <span className="text-slate-400 block">Package Snapshot:</span>
-                  <strong className="text-slate-800 dark:text-slate-200">{contractSnapshot.package_name_snapshot}</strong>
+                  <span className="text-muted-foreground block">Package Snapshot:</span>
+                  <strong className="text-foreground font-semibold">{contractSnapshot.package_name_snapshot}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">Duration:</span>
-                  <strong className="text-slate-800 dark:text-slate-200">
+                  <span className="text-muted-foreground block">Duration:</span>
+                  <strong className="text-foreground font-semibold">
                     {contractSnapshot.duration_value} {contractSnapshot.duration_unit}(S)
                   </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">Purchase Price:</span>
-                  <strong className="text-slate-800 dark:text-slate-200">₹{contractSnapshot.purchase_price}</strong>
+                  <span className="text-muted-foreground block">Purchase Price:</span>
+                  <strong className="text-foreground font-semibold">₹{contractSnapshot.purchase_price}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">Final Amount Paid:</span>
-                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
-                    ₹{contractSnapshot.final_amount}
-                  </strong>
+                  <span className="text-muted-foreground block">Final Amount Paid:</span>
+                  <strong className="text-primary font-bold">₹{contractSnapshot.final_amount}</strong>
                 </div>
               </div>
 
               <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
                   Snapshotted Entitlements
                 </span>
                 <div className="space-y-1.5">
                   {contractSnapshot.entitlements_snapshot?.map((es, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs flex justify-between font-mono"
+                      className="p-2.5 bg-muted/40 rounded-lg text-xs flex justify-between font-mono border border-border/60"
                     >
-                      <span>{es.entitlement_type}</span>
-                      <strong>{es.is_unlimited ? 'Unlimited' : `${es.allocated_units} sessions`}</strong>
+                      <span className="text-foreground">{es.entitlement_type}</span>
+                      <strong className="text-primary">{es.is_unlimited ? 'Unlimited' : `${es.allocated_units} sessions`}</strong>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-              <button
-                onClick={() => setIsContractOpen(false)}
-                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsContractOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Freeze Membership Modal */}
-      {isFreezeOpen && selectedMembership && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Schedule Membership Freeze</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Member: {selectedMembership.member_name} ({selectedMembership.membership_number})
-            </p>
-
+      <Dialog open={isFreezeOpen && !!selectedMembership} onOpenChange={setIsFreezeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Membership Freeze</DialogTitle>
+          </DialogHeader>
+          {selectedMembership && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -629,71 +601,69 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
                   },
                 });
               }}
-              className="mt-4 space-y-4"
+              className="space-y-4 py-2 text-xs sm:text-sm"
             >
+              <p className="text-xs text-muted-foreground">
+                Member: <span className="font-semibold text-foreground">{selectedMembership.member_name}</span> ({selectedMembership.membership_number})
+              </p>
+
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Freeze From</label>
-                <input
+                <Label className="mb-1 block">Freeze From</Label>
+                <Input
                   type="date"
                   required
                   value={freezeFrom}
                   onChange={(e) => setFreezeFrom(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Freeze Until</label>
-                <input
+                <Label className="mb-1 block">Freeze Until</Label>
+                <Input
                   type="date"
                   required
                   value={freezeUntil}
                   onChange={(e) => setFreezeUntil(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Reason</label>
-                <input
+                <Label className="mb-1 block">Reason</Label>
+                <Input
                   type="text"
                   placeholder="e.g. Travel or Medical leave"
                   value={freezeReason}
                   onChange={(e) => setFreezeReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setIsFreezeOpen(false)}
-                  className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={freezeMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
                 >
                   {freezeMutation.isPending ? 'Freezing...' : 'Apply Freeze'}
-                </button>
-              </div>
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Consume Session Modal */}
-      {isConsumeOpen && selectedMembership && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Check-In / Consume Entitlement</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Member: {selectedMembership.member_name} ({selectedMembership.membership_number})
-            </p>
-
+      <Dialog open={isConsumeOpen && !!selectedMembership} onOpenChange={setIsConsumeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Check-In / Consume Entitlement</DialogTitle>
+          </DialogHeader>
+          {selectedMembership && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -706,14 +676,18 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
                   },
                 });
               }}
-              className="mt-4 space-y-4"
+              className="space-y-4 py-2 text-xs sm:text-sm"
             >
+              <p className="text-xs text-muted-foreground">
+                Member: <span className="font-semibold text-foreground">{selectedMembership.member_name}</span> ({selectedMembership.membership_number})
+              </p>
+
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Entitlement Type</label>
+                <Label className="mb-1 block">Entitlement Type</Label>
                 <select
                   value={consumeType}
                   onChange={(e) => setConsumeType(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="CLASS_SESSIONS">CLASS_SESSIONS</option>
                   <option value="PERSONAL_TRAINING">PERSONAL_TRAINING</option>
@@ -722,37 +696,35 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Units to Consume</label>
-                <input
+                <Label className="mb-1 block">Units to Consume</Label>
+                <Input
                   type="number"
                   step="0.5"
                   required
                   value={consumeUnits}
                   onChange={(e) => setConsumeUnits(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setIsConsumeOpen(false)}
-                  className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={consumeMutation.isPending}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition"
                 >
                   {consumeMutation.isPending ? 'Processing...' : 'Confirm Check-In'}
-                </button>
-              </div>
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

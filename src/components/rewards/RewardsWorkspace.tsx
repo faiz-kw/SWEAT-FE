@@ -9,26 +9,26 @@ import {
   Search,
   Plus,
   RefreshCw,
-  CheckCircle2,
-  Clock,
   Coins,
-  Wallet,
-  ArrowUpRight,
   Sliders,
   Copy,
   Check,
-  Percent,
 } from 'lucide-react';
 import { rewardsApi } from '../../services/rewardsApi';
 import {
-  ReferralProgram,
-  ReferralIdentifier,
-  Referral,
   RewardAccount,
-  RewardLedger,
-  ReferralQualificationRule,
-  ReferralBenefitRule,
 } from '../../types/rewards';
+import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface RewardsWorkspaceProps {
   initialTab?: 'referrals' | 'programs' | 'accounts' | 'ledger' | 'rules';
@@ -156,7 +156,6 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
   // Metrics
   const totalReferrals = referrals.length;
   const rewardedCount = referrals.filter((r) => r.status === 'REWARDED').length;
-  const qualifiedCount = referrals.filter((r) => r.status === 'QUALIFIED').length;
   const totalPointsCirculation = accounts.reduce(
     (acc, a) => acc + parseFloat(a.points_balance || '0'),
     0
@@ -178,287 +177,362 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
   });
 
   return (
-    <div className="space-y-6">
-      {/* Top Header & Metrics */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Gift className="w-7 h-7 text-indigo-400" />
-            Referrals, Loyalty & Rewards Engine
-          </h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Track member referral attribution funnels, double-entry loyalty points & store credit ledgers, and qualification rules.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              refetchReferrals();
-              refetchPrograms();
-              refetchIdentifiers();
-              refetchAccounts();
-              refetchLedgers();
-              refetchQualRules();
-              refetchBenefitRules();
-            }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col min-h-screen bg-background">
+      <PageHeader
+        title="Referrals, Loyalty & Rewards Engine"
+        description="Track member referral attribution funnels, double-entry loyalty points & store credit ledgers, and qualification rules."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                refetchReferrals();
+                refetchPrograms();
+                refetchIdentifiers();
+                refetchAccounts();
+                refetchLedgers();
+                refetchQualRules();
+                refetchBenefitRules();
+              }}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Refresh</span>
+            </Button>
+          </div>
+        }
+      />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4">
-          <div className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Total Referrals</div>
-          <div className="text-2xl font-bold text-white mt-1">{totalReferrals}</div>
-          <div className="text-xs text-zinc-500 mt-1">Invited & attributed</div>
+      <PageBody>
+        {/* KPI Row */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4 mb-6">
+          <KpiTile
+            title="Total Referrals"
+            value={totalReferrals}
+            badge={{ text: 'Attributed', variant: 'neutral' }}
+          />
+          <KpiTile
+            title="Rewarded"
+            value={rewardedCount}
+            badge={{ text: 'Disbursed', variant: 'success' }}
+          />
+          <KpiTile
+            title="Points Circulation"
+            value={totalPointsCirculation.toLocaleString('en-IN')}
+            badge={{ text: 'Active Balance', variant: 'info' }}
+          />
+          <KpiTile
+            title="Wallet Credit"
+            value={`₹${totalCreditIssued.toFixed(2)}`}
+            badge={{ text: 'Spendable', variant: 'warning' }}
+          />
+          <KpiTile
+            title="Active Programs"
+            value={programs.length}
+            badge={{ text: 'Rule sets', variant: 'info' }}
+          />
         </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4">
-          <div className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Rewarded</div>
-          <div className="text-2xl font-bold text-emerald-400 mt-1">{rewardedCount}</div>
-          <div className="text-xs text-zinc-500 mt-1">Benefits disbursed</div>
-        </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4">
-          <div className="text-xs font-medium text-indigo-400 uppercase tracking-wider">Points Circulation</div>
-          <div className="text-2xl font-bold text-indigo-400 mt-1">{totalPointsCirculation.toLocaleString()}</div>
-          <div className="text-xs text-zinc-500 mt-1">Active member balance</div>
-        </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4">
-          <div className="text-xs font-medium text-amber-400 uppercase tracking-wider">Wallet Credit</div>
-          <div className="text-2xl font-bold text-amber-400 mt-1">${totalCreditIssued.toFixed(2)}</div>
-          <div className="text-xs text-zinc-500 mt-1">Spendable balance</div>
-        </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4">
-          <div className="text-xs font-medium text-purple-400 uppercase tracking-wider">Active Programs</div>
-          <div className="text-2xl font-bold text-purple-400 mt-1">{programs.length}</div>
-          <div className="text-xs text-zinc-500 mt-1">Rule sets enabled</div>
-        </div>
-      </div>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-zinc-800 flex items-center gap-6 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('referrals')}
-          className={`pb-3.5 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'referrals'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Share2 className="w-4 h-4" />
-          Referral Funnel ({referrals.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('programs')}
-          className={`pb-3.5 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'programs'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Gift className="w-4 h-4" />
-          Programs & Codes ({identifiers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('accounts')}
-          className={`pb-3.5 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'accounts'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Coins className="w-4 h-4" />
-          Member Loyalty Accounts ({accounts.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('ledger')}
-          className={`pb-3.5 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'ledger'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          Double-Entry Ledger ({ledgers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('rules')}
-          className={`pb-3.5 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'rules'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Sliders className="w-4 h-4" />
-          Qualification & Benefits ({qualRules.length + benefitRules.length})
-        </button>
-      </div>
+        {/* Navigation Tabs */}
+        <div className="overflow-x-auto pb-2 mb-6">
+          <div className="inline-flex p-1 rounded-xl bg-muted/60 border border-border/40 gap-1 text-xs sm:text-sm font-medium">
+            <button
+              onClick={() => setActiveTab('referrals')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'referrals'
+                  ? 'bg-background text-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Referral Funnel</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+                {referrals.length}
+              </span>
+            </button>
 
-      {/* Tab: Referrals Funnel */}
-      {activeTab === 'referrals' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800">
-            <div className="relative w-80">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search referral code, referrer, referee..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500"
-              />
+            <button
+              onClick={() => setActiveTab('programs')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'programs'
+                  ? 'bg-background text-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Gift className="w-4 h-4" />
+              <span>Programs & Codes</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+                {identifiers.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('accounts')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'accounts'
+                  ? 'bg-background text-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Coins className="w-4 h-4" />
+              <span>Member Accounts</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+                {accounts.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ledger')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'ledger'
+                  ? 'bg-background text-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Double-Entry Ledger</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+                {ledgers.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'rules'
+                  ? 'bg-background text-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Sliders className="w-4 h-4" />
+              <span>Rules & Benefits</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
+                {qualRules.length + benefitRules.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab 1: Referrals Funnel */}
+        {activeTab === 'referrals' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search referral code, referrer, referee..."
+                  className="pl-9 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-foreground">
+                  <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/60 font-semibold">
+                    <tr>
+                      <th className="px-5 py-3.5">Referral Code</th>
+                      <th className="px-5 py-3.5">Program</th>
+                      <th className="px-5 py-3.5">Referrer</th>
+                      <th className="px-5 py-3.5">Referred User</th>
+                      <th className="px-5 py-3.5">Source</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {loadingReferrals ? (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                          Loading referrals...
+                        </td>
+                      </tr>
+                    ) : filteredReferrals.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground text-sm">
+                          No referrals found matching current filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredReferrals.map((ref) => (
+                        <tr key={ref.id} className="hover:bg-muted/30 transition">
+                          <td className="px-5 py-4 font-mono text-xs font-semibold text-primary">
+                            {ref.identifier_used}
+                          </td>
+                          <td className="px-5 py-4 text-xs text-muted-foreground">{ref.program_name || 'Standard Referral'}</td>
+                          <td className="px-5 py-4">
+                            <div className="text-foreground font-medium text-xs">{ref.referrer_email}</div>
+                            <div className="text-[11px] text-muted-foreground">{ref.referrer_type}</div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="text-foreground font-medium text-xs">
+                              {ref.referred_user_email || ref.referred_email || 'Pending Registration'}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                              {ref.source}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <Badge
+                              variant={
+                                ref.status === 'REWARDED'
+                                  ? 'default'
+                                  : ref.status === 'QUALIFIED'
+                                  ? 'outline'
+                                  : 'secondary'
+                              }
+                              className="text-xs font-semibold"
+                            >
+                              {ref.status}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            {ref.status === 'REGISTERED' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => qualifyMutation.mutate(ref.id)}
+                                disabled={qualifyMutation.isPending}
+                                className="text-xs h-7"
+                              >
+                                Qualify & Reward
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
+        {/* Tab 2: Programs & Codes */}
+        {activeTab === 'programs' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {programs.map((p) => (
+                <div key={p.id} className="bg-card border border-border/60 rounded-2xl p-5 space-y-3 shadow-xs">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-foreground text-base">{p.name}</h3>
+                      <p className="text-xs text-primary font-mono mt-0.5">{p.code}</p>
+                    </div>
+                    <Badge variant="default" className="text-xs">
+                      {p.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{p.description || 'Active member & trainer referral campaign.'}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-border/60">
+                <h3 className="text-sm font-semibold text-foreground">Active Referral Share Identifiers</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/60 font-semibold">
+                    <tr>
+                      <th className="px-5 py-3.5">Code Value</th>
+                      <th className="px-5 py-3.5">Owner Email</th>
+                      <th className="px-5 py-3.5">Type</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5 text-right">Copy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {identifiers.map((ident) => (
+                      <tr key={ident.id} className="hover:bg-muted/30 transition">
+                        <td className="px-5 py-4 font-mono font-bold text-primary">{ident.identifier_value}</td>
+                        <td className="px-5 py-4 text-foreground text-xs">{ident.owner_email}</td>
+                        <td className="px-5 py-4 text-xs text-muted-foreground">{ident.identifier_type}</td>
+                        <td className="px-5 py-4">
+                          <Badge variant="default" className="text-xs">
+                            {ident.status}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => copyToClipboard(ident.identifier_value)}
+                            className="text-xs h-7 gap-1.5"
+                          >
+                            {copiedCode === ident.identifier_value ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-500" /> <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" /> <span>Copy Code</span>
+                              </>
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Member Loyalty Accounts */}
+        {activeTab === 'accounts' && (
+          <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-zinc-300">
-                <thead className="bg-zinc-950/60 text-xs uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/60 font-semibold">
                   <tr>
-                    <th className="px-5 py-3.5">Referral Code</th>
-                    <th className="px-5 py-3.5">Program</th>
-                    <th className="px-5 py-3.5">Referrer</th>
-                    <th className="px-5 py-3.5">Referred User</th>
-                    <th className="px-5 py-3.5">Source</th>
+                    <th className="px-5 py-3.5">Member</th>
+                    <th className="px-5 py-3.5">Points Balance</th>
+                    <th className="px-5 py-3.5">Store Credit</th>
+                    <th className="px-5 py-3.5">Lifetime Earned</th>
+                    <th className="px-5 py-3.5">Lifetime Redeemed</th>
                     <th className="px-5 py-3.5">Status</th>
                     <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
-                  {loadingReferrals ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
-                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-zinc-400" />
-                        Loading referrals...
+                <tbody className="divide-y divide-border/60">
+                  {accounts.map((acc) => (
+                    <tr key={acc.id} className="hover:bg-muted/30 transition">
+                      <td className="px-5 py-4 font-medium text-foreground text-xs">
+                        {acc.user_name || 'Member'}
+                        <div className="text-[11px] text-muted-foreground font-mono">{acc.member_number}</div>
                       </td>
-                    </tr>
-                  ) : filteredReferrals.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
-                        No referrals found matching current filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredReferrals.map((ref) => (
-                      <tr key={ref.id} className="hover:bg-zinc-800/30 transition">
-                        <td className="px-5 py-4 font-mono text-xs font-semibold text-indigo-300">
-                          {ref.identifier_used}
-                        </td>
-                        <td className="px-5 py-4 text-xs text-zinc-400">{ref.program_name || 'Standard Referral'}</td>
-                        <td className="px-5 py-4">
-                          <div className="text-zinc-200 font-medium">{ref.referrer_email}</div>
-                          <div className="text-xs text-zinc-500">{ref.referrer_type}</div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="text-zinc-200 font-medium">
-                            {ref.referred_user_email || ref.referred_email || 'Pending Registration'}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                            {ref.source}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              ref.status === 'REWARDED'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : ref.status === 'QUALIFIED'
-                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
-                                : ref.status === 'REGISTERED'
-                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            }`}
-                          >
-                            {ref.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {ref.status === 'REGISTERED' && (
-                            <button
-                              onClick={() => qualifyMutation.mutate(ref.id)}
-                              disabled={qualifyMutation.isPending}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition"
-                            >
-                              Qualify & Reward
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Programs & Codes */}
-      {activeTab === 'programs' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {programs.map((p) => (
-              <div key={p.id} className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-white text-base">{p.name}</h3>
-                    <p className="text-xs text-indigo-400 font-mono mt-0.5">{p.code}</p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {p.status}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400">{p.description || 'Active member & trainer referral campaign.'}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-zinc-800">
-              <h3 className="text-sm font-semibold text-white">Active Referral Share Identifiers</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-zinc-300">
-                <thead className="bg-zinc-950/60 text-xs uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
-                  <tr>
-                    <th className="px-5 py-3.5">Code Value</th>
-                    <th className="px-5 py-3.5">Owner Email</th>
-                    <th className="px-5 py-3.5">Type</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5 text-right">Copy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60">
-                  {identifiers.map((ident) => (
-                    <tr key={ident.id} className="hover:bg-zinc-800/30 transition">
-                      <td className="px-5 py-4 font-mono font-bold text-indigo-300">{ident.identifier_value}</td>
-                      <td className="px-5 py-4 text-zinc-200">{ident.owner_email}</td>
-                      <td className="px-5 py-4 text-xs text-zinc-400">{ident.identifier_type}</td>
+                      <td className="px-5 py-4 font-semibold text-primary text-xs">{acc.points_balance} pts</td>
+                      <td className="px-5 py-4 font-semibold text-emerald-600 dark:text-emerald-400 text-xs">₹{acc.credit_balance}</td>
+                      <td className="px-5 py-4 text-xs text-muted-foreground">{acc.lifetime_earned}</td>
+                      <td className="px-5 py-4 text-xs text-muted-foreground">{acc.lifetime_redeemed}</td>
                       <td className="px-5 py-4">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          {ident.status}
-                        </span>
+                        <Badge variant="default" className="text-xs">
+                          {acc.status}
+                        </Badge>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <button
-                          onClick={() => copyToClipboard(ident.identifier_value)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 inline-flex items-center gap-1.5 transition"
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedAccount(acc);
+                            setIsGrantOpen(true);
+                          }}
+                          className="text-xs h-7"
                         >
-                          {copiedCode === ident.identifier_value ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" /> Copy Code
-                            </>
-                          )}
-                        </button>
+                          Grant Points
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -466,221 +540,169 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Tab: Member Loyalty Accounts */}
-      {activeTab === 'accounts' && (
-        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-zinc-300">
-              <thead className="bg-zinc-950/60 text-xs uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
-                <tr>
-                  <th className="px-5 py-3.5">Member</th>
-                  <th className="px-5 py-3.5">Points Balance</th>
-                  <th className="px-5 py-3.5">Store Credit</th>
-                  <th className="px-5 py-3.5">Lifetime Earned</th>
-                  <th className="px-5 py-3.5">Lifetime Redeemed</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60">
-                {accounts.map((acc) => (
-                  <tr key={acc.id} className="hover:bg-zinc-800/30 transition">
-                    <td className="px-5 py-4 font-medium text-white">
-                      {acc.user_name || 'Member'}
-                      <div className="text-xs text-zinc-500 font-mono">{acc.member_number}</div>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-indigo-400">{acc.points_balance} pts</td>
-                    <td className="px-5 py-4 font-semibold text-emerald-400">${acc.credit_balance}</td>
-                    <td className="px-5 py-4 text-xs text-zinc-400">{acc.lifetime_earned}</td>
-                    <td className="px-5 py-4 text-xs text-zinc-400">{acc.lifetime_redeemed}</td>
-                    <td className="px-5 py-4">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {acc.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedAccount(acc);
-                          setIsGrantOpen(true);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 transition"
-                      >
-                        Grant Points
-                      </button>
-                    </td>
+        {/* Tab 4: Double-Entry Ledger */}
+        {activeTab === 'ledger' && (
+          <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/60 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3.5">Timestamp</th>
+                    <th className="px-5 py-3.5">Member</th>
+                    <th className="px-5 py-3.5">Tx Type</th>
+                    <th className="px-5 py-3.5">Reward Type</th>
+                    <th className="px-5 py-3.5">Quantity</th>
+                    <th className="px-5 py-3.5">Balance After</th>
+                    <th className="px-5 py-3.5">Reason Code</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Double-Entry Ledger */}
-      {activeTab === 'ledger' && (
-        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-zinc-300">
-              <thead className="bg-zinc-950/60 text-xs uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
-                <tr>
-                  <th className="px-5 py-3.5">Timestamp</th>
-                  <th className="px-5 py-3.5">Member</th>
-                  <th className="px-5 py-3.5">Tx Type</th>
-                  <th className="px-5 py-3.5">Reward Type</th>
-                  <th className="px-5 py-3.5">Quantity</th>
-                  <th className="px-5 py-3.5">Balance After</th>
-                  <th className="px-5 py-3.5">Reason Code</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60">
-                {ledgers.map((l) => (
-                  <tr key={l.id} className="hover:bg-zinc-800/30 transition">
-                    <td className="px-5 py-4 font-mono text-xs text-zinc-400">
-                      {new Date(l.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-200">{l.user_name || 'Member'}</td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                          l.transaction_type === 'EARN'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}
-                      >
-                        {l.transaction_type}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-xs text-zinc-400">{l.reward_type}</td>
-                    <td className="px-5 py-4 font-mono font-semibold text-white">{l.quantity}</td>
-                    <td className="px-5 py-4 font-mono text-indigo-400">{l.balance_after}</td>
-                    <td className="px-5 py-4 text-xs font-mono text-zinc-400">{l.reason_code}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Rules & Qualification */}
-      {activeTab === 'rules' && (
-        <div className="space-y-6">
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="font-semibold text-white mb-3">Referral Qualification Trigger Rules</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {qualRules.map((rule) => (
-                <div key={rule.id} className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-indigo-400 font-semibold">{rule.qualification_event}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">{rule.status}</span>
-                  </div>
-                  <div className="text-xs text-zinc-400">
-                    Minimum Order Amount: <span className="text-white font-semibold">${rule.minimum_order_amount || '0.00'}</span>
-                  </div>
-                </div>
-              ))}
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {ledgers.map((l) => (
+                    <tr key={l.id} className="hover:bg-muted/30 transition">
+                      <td className="px-5 py-4 font-mono text-xs text-muted-foreground">
+                        {new Date(l.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-foreground text-xs">{l.user_name || 'Member'}</td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                            l.transaction_type === 'EARN'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                          }`}
+                        >
+                          {l.transaction_type}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-xs text-muted-foreground">{l.reward_type}</td>
+                      <td className="px-5 py-4 font-mono font-semibold text-foreground text-xs">{l.quantity}</td>
+                      <td className="px-5 py-4 font-mono text-primary text-xs">{l.balance_after}</td>
+                      <td className="px-5 py-4 text-xs font-mono text-muted-foreground">{l.reason_code}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+        )}
 
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="font-semibold text-white mb-3">Referral Benefit Disbursement Rules</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {benefitRules.map((rule) => (
-                <div key={rule.id} className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs text-white">Beneficiary: {rule.beneficiary}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400">{rule.benefit_type}</span>
+        {/* Tab 5: Rules & Qualification */}
+        {activeTab === 'rules' && (
+          <div className="space-y-6">
+            <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs">
+              <h3 className="font-semibold text-foreground mb-3 text-base">Referral Qualification Trigger Rules</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {qualRules.map((rule) => (
+                  <div key={rule.id} className="bg-muted/30 border border-border/50 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs text-primary font-semibold">{rule.qualification_event}</span>
+                      <Badge variant="default" className="text-xs">{rule.status}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Minimum Order Amount: <span className="text-foreground font-semibold">₹{rule.minimum_order_amount || '0.00'}</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-zinc-400">
-                    Reward Value: <span className="text-emerald-400 font-semibold">{rule.benefit_value}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs">
+              <h3 className="font-semibold text-foreground mb-3 text-base">Referral Benefit Disbursement Rules</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {benefitRules.map((rule) => (
+                  <div key={rule.id} className="bg-muted/30 border border-border/50 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-foreground">Beneficiary: {rule.beneficiary}</span>
+                      <Badge variant="outline" className="text-xs">{rule.benefit_type}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Reward Value: <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rule.benefit_value}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </PageBody>
 
       {/* Manual Grant Modal */}
-      {isGrantOpen && selectedAccount && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Gift className="w-5 h-5 text-indigo-400" />
-                Grant Member Rewards
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">
+      {selectedAccount && (
+        <Dialog open={isGrantOpen} onOpenChange={setIsGrantOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Gift className="w-5 h-5 text-primary" />
+                <span>Grant Member Rewards</span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Credit loyalty points or wallet balance to member account.
               </p>
-            </div>
+            </DialogHeader>
 
             {modalError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs rounded-xl">
                 {modalError}
               </div>
             )}
 
-            <div className="space-y-3 text-sm">
+            <div className="space-y-3 text-sm pt-2">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Reward Type</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Reward Type</label>
                 <select
                   value={grantType}
                   onChange={(e) => setGrantType(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="POINTS">Points (Loyalty Currency)</option>
-                  <option value="CREDIT">Store Wallet Credit ($)</option>
+                  <option value="CREDIT">Store Wallet Credit (₹)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Quantity</label>
-                <input
+                <label className="block text-xs font-medium text-foreground mb-1">Quantity</label>
+                <Input
                   type="number"
                   value={grantQuantity}
                   onChange={(e) => setGrantQuantity(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500"
+                  className="text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Reason Code</label>
-                <input
+                <label className="block text-xs font-medium text-foreground mb-1">Reason Code</label>
+                <Input
                   type="text"
                   value={grantReasonCode}
                   onChange={(e) => setGrantReasonCode(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+                  className="font-mono text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Description Notes</label>
-                <textarea
+                <label className="block text-xs font-medium text-foreground mb-1">Description Notes</label>
+                <Input
                   value={grantReason}
                   onChange={(e) => setGrantReason(e.target.value)}
-                  rows={2}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500"
+                  className="text-sm"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
+            <DialogFooter className="pt-3">
+              <Button
+                variant="outline"
                 onClick={() => {
                   setIsGrantOpen(false);
                   setSelectedAccount(null);
                   setModalError(null);
                 }}
-                className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() =>
                   grantMutation.mutate({
                     user_profile_id: selectedAccount.user_profile,
@@ -691,13 +713,12 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
                   })
                 }
                 disabled={grantMutation.isPending}
-                className="px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition disabled:opacity-50"
               >
                 {grantMutation.isPending ? 'Granting...' : 'Confirm Grant'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

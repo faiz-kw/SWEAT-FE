@@ -6,12 +6,12 @@ export const approvalsApi = {
     status?: string;
     request_type?: string;
   }): Promise<ApprovalRequest[]> => {
-    const res = await api.get('/approval-requests/', { params });
+    const res = await api.get('/tenant/approval-requests/', { params });
     return res.data.results || res.data;
   },
 
   getRequest: async (id: string): Promise<ApprovalRequest> => {
-    const res = await api.get(`/approval-requests/${id}/`);
+    const res = await api.get(`/tenant/approval-requests/${id}/`);
     return res.data;
   },
 
@@ -22,7 +22,7 @@ export const approvalsApi = {
     requested_payload?: Record<string, any>;
     required_approvals?: number;
   }): Promise<ApprovalRequest> => {
-    const res = await api.post('/approval-requests/', data);
+    const res = await api.post('/tenant/approval-requests/', data);
     return res.data;
   },
 
@@ -34,12 +34,12 @@ export const approvalsApi = {
       allow_self_approval?: boolean;
     }
   ): Promise<ApprovalAction> => {
-    const res = await api.post(`/approval-requests/${requestId}/act/`, data);
+    const res = await api.post(`/tenant/approval-requests/${requestId}/act/`, data);
     return res.data;
   },
 
   getActions: async (): Promise<ApprovalAction[]> => {
-    const res = await api.get('/approval-actions/');
+    const res = await api.get('/tenant/approval-actions/');
     return res.data.results || res.data;
   },
 };
