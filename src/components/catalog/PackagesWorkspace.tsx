@@ -82,6 +82,7 @@ export const PackagesWorkspace: React.FC = () => {
 
   // Edit Modals
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
+  const [editPkgCode, setEditPkgCode] = useState('');
   const [editPkgName, setEditPkgName] = useState('');
   const [editPkgStatus, setEditPkgStatus] = useState<'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [editPkgProgram, setEditPkgProgram] = useState('');
@@ -307,6 +308,7 @@ export const PackagesWorkspace: React.FC = () => {
       if (!editingPackage) return;
       // 1. Update package identity metadata
       const updatedPkg = await catalogApi.updatePackage(editingPackage.id, {
+        code: editPkgCode.trim().toUpperCase(),
         name: editPkgName.trim(),
         status: editPkgStatus,
         program: editPkgProgram,
@@ -554,6 +556,7 @@ export const PackagesWorkspace: React.FC = () => {
 
   const startEditPackage = (pkg: Package) => {
     setEditingPackage(pkg);
+    setEditPkgCode(pkg.code || '');
     setEditPkgName(pkg.name);
     setEditPkgStatus((pkg.status as any) || 'ACTIVE');
     setEditPkgProgram(pkg.program || '');
@@ -2082,12 +2085,13 @@ export const PackagesWorkspace: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Package Code</label>
+                    <label className="block text-xs font-medium text-foreground mb-1">Package Code *</label>
                     <Input
                       type="text"
-                      value={editingPackage.code}
-                      disabled
-                      className="text-sm font-mono bg-muted/50 cursor-not-allowed text-muted-foreground"
+                      placeholder="e.g. GOLD-ANNUAL"
+                      value={editPkgCode}
+                      onChange={(e) => setEditPkgCode(e.target.value.toUpperCase())}
+                      className="text-sm font-mono"
                     />
                   </div>
                   <div>
@@ -2310,6 +2314,7 @@ export const PackagesWorkspace: React.FC = () => {
               </Button>
               <Button
                 disabled={
+                  !editPkgCode.trim() ||
                   !editPkgName.trim() ||
                   !editPkgProgram ||
                   editPkgTotalDays <= 0 ||
