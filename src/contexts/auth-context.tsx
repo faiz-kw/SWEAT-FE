@@ -49,6 +49,7 @@
  */
 
 import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   api,
   setAccessToken,
@@ -67,7 +68,8 @@ import {
 // -----------------------------------------------------------------
 
 export interface LoginCredentials {
-  email: string;
+  identifier?: string;
+  email?: string;
   password: string;
   tenant_slug?: string;
 }
@@ -103,7 +105,7 @@ export interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<{ defaultRoute?: string; userType?: string }>;
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
@@ -123,6 +125,7 @@ const AuthContext = React.createContext<AuthContextValue | null>(null);
  * Any component inside the app can then call useAuth() to read the auth state.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   // Initialize directly from in-memory store if already populated in beforeLoad
   const [user, setUser] = React.useState<AuthUser | null>(() => getCurrentUser());
 
@@ -327,19 +330,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    *
    * On failure: Throws an error — the login page catches and shows the error message.
    */
-  async function login(credentials: LoginCredentials): Promise<void> {
-    const payload: { email: string; password: string; tenant_slug?: string } = {
-      email: credentials.email.trim(),
+  async function login(credentials: LoginCredentials): Promise<{ defaultRoute?: string; userType?: string }> {
+    // CRITICAL: Purge any prior tenant query cache before establishing new session
+    queryClient.clear();
+
+    const id = (credentials.identifier || credentials.email || '').trim();
+    const payload: Record<string, any> = {
+      identifier: id,
+      email: id, // compatibility
       password: credentials.password,
     };
     if (credentials.tenant_slug && credentials.tenant_slug.trim()) {
       payload.tenant_slug = credentials.tenant_slug.trim().toLowerCase();
     }
-    const response = await api.post<LoginApiResponse>('/auth/login/', payload);
+    const response = await api.post<LoginApiResponse & { default_route?: string; user_type?: string }>('/auth/login/', payload);
     setAccessToken(response.data.access);
     // Fetch full profile so name/locations are immediately available
     await fetchAndSetProfile();
     setUser(getCurrentUser());
+    return {
+      defaultRoute: response.data.default_route,
+      userType: response.data.user_type,
+    };
   }
 
   // ---------------------------------------------------------------
@@ -359,6 +371,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Backend call failed — still proceed with local logout
     } finally {
+      // CRITICAL: Clear all TanStack Query cache to guarantee zero cross-tenant data leakage
+      queryClient.clear();
       clearAccessToken();
       clearUserProfile();
       setUser(null);
