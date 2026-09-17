@@ -5,12 +5,12 @@
  * Platform Super Admin, Platform Users, Tenant Org Admin, Branch Manager,
  * Trainer, Sales Staff, Front Desk, Member / End User.
  *
- * Clean single-card UI requiring ONLY:
+ * Single login form with an organization code for tenant access:
  * - Username or Email
  * - Password
  * - Sign in button
  *
- * Automatic server-side identity directory routing.
+ * Blank organization code is reserved for platform superadmins.
  */
 
 import * as React from 'react';
@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from '@/components/ui/alert-dialog';
 
 // Route definition for /login
 export const Route = createFileRoute('/login')({
@@ -52,6 +53,9 @@ function LoginPage() {
 
   // Form inputs
   const [identifier, setIdentifier] = React.useState('');
+  const [organizationCode, setOrganizationCode] = React.useState('');
+  const [acknowledgment, setAcknowledgment] = React.useState<string | null>(null);
+  const organizationInput = React.useRef<HTMLInputElement>(null);
   const [password, setPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
 
@@ -79,6 +83,7 @@ function LoginPage() {
       const res = await login({
         identifier: cleanIdentifier,
         password,
+        tenant_slug: organizationCode.trim().toLowerCase(),
       });
 
       // Post-login automatic routing to the server-determined default workspace
@@ -86,9 +91,13 @@ function LoginPage() {
       await router.navigate({ to: targetRoute as any });
     } catch (err: any) {
       const serverMsg =
-        err?.response?.data?.error ||
+        err?.data?.error || err?.response?.data?.error ||
         (err instanceof Error ? err.message : 'Invalid username/email or password.');
-      setError(serverMsg);
+      if ((err?.data?.code || err?.response?.data?.code) === 'organization_required') {
+        setAcknowledgment(serverMsg);
+      } else {
+        setError(serverMsg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -99,6 +108,17 @@ function LoginPage() {
       className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-background px-4 py-8 sm:px-6 lg:px-8"
       role="main"
     >
+      <AlertDialog open={acknowledgment !== null} onOpenChange={(open) => { if (!open) setAcknowledgment(null); }}>
+        <AlertDialogContent onCloseAutoFocus={(event) => { event.preventDefault(); organizationInput.current?.focus(); }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Organization code required</AlertDialogTitle>
+            <AlertDialogDescription>{acknowledgment}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setAcknowledgment(null)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Background ambient lighting effects */}
       <div
         aria-hidden="true"
@@ -142,6 +162,28 @@ function LoginPage() {
             noValidate
             aria-label="Universal Login Form"
           >
+            <div className="space-y-1.5">
+              <Label htmlFor="login-organization" className="text-xs font-semibold">
+                Organization code
+              </Label>
+              <Input
+                ref={organizationInput}
+                id="login-organization"
+                name="organization"
+                autoComplete="organization"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="Enter your gym's organization code"
+                value={organizationCode}
+                onChange={(e) => setOrganizationCode(e.target.value)}
+                disabled={isSubmitting}
+                aria-describedby="organization-help"
+                className="h-10 text-[13.5px] rounded-lg bg-muted/30"
+              />
+              <p id="organization-help" className="text-xs text-muted-foreground">
+                Required for gym accounts. Platform superadmins can leave this blank.
+              </p>
+            </div>
             {/* Username or Email field */}
             <div className="space-y-1.5">
               <Label
