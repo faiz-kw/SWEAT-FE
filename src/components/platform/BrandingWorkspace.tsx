@@ -131,9 +131,9 @@ export function BrandingWorkspace() {
   const [previewTab, setPreviewTab] = React.useState<"shell" | "mobile" | "email">("shell");
   const [previewTheme, setPreviewTheme] = React.useState<"dark" | "light">("light");
 
-  const [appName, setAppName] = React.useState("PerformanceOS");
+  const [appName, setAppName] = React.useState("");
   const [primaryColor, setPrimaryColor] = React.useState("#0f766e");
-  const [accentColor, setAccentColor] = React.useState("#f59e0b");
+  const [accentColor, setAccentColor] = React.useState("#2dd4bf");
   const [themePresetCode, setThemePresetCode] = React.useState<string>("titanium-teal");
   const [themeTokens, setThemeTokens] = React.useState<Record<string, any> | null>(null);
   const [customDomain, setCustomDomain] = React.useState("");
@@ -141,14 +141,10 @@ export function BrandingWorkspace() {
   const [dnsResult, setDnsResult] = React.useState<DnsVerificationResult | null>(null);
   const [logoUrl, setLogoUrl] = React.useState("");
   const [faviconUrl, setFaviconUrl] = React.useState("");
-  const [emailFooter, setEmailFooter] = React.useState(
-    "© {{year}} {{company_name}} · All rights reserved. Powered by PerformanceOS."
-  );
-  const [supportEmail, setSupportEmail] = React.useState("support@fitnessbrand.com");
+  const [emailFooter, setEmailFooter] = React.useState("");
+  const [supportEmail, setSupportEmail] = React.useState("");
   const [removeWatermark, setRemoveWatermark] = React.useState(false);
-  const [loginTagline, setLoginTagline] = React.useState(
-    "Enterprise Operating System for Modern Athletic Franchises"
-  );
+  const [loginTagline, setLoginTagline] = React.useState("");
 
   // Baseline state for dirty-tracking
   const [initialData, setInitialData] = React.useState<TenantBrandingData | null>(null);
@@ -165,9 +161,9 @@ export function BrandingWorkspace() {
   const isDirty = React.useMemo(() => {
     if (!initialData) return false;
     return (
-      appName !== (initialData.app_name || "PerformanceOS") ||
+      appName !== (initialData.app_name || "") ||
       primaryColor !== (initialData.primary_color || "#0f766e") ||
-      accentColor !== (initialData.accent_color || "#f59e0b") ||
+      accentColor !== (initialData.accent_color || "#2dd4bf") ||
       customDomain !== (initialData.custom_domain || "") ||
       logoUrl !== (initialData.logo_url || "") ||
       faviconUrl !== (initialData.favicon_url || "") ||
@@ -197,7 +193,7 @@ export function BrandingWorkspace() {
       const data = await fetchTenantsApi();
       setTenants(data);
       if (data.length > 0 && !selectedTenantId) {
-        setSelectedTenantId(data[0].id);
+        setSelectedTenantId(data[0]?.id ?? '');
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to load tenants");
@@ -216,42 +212,36 @@ export function BrandingWorkspace() {
     try {
       const b = await fetchTenantBrandingApi(tId);
       if (b) {
-        setAppName(b.app_name || "PerformanceOS");
+        setAppName(b.app_name || "");
         setPrimaryColor(b.primary_color || "#0f766e");
-        setAccentColor(b.accent_color || "#f59e0b");
+        setAccentColor(b.accent_color || "#2dd4bf");
         setThemePresetCode(b.theme_preset_code || "titanium-teal");
         setThemeTokens(b.theme_tokens || null);
         setCustomDomain(b.custom_domain || "");
         setCnameVerified(Boolean(b.cname_verified));
         setLogoUrl(b.logo_url || "");
         setFaviconUrl(b.favicon_url || "");
-        setEmailFooter(
-          b.email_footer ||
-            "© {{year}} {{company_name}} · All rights reserved. Powered by PerformanceOS."
-        );
-        setSupportEmail(b.support_email || "support@fitnessbrand.com");
+        setEmailFooter(b.email_footer || "");
+        setSupportEmail(b.support_email || "");
         setRemoveWatermark(Boolean(b.remove_watermark));
-        setLoginTagline(
-          b.login_tagline ||
-            "Enterprise Operating System for Modern Athletic Franchises"
-        );
+        setLoginTagline(b.login_tagline || "");
         setInitialData(b);
       }
     } catch {
-      // Fallback defaults for new tenant
-      setAppName("PerformanceOS");
+      // Fallback defaults for new tenant with no saved branding
+      setAppName("");
       setPrimaryColor("#0f766e");
-      setAccentColor("#f59e0b");
+      setAccentColor("#2dd4bf");
       setThemePresetCode("titanium-teal");
       setThemeTokens(null);
       setCustomDomain("");
       setCnameVerified(false);
       setLogoUrl("");
       setFaviconUrl("");
-      setEmailFooter("© {{year}} {{company_name}} · All rights reserved.");
-      setSupportEmail("support@fitnessbrand.com");
+      setEmailFooter("");
+      setSupportEmail("");
       setRemoveWatermark(false);
-      setLoginTagline("Enterprise Operating System for Modern Athletic Franchises");
+      setLoginTagline("");
       setInitialData(null);
     }
   }, []);
@@ -324,33 +314,61 @@ export function BrandingWorkspace() {
     if (!sessionApplied) {
       document.documentElement.style.setProperty("--primary", primaryColor);
       document.documentElement.style.setProperty("--ring", primaryColor);
+      document.documentElement.style.setProperty("--sidebar-primary", primaryColor);
       document.documentElement.style.setProperty("--accent", accentColor);
       setSessionApplied(true);
       toast.success("Theme applied to your current active session!");
     } else {
       document.documentElement.style.removeProperty("--primary");
       document.documentElement.style.removeProperty("--ring");
+      document.documentElement.style.removeProperty("--sidebar-primary");
       document.documentElement.style.removeProperty("--accent");
       setSessionApplied(false);
       toast.info("Session theme reverted to default system styles.");
     }
   };
 
-  // Copy CSS Tokens
-  const handleCopyTokens = () => {
+  // Keep session preview updated if colors change while session preview is active
+  React.useEffect(() => {
+    if (sessionApplied) {
+      document.documentElement.style.setProperty("--primary", primaryColor);
+      document.documentElement.style.setProperty("--ring", primaryColor);
+      document.documentElement.style.setProperty("--sidebar-primary", primaryColor);
+      document.documentElement.style.setProperty("--accent", accentColor);
+    }
+  }, [sessionApplied, primaryColor, accentColor]);
+
+  // Copy CSS Tokens with bulletproof fallback
+  const handleCopyTokens = async () => {
     const cssTokens = `:root {\n  --brand-primary: ${primaryColor};\n  --brand-accent: ${accentColor};\n  --brand-app-name: "${appName}";\n  --brand-custom-domain: "${customDomain}";\n  --brand-theme-preset: "${themePresetCode}";\n}`;
-    navigator.clipboard.writeText(cssTokens);
-    setCopiedTokens(true);
-    toast.success("CSS theme tokens copied to clipboard!");
-    setTimeout(() => setCopiedTokens(false), 2000);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cssTokens);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = cssTokens;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedTokens(true);
+      toast.success("CSS theme tokens copied to clipboard!");
+      setTimeout(() => setCopiedTokens(false), 2000);
+    } catch {
+      toast.error("Failed to copy tokens to clipboard");
+    }
   };
 
   // Reset Changes
   const handleReset = () => {
     if (initialData) {
-      setAppName(initialData.app_name || "PerformanceOS");
+      setAppName(initialData.app_name || "");
       setPrimaryColor(initialData.primary_color || "#0f766e");
-      setAccentColor(initialData.accent_color || "#f59e0b");
+      setAccentColor(initialData.accent_color || "#2dd4bf");
       setThemePresetCode(initialData.theme_preset_code || "titanium-teal");
       setThemeTokens(initialData.theme_tokens || null);
       setCustomDomain(initialData.custom_domain || "");
@@ -358,12 +376,9 @@ export function BrandingWorkspace() {
       setLogoUrl(initialData.logo_url || "");
       setFaviconUrl(initialData.favicon_url || "");
       setEmailFooter(initialData.email_footer || "");
-      setSupportEmail(initialData.support_email || "support@fitnessbrand.com");
+      setSupportEmail(initialData.support_email || "");
       setRemoveWatermark(Boolean(initialData.remove_watermark));
-      setLoginTagline(
-        initialData.login_tagline ||
-          "Enterprise Operating System for Modern Athletic Franchises"
-      );
+      setLoginTagline(initialData.login_tagline || "");
       toast.info("Branding changes reset to saved database state.");
     }
   };
@@ -380,6 +395,9 @@ export function BrandingWorkspace() {
     try {
       const res = await verifyTenantDnsApi(selectedTenantId, customDomain.trim());
       setCnameVerified(res.cname_verified);
+      if (res.custom_domain) {
+        setCustomDomain(res.custom_domain);
+      }
       setDnsResult(res);
       toast.success(res.message || `DNS CNAME verified successfully for ${customDomain}`);
     } catch (err: any) {
@@ -414,6 +432,12 @@ export function BrandingWorkspace() {
         login_tagline: loginTagline,
       });
       setInitialData(updated);
+      if (updated.custom_domain !== undefined && updated.custom_domain !== null) {
+        setCustomDomain(updated.custom_domain);
+      }
+      if (updated.cname_verified !== undefined && updated.cname_verified !== null) {
+        setCnameVerified(Boolean(updated.cname_verified));
+      }
       toast.success("White-label branding and custom theme saved successfully!");
 
       // 1. Broadcast across all tabs and windows for instant real-time sync

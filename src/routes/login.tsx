@@ -11,11 +11,14 @@
  * - Sign in button
  *
  * Blank organization code is reserved for platform superadmins.
+ *
+ * Branding is fully dynamic — fetched from /api/v1/auth/branding/
+ * so white-label tenants see their own logo, colors, and name.
  */
 
 import * as React from 'react';
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Building2 } from 'lucide-react';
 import { isAuthenticated } from '@/services';
 import { useAuth } from '@/contexts';
 import { Button } from '@/components/ui/button';
@@ -23,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from '@/components/ui/alert-dialog';
+import { fetchPublicBrandingApi, type PublicBrandingData } from '@/services/api-platform';
 
 // Route definition for /login
 export const Route = createFileRoute('/login')({
@@ -40,6 +44,19 @@ export const Route = createFileRoute('/login')({
     ],
   }),
 });
+
+// Default fallback branding (platform-level)
+const DEFAULT_BRANDING: PublicBrandingData = {
+  type: 'platform',
+  app_name: 'PerformanceOS',
+  brand_name: 'PerformanceOS',
+  primary_color: '#0f766e',
+  accent_color: '#2dd4bf',
+  logo_url: '',
+  favicon_url: '',
+  login_tagline: 'Enterprise Operating System for Modern Athletic Franchises',
+  support_email: '',
+};
 
 function LoginPage() {
   const { login, isAuthenticated: isAuth, isLoading } = useAuth();
@@ -62,6 +79,80 @@ function LoginPage() {
   // UI state
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  // Dynamic branding state
+  const [branding, setBranding] = React.useState<PublicBrandingData>(DEFAULT_BRANDING);
+  const [brandingLoading, setBrandingLoading] = React.useState(true);
+  const [tenantBrandingFetched, setTenantBrandingFetched] = React.useState('');
+
+  // Load platform-level branding on mount
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchPublicBrandingApi()
+      .then((data) => {
+        if (!cancelled) setBranding(data);
+      })
+      .catch(() => {
+        // silently fall back to defaults
+      })
+      .finally(() => {
+        if (!cancelled) setBrandingLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // When user types an organization code, debounce-fetch that tenant's branding
+  React.useEffect(() => {
+    const slug = organizationCode.trim().toLowerCase();
+    if (!slug) {
+      // Revert to platform branding when org code is cleared
+      if (tenantBrandingFetched) {
+        setBrandingLoading(true);
+        fetchPublicBrandingApi()
+          .then((data) => setBranding(data))
+          .catch(() => setBranding(DEFAULT_BRANDING))
+          .finally(() => setBrandingLoading(false));
+        setTenantBrandingFetched('');
+      }
+      return;
+    }
+    if (slug === tenantBrandingFetched) return;
+
+    const timer = setTimeout(() => {
+      setBrandingLoading(true);
+      fetchPublicBrandingApi(slug)
+        .then((data) => {
+          setBranding(data);
+          setTenantBrandingFetched(slug);
+          // Apply tenant colors to CSS for live preview
+          if (data.primary_color) {
+            document.documentElement.style.setProperty('--primary', data.primary_color);
+            document.documentElement.style.setProperty('--ring', data.primary_color);
+          }
+          if (data.accent_color) {
+            document.documentElement.style.setProperty('--accent', data.accent_color);
+          }
+        })
+        .catch(() => {
+          // Org code not found — silently stay on current branding
+          setTenantBrandingFetched(slug); // mark as attempted so we don't retry
+        })
+        .finally(() => setBrandingLoading(false));
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(timer);
+  }, [organizationCode, tenantBrandingFetched]);
+
+  // Apply platform branding colors to CSS on load
+  React.useEffect(() => {
+    if (branding.primary_color && branding.type === 'platform') {
+      document.documentElement.style.setProperty('--primary', branding.primary_color);
+      document.documentElement.style.setProperty('--ring', branding.primary_color);
+    }
+    if (branding.accent_color && branding.type === 'platform') {
+      document.documentElement.style.setProperty('--accent', branding.accent_color);
+    }
+  }, [branding.primary_color, branding.accent_color, branding.type]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -103,6 +194,13 @@ function LoginPage() {
     }
   }
 
+  const appName = branding.app_name || 'PerformanceOS';
+  const primaryColor = branding.primary_color || '#0f766e';
+  const accentColor = branding.accent_color || '#2dd4bf';
+  const loginTagline = branding.login_tagline || 'Enterprise Operating System for Modern Athletic Franchises';
+  const logoUrl = branding.logo_url || '';
+  const isTenant = branding.type === 'tenant';
+
   return (
     <main
       className="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-background px-4 py-8 sm:px-6 lg:px-8"
@@ -119,28 +217,72 @@ function LoginPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* Background ambient lighting effects */}
+
+      {/* Background ambient lighting effects — uses dynamic brand colors */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 size-[360px] sm:size-[500px] rounded-full bg-primary/10 blur-[100px] sm:blur-[140px]"
+        className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 size-[360px] sm:size-[500px] rounded-full blur-[100px] sm:blur-[140px] transition-colors duration-700"
+        style={{ backgroundColor: `${primaryColor}1a` }}
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-32 right-1/4 size-[280px] sm:size-[420px] rounded-full bg-accent/15 blur-[90px] sm:blur-[120px]"
+        className="pointer-events-none absolute -bottom-32 right-1/4 size-[280px] sm:size-[420px] rounded-full blur-[90px] sm:blur-[120px] transition-colors duration-700"
+        style={{ backgroundColor: `${accentColor}26` }}
       />
 
       <div className="relative z-10 w-full max-w-[400px] mx-auto animate-in fade-in zoom-in-95 duration-200">
-        {/* Brand header */}
+        {/* Brand header — fully dynamic */}
         <div className="mb-6 flex flex-col items-center justify-center text-center">
           <div className="flex items-center gap-3 mb-2">
-            <BrandLogo size={42} showStatusDot={false} />
-            <span className="text-xl font-bold tracking-tight text-foreground">
-              PerformanceOS
+            {logoUrl ? (
+              <div
+                className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl shadow-md ring-1 ring-white/10 border border-white/10 overflow-hidden transition-transform duration-200 hover:scale-105"
+                style={{ borderColor: primaryColor }}
+              >
+                <img
+                  src={logoUrl}
+                  alt={`${appName} logo`}
+                  className="h-full w-full object-contain"
+                  onError={(e) => {
+                    // Fallback to BrandLogo if image fails to load
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : (
+              <BrandLogo
+                size={42}
+                showStatusDot={false}
+                primaryColor={primaryColor}
+                accentColor={accentColor}
+              />
+            )}
+            <span className="text-xl font-bold tracking-tight text-foreground transition-all duration-500">
+              {brandingLoading ? (
+                <span className="inline-block h-5 w-32 animate-pulse rounded bg-muted" />
+              ) : appName}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground font-medium">
-            Fitness Command Center
-          </p>
+
+          {/* Tenant indicator badge */}
+          {isTenant && branding.tenant_slug && (
+            <div
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm ring-1 ring-white/10 transition-all duration-300"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <Building2 className="size-3" aria-hidden="true" />
+              <span>{branding.tenant_slug.toUpperCase()}</span>
+            </div>
+          )}
+
+          {/* Dynamic tagline */}
+          {!isTenant && (
+            <p className="text-xs text-muted-foreground font-medium mt-0.5 transition-all duration-500">
+              {brandingLoading ? (
+                <span className="inline-block h-3 w-40 animate-pulse rounded bg-muted" />
+              ) : loginTagline}
+            </p>
+          )}
         </div>
 
         {/* Universal Login Card */}
@@ -151,7 +293,9 @@ function LoginPage() {
               Welcome back
             </h1>
             <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-              Sign in to your PerformanceOS account.
+              {isTenant
+                ? `Sign in to ${appName}.`
+                : `Sign in to your ${appName} account.`}
             </p>
           </div>
 
@@ -184,6 +328,7 @@ function LoginPage() {
                 Required for gym accounts. Platform superadmins can leave this blank.
               </p>
             </div>
+
             {/* Username or Email field */}
             <div className="space-y-1.5">
               <Label
@@ -284,7 +429,7 @@ function LoginPage() {
 
         {/* Footer */}
         <p className="mt-6 text-center text-xs text-muted-foreground/80 font-normal">
-          PerformanceOS Enterprise Security
+          {appName} Enterprise Security
         </p>
       </div>
     </main>

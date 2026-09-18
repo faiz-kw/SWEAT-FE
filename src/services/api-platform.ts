@@ -351,4 +351,31 @@ export async function verifyTenantDnsApi(tenantId: string, domain: string): Prom
   return res.data;
 }
 
+// ── PUBLIC BRANDING (no auth required) ───────────────────────────────
 
+export interface PublicBrandingData {
+  type: 'platform' | 'tenant';
+  app_name: string;
+  brand_name: string;
+  primary_color: string;
+  accent_color: string;
+  logo_url: string;
+  favicon_url: string;
+  login_tagline: string;
+  support_email: string;
+  tenant_slug?: string;
+  custom_domain?: string;
+}
+
+/**
+ * Fetch public branding data (no JWT required).
+ * Used by the login page to render dynamic branding before authentication.
+ * @param tenantSlug — if provided, returns that tenant's public branding
+ */
+export async function fetchPublicBrandingApi(tenantSlug?: string): Promise<PublicBrandingData> {
+  const url = tenantSlug
+    ? `/auth/branding/?tenant=${encodeURIComponent(tenantSlug)}`
+    : `/auth/branding/`;
+  const res = await api.get<PublicBrandingData>(url);
+  return res.data;
+}
