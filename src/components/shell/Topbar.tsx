@@ -103,16 +103,26 @@ export function Topbar() {
   const searchContainerRef = React.useRef<HTMLDivElement>(null);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
 
+  const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
+
   const searchResults = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return ALL_NAV_ITEMS.filter(
-      (item) =>
+    return ALL_NAV_ITEMS.filter((item) => {
+      // Check section visibility
+      if (item.sectionVisibility === "superadmin_only" && !isSuperAdmin) return false;
+      if (item.sectionVisibility === "tenant_only" && isSuperAdmin) return false;
+      // Check item visibility
+      if (item.visibility === "superadmin_only" && !isSuperAdmin) return false;
+      if (item.visibility === "tenant_only" && isSuperAdmin) return false;
+
+      return (
         item.label.toLowerCase().includes(q) ||
         item.section.toLowerCase().includes(q) ||
         item.to.toLowerCase().includes(q)
-    ).slice(0, 8);
-  }, [searchQuery]);
+      );
+    }).slice(0, 8);
+  }, [searchQuery, isSuperAdmin]);
 
   // Global Ctrl/Cmd + K shortcut listener
   React.useEffect(() => {

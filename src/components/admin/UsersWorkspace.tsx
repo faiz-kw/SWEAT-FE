@@ -149,7 +149,7 @@ export function UsersWorkspace() {
   const [editingUser, setEditingUser] = React.useState<AdminUserRow | null>(null);
   const [editRole, setEditRole] = React.useState("");
   const [editDepartmentId, setEditDepartmentId] = React.useState("");
-  const [editBranchId, setEditBranchId] = React.useState("");
+  const [editBranchAccess, setEditBranchAccess] = React.useState<Record<string, boolean>>({});
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
 
@@ -298,13 +298,23 @@ export function UsersWorkspace() {
     }
   };
 
+  const branchAccessForRole = (user: AdminUserRow, roleId: string) => {
+    const access: Record<string, boolean> = {};
+    for (const entry of user.branch_access || []) {
+      if (entry.role_id === roleId) access[entry.branch_id] = entry.enabled;
+    }
+    return access;
+  };
+
   // Open Edit User Modal
   const handleOpenEdit = (user: AdminUserRow) => {
     setEditingUser(user);
-    setEditRole(user.role || (roles.length > 0 ? roles[0].name : "Staff"));
-    setEditStatus(user.status || (user.is_active ? "Active" : "Inactive"));
+    const roleId = roles.find((role) => role.name === user.role || role.code === user.role)?.id || user.branch_access?.[0]?.role_id || "";
+    setEditRole(roleId);
+    setEditBranchAccess(branchAccessForRole(user, roleId));
+    const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
+    setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
     setEditDepartmentId("");
-    setEditBranchId(user.active_location_id || "");
     setEditModalOpen(true);
   };
 
@@ -315,11 +325,15 @@ export function UsersWorkspace() {
     setEditSubmitting(true);
     try {
       await updateUserApi(editingUser.id, {
-        role: editRole,
-        status: editStatus === "Active" ? "ACTIVE" : editStatus === "Invited" ? "INVITED" : "INACTIVE",
+        ...(editRole ? { role_id: editRole } : {}),
+        ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
         is_active: editStatus === "Active",
         department_id: editDepartmentId || undefined,
-        branch_id: editBranchId || undefined,
+        ...(roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? {
+          branch_access: branches.map((branch) => ({
+            branch_id: branch.id, enabled: editBranchAccess[branch.id] === true,
+          })),
+        } : {}),
       });
       toast.success(`Updated role and status for ${editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
@@ -1222,7 +1236,7 @@ export function UsersWorkspace() {
               <Edit2 className="size-4 text-primary" /> Edit Staff Profile
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Update role assignment, branch location, and authorization status.
+              Update role assignment, branch access, and authorization status.
             </DialogDescription>
           </DialogHeader>
 
@@ -1239,13 +1253,16 @@ export function UsersWorkspace() {
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Assigned Role</Label>
-                <Select value={editRole} onValueChange={setEditRole}>
+                <Select value={editRole} onValueChange={(roleId) => {
+                  setEditRole(roleId);
+                  setEditBranchAccess(editingUser ? branchAccessForRole(editingUser, roleId) : {});
+                }}>
                   <SelectTrigger className="h-8 text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56">
                     {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.name}>
+                      <SelectItem key={r.id} value={r.id}>
                         <span className="font-semibold">{r.name}</span>
                         {r.description ? (
                           <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span>
@@ -1274,22 +1291,26 @@ export function UsersWorkspace() {
                 </div>
               )}
 
-              {branches.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Branch Assignment</Label>
-                  <Select value={editBranchId} onValueChange={setEditBranchId}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent className="text-xs">
-                      {branches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Branch access for this role</Label>
+                  <p className="text-xs text-muted-foreground">Enable any number of branches. Disabling a branch removes access through this role; other roles may still grant access.</p>
+                  {branches.map((branch) => (
+                    <label key={branch.id} className="flex items-center justify-between gap-3 rounded border p-2 text-xs">
+                      <span>{branch.name}</span>
+                      <span className="flex items-center gap-2">
+                        {editBranchAccess[branch.id] ? "Enabled" : "Disabled"}
+                        <input type="checkbox" aria-label={`Enable access to ${branch.name}`}
+                          checked={editBranchAccess[branch.id] === true}
+                          disabled={editSubmitting}
+                          onChange={(event) => setEditBranchAccess((current) => ({ ...current, [branch.id]: event.target.checked }))} />
+                      </span>
+                    </label>
+                  ))}
+                  {branches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
                 </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Organization-scoped roles apply to all branches. Choose a branch-scoped role to manage individual branch access.</p>
               )}
 
               <div className="space-y-1">

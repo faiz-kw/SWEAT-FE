@@ -62,14 +62,23 @@ function ShellLayout() {
     );
     if (!section) return;  // unknown route — let the router 404 it
 
-    // Always-allowed system sections
-    if (ALWAYS_ALLOWED_SECTIONS.has(section.id)) return;
-
     // Find the specific nav item that matches this path
     const navItem = section.items.find(
       (item) => item.to !== "/" && pathname.startsWith(item.to)
     );
     if (!navItem) return;
+
+    // Guard items restricted to super admins (e.g. Services, Configuration, Forms, Integrations, API)
+    if (navItem.visibility === "superadmin_only") {
+      const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
+      if (!isSuper || user.userType === "tenant") {
+        void navigate({ to: "/" });
+        return;
+      }
+    }
+
+    // Always-allowed system sections
+    if (ALWAYS_ALLOWED_SECTIONS.has(section.id)) return;
 
     // Check permission against tenant's provisioned modules
     const allowed = isSubmoduleAllowed(user.enabledModules, navItem.to, section.id);

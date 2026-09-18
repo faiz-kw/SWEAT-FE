@@ -46,6 +46,97 @@ import {
 } from "@/services/api-admin";
 import { useAuth } from "@/contexts";
 
+const isUuid = (val?: string | null): boolean => {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+};
+
+const MODULE_FRIENDLY_NAMES: Record<string, string> = {
+  core: "Core System & Administration",
+  crm: "CRM & Sales Automation",
+  members: "Member Lifecycle Management",
+  ops: "Studio Operations & Classes",
+  finance: "Finance, Billing & POS",
+  ai: "AI Intelligence & Computer Vision",
+  nutrition: "Nutrition & Dietetics",
+  inventory: "Inventory & Pro Shop POS",
+  cs: "Customer Success & Retention",
+  marketing: "Marketing & Campaigns",
+  automation: "Automation & Workflows",
+  reports: "Business & Financial Reports",
+  platform: "Platform Infrastructure",
+};
+
+const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
+  users: "Users & Staff",
+  roles: "Roles & Access Control",
+  permissions: "Permissions Management",
+  locations: "Locations & Facilities",
+  branches: "Branches & Studios",
+  leads: "Lead Management",
+  activities: "Sales Activities",
+  trials: "Trial Bookings",
+  classes: "Classes & Schedule",
+  bookings: "Bookings & Check-ins",
+  appointments: "Appointments & Trainers",
+  memberships: "Memberships & Plans",
+  attendance: "Attendance & Access Events",
+  invoices: "Invoices & Billing",
+  payments: "Payments & Transactions",
+  orders: "Orders & Point of Sale",
+  discounts: "Discounts & Campaigns",
+  rewards: "Rewards & Referrals",
+  security: "Security Policy & Audit",
+  storage: "Files & Storage",
+  privacy: "Privacy & Data Protection",
+};
+
+export const getFriendlyModuleName = (perm: PermissionDefRow): string => {
+  if (perm.module_name && !isUuid(perm.module_name)) return perm.module_name;
+  if (perm.module_code && MODULE_FRIENDLY_NAMES[perm.module_code.toLowerCase()]) {
+    return MODULE_FRIENDLY_NAMES[perm.module_code.toLowerCase()];
+  }
+  if (perm.module && !isUuid(perm.module)) {
+    return MODULE_FRIENDLY_NAMES[perm.module.toLowerCase()] || perm.module.toUpperCase();
+  }
+  if (perm.module_code) return perm.module_code.toUpperCase();
+  return "System Core";
+};
+
+export const getFriendlySubmoduleName = (perm: PermissionDefRow): string => {
+  if (perm.submodule_name && !isUuid(perm.submodule_name)) return perm.submodule_name;
+  if (perm.submodule_code && SUBMODULE_FRIENDLY_NAMES[perm.submodule_code.toLowerCase()]) {
+    return SUBMODULE_FRIENDLY_NAMES[perm.submodule_code.toLowerCase()];
+  }
+  if (perm.submodule && !isUuid(perm.submodule)) {
+    return SUBMODULE_FRIENDLY_NAMES[perm.submodule.toLowerCase()] || perm.submodule;
+  }
+  if (perm.submodule_code) {
+    return perm.submodule_code.charAt(0).toUpperCase() + perm.submodule_code.slice(1);
+  }
+  return "";
+};
+
+export const getFriendlyPermissionCode = (perm: PermissionDefRow): string => {
+  if (perm.permission_code && !isUuid(perm.permission_code)) return perm.permission_code;
+  if (perm.code && !isUuid(perm.code)) return perm.code;
+  if (perm.action && perm.module_code) return `${perm.module_code}.${perm.action}`;
+  return perm.action || "permission";
+};
+
+export const getFriendlyPermissionLabel = (perm: PermissionDefRow): string => {
+  if (perm.label && !isUuid(perm.label)) return perm.label;
+  if (perm.name && !isUuid(perm.name)) return perm.name;
+  const code = getFriendlyPermissionCode(perm);
+  const parts = code.split(".");
+  if (parts.length >= 2) {
+    const action = parts[parts.length - 1];
+    const resource = parts[parts.length - 2];
+    return `${action.charAt(0).toUpperCase() + action.slice(1)} ${resource.charAt(0).toUpperCase() + resource.slice(1)}`;
+  }
+  return code.charAt(0).toUpperCase() + code.slice(1);
+};
+
 export function PermissionsWorkspace() {
   const { user } = useAuth();
   const isPlatformAdmin =
@@ -223,31 +314,40 @@ export function PermissionsWorkspace() {
     }
   };
 
-  // Group permissions by Module -> Submodule
+  // Group permissions by Friendly Module Name
   const groupedPermissions = React.useMemo(() => {
     const groups: Record<string, PermissionDefRow[]> = {};
-    permissions.forEach((perm) => {
-      const matchesSearch =
-        perm.label.toLowerCase().includes(search.toLowerCase()) ||
-        perm.id.toLowerCase().includes(search.toLowerCase()) ||
-        perm.module.toLowerCase().includes(search.toLowerCase()) ||
-        (perm.description || "").toLowerCase().includes(search.toLowerCase()) ||
-        perm.code.toLowerCase().includes(search.toLowerCase());
+    const q = search.trim().toLowerCase();
 
-      const matchesModule = moduleFilter === "all" || perm.module === moduleFilter;
+    permissions.forEach((perm) => {
+      const moduleTitle = getFriendlyModuleName(perm);
+      const subTitle = getFriendlySubmoduleName(perm);
+      const permLabel = getFriendlyPermissionLabel(perm);
+      const permCode = getFriendlyPermissionCode(perm);
+      const desc = perm.description || "";
+
+      const matchesSearch =
+        !q ||
+        permLabel.toLowerCase().includes(q) ||
+        permCode.toLowerCase().includes(q) ||
+        moduleTitle.toLowerCase().includes(q) ||
+        subTitle.toLowerCase().includes(q) ||
+        desc.toLowerCase().includes(q);
+
+      const matchesModule = moduleFilter === "all" || moduleTitle === moduleFilter;
 
       if (matchesSearch && matchesModule) {
-        if (!groups[perm.module]) {
-          groups[perm.module] = [];
+        if (!groups[moduleTitle]) {
+          groups[moduleTitle] = [];
         }
-        groups[perm.module].push(perm);
+        groups[moduleTitle].push(perm);
       }
     });
     return groups;
   }, [permissions, search, moduleFilter]);
 
   const uniqueModules = React.useMemo(() => {
-    return Array.from(new Set(permissions.map((p) => p.module))).sort();
+    return Array.from(new Set(permissions.map((p) => getFriendlyModuleName(p)))).sort();
   }, [permissions]);
 
   // Filtered Roles List for Left Sidebar
@@ -507,14 +607,14 @@ export function PermissionsWorkspace() {
                 </div>
 
                 <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                  <SelectTrigger className="h-8 text-xs w-44 bg-background">
+                  <SelectTrigger className="h-8 text-xs w-52 bg-background">
                     <SelectValue placeholder="Module Filter" />
                   </SelectTrigger>
                   <SelectContent className="text-xs">
-                    <SelectItem value="all">All Modules ({permissions.length})</SelectItem>
+                    <SelectItem value="all">All Modules ({permissions.length} capabilities)</SelectItem>
                     {uniqueModules.map((m) => (
                       <SelectItem key={m} value={m}>
-                        {m} Module
+                        {m}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -537,7 +637,7 @@ export function PermissionsWorkspace() {
                       <div className="bg-muted/40 p-3 border-b border-border flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-foreground">
-                            {moduleName} Module
+                            {moduleName}
                           </span>
                           <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.2 rounded font-bold">
                             {perms.length} {perms.length === 1 ? "capability" : "capabilities"}
@@ -578,19 +678,19 @@ export function PermissionsWorkspace() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-bold text-foreground">
-                                    {perm.label || perm.name}
+                                    {getFriendlyPermissionLabel(perm)}
                                   </span>
                                   <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
-                                    {perm.code || perm.id}
+                                    {getFriendlyPermissionCode(perm)}
                                   </span>
-                                  {perm.submodule && (
-                                    <Badge variant="outline" className="text-[9px] py-0">
-                                      {perm.submodule}
+                                  {getFriendlySubmoduleName(perm) && (
+                                    <Badge variant="outline" className="text-[9px] py-0 font-medium">
+                                      {getFriendlySubmoduleName(perm)}
                                     </Badge>
                                   )}
                                 </div>
                                 <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-normal">
-                                  {perm.description || `Allow staff to ${perm.action || "manage"} ${perm.module}.`}
+                                  {perm.description || `Allows staff to execute ${getFriendlyPermissionLabel(perm).toLowerCase()} actions.`}
                                 </p>
                               </div>
 
@@ -641,14 +741,14 @@ export function PermissionsWorkspace() {
               </div>
 
               <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                <SelectTrigger className="h-8 text-xs w-44 bg-background">
+                <SelectTrigger className="h-8 text-xs w-52 bg-background">
                   <SelectValue placeholder="Module Filter" />
                 </SelectTrigger>
                 <SelectContent className="text-xs">
-                  <SelectItem value="all">All Modules ({permissions.length})</SelectItem>
+                  <SelectItem value="all">All Modules ({permissions.length} capabilities)</SelectItem>
                   {uniqueModules.map((m) => (
                     <SelectItem key={m} value={m}>
-                      {m} Module
+                      {m}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -660,7 +760,7 @@ export function PermissionsWorkspace() {
                 <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
                     <tr className="border-b border-border bg-muted text-xs">
-                      <th className="py-3 px-4 font-bold text-foreground w-[280px] min-w-[280px] sticky left-0 bg-muted z-20 shadow-[1px_0_0_0_hsl(var(--border))]">
+                      <th className="py-3 px-4 font-bold text-foreground w-[320px] min-w-[320px] sticky left-0 bg-muted z-20 shadow-[1px_0_0_0_hsl(var(--border))]">
                         Module & Capability
                       </th>
                       {filteredRoles.map((role) => (
@@ -670,7 +770,7 @@ export function PermissionsWorkspace() {
                               {role.name}
                             </span>
                             <span className="font-mono text-[9.5px] text-muted-foreground uppercase tracking-wider mt-0.5">
-                              {role.scope}
+                              {role.scope} Scope
                             </span>
                           </div>
                         </th>
@@ -685,10 +785,10 @@ export function PermissionsWorkspace() {
                           <td colSpan={filteredRoles.length + 1} className="py-2 px-4 bg-muted/60">
                             <div className="sticky left-4 inline-flex items-center gap-2">
                               <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                                {moduleName} Module
+                                {moduleName}
                               </span>
                               <span className="text-[10px] font-semibold text-muted-foreground bg-background/80 px-2 py-0.5 rounded-md border border-border">
-                                {perms.length} Capabilities
+                                {perms.length} {perms.length === 1 ? "Capability" : "Capabilities"}
                               </span>
                             </div>
                           </td>
@@ -697,8 +797,17 @@ export function PermissionsWorkspace() {
                         {perms.map((perm) => (
                           <tr key={perm.id} className="hover:bg-muted/30 transition-colors">
                             <td className="py-2.5 px-4 sticky left-0 bg-card z-10 shadow-[1px_0_0_0_hsl(var(--border))]">
-                              <div className="font-semibold text-foreground text-xs">{perm.label || perm.name}</div>
-                              <div className="font-mono text-[10px] text-muted-foreground">{perm.code || perm.id}</div>
+                              <div className="font-semibold text-foreground text-xs">
+                                {getFriendlyPermissionLabel(perm)}
+                              </div>
+                              <div className="font-mono text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                <span>{getFriendlyPermissionCode(perm)}</span>
+                                {getFriendlySubmoduleName(perm) && (
+                                  <span className="text-[9px] text-muted-foreground/80 bg-muted px-1 py-0.2 rounded font-sans">
+                                    {getFriendlySubmoduleName(perm)}
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {filteredRoles.map((role) => {

@@ -4,9 +4,11 @@
  */
 
 import { api } from "./api";
+import { getCurrentUser, refreshAccessToken } from "./auth";
 import { type Row } from "./store";
 
 export interface AdminUserRow extends Row {
+  branch_access?: { role_id: string; branch_id: string; branch_name: string; enabled: boolean }[];
   email: string;
   first_name: string;
   last_name: string;
@@ -45,9 +47,17 @@ export interface RoleDefRow extends Row {
 export interface PermissionDefRow {
   id: string;
   module: string;
+  module_code?: string;
+  module_name?: string;
+  submodule?: string;
+  submodule_code?: string;
+  submodule_name?: string;
+  permission_code?: string;
+  code?: string;
   action: string;
   label: string;
-  scope: "platform" | "tenant";
+  name?: string;
+  scope?: "platform" | "tenant";
   description: string;
 }
 
@@ -346,35 +356,28 @@ export async function fetchDepartmentsApi(): Promise<{ id: string; name: string;
 }
 
 export async function fetchLocationsApi(tenantId?: string): Promise<LocationRow[]> {
-  const token = typeof window !== 'undefined' ? window.localStorage.getItem('pos_user_profile') : null;
-  let isTenant = false;
-  try {
-    if (token) {
-      const parsed = JSON.parse(token);
-      if (parsed.user_type === 'tenant' || (parsed.tenantId && !parsed.isSuperAdmin)) {
-        isTenant = true;
-      }
-    }
-  } catch {}
+  let currentUser = getCurrentUser();
+  if (!currentUser) {
+    await refreshAccessToken();
+    currentUser = getCurrentUser();
+  }
+  if (!currentUser) throw new Error('Please sign in to view locations.');
+  const isTenant = currentUser.userType === 'tenant';
 
   // In tenant session, query tenant branches endpoint (prevents 403 on /platform/locations/)
   if (isTenant) {
-    try {
-      const res = await api.get<any>('/tenant/branches/');
-      return toArray<any>(res.data).map((b: any) => ({
-        id: b.id,
-        name: b.name,
-        city: b.city || b.address || 'Studio',
-        address: b.address || '',
-        phone: b.phone || '',
-        capacity: b.capacity || 100,
-        operating_hours: b.operating_hours || '06:00 - 22:00',
-        is_active: b.is_active ?? (b.status === 'ACTIVE'),
-        created_at: b.created_at,
-      }));
-    } catch {
-      return [];
-    }
+    const res = await api.get<any>('/tenant/branches/');
+    return toArray<any>(res.data).map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      city: b.city || b.address || 'Studio',
+      address: b.address || '',
+      phone: b.phone || '',
+      capacity: b.capacity || 100,
+      operating_hours: b.operating_hours || '06:00 - 22:00',
+      is_active: b.is_active ?? (b.status === 'ACTIVE'),
+      created_at: b.created_at,
+    }));
   }
 
   const params = tenantId ? `?tenant=${tenantId}` : '';

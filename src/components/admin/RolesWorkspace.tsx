@@ -62,6 +62,12 @@ import {
   type AdminUserRow,
 } from "@/services/api-admin";
 import { useAuth } from "@/contexts";
+import {
+  getFriendlyModuleName,
+  getFriendlySubmoduleName,
+  getFriendlyPermissionCode,
+  getFriendlyPermissionLabel,
+} from "./PermissionsWorkspace";
 
 export function RolesWorkspace() {
   const router = useRouter();
@@ -266,7 +272,7 @@ export function RolesWorkspace() {
     setAssigningUser(true);
     try {
       await updateUserApi(selectedUserId, {
-        role: activeRoleForAssign.name,
+        role_id: activeRoleForAssign.id,
       });
       toast.success(`Role "${activeRoleForAssign.name}" assigned successfully!`);
       setAssignModalOpen(false);
@@ -300,8 +306,8 @@ export function RolesWorkspace() {
   const permissionsByModule = React.useMemo(() => {
     const modules: Record<string, Record<string, PermissionDefRow[]>> = {};
     permissions.forEach((p) => {
-      const mod = p.module || "General";
-      const sub = p.submodule || "Standard";
+      const mod = getFriendlyModuleName(p);
+      const sub = getFriendlySubmoduleName(p) || "General Capabilities";
       if (!modules[mod]) modules[mod] = {};
       if (!modules[mod][sub]) modules[mod][sub] = [];
       modules[mod][sub].push(p);
@@ -761,9 +767,14 @@ export function RolesWorkspace() {
                                 className="mt-0.5 rounded border-border text-primary size-3.5"
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="font-semibold truncate">{p.name || p.label || p.code}</div>
+                                <div className="font-semibold truncate">
+                                  {getFriendlyPermissionLabel(p)}
+                                </div>
+                                <div className="font-mono text-[9.5px] text-muted-foreground truncate">
+                                  {getFriendlyPermissionCode(p)}
+                                </div>
                                 {p.description && (
-                                  <div className="text-[10px] text-muted-foreground line-clamp-1">
+                                  <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
                                     {p.description}
                                   </div>
                                 )}

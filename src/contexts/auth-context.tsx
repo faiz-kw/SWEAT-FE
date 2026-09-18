@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? `${nameParts[0]!.charAt(0)}${nameParts[1]!.charAt(0)}`.toUpperCase()
         : fullName.slice(0, 2).toUpperCase();
 
-      const rawLocs = (me as any).allowed_locations_list || me.allowed_locations || [];
+      const rawLocs = (me as any).allowed_locations_list || me.allowed_locations || (me as any).allowed_branches || [];
       const locations = Array.isArray(rawLocs)
         ? rawLocs
             .map((l: any, idx: number) => {

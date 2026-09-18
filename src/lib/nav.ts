@@ -2,6 +2,12 @@ export type NavItem = {
   label: string;
   to: string;
   badgeKey?: "leads" | "atRisk" | "approvals" | "grievances";
+  /** Controls role-based visibility:
+   *  - 'all' (default): visible to all
+   *  - 'superadmin_only': only Platform Super Admins see this
+   *  - 'tenant_only': only tenant users see this
+   */
+  visibility?: "all" | "superadmin_only" | "tenant_only";
 };
 
 export type NavSection = {
@@ -18,9 +24,10 @@ export type NavSection = {
 };
 
 /**
- * Filter NAV sections based on the authenticated user's role.
+ * Filter NAV sections and their items based on the authenticated user's role.
  * - Super Admins (isSuperAdmin = true) see: Platform Core, Administration, + all tenant modules
- * - Tenant users (Admin, Manager, Trainer, etc.) see: all tenant modules EXCEPT Platform Core
+ * - Tenant users (Admin, Manager, Trainer, etc.) see: all tenant modules EXCEPT Platform Core,
+ *   and Administration with only tenant-applicable items.
  */
 export function getFilteredNav(isSuperAdmin: boolean): NavSection[] {
   return NAV.filter((section) => {
@@ -29,7 +36,18 @@ export function getFilteredNav(isSuperAdmin: boolean): NavSection[] {
     if (vis === "superadmin_only") return isSuperAdmin;
     if (vis === "tenant_only") return !isSuperAdmin;
     return true;
-  });
+  })
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        const itemVis = item.visibility ?? "all";
+        if (itemVis === "all") return true;
+        if (itemVis === "superadmin_only") return isSuperAdmin;
+        if (itemVis === "tenant_only") return !isSuperAdmin;
+        return true;
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
 }
 
 /**
@@ -234,11 +252,11 @@ export const NAV: NavSection[] = [
       { label: "Roles", to: "/admin/roles" },
       { label: "Permissions", to: "/admin/permissions" },
       { label: "Locations", to: "/admin/locations" },
-      { label: "Services", to: "/admin/services" },
-      { label: "Configuration", to: "/admin/configuration" },
-      { label: "Forms", to: "/admin/forms" },
-      { label: "Integrations", to: "/admin/integrations" },
-      { label: "API", to: "/admin/api" },
+      { label: "Services", to: "/admin/services", visibility: "superadmin_only" },
+      { label: "Configuration", to: "/admin/configuration", visibility: "superadmin_only" },
+      { label: "Forms", to: "/admin/forms", visibility: "superadmin_only" },
+      { label: "Integrations", to: "/admin/integrations", visibility: "superadmin_only" },
+      { label: "API", to: "/admin/api", visibility: "superadmin_only" },
       { label: "Audit Logs", to: "/admin/audit-logs" },
       { label: "Security", to: "/admin/security" },
     ],
@@ -260,8 +278,23 @@ export const NAV: NavSection[] = [
   },
 ];
 
-export const ALL_NAV_ITEMS: { section: string; sectionId: string; label: string; to: string }[] =
-  NAV.flatMap((s) => s.items.map((i) => ({ section: s.label, sectionId: s.id, label: i.label, to: i.to })));
+export const ALL_NAV_ITEMS: {
+  section: string;
+  sectionId: string;
+  label: string;
+  to: string;
+  visibility?: "all" | "superadmin_only" | "tenant_only";
+  sectionVisibility?: "all" | "superadmin_only" | "tenant_only";
+}[] = NAV.flatMap((s) =>
+  s.items.map((i) => ({
+    section: s.label,
+    sectionId: s.id,
+    label: i.label,
+    to: i.to,
+    visibility: i.visibility,
+    sectionVisibility: s.visibility,
+  }))
+);
 
 export function findNavItem(pathname: string) {
   return ALL_NAV_ITEMS.find((i) => i.to === pathname);

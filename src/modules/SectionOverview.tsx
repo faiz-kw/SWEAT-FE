@@ -5,8 +5,8 @@ import { KpiTile, MiniTable, PageBody, PageHeader, Section } from "@/components/
 import { StatusBadge } from "@/components/enterprise/StatusBadge";
 import { dateTime } from "@/components/enterprise/format";
 import { Button } from "@/components/ui/button";
-import { NAV } from "@/lib/nav";
-import { useApp } from "@/contexts";
+import { NAV, getFilteredNav } from "@/lib/nav";
+import { useApp, useAuth } from "@/contexts";
 import { useModuleNavigate } from "@/modules/navigate";
 import { moduleDef } from "@/modules/registry";
 import { timeOf } from "@/modules/related";
@@ -68,16 +68,18 @@ function buildCard(label: string, to: string, locationId: string): ModuleCard | 
  */
 export function SectionOverview({ sectionId }: { sectionId: string }) {
   const { locationId } = useApp();
+  const { user } = useAuth();
   useStoreVersion();
   const go = useModuleNavigate();
 
-  const sections = React.useMemo(
-    () =>
-      (sectionId === "all" ? NAV : NAV.filter((s) => s.id === sectionId)).filter(
-        (s) => s.id !== "dashboard",
-      ),
-    [sectionId],
-  );
+  const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
+
+  const sections = React.useMemo(() => {
+    const filtered = getFilteredNav(isSuperAdmin);
+    return (sectionId === "all" ? filtered : filtered.filter((s) => s.id === sectionId)).filter(
+      (s) => s.id !== "dashboard"
+    );
+  }, [sectionId, isSuperAdmin]);
 
   const cards = React.useMemo(
     () =>
