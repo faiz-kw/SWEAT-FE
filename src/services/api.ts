@@ -96,6 +96,7 @@ async function request<T>(
     );
     error.status = res.status;
     error.data = errorData;
+    error.response = { data: errorData, status: res.status };
     throw error;
   }
 

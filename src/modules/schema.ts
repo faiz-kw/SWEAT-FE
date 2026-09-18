@@ -147,13 +147,6 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
     { key: "postureScore", label: "Posture Score", type: "number" },
     { key: "status", label: "Status", type: "enum", options: ["Completed", "Pending Review", "Scheduled"] },
   ],
-  exercises: [
-    { key: "name", label: "Exercise Name", type: "text", required: true },
-    { key: "category", label: "Category", type: "enum", options: ["Strength", "Cardio", "Mobility", "Core", "Plyometrics"] },
-    { key: "primaryMuscle", label: "Primary Muscle", type: "text" },
-    { key: "equipment", label: "Equipment", type: "text" },
-    { key: "difficulty", label: "Difficulty", type: "enum", options: ["Beginner", "Intermediate", "Advanced"] },
-  ],
   nutritionPlans: [
     { key: "member", label: "Member", type: "text", required: true },
     { key: "coach", label: "Coach", type: "text" },

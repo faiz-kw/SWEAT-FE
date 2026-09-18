@@ -108,7 +108,6 @@ export const NAV: NavSection[] = [
       { label: "Assessments", to: "/ops/assessments" },
       { label: "Trainers", to: "/ops/trainers" },
       { label: "Programs", to: "/ops/programs" },
-      { label: "Exercises", to: "/ops/exercises" },
     ],
   },
   {
@@ -145,7 +144,6 @@ export const NAV: NavSection[] = [
       { label: "Trainers", to: "/coaching/trainers" },
       { label: "Online Coaches", to: "/coaching/online-coaches" },
       { label: "Nutrition Coaches", to: "/coaching/nutrition-coaches" },
-      { label: "Exercise Library", to: "/coaching/exercise-library" },
       { label: "Program Builder", to: "/coaching/program-builder" },
     ],
   },

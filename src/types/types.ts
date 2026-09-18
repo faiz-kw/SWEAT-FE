@@ -343,16 +343,6 @@ export interface Assessment extends Scoped {
   score: number;
 }
 
-export interface Exercise extends Scoped {
-  id: ID;
-  name: string;
-  pattern: string;
-  equipment: string;
-  primaryMuscle: string;
-  level: "Beginner" | "Intermediate" | "Advanced";
-  usedInPrograms: number;
-}
-
 export interface Program extends Scoped {
   id: ID;
   name: string;

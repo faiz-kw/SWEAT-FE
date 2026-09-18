@@ -137,3 +137,67 @@ export interface ClassScheduleRecommendation {
   recommendation_reason?: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'APPLIED';
 }
+
+export interface ClassPrice {
+  id: string;
+  class_template: string;
+  branch?: string;
+  branch_name?: string;
+  version_number: number;
+  currency: string;
+  price: string | number;
+  tax_percent: string | number;
+  effective_from: string;
+  effective_until?: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'INACTIVE';
+  created_at?: string;
+}
+
+export interface ClassBranchAvailability {
+  id: string;
+  class_template: string;
+  branch: string;
+  branch_name?: string;
+  status: 'ENABLED' | 'DISABLED';
+  capacity_override?: number;
+  trial_capacity_override?: number;
+  waitlist_capacity_override?: number;
+  created_at?: string;
+}
+
+export interface ClassContentMapping {
+  id: string;
+  content_item: string;
+  content_title?: string;
+  class_template?: string;
+  class_category?: string;
+  program?: string;
+  trainer_specialty?: string;
+  branch?: string;
+  delivery_mode?: DeliveryMode;
+  status: 'ACTIVE' | 'INACTIVE';
+  created_at?: string;
+}
+
+export interface TrainerProfileOption {
+  id: string;
+  trainer_code: string;
+  trainer_name?: string;
+  specialties?: Array<{ id: string; name: string; code: string }>;
+  trainer_status?: string;
+}
+
+export interface BranchOption {
+  id: string;
+  name: string;
+  code?: string;
+  status?: string;
+}
+
+export interface ProgramOption {
+  id: string;
+  name: string;
+  code?: string;
+  status?: string;
+}
+

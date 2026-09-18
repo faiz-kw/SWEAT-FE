@@ -48,7 +48,6 @@ export const MODULES: Record<string, ModuleDef> = {
   "/ops/assessments": { collection: "assessments" },
   "/ops/trainers": { collection: "trainers" },
   "/ops/programs": { collection: "programs" },
-  "/ops/exercises": { collection: "exercises" },
 
   /* Performance */
   "/performance/assessments": { collection: "assessments" },
@@ -103,7 +102,6 @@ export const MODULES: Record<string, ModuleDef> = {
   /* Coaching */
   "/coaching/online-coaches": { collection: "coaches", preset: preset("Online coaches", "coachType", "Online Coach") },
   "/coaching/nutrition-coaches": { collection: "coaches", preset: preset("Nutrition coaches", "coachType", "Nutrition Coach") },
-  "/coaching/exercise-library": { collection: "exercises" },
   "/coaching/program-builder": { collection: "programs" },
   "/coaching/trainers": { collection: "trainers" },
 

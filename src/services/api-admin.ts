@@ -465,8 +465,21 @@ export async function fetchAuditLogsApi(action?: string, module?: string): Promi
   if (action && action !== "all") params.set("action", action);
   if (module && module !== "all") params.set("module", module);
   const query = params.toString() ? `?${params.toString()}` : "";
-  const res = await api.get<AuditLogRow[]>(`/tenant/audit-events/${query}`);
-  return res.data || [];
+  const res = await api.get<any>(`/tenant/audit-events/${query}`);
+  const rawList = toArray<any>(res.data);
+  return rawList.map((item: any) => ({
+    id: item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+    user_email: item.user_email || item.actor_email || (typeof item.actor === 'string' ? item.actor : '') || 'system@performanceos.internal',
+    user_name: item.user_name || item.actor_name || '',
+    action: item.action || 'AUDIT',
+    module: item.module || item.resource_type || 'General',
+    entity_type: item.entity_type || item.resource_type || 'System',
+    entity_id: item.entity_id || item.resource_id || item.id || '',
+    description: item.description || `${item.action || 'Action'} recorded on ${item.resource_type || 'system'}`,
+    ip_address: item.ip_address || '127.0.0.1',
+    user_agent: item.user_agent || '',
+    created_at: item.created_at || new Date().toISOString(),
+  }));
 }
 
 // ── API KEYS & WEBHOOKS ───────────────────────────────────────────────

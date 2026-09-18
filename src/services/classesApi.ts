@@ -10,9 +10,14 @@ import {
   ClassScheduleRule,
   ClassOccurrence,
   ClassContentItem,
-  ClassContentAssignment,
+  ClassContentMapping,
   ClassDemandPlanningRun,
   ClassScheduleRecommendation,
+  ClassPrice,
+  ClassBranchAvailability,
+  TrainerProfileOption,
+  BranchOption,
+  ProgramOption,
 } from '../types/classes';
 
 export const classesApi = {
@@ -27,9 +32,19 @@ export const classesApi = {
     return res.data;
   },
 
+  async updateCategory(id: string, data: Partial<ClassCategory>): Promise<ClassCategory> {
+    const res = await api.patch<ClassCategory>(`/tenant/class-categories/${id}/`, data);
+    return res.data;
+  },
+
+  async deleteCategory(id: string): Promise<void> {
+    await api.delete(`/tenant/class-categories/${id}/`);
+  },
+
   // --- Class Templates ---
-  async getTemplates(): Promise<ClassTemplate[]> {
-    const res = await api.get<any>('/tenant/class-templates/');
+  async getTemplates(categoryId?: string): Promise<ClassTemplate[]> {
+    const params = categoryId ? { category_id: categoryId } : {};
+    const res = await api.get<any>('/tenant/class-templates/', { params });
     return res.data?.results || res.data || [];
   },
 
@@ -43,6 +58,10 @@ export const classesApi = {
     return res.data;
   },
 
+  async deleteTemplate(id: string): Promise<void> {
+    await api.delete(`/tenant/class-templates/${id}/`);
+  },
+
   // --- Class Schedule Rules ---
   async getScheduleRules(branchId?: string): Promise<ClassScheduleRule[]> {
     const params = branchId ? { branch_id: branchId } : {};
@@ -53,6 +72,15 @@ export const classesApi = {
   async createScheduleRule(data: Partial<ClassScheduleRule>): Promise<ClassScheduleRule> {
     const res = await api.post<ClassScheduleRule>('/tenant/class-schedule-rules/', data);
     return res.data;
+  },
+
+  async updateScheduleRule(id: string, data: Partial<ClassScheduleRule>): Promise<ClassScheduleRule> {
+    const res = await api.patch<ClassScheduleRule>(`/tenant/class-schedule-rules/${id}/`, data);
+    return res.data;
+  },
+
+  async deleteScheduleRule(id: string): Promise<void> {
+    await api.delete(`/tenant/class-schedule-rules/${id}/`);
   },
 
   async generateOccurrencesFromRule(ruleId: string, fromDate: string, toDate: string): Promise<any> {
@@ -69,8 +97,18 @@ export const classesApi = {
     return res.data?.results || res.data || [];
   },
 
-  async createOccurrence(data: Partial<ClassOccurrence>): Promise<ClassOccurrence> {
+  async createOccurrence(data: any): Promise<ClassOccurrence> {
     const res = await api.post<ClassOccurrence>('/tenant/class-occurrences/', data);
+    return res.data;
+  },
+
+  async updateOccurrence(id: string, data: Partial<ClassOccurrence>): Promise<ClassOccurrence> {
+    const res = await api.patch<ClassOccurrence>(`/tenant/class-occurrences/${id}/`, data);
+    return res.data;
+  },
+
+  async cancelOccurrence(id: string): Promise<ClassOccurrence> {
+    const res = await api.patch<ClassOccurrence>(`/tenant/class-occurrences/${id}/`, { status: 'CANCELLED' });
     return res.data;
   },
 
@@ -87,6 +125,65 @@ export const classesApi = {
     return res.data;
   },
 
+  async rotateContent(occurrenceId: string): Promise<any> {
+    return this.assignContent(occurrenceId);
+  },
+
+  // --- Branch Availability & Pricing ---
+  async getBranchAvailabilities(templateId?: string): Promise<ClassBranchAvailability[]> {
+    const res = await api.get<any>('/tenant/class-branch-availabilities/');
+    const all = res.data?.results || res.data || [];
+    if (templateId) {
+      return all.filter((a: any) => a.class_template === templateId);
+    }
+    return all;
+  },
+
+  async createBranchAvailability(data: Partial<ClassBranchAvailability>): Promise<ClassBranchAvailability> {
+    const res = await api.post<ClassBranchAvailability>('/tenant/class-branch-availabilities/', data);
+    return res.data;
+  },
+
+  async getClassPrices(templateId?: string): Promise<ClassPrice[]> {
+    const res = await api.get<any>('/tenant/class-prices/');
+    const all = res.data?.results || res.data || [];
+    if (templateId) {
+      return all.filter((p: any) => p.class_template === templateId);
+    }
+    return all;
+  },
+
+  async createClassPrice(data: Partial<ClassPrice>): Promise<ClassPrice> {
+    const res = await api.post<ClassPrice>('/tenant/class-prices/', data);
+    return res.data;
+  },
+
+  // --- External Dependencies (Real Backend Endpoints) ---
+  async getBranches(): Promise<BranchOption[]> {
+    const res = await api.get<any>('/tenant/branches/');
+    return res.data?.results || res.data || [];
+  },
+
+  async getBranchWorkingHours(branchId: string): Promise<any[]> {
+    const res = await api.get<any>('/tenant/branch-working-hours/', { params: { branch: branchId } });
+    return res.data?.results || res.data || [];
+  },
+
+  async getBranchOperatingExceptions(branchId: string): Promise<any[]> {
+    const res = await api.get<any>('/tenant/branch-operating-exceptions/', { params: { branch: branchId } });
+    return res.data?.results || res.data || [];
+  },
+
+  async getTrainers(): Promise<TrainerProfileOption[]> {
+    const res = await api.get<any>('/tenant/trainer-profiles/');
+    return res.data?.results || res.data || [];
+  },
+
+  async getPrograms(): Promise<ProgramOption[]> {
+    const res = await api.get<any>('/tenant/programs/');
+    return res.data?.results || res.data || [];
+  },
+
   // --- Content Studio ---
   async getContentItems(): Promise<ClassContentItem[]> {
     const res = await api.get<any>('/tenant/class-content-items/');
@@ -95,6 +192,25 @@ export const classesApi = {
 
   async createContentItem(data: Partial<ClassContentItem>): Promise<ClassContentItem> {
     const res = await api.post<ClassContentItem>('/tenant/class-content-items/', data);
+    return res.data;
+  },
+
+  async updateContentItem(id: string, data: Partial<ClassContentItem>): Promise<ClassContentItem> {
+    const res = await api.patch<ClassContentItem>(`/tenant/class-content-items/${id}/`, data);
+    return res.data;
+  },
+
+  async deleteContentItem(id: string): Promise<void> {
+    await api.delete(`/tenant/class-content-items/${id}/`);
+  },
+
+  async getContentMappings(): Promise<ClassContentMapping[]> {
+    const res = await api.get<any>('/tenant/class-content-mappings/');
+    return res.data?.results || res.data || [];
+  },
+
+  async createContentMapping(data: Partial<ClassContentMapping>): Promise<ClassContentMapping> {
+    const res = await api.post<ClassContentMapping>('/tenant/class-content-mappings/', data);
     return res.data;
   },
 

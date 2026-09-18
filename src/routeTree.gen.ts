@@ -36,7 +36,6 @@ import { Route as ShellAutomationApprovalsRouteImport } from './routes/_shell/au
 import { Route as ShellAutomationNotificationsRouteImport } from './routes/_shell/automation.notifications'
 import { Route as ShellAutomationRulesRouteImport } from './routes/_shell/automation.rules'
 import { Route as ShellAutomationWorkflowsRouteImport } from './routes/_shell/automation.workflows'
-import { Route as ShellCoachingExerciseLibraryRouteImport } from './routes/_shell/coaching.exercise-library'
 import { Route as ShellCoachingNutritionCoachesRouteImport } from './routes/_shell/coaching.nutrition-coaches'
 import { Route as ShellCoachingOnlineCoachesRouteImport } from './routes/_shell/coaching.online-coaches'
 import { Route as ShellCoachingProgramBuilderRouteImport } from './routes/_shell/coaching.program-builder'
@@ -85,7 +84,6 @@ import { Route as ShellOpsAssessmentsRouteImport } from './routes/_shell/ops.ass
 import { Route as ShellOpsBookingsRouteImport } from './routes/_shell/ops.bookings'
 import { Route as ShellOpsCalendarRouteImport } from './routes/_shell/ops.calendar'
 import { Route as ShellOpsClassesRouteImport } from './routes/_shell/ops.classes'
-import { Route as ShellOpsExercisesRouteImport } from './routes/_shell/ops.exercises'
 import { Route as ShellOpsPersonalTrainingRouteImport } from './routes/_shell/ops.personal-training'
 import { Route as ShellOpsPilatesRouteImport } from './routes/_shell/ops.pilates'
 import { Route as ShellOpsProgramsRouteImport } from './routes/_shell/ops.programs'
@@ -250,12 +248,6 @@ const ShellAutomationWorkflowsRoute =
   ShellAutomationWorkflowsRouteImport.update({
     id: '/automation/workflows',
     path: '/automation/workflows',
-    getParentRoute: () => ShellRoute,
-  } as any)
-const ShellCoachingExerciseLibraryRoute =
-  ShellCoachingExerciseLibraryRouteImport.update({
-    id: '/coaching/exercise-library',
-    path: '/coaching/exercise-library',
     getParentRoute: () => ShellRoute,
   } as any)
 const ShellCoachingNutritionCoachesRoute =
@@ -504,11 +496,6 @@ const ShellOpsClassesRoute = ShellOpsClassesRouteImport.update({
   path: '/ops/classes',
   getParentRoute: () => ShellRoute,
 } as any)
-const ShellOpsExercisesRoute = ShellOpsExercisesRouteImport.update({
-  id: '/ops/exercises',
-  path: '/ops/exercises',
-  getParentRoute: () => ShellRoute,
-} as any)
 const ShellOpsPersonalTrainingRoute =
   ShellOpsPersonalTrainingRouteImport.update({
     id: '/ops/personal-training',
@@ -679,7 +666,6 @@ export interface FileRoutesByFullPath {
   '/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/automation/rules': typeof ShellAutomationRulesRoute
   '/automation/workflows': typeof ShellAutomationWorkflowsRoute
-  '/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
   '/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
   '/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
   '/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
@@ -728,7 +714,6 @@ export interface FileRoutesByFullPath {
   '/ops/bookings': typeof ShellOpsBookingsRoute
   '/ops/calendar': typeof ShellOpsCalendarRoute
   '/ops/classes': typeof ShellOpsClassesRoute
-  '/ops/exercises': typeof ShellOpsExercisesRoute
   '/ops/personal-training': typeof ShellOpsPersonalTrainingRoute
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
@@ -784,7 +769,6 @@ export interface FileRoutesByTo {
   '/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/automation/rules': typeof ShellAutomationRulesRoute
   '/automation/workflows': typeof ShellAutomationWorkflowsRoute
-  '/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
   '/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
   '/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
   '/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
@@ -833,7 +817,6 @@ export interface FileRoutesByTo {
   '/ops/bookings': typeof ShellOpsBookingsRoute
   '/ops/calendar': typeof ShellOpsCalendarRoute
   '/ops/classes': typeof ShellOpsClassesRoute
-  '/ops/exercises': typeof ShellOpsExercisesRoute
   '/ops/personal-training': typeof ShellOpsPersonalTrainingRoute
   '/ops/pilates': typeof ShellOpsPilatesRoute
   '/ops/programs': typeof ShellOpsProgramsRoute
@@ -891,7 +874,6 @@ export interface FileRoutesById {
   '/_shell/automation/notifications': typeof ShellAutomationNotificationsRoute
   '/_shell/automation/rules': typeof ShellAutomationRulesRoute
   '/_shell/automation/workflows': typeof ShellAutomationWorkflowsRoute
-  '/_shell/coaching/exercise-library': typeof ShellCoachingExerciseLibraryRoute
   '/_shell/coaching/nutrition-coaches': typeof ShellCoachingNutritionCoachesRoute
   '/_shell/coaching/online-coaches': typeof ShellCoachingOnlineCoachesRoute
   '/_shell/coaching/program-builder': typeof ShellCoachingProgramBuilderRoute
@@ -940,7 +922,6 @@ export interface FileRoutesById {
   '/_shell/ops/bookings': typeof ShellOpsBookingsRoute
   '/_shell/ops/calendar': typeof ShellOpsCalendarRoute
   '/_shell/ops/classes': typeof ShellOpsClassesRoute
-  '/_shell/ops/exercises': typeof ShellOpsExercisesRoute
   '/_shell/ops/personal-training': typeof ShellOpsPersonalTrainingRoute
   '/_shell/ops/pilates': typeof ShellOpsPilatesRoute
   '/_shell/ops/programs': typeof ShellOpsProgramsRoute
@@ -998,7 +979,6 @@ export interface FileRouteTypes {
     | '/automation/notifications'
     | '/automation/rules'
     | '/automation/workflows'
-    | '/coaching/exercise-library'
     | '/coaching/nutrition-coaches'
     | '/coaching/online-coaches'
     | '/coaching/program-builder'
@@ -1047,7 +1027,6 @@ export interface FileRouteTypes {
     | '/ops/bookings'
     | '/ops/calendar'
     | '/ops/classes'
-    | '/ops/exercises'
     | '/ops/personal-training'
     | '/ops/pilates'
     | '/ops/programs'
@@ -1103,7 +1082,6 @@ export interface FileRouteTypes {
     | '/automation/notifications'
     | '/automation/rules'
     | '/automation/workflows'
-    | '/coaching/exercise-library'
     | '/coaching/nutrition-coaches'
     | '/coaching/online-coaches'
     | '/coaching/program-builder'
@@ -1152,7 +1130,6 @@ export interface FileRouteTypes {
     | '/ops/bookings'
     | '/ops/calendar'
     | '/ops/classes'
-    | '/ops/exercises'
     | '/ops/personal-training'
     | '/ops/pilates'
     | '/ops/programs'
@@ -1209,7 +1186,6 @@ export interface FileRouteTypes {
     | '/_shell/automation/notifications'
     | '/_shell/automation/rules'
     | '/_shell/automation/workflows'
-    | '/_shell/coaching/exercise-library'
     | '/_shell/coaching/nutrition-coaches'
     | '/_shell/coaching/online-coaches'
     | '/_shell/coaching/program-builder'
@@ -1258,7 +1234,6 @@ export interface FileRouteTypes {
     | '/_shell/ops/bookings'
     | '/_shell/ops/calendar'
     | '/_shell/ops/classes'
-    | '/_shell/ops/exercises'
     | '/_shell/ops/personal-training'
     | '/_shell/ops/pilates'
     | '/_shell/ops/programs'
@@ -1482,13 +1457,6 @@ declare module '@tanstack/react-router' {
       path: '/automation/workflows'
       fullPath: '/automation/workflows'
       preLoaderRoute: typeof ShellAutomationWorkflowsRouteImport
-      parentRoute: typeof ShellRoute
-    }
-    '/_shell/coaching/exercise-library': {
-      id: '/_shell/coaching/exercise-library'
-      path: '/coaching/exercise-library'
-      fullPath: '/coaching/exercise-library'
-      preLoaderRoute: typeof ShellCoachingExerciseLibraryRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/coaching/nutrition-coaches': {
@@ -1827,13 +1795,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellOpsClassesRouteImport
       parentRoute: typeof ShellRoute
     }
-    '/_shell/ops/exercises': {
-      id: '/_shell/ops/exercises'
-      path: '/ops/exercises'
-      fullPath: '/ops/exercises'
-      preLoaderRoute: typeof ShellOpsExercisesRouteImport
-      parentRoute: typeof ShellRoute
-    }
     '/_shell/ops/personal-training': {
       id: '/_shell/ops/personal-training'
       path: '/ops/personal-training'
@@ -2085,7 +2046,6 @@ interface ShellRouteChildren {
   ShellAutomationNotificationsRoute: typeof ShellAutomationNotificationsRoute
   ShellAutomationRulesRoute: typeof ShellAutomationRulesRoute
   ShellAutomationWorkflowsRoute: typeof ShellAutomationWorkflowsRoute
-  ShellCoachingExerciseLibraryRoute: typeof ShellCoachingExerciseLibraryRoute
   ShellCoachingNutritionCoachesRoute: typeof ShellCoachingNutritionCoachesRoute
   ShellCoachingOnlineCoachesRoute: typeof ShellCoachingOnlineCoachesRoute
   ShellCoachingProgramBuilderRoute: typeof ShellCoachingProgramBuilderRoute
@@ -2128,7 +2088,6 @@ interface ShellRouteChildren {
   ShellOpsBookingsRoute: typeof ShellOpsBookingsRoute
   ShellOpsCalendarRoute: typeof ShellOpsCalendarRoute
   ShellOpsClassesRoute: typeof ShellOpsClassesRoute
-  ShellOpsExercisesRoute: typeof ShellOpsExercisesRoute
   ShellOpsPersonalTrainingRoute: typeof ShellOpsPersonalTrainingRoute
   ShellOpsPilatesRoute: typeof ShellOpsPilatesRoute
   ShellOpsProgramsRoute: typeof ShellOpsProgramsRoute
@@ -2183,7 +2142,6 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellAutomationNotificationsRoute: ShellAutomationNotificationsRoute,
   ShellAutomationRulesRoute: ShellAutomationRulesRoute,
   ShellAutomationWorkflowsRoute: ShellAutomationWorkflowsRoute,
-  ShellCoachingExerciseLibraryRoute: ShellCoachingExerciseLibraryRoute,
   ShellCoachingNutritionCoachesRoute: ShellCoachingNutritionCoachesRoute,
   ShellCoachingOnlineCoachesRoute: ShellCoachingOnlineCoachesRoute,
   ShellCoachingProgramBuilderRoute: ShellCoachingProgramBuilderRoute,
@@ -2226,7 +2184,6 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellOpsBookingsRoute: ShellOpsBookingsRoute,
   ShellOpsCalendarRoute: ShellOpsCalendarRoute,
   ShellOpsClassesRoute: ShellOpsClassesRoute,
-  ShellOpsExercisesRoute: ShellOpsExercisesRoute,
   ShellOpsPersonalTrainingRoute: ShellOpsPersonalTrainingRoute,
   ShellOpsPilatesRoute: ShellOpsPilatesRoute,
   ShellOpsProgramsRoute: ShellOpsProgramsRoute,

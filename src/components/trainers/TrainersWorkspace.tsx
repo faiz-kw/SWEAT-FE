@@ -23,13 +23,21 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
+  UserPlus,
+  Loader2,
+  Eye,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { api } from '@/services/api';
 import { workforceApi } from '@/services/workforceApi';
+import { fetchUsersApi } from '@/services/api-admin';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -49,6 +57,55 @@ export function TrainersWorkspace() {
   const [statusFilter, setStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
+
+  // Register Trainer Modal State
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = React.useState(false);
+  const [registerStaffUserId, setRegisterStaffUserId] = React.useState('');
+  const [registerTrainerCode, setRegisterTrainerCode] = React.useState('');
+  const [registerExperienceYears, setRegisterExperienceYears] = React.useState('3');
+  const [registerBio, setRegisterBio] = React.useState('');
+  const [registerScheduleBuffer, setRegisterScheduleBuffer] = React.useState(15);
+  const [registerCanTeachAll, setRegisterCanTeachAll] = React.useState(true);
+  const [registerLoading, setRegisterLoading] = React.useState(false);
+
+  // View Trainer Modal State
+  const [isViewModalOpen, setIsViewModalOpen] = React.useState(false);
+
+  // Edit Trainer Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
+  const [editStatus, setEditStatus] = React.useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [editExperienceYears, setEditExperienceYears] = React.useState('3');
+  const [editBio, setEditBio] = React.useState('');
+  const [editScheduleBuffer, setEditScheduleBuffer] = React.useState(15);
+  const [editCanTeachAll, setEditCanTeachAll] = React.useState(true);
+  const [editLoading, setEditLoading] = React.useState(false);
+
+  // Delete Trainer Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
+
+  // Fetch Users for Trainer Registration
+  const { data: staffUsers = [] } = useQuery({
+    queryKey: ['admin-users-for-trainer-registration'],
+    queryFn: () => fetchUsersApi(),
+  });
+
+  // Fetch Real Branches for Slot & Eligibility Evaluation
+  const { data: branches = [] } = useQuery<{ id: string; name: string; city?: string }[]>({
+    queryKey: ['tenant-branches-for-trainers'],
+    queryFn: async () => {
+      const res = await api.get<any>('/tenant/branches/');
+      return Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+    },
+  });
+
+  const [selectedBranchId, setSelectedBranchId] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (branches.length > 0 && !selectedBranchId) {
+      setSelectedBranchId(branches[0].id);
+    }
+  }, [branches, selectedBranchId]);
 
   // Availability Checker State
   const [checkDate, setCheckDate] = React.useState(() => {
@@ -96,8 +153,7 @@ export function TrainersWorkspace() {
     setAvailabilityResult(null);
     try {
       const isoStart = `${checkDate}T${checkTime}:00Z`;
-      // Note: pass dummy branch ID or first branch if needed
-      const branchId = '00000000-0000-0000-0000-000000000000';
+      const branchId = selectedBranchId || branches[0]?.id;
       const result = await workforceApi.checkAvailability(selectedTrainer.id, {
         start_datetime: isoStart,
         branch_id: branchId,
@@ -110,6 +166,105 @@ export function TrainersWorkspace() {
       toast.error(err?.message || 'Failed to evaluate trainer availability');
     } finally {
       setIsCheckingSlot(false);
+    }
+  };
+
+  // Handle register trainer submit
+  const handleRegisterTrainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registerStaffUserId) {
+      toast.error('Please select a staff member to register.');
+      return;
+    }
+    setRegisterLoading(true);
+    try {
+      await workforceApi.createTrainer({
+        user_id: registerStaffUserId,
+        trainer_code: registerTrainerCode.trim() || undefined,
+        experience_years: registerExperienceYears ? parseFloat(registerExperienceYears) : undefined,
+        bio: registerBio.trim() || undefined,
+        minimum_schedule_buffer_minutes: registerScheduleBuffer || 15,
+        can_teach_all_specialties: registerCanTeachAll,
+      });
+      toast.success('Trainer successfully registered!');
+      setIsRegisterModalOpen(false);
+      setRegisterStaffUserId('');
+      setRegisterTrainerCode('');
+      setRegisterBio('');
+      setRegisterExperienceYears('3');
+      refetch();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.error ||
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Failed to register trainer'
+      );
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+
+  // Open Edit Modal with trainer data
+  const handleOpenEdit = (trainer: TrainerProfile) => {
+    setSelectedTrainer(trainer);
+    setEditStatus((trainer.trainer_status as 'ACTIVE' | 'INACTIVE') || 'ACTIVE');
+    setEditExperienceYears(String(trainer.experience_years ?? '0'));
+    setEditBio(trainer.bio || '');
+    setEditScheduleBuffer(trainer.minimum_schedule_buffer_minutes || 0);
+    setEditCanTeachAll(trainer.can_teach_all_specialties ?? false);
+    setIsEditModalOpen(true);
+  };
+
+  // Handle update trainer submit
+  const handleUpdateTrainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTrainer) return;
+    setEditLoading(true);
+    try {
+      await workforceApi.updateTrainer(selectedTrainer.id, {
+        trainer_status: editStatus,
+        experience_years: editExperienceYears ? parseFloat(editExperienceYears) : undefined,
+        bio: editBio.trim(),
+        minimum_schedule_buffer_minutes: editScheduleBuffer,
+        can_teach_all_specialties: editCanTeachAll,
+      });
+      toast.success('Trainer profile updated successfully!');
+      setIsEditModalOpen(false);
+      refetch();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.error ||
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Failed to update trainer'
+      );
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Handle delete trainer submit
+  const handleDeleteTrainer = async () => {
+    if (!selectedTrainer) return;
+    setDeleteLoading(true);
+    try {
+      await workforceApi.deleteTrainer(selectedTrainer.id);
+      toast.success(
+        `Trainer "${selectedTrainer.trainer_name || selectedTrainer.trainer_code}" deleted successfully.`
+      );
+      setIsDeleteModalOpen(false);
+      setSelectedTrainer(null);
+      refetch();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.error ||
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Failed to delete trainer'
+      );
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -151,6 +306,14 @@ export function TrainersWorkspace() {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Eligibility Scanner</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setIsRegisterModalOpen(true)}
+              className="gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Register Trainer</span>
             </Button>
           </div>
         </div>
@@ -243,8 +406,10 @@ export function TrainersWorkspace() {
                 </p>
                 <Button
                   size="sm"
-                  onClick={() => toast.info('To register a trainer, assign a TrainerProfile to an EmployeeProfile via Admin.')}
+                  onClick={() => setIsRegisterModalOpen(true)}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
+                  <UserPlus className="w-4 h-4 mr-1" />
                   Register First Trainer
                 </Button>
               </div>
@@ -320,17 +485,56 @@ export function TrainersWorkspace() {
                             </Badge>
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTrainer(trainer);
-                                setIsCheckModalOpen(true);
-                              }}
-                              className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                            >
-                              Check Slot
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsViewModalOpen(true);
+                                }}
+                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                title="View Details"
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                View
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEdit(trainer)}
+                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                title="Edit Profile"
+                              >
+                                <Pencil className="w-3.5 h-3.5 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsCheckModalOpen(true);
+                                }}
+                                className="h-8 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                                title="Check Availability"
+                              >
+                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                Check Slot
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsDeleteModalOpen(true);
+                                }}
+                                className="h-8 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                                title="Delete Trainer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -385,19 +589,53 @@ export function TrainersWorkspace() {
                         )}
                       </div>
 
-                      <div className="border-t border-border/40 pt-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="border-t border-border/40 pt-3 flex items-center justify-between gap-2 flex-wrap text-xs text-muted-foreground">
                         <span>Buffer: {trainer.minimum_schedule_buffer_minutes} min</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedTrainer(trainer);
-                            setIsCheckModalOpen(true);
-                          }}
-                          className="h-7 text-xs"
-                        >
-                          Check Slot
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTrainer(trainer);
+                              setIsViewModalOpen(true);
+                            }}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEdit(trainer)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Pencil className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTrainer(trainer);
+                              setIsCheckModalOpen(true);
+                            }}
+                            className="h-7 px-2 text-xs text-primary"
+                          >
+                            Check
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTrainer(trainer);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -421,6 +659,20 @@ export function TrainersWorkspace() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-medium">Studio Branch *</Label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} {b.city ? `(${b.city})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Session Date</Label>
                 <Input
@@ -480,7 +732,7 @@ export function TrainersWorkspace() {
                 setEligibleList(null);
                 try {
                   const isoStart = `${checkDate}T${checkTime}:00Z`;
-                  const branchId = '00000000-0000-0000-0000-000000000000';
+                  const branchId = selectedBranchId || branches[0]?.id;
                   const res = await workforceApi.findEligibleTrainers({
                     start_datetime: isoStart,
                     branch_id: branchId,
@@ -582,6 +834,21 @@ export function TrainersWorkspace() {
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs">Studio Branch</Label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} {b.city ? `(${b.city})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs">Delivery Mode</Label>
               <select
                 value={checkDeliveryMode}
@@ -621,6 +888,430 @@ export function TrainersWorkspace() {
             </Button>
             <Button size="sm" disabled={isCheckingSlot} onClick={handleCheckTrainerSlot}>
               {isCheckingSlot ? 'Checking...' : 'Check Availability'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Register Trainer Modal */}
+      <Dialog open={isRegisterModalOpen} onOpenChange={setIsRegisterModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-emerald-600" />
+              <span>Register New Trainer</span>
+            </DialogTitle>
+            <DialogDescription>
+              Assign an operational trainer profile to a staff user to enable class scheduling, personal training, and live availability.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleRegisterTrainer} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Staff Member *</Label>
+              <select
+                value={registerStaffUserId}
+                onChange={(e) => setRegisterStaffUserId(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
+                required
+              >
+                <option value="">-- Choose a staff member --</option>
+                {staffUsers.map((u) => {
+                  const isTrainerRole =
+                    u.role?.toUpperCase().includes('TRAINER') ||
+                    u.role_name?.toUpperCase().includes('TRAINER');
+                  const alreadyRegistered = trainers.some(
+                    (t) => t.email?.toLowerCase() === u.email?.toLowerCase()
+                  );
+                  return (
+                    <option key={u.id} value={u.id} disabled={alreadyRegistered}>
+                      {u.full_name || u.email} ({u.email})
+                      {isTrainerRole ? ' [Trainer Role]' : ''}
+                      {alreadyRegistered ? ' [Already Registered]' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Staff members with the "Trainer Role" in Administration &gt; Roles are indicated above.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Trainer Code (Optional)</Label>
+                <Input
+                  placeholder="e.g. TRN-001 (auto if empty)"
+                  value={registerTrainerCode}
+                  onChange={(e) => setRegisterTrainerCode(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Experience (Years)</Label>
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="50"
+                  value={registerExperienceYears}
+                  onChange={(e) => setRegisterExperienceYears(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Professional Bio &amp; Qualifications</Label>
+              <Textarea
+                placeholder="e.g. Certified strength and conditioning coach specializing in HIIT and functional movement."
+                value={registerBio}
+                onChange={(e) => setRegisterBio(e.target.value)}
+                rows={3}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Schedule Buffer (Minutes)</Label>
+                <Input
+                  type="number"
+                  step="5"
+                  min="0"
+                  max="120"
+                  value={registerScheduleBuffer}
+                  onChange={(e) => setRegisterScheduleBuffer(parseInt(e.target.value) || 0)}
+                  className="h-9 text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground">Rest time required between bookings.</p>
+              </div>
+
+              <div className="space-y-1.5 flex flex-col justify-center">
+                <Label className="text-xs font-semibold">Capabilities</Label>
+                <label className="flex items-center gap-2 text-xs mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={registerCanTeachAll}
+                    onChange={(e) => setRegisterCanTeachAll(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                  />
+                  <span>Can teach all fitness specialties</span>
+                </label>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRegisterModalOpen(false)}
+                disabled={registerLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                disabled={registerLoading}
+              >
+                {registerLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Registering...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Register Trainer</span>
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Trainer Profile Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              <span>Trainer Profile Details</span>
+            </DialogTitle>
+            <DialogDescription>
+              Operational profile, scheduling parameters, and qualification summary.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTrainer && (
+            <div className="space-y-4 py-2 text-sm">
+              <div className="flex items-center gap-4 p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <div className="w-13 h-13 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-base shrink-0">
+                  {(selectedTrainer.trainer_name || selectedTrainer.trainer_code || 'T').substring(0, 2).toUpperCase()}
+                </div>
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-base leading-none">
+                      {selectedTrainer.trainer_name || 'Fitness Trainer'}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className={
+                        selectedTrainer.trainer_status === 'ACTIVE'
+                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs'
+                          : 'bg-muted text-muted-foreground text-xs'
+                      }
+                    >
+                      {selectedTrainer.trainer_status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {selectedTrainer.email || 'No email attached'}
+                  </p>
+                  <p className="text-xs font-mono text-primary font-semibold">
+                    Code: {selectedTrainer.trainer_code}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border border-border/60 bg-card">
+                  <span className="text-xs text-muted-foreground block">Experience</span>
+                  <span className="font-semibold text-foreground text-sm">
+                    {selectedTrainer.experience_years
+                      ? `${selectedTrainer.experience_years} Years`
+                      : 'Not specified'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-lg border border-border/60 bg-card">
+                  <span className="text-xs text-muted-foreground block">Session Buffer</span>
+                  <span className="font-semibold text-foreground text-sm">
+                    {selectedTrainer.minimum_schedule_buffer_minutes ?? 0} Minutes
+                  </span>
+                </div>
+              </div>
+
+              {selectedTrainer.bio && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Professional Bio &amp; Background
+                  </Label>
+                  <p className="text-xs leading-relaxed p-3 rounded-lg bg-muted/20 border border-border/40 text-foreground">
+                    {selectedTrainer.bio}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-muted-foreground">
+                  Specialties &amp; Capabilities
+                </Label>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedTrainer.can_teach_all_specialties ? (
+                    <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 font-medium">
+                      All Fitness Specialties Permitted
+                    </Badge>
+                  ) : selectedTrainer.specialties && selectedTrainer.specialties.length > 0 ? (
+                    selectedTrainer.specialties.map((s) => (
+                      <Badge key={s.id} variant="secondary">
+                        {s.name || s.code}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">No specific specialties mapped.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="pt-2 border-t flex justify-between sm:justify-between items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsViewModalOpen(false);
+                if (selectedTrainer) handleOpenEdit(selectedTrainer);
+              }}
+              className="gap-1.5"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit Profile
+            </Button>
+            <Button size="sm" onClick={() => setIsViewModalOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Trainer Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              <span>Edit Trainer Profile</span>
+            </DialogTitle>
+            <DialogDescription>
+              Update operational parameters, experience, status, and buffer for{' '}
+              {selectedTrainer?.trainer_name || selectedTrainer?.trainer_code}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleUpdateTrainer} className="space-y-4 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Trainer Status</Label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs focus:outline-hidden focus:ring-2 focus:ring-primary"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Experience (Years)</Label>
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="50"
+                  value={editExperienceYears}
+                  onChange={(e) => setEditExperienceYears(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Schedule Buffer (Minutes)</Label>
+              <Input
+                type="number"
+                step="5"
+                min="0"
+                max="120"
+                value={editScheduleBuffer}
+                onChange={(e) => setEditScheduleBuffer(parseInt(e.target.value) || 0)}
+                className="h-9 text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Required rest minutes before/after bookings.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Professional Bio &amp; Qualifications</Label>
+              <Textarea
+                placeholder="Trainer background and credentials..."
+                value={editBio}
+                onChange={(e) => setEditBio(e.target.value)}
+                rows={3}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Capabilities</Label>
+              <label className="flex items-center gap-2 text-xs mt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editCanTeachAll}
+                  onChange={(e) => setEditCanTeachAll(e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                />
+                <span>Can teach all fitness specialties</span>
+              </label>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={editLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
+                disabled={editLoading}
+              >
+                {editLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Save Changes</span>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" />
+              <span>Delete Trainer Profile</span>
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete trainer profile for{' '}
+              <strong>{selectedTrainer?.trainer_name || selectedTrainer?.trainer_code}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs space-y-1.5">
+            <p className="font-semibold">
+              Warning: This action permanently removes the trainer profile from the operational directory.
+            </p>
+            <p className="text-destructive/80">
+              Note: The underlying staff account will remain in Administration &gt; Users. Only the operational trainer profile is removed.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteModalOpen(false)}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteTrainer}
+              disabled={deleteLoading}
+              className="gap-1.5"
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Deleting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Yes, Delete Trainer</span>
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

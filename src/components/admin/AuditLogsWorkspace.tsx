@@ -30,11 +30,21 @@ export function AuditLogsWorkspace() {
     loadAuditLogs();
   }, [loadAuditLogs]);
 
-  const filteredLogs = logs.filter((l) => {
+  const logsList = Array.isArray(logs) ? logs : [];
+  const filteredLogs = logsList.filter((l) => {
+    const searchLower = (search || "").toLowerCase();
+    const userEmail = (l.user_email || "").toLowerCase();
+    const description = (l.description || "").toLowerCase();
+    const entityType = (l.entity_type || "").toLowerCase();
+    const moduleName = (l.module || "").toLowerCase();
+
     const matchesSearch =
-      l.user_email.toLowerCase().includes(search.toLowerCase()) ||
-      l.description.toLowerCase().includes(search.toLowerCase()) ||
-      l.entity_type.toLowerCase().includes(search.toLowerCase());
+      !searchLower ||
+      userEmail.includes(searchLower) ||
+      description.includes(searchLower) ||
+      entityType.includes(searchLower) ||
+      moduleName.includes(searchLower);
+
     const matchesAction = actionFilter === "all" || l.action === actionFilter;
     return matchesSearch && matchesAction;
   });
@@ -44,7 +54,18 @@ export function AuditLogsWorkspace() {
       <PageHeader
         title="Immutable Audit Logs & Security Stream"
         subtitle="Cryptographically timestamped audit trail of all administrative actions, data exports, membership modifications, and logins."
-      />
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => loadAuditLogs()}
+          disabled={loading}
+          className="gap-2"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </PageHeader>
 
       <PageBody>
         {/* Filter bar */}
@@ -92,53 +113,78 @@ export function AuditLogsWorkspace() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40 font-mono text-xs">
-                {filteredLogs.map((log) => {
-                  const isCreate = log.action === "CREATE";
-                  const isDelete = log.action === "DELETE";
-                  const isExport = log.action === "EXPORT";
-
-                  return (
-                    <tr key={log.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString()}
-                      </td>
-
-                      <td className="py-3 px-4 font-sans font-medium text-foreground">
-                        <div>{log.user_name || log.user_email}</div>
-                        <div className="text-[11px] text-muted-foreground">{log.user_email}</div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isCreate
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                              : isDelete
-                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                              : isExport
-                              ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
-                              : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
-                          }`}
-                        >
-                          {log.action}
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+                        <span className="font-sans text-xs">Loading audit stream from database...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <ShieldAlert className="w-8 h-8 text-muted-foreground/50 mb-1" />
+                        <span className="font-sans font-medium text-foreground text-sm">No Audit Logs Found</span>
+                        <span className="font-sans text-xs text-muted-foreground max-w-sm">
+                          {search ? `No actions matching "${search}".` : "No audit events recorded for the active filter."}
                         </span>
-                      </td>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((log) => {
+                    const isCreate = log.action === "CREATE";
+                    const isDelete = log.action === "DELETE";
+                    const isExport = log.action === "EXPORT";
 
-                      <td className="py-3 px-4 font-sans">
-                        <span className="font-semibold text-foreground">{log.module}</span>
-                        <span className="text-muted-foreground block text-[11px]">{log.entity_type} ({log.entity_id})</span>
-                      </td>
+                    return (
+                      <tr key={log.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                          {log.created_at ? new Date(log.created_at).toLocaleString() : "—"}
+                        </td>
 
-                      <td className="py-3 px-4 font-sans text-muted-foreground max-w-xs truncate">
-                        {log.description}
-                      </td>
+                        <td className="py-3 px-4 font-sans font-medium text-foreground">
+                          <div>{log.user_name || log.user_email || "System"}</div>
+                          <div className="text-[11px] text-muted-foreground">{log.user_email || "system@internal"}</div>
+                        </td>
 
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {log.ip_address || "127.0.0.1"}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isCreate
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                : isDelete
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                : isExport
+                                ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                                : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                            }`}
+                          >
+                            {log.action}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 font-sans">
+                          <span className="font-semibold text-foreground">{log.module}</span>
+                          <span className="text-muted-foreground block text-[11px]">
+                            {log.entity_type} {log.entity_id ? `(${log.entity_id})` : ""}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 font-sans text-muted-foreground max-w-xs truncate">
+                          {log.description}
+                        </td>
+
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {log.ip_address || "127.0.0.1"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

@@ -50,8 +50,12 @@ export const workforceApi = {
   },
 
   updateTrainer: async (id: string, payload: Record<string, any>): Promise<TrainerProfile> => {
-    const res = await api.post<TrainerProfile>(`/tenant/trainer-profiles/${id}/`, payload, { method: 'PATCH' } as any);
+    const res = await api.patch<TrainerProfile>(`/tenant/trainer-profiles/${id}/`, payload);
     return res.data;
+  },
+
+  deleteTrainer: async (id: string): Promise<void> => {
+    await api.delete(`/tenant/trainer-profiles/${id}/`);
   },
 
   checkAvailability: async (

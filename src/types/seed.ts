@@ -9,7 +9,6 @@ import type {
   Communication,
   Complaint,
   Coupon,
-  Exercise,
   Integration,
   Invoice,
   Lead,
@@ -48,7 +47,6 @@ export interface Dataset {
   classes: ClassDef[];
   bookings: Booking[];
   assessments: Assessment[];
-  exercises: Exercise[];
   programs: Program[];
   nutritionPlans: NutritionPlan[];
   products: Product[];
@@ -84,7 +82,6 @@ export function getDataset(): Dataset {
     classes: [],
     bookings: [],
     assessments: [],
-    exercises: [],
     programs: [],
     nutritionPlans: [],
     products: [],

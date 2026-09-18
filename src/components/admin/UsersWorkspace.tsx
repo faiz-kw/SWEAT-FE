@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -82,7 +83,7 @@ export const isPlatformRole = (r: RoleDefRow | { name: string; scope?: string })
 };
 
 export function extractApiError(err: any, fallback: string = "Operation failed"): string {
-  const data = err?.response?.data;
+  const data = err?.response?.data || err?.data;
   if (!data) return err?.message || fallback;
   if (typeof data === "string") return data;
   if (data.detail) return String(data.detail);
@@ -143,6 +144,7 @@ export function UsersWorkspace() {
   const [inviteBranchId, setInviteBranchId] = React.useState("");
   const [inviteTenantId, setInviteTenantId] = React.useState("");
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
+  const [inviteError, setInviteError] = React.useState<string | null>(null);
 
   // Edit User Modal State
   const [editModalOpen, setEditModalOpen] = React.useState(false);
@@ -152,6 +154,7 @@ export function UsersWorkspace() {
   const [editBranchAccess, setEditBranchAccess] = React.useState<Record<string, boolean>>({});
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
 
   // Load Data
   const loadData = React.useCallback(async () => {
@@ -240,18 +243,33 @@ export function UsersWorkspace() {
   // Handle Create / Invite User
   const handleCreateOrInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setInviteError(null);
+
     if (!inviteEmail.trim() || !inviteFirstName.trim()) {
-      toast.error("Please provide email and first name");
+      const err = "Please provide email and first name";
+      setInviteError(err);
+      toast.error(err);
       return;
     }
 
     if (useCustomPassword && invitePassword.trim().length < 10) {
-      toast.error("Initial password must contain at least 10 characters.");
+      const err = "Initial password must contain at least 10 characters.";
+      setInviteError(err);
+      toast.error(err);
+      return;
+    }
+
+    if (useCustomPassword && invitePassword.trim().toLowerCase() === inviteEmail.trim().toLowerCase()) {
+      const err = "Password cannot be identical to the email address. Please choose a secure password.";
+      setInviteError(err);
+      toast.error(err);
       return;
     }
 
     if (isPlatformAdmin && userScope === "tenant" && !inviteTenantId && tenants.length > 0) {
-      toast.error("Please select a target tenant organization for this tenant staff member");
+      const err = "Please select a target tenant organization for this tenant staff member";
+      setInviteError(err);
+      toast.error(err);
       return;
     }
 
@@ -289,9 +307,11 @@ export function UsersWorkspace() {
       setShowPassword(false);
       setInviteDepartmentId("");
       setInviteBranchId("");
+      setInviteError(null);
       loadData();
     } catch (err: any) {
       const msg = extractApiError(err, "Failed to create user");
+      setInviteError(msg);
       toast.error(msg);
     } finally {
       setInviteSubmitting(false);
@@ -315,6 +335,7 @@ export function UsersWorkspace() {
     const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
     setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
     setEditDepartmentId("");
+    setEditError(null);
     setEditModalOpen(true);
   };
 
@@ -322,6 +343,7 @@ export function UsersWorkspace() {
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+    setEditError(null);
     setEditSubmitting(true);
     try {
       await updateUserApi(editingUser.id, {
@@ -338,9 +360,12 @@ export function UsersWorkspace() {
       toast.success(`Updated role and status for ${editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
       setEditingUser(null);
+      setEditError(null);
       loadData();
     } catch (err: any) {
-      toast.error(extractApiError(err, "Failed to update user"));
+      const msg = extractApiError(err, "Failed to update user");
+      setEditError(msg);
+      toast.error(msg);
     } finally {
       setEditSubmitting(false);
     }
@@ -404,7 +429,20 @@ export function UsersWorkspace() {
 
       // Role filter
       if (roleFilter !== "all") {
-        if (u.role !== roleFilter && u.role_name !== roleFilter) return false;
+        const roleObj = roles.find((r) => r.id === roleFilter || r.name === roleFilter);
+        const targetRoleId = roleObj ? roleObj.id : roleFilter;
+        const targetRoleName = (roleObj ? roleObj.name : roleFilter).toLowerCase();
+
+        const userRoleId = (u as any).role_id;
+        const userRole = (u.role || u.role_name || "").toLowerCase();
+
+        const matchesRoleId = userRoleId && userRoleId === targetRoleId;
+        const matchesRoleName = userRole && userRole === targetRoleName;
+        const matchesMultiRoles = Array.isArray((u as any).roles) && (u as any).roles.some(
+          (r: any) => r.id === targetRoleId || r.name?.toLowerCase() === targetRoleName
+        );
+
+        if (!matchesRoleId && !matchesRoleName && !matchesMultiRoles) return false;
       }
 
       // Department filter (Tenant mode)
@@ -414,7 +452,20 @@ export function UsersWorkspace() {
 
       // Branch filter
       if (branchFilter !== "all") {
-        if (u.active_location_id !== branchFilter && u.active_location_name !== branchFilter) return false;
+        const branchObj = branches.find((b) => b.id === branchFilter || b.name === branchFilter);
+        const targetId = branchObj ? branchObj.id : branchFilter;
+        const targetName = (branchObj ? branchObj.name : branchFilter).toLowerCase();
+
+        const userBranchId = u.active_location_id || (u as any).home_branch || (u as any).branch_id;
+        const userBranchName = (u.active_location_name || (u as any).home_branch_name || "").toLowerCase();
+
+        const matchesId = userBranchId && userBranchId === targetId;
+        const matchesName = userBranchName && userBranchName === targetName;
+        const matchesAccessList = Array.isArray(u.branch_access) && u.branch_access.some(
+          (ba: any) => (ba.branch_id === targetId || ba.branch_name?.toLowerCase() === targetName) && ba.enabled
+        );
+
+        if (!matchesId && !matchesName && !matchesAccessList) return false;
       }
 
       // Status filter
@@ -959,7 +1010,13 @@ export function UsersWorkspace() {
       </PageBody>
 
       {/* Add / Invite User Modal */}
-      <Dialog open={inviteModalOpen} onOpenChange={setInviteModalOpen}>
+      <Dialog
+        open={inviteModalOpen}
+        onOpenChange={(open) => {
+          setInviteModalOpen(open);
+          if (!open) setInviteError(null);
+        }}
+      >
         <DialogContent className="sm:max-w-lg bg-card border-border rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
@@ -972,6 +1029,18 @@ export function UsersWorkspace() {
                 : "Create an active employee or coach account for your gym with role and branch allotments."}
             </DialogDescription>
           </DialogHeader>
+
+          {inviteError && (
+            <Alert variant="destructive" className="py-2.5 px-3 text-xs bg-destructive/10 border-destructive/30 text-destructive flex items-start gap-2.5 rounded-xl">
+              <AlertCircle className="size-4 shrink-0 mt-0.5 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <AlertTitle className="text-xs font-bold leading-tight">Unable to Create Staff Account</AlertTitle>
+                <AlertDescription className="text-[11px] mt-0.5 leading-normal text-destructive/90">
+                  {inviteError}
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
 
           <form onSubmit={handleCreateOrInviteUser} className="space-y-4 pt-2">
             {/* Scope Selection (Platform Admin only) */}
@@ -1229,7 +1298,13 @@ export function UsersWorkspace() {
       </Dialog>
 
       {/* Edit User Modal */}
-      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+      <Dialog
+        open={editModalOpen}
+        onOpenChange={(open) => {
+          setEditModalOpen(open);
+          if (!open) setEditError(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md bg-card border-border rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
@@ -1239,6 +1314,18 @@ export function UsersWorkspace() {
               Update role assignment, branch access, and authorization status.
             </DialogDescription>
           </DialogHeader>
+
+          {editError && (
+            <Alert variant="destructive" className="py-2.5 px-3 text-xs bg-destructive/10 border-destructive/30 text-destructive flex items-start gap-2.5 rounded-xl">
+              <AlertCircle className="size-4 shrink-0 mt-0.5 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <AlertTitle className="text-xs font-bold leading-tight">Unable to Update Staff Account</AlertTitle>
+                <AlertDescription className="text-[11px] mt-0.5 leading-normal text-destructive/90">
+                  {editError}
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
 
           {editingUser && (
             <form onSubmit={handleSaveEdit} className="space-y-3.5 pt-2">

@@ -29,7 +29,6 @@ export interface Collections {
   classes: Row[];
   bookings: Row[];
   assessments: Row[];
-  exercises: Row[];
   programs: Row[];
   nutritionPlans: Row[];
   products: Row[];
@@ -79,7 +78,6 @@ export const BACKEND_COLLECTIONS = new Set<CollectionKey>([
   "bookings",
   "trainers",
   "assessments",
-  "exercises",
   "programs",
   "nutritionPlans",
   "products",
@@ -136,7 +134,6 @@ import {
   createBookingApi,
   createClassApi,
   createCouponApi,
-  createExerciseApi,
   createFoodItemApi,
   createInvoiceApi,
   createLeadApi,
@@ -150,7 +147,6 @@ import {
   deleteBookingApi,
   deleteClassApi,
   deleteCouponApi,
-  deleteExerciseApi,
   deleteFoodItemApi,
   deleteInvoiceApi,
   deleteLeadApi,
@@ -164,7 +160,6 @@ import {
   fetchBookings,
   fetchClasses,
   fetchCoupons,
-  fetchExercises,
   fetchFoodDatabase,
   fetchIntegrationStatus,
   fetchInvoices,
@@ -179,7 +174,6 @@ import {
   updateBookingApi,
   updateClassApi,
   updateCouponApi,
-  updateExerciseApi,
   updateFoodItemApi,
   updateInvoiceApi,
   updateLeadApi,
@@ -301,18 +295,6 @@ export function createRecord(key: CollectionKey, values: Record<string, unknown>
       .catch((err) => {
         console.error("Failed to create assessment on backend:", err);
       });
-  } else if (key === "exercises") {
-    createExerciseApi(values)
-      .then((created) => {
-        const idx = rows.findIndex((r) => r.id === row.id);
-        if (idx !== -1) {
-          rows[idx] = created;
-          emit();
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to create exercise on backend:", err);
-      });
   } else if (key === "programs") {
     createProgramApi(values)
       .then((created) => {
@@ -424,10 +406,6 @@ export function updateRecord(key: CollectionKey, id: string, values: Record<stri
     updateAssessmentApi(id, values).catch((err) => {
       console.error("Failed to update assessment on backend:", err);
     });
-  } else if (key === "exercises") {
-    updateExerciseApi(id, values).catch((err) => {
-      console.error("Failed to update exercise on backend:", err);
-    });
   } else if (key === "programs") {
     updateProgramApi(id, values).catch((err) => {
       console.error("Failed to update program on backend:", err);
@@ -503,12 +481,6 @@ export function deleteRecords(key: CollectionKey, ids: string[]) {
     for (const id of ids) {
       deleteAssessmentApi(id).catch((err) => {
         console.error("Failed to delete assessment on backend:", err);
-      });
-    }
-  } else if (key === "exercises") {
-    for (const id of ids) {
-      deleteExerciseApi(id).catch((err) => {
-        console.error("Failed to delete exercise on backend:", err);
       });
     }
   } else if (key === "programs") {
@@ -599,12 +571,6 @@ export function useCollection(key: CollectionKey, locationId?: string): Row[] {
       fetchAssessments()
         .then((rows) => {
           setCollectionRows("assessments", rows);
-        })
-        .catch(() => {});
-    } else if (key === "exercises") {
-      fetchExercises()
-        .then((rows) => {
-          setCollectionRows("exercises", rows);
         })
         .catch(() => {});
     } else if (key === "programs") {

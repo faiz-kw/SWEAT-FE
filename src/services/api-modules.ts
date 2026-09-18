@@ -664,63 +664,6 @@ export async function deleteAssessmentApi(id: string): Promise<void> {
   await api.delete(`/coaching/assessments/${id}/`);
 }
 
-// ── 9B. EXERCISE LIBRARY ─────────────────────────────────────────────
-
-export function normalizeExercise(item: any): Row {
-  return {
-    ...item,
-    id: item.id,
-    tenantId: item.tenant_id ?? item.tenantId,
-    name: item.name,
-    category: item.category,
-    primaryMuscle: item.primary_muscle ?? item.primaryMuscle ?? "Chest",
-    primary_muscle: item.primary_muscle ?? item.primaryMuscle ?? "Chest",
-    equipment: item.equipment ?? "Barbell",
-    difficulty: item.difficulty ?? "Intermediate",
-    movementPattern: item.movement_pattern ?? item.movementPattern ?? "Push",
-    instructions: item.instructions ?? "",
-    videoUrl: item.video_url ?? item.videoUrl ?? "",
-  };
-}
-
-export async function fetchExercises(): Promise<Row[]> {
-  const res = await api.get<any[]>("/coaching/exercises/");
-  return (res.data || []).map(normalizeExercise);
-}
-
-export async function createExerciseApi(values: Record<string, unknown>): Promise<Row> {
-  const payload: Record<string, unknown> = {
-    name: values["name"],
-    category: values["category"] ?? "Strength",
-    primary_muscle: values["primaryMuscle"] ?? values["primary_muscle"] ?? "Chest",
-    equipment: values["equipment"] ?? "Barbell",
-    difficulty: values["difficulty"] ?? "Intermediate",
-    movement_pattern: values["movementPattern"] ?? values["movement_pattern"] ?? "Push",
-    instructions: values["instructions"] ?? "",
-  };
-  const res = await api.post<any>("/coaching/exercises/", payload);
-  return normalizeExercise(res.data);
-}
-
-export async function updateExerciseApi(id: string, values: Record<string, unknown>): Promise<Row> {
-  const payload: Record<string, unknown> = {};
-  if ("name" in values) payload["name"] = values["name"];
-  if ("category" in values) payload["category"] = values["category"];
-  if ("primaryMuscle" in values || "primary_muscle" in values) {
-    payload["primary_muscle"] = values["primaryMuscle"] ?? values["primary_muscle"];
-  }
-  if ("equipment" in values) payload["equipment"] = values["equipment"];
-  if ("difficulty" in values) payload["difficulty"] = values["difficulty"];
-  if ("instructions" in values) payload["instructions"] = values["instructions"];
-
-  const res = await api.patch<any>(`/coaching/exercises/${id}/`, payload);
-  return normalizeExercise(res.data);
-}
-
-export async function deleteExerciseApi(id: string): Promise<void> {
-  await api.delete(`/coaching/exercises/${id}/`);
-}
-
 // ── 9C. WORKOUT PROGRAMS ─────────────────────────────────────────────
 
 export function normalizeProgram(item: any): Row {

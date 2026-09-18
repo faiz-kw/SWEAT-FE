@@ -57,7 +57,7 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
   {
     id: "ops",
     label: "Studio Operations & Scheduling",
-    description: "Multi-studio class calendars, PT allocations, trainer rosters, and exercise libraries.",
+    description: "Multi-studio class calendars, PT allocations, trainer rosters, and workout programs.",
     icon: "CalendarRange",
     submodules: [
       { id: "/ops/calendar", label: "Master Calendar", to: "/ops/calendar", description: "Unified visual schedule across all studios and rooms." },
@@ -68,7 +68,6 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
       { id: "/ops/assessments", label: "Body & Fitness Assessments", to: "/ops/assessments", description: "InBody, body fat %, and functional movement benchmarks." },
       { id: "/ops/trainers", label: "Trainer Roster & Shifts", to: "/ops/trainers", description: "Staff scheduling, payroll hours, and availability." },
       { id: "/ops/programs", label: "Workout Program Builder", to: "/ops/programs", description: "Structured multi-week workout and training templates." },
-      { id: "/ops/exercises", label: "Movement & Exercise Library", to: "/ops/exercises", description: "Database of exercises with video demonstrations." },
     ],
   },
   {
@@ -155,13 +154,12 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
   {
     id: "coaching",
     label: "Coaching & Athlete Development",
-    description: "Personal trainer allocations, workout program builders, and exercise libraries.",
+    description: "Personal trainer allocations and workout program builders.",
     icon: "Dumbbell",
     submodules: [
       { id: "/coaching/trainers", label: "Trainers Roster", to: "/coaching/trainers", description: "Certified coach directory and availability." },
       { id: "/coaching/online-coaches", label: "Online Coaches", to: "/coaching/online-coaches", description: "Remote training and digital check-ins." },
       { id: "/coaching/nutrition-coaches", label: "Nutrition Coaches", to: "/coaching/nutrition-coaches", description: "Certified nutritionists and meal consultants." },
-      { id: "/coaching/exercise-library", label: "Exercise Library", to: "/coaching/exercise-library", description: "Movement video guides and form cues." },
       { id: "/coaching/program-builder", label: "Program Builder", to: "/coaching/program-builder", description: "Custom periodized workout programming." },
     ],
   },
