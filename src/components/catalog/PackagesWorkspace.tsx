@@ -75,6 +75,14 @@ function getErrorMessage(error: any): string {
   return error.message || 'Failed to communicate with tenant catalog service.';
 }
 
+const formatCurrency = (amount: any, currency: string = 'INR') => {
+  if (amount === undefined || amount === null || amount === '') return '—';
+  const num = Number(amount);
+  if (isNaN(num)) return `${currency} ${amount}`;
+  const sym = currency === 'INR' || currency === '₹' ? '₹' : currency === 'USD' || currency === '$' ? '$' : `${currency} `;
+  return `${sym}${num.toLocaleString('en-IN')}`;
+};
+
 export const PackagesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -315,6 +323,15 @@ export const PackagesWorkspace: React.FC = () => {
       }),
     enabled: Boolean(auditPackage?.id),
   });
+
+  const filteredAuditEvents = useMemo(() => {
+    if (!auditPackage?.id) return [];
+    return (auditEvents || []).filter((evt: any) => {
+      if (evt.entity_id && evt.entity_id !== auditPackage.id) return false;
+      if (evt.entity_type && !['Package', 'PACKAGE'].includes(evt.entity_type)) return false;
+      return true;
+    });
+  }, [auditEvents, auditPackage?.id]);
 
   // Map packages to their program
   const packagesByProgram = useMemo(() => {
@@ -1229,17 +1246,6 @@ export const PackagesWorkspace: React.FC = () => {
                         <div className="border-t border-border/60 bg-muted/20 p-4 sm:p-5 space-y-3">
                           <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                             <span>Packages for {prog.name} ({progPkgs.length})</span>
-                            {hasCatalogPermission && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openAddPackageForProgram(prog.id)}
-                                className="h-6 text-xs text-primary hover:text-primary/80 gap-1 p-0 font-medium"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Add New Package</span>
-                              </Button>
-                            )}
                           </div>
 
                           {progPkgs.length === 0 ? (
@@ -1303,7 +1309,7 @@ export const PackagesWorkspace: React.FC = () => {
                                           {firstPrice && (
                                             <div className="flex items-center justify-between">
                                               <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                {firstPrice.currency || '₹'} {firstPrice.total_price || firstPrice.sale_price}
+                                                {formatCurrency(firstPrice.total_price || firstPrice.sale_price, firstPrice.currency || 'INR')}
                                               </span>
                                               {homeEnt?.allocated_units && (
                                                 <span className="text-[11px] text-muted-foreground font-mono">
@@ -1715,20 +1721,30 @@ export const PackagesWorkspace: React.FC = () => {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                              <span className="font-semibold text-sm text-foreground truncate">
-                                {ver.name_snapshot || historyPackage.name}
+                              <span className="font-semibold text-sm text-foreground">
+                                Version {ver.version_number}
                               </span>
-                              <Badge variant={isCurrent ? 'default' : 'secondary'} className="text-[10px] shrink-0">
-                                {isCurrent ? 'CURRENT' : ver.status}
+                              <Badge
+                                variant={isCurrent ? 'default' : 'secondary'}
+                                className={`text-[10px] shrink-0 ${
+                                  isCurrent
+                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                    : ''
+                                }`}
+                              >
+                                {isCurrent ? 'CURRENT' : 'RETIRED'}
                               </Badge>
-                              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono shrink-0">READ-ONLY</span>
                             </div>
                             {/* Quick-glance summary row */}
-                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
-                              <span>📅 {durationLabel}</span>
-                              {firstPrice && <span>💰 {firstPrice.currency || 'INR'} {firstPrice.total_price || firstPrice.sale_price}</span>}
-                              <span>🕐 Validity: {validityLabel}</span>
-                              <span>📡 {channels}</span>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5 items-center">
+                              <span className="font-medium text-foreground">{durationLabel}</span>
+                              {firstPrice && (
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrency(firstPrice.total_price || firstPrice.sale_price, firstPrice.currency || 'INR')}
+                                </span>
+                              )}
+                              <span>Validity: {validityLabel}</span>
+                              <span>{channels}</span>
                             </div>
                             <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                               Created {new Date(ver.created_at).toLocaleDateString()}
@@ -1989,37 +2005,90 @@ export const PackagesWorkspace: React.FC = () => {
                     <div key={i} className="h-16 bg-muted/40 rounded-xl border border-border/50 animate-pulse" />
                   ))}
                 </div>
-              ) : auditEvents.length === 0 ? (
+              ) : filteredAuditEvents.length === 0 ? (
                 <div className="p-8 text-center bg-card border border-dashed border-border/80 rounded-xl">
                   <Activity className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No audit events recorded yet for this package.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {auditEvents.map((evt: any) => (
-                    <div
-                      key={evt.id}
-                      className="p-3 bg-muted/20 border border-border/60 rounded-xl space-y-1 text-xs"
-                    >
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground font-mono">
-                          {evt.action || evt.event_type}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {new Date(evt.created_at || evt.timestamp).toLocaleString()}
-                        </span>
+                <div className="space-y-2.5">
+                  {filteredAuditEvents.map((evt: any) => {
+                    const actionRaw = evt.action || evt.action_code || evt.event_type || '';
+                    const actionTitle = actionRaw
+                      .replace(/_/g, ' ')
+                      .toLowerCase()
+                      .replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Package Modified';
+                    const isCreate = actionRaw.toUpperCase().includes('CREATE');
+                    const actorDisplay = evt.actor_email || evt.actor_name || evt.actor || 'Administrator';
+                    const data = evt.after_data || evt.metadata || {};
+
+                    return (
+                      <div
+                        key={evt.id}
+                        className="p-3.5 bg-card border border-border/70 rounded-xl space-y-2 text-xs shadow-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className={`size-2 rounded-full shrink-0 ${isCreate ? 'bg-emerald-500' : 'bg-primary'}`} />
+                            <span className="font-semibold text-foreground text-xs sm:text-sm">
+                              {actionTitle}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {new Date(evt.created_at || evt.occurred_at || evt.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-muted-foreground text-[11px] flex-wrap gap-1">
+                          <span>
+                            Modified by: <strong className="text-foreground font-medium">{actorDisplay}</strong>
+                          </span>
+                          {evt.ip_address && <span className="text-muted-foreground/60">IP: {evt.ip_address}</span>}
+                        </div>
+
+                        {evt.event_description && (
+                          <div className="p-2.5 bg-muted/40 rounded-lg text-xs text-foreground/90 leading-relaxed border border-border/40">
+                            {evt.event_description}
+                          </div>
+                        )}
+
+                        {/* Client-friendly attribute summary badges with ZERO raw code/JSON */}
+                        {data && typeof data === 'object' && Object.keys(data).length > 0 && (
+                          <div className="pt-0.5 flex items-center gap-1.5 flex-wrap">
+                            {data.status && (
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                data.status === 'ACTIVE'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                  : 'bg-muted text-muted-foreground border-border'
+                              }`}>
+                                Status: {data.status}
+                              </span>
+                            )}
+                            {(data.price || data.total_price || data.sale_price) && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                Price: {formatCurrency(data.price || data.total_price || data.sale_price, data.currency || 'INR')}
+                              </span>
+                            )}
+                            {(data.duration_value || data.duration) && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
+                                Duration: {data.duration_value || data.duration} {data.duration_unit?.toLowerCase() || ''}
+                              </span>
+                            )}
+                            {(data.validity_days || data.validity) && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/60">
+                                Validity: {data.validity_days || data.validity} days
+                              </span>
+                            )}
+                            {(data.allocated_units || data.sessions) && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/60">
+                                Sessions: {data.allocated_units || data.sessions}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center justify-between text-muted-foreground text-[11px]">
-                        <span>Actor: {evt.actor_email || evt.actor_name || evt.actor || 'System'}</span>
-                        {evt.ip_address && <span>IP: {evt.ip_address}</span>}
-                      </div>
-                      {evt.metadata && Object.keys(evt.metadata).length > 0 && (
-                        <pre className="p-2 bg-background border border-border/40 rounded text-[10px] font-mono text-muted-foreground overflow-x-auto mt-1">
-                          {JSON.stringify(evt.metadata, null, 2)}
-                        </pre>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
