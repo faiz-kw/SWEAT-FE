@@ -60,12 +60,13 @@ export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [filterQuery, setFilterQuery] = React.useState("");
 
-  // Role-based nav filtering — Super Admins see Platform Core, tenant users don't
+  // Effective permission & tenant module filtering
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === 'Super Admin');
-  const roleFilteredNav = React.useMemo(() => getFilteredNav(isSuperAdmin), [isSuperAdmin]);
-
-  // Tenant's provisioned module/submodule list. null = unrestricted (super admin).
   const enabledModules = user?.enabledModules ?? null;
+  const roleFilteredNav = React.useMemo(
+    () => getFilteredNav(user, isSuperAdmin, enabledModules),
+    [user, isSuperAdmin, enabledModules]
+  );
 
   // ── Drag Resizing State & Handlers ──
   const [sidebarWidth, setSidebarWidth] = React.useState<number>(() => {
@@ -149,27 +150,16 @@ export function Sidebar() {
 
   // Nav list rendered directly in both desktop and mobile modes (prevents unmount jumps)
   const renderNavContent = (isMobile = false) => {
-    // 1. Role-based filter (super admin vs tenant visibility)
-    // 2. Module/submodule permission filter (tenant's enabledModules list)
-    // 3. Search query filter
+    // Apply search filter on top of centrally permission-filtered nav
     const filteredNav = roleFilteredNav
       .map((sec) => {
-        // Filter items to only those allowed by the tenant's provisioned modules
-        const allowedItems = sec.items.filter((item) => {
-          // Dashboard ("/") and admin sections are always visible (not in FEATURE_MODULES_CATALOG)
-          if (sec.id === 'dashboard' || sec.id === 'admin' || sec.id === 'platform') return true;
-          // Use isSubmoduleAllowed to check against tenant's enabledModules
-          return isSubmoduleAllowed(enabledModules, item.to, sec.id);
-        });
-
-        // Apply search filter on top
         const searchedItems = filterQuery
-          ? allowedItems.filter(
+          ? sec.items.filter(
               (item) =>
                 item.label.toLowerCase().includes(filterQuery.toLowerCase()) ||
                 sec.label.toLowerCase().includes(filterQuery.toLowerCase())
             )
-          : allowedItems;
+          : sec.items;
 
         return { ...sec, items: searchedItems };
       })

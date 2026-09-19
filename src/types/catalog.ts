@@ -144,6 +144,8 @@ export interface Package {
   code: string;
   name: string;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  versions?: PackageVersion[];
+  versions_count?: number;
   latest_version?: {
     id: string;
     version_number: number;

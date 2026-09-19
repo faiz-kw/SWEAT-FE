@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { useAuth } from '@/contexts';
 import { api } from '@/services/api';
 import { workforceApi } from '@/services/workforceApi';
 import { fetchUsersApi } from '@/services/api-admin';
@@ -52,6 +53,37 @@ import { Label } from '@/components/ui/label';
 
 export function TrainersWorkspace() {
   const queryClient = useQueryClient();
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  const canCreateTrainers = React.useMemo(() => {
+    if (isAuthLoading || !user) return false;
+    if (user.isSuperAdmin) return true;
+    const perms = user.permissions || [];
+    return perms.includes('ops.trainers.create') || perms.includes('*');
+  }, [user, isAuthLoading]);
+
+  const canEditTrainers = React.useMemo(() => {
+    if (isAuthLoading || !user) return false;
+    if (user.isSuperAdmin) return true;
+    const perms = user.permissions || [];
+    return perms.includes('ops.trainers.edit') || perms.includes('*');
+  }, [user, isAuthLoading]);
+
+  const canDeleteTrainers = React.useMemo(() => {
+    if (isAuthLoading || !user) return false;
+    if (user.isSuperAdmin) return true;
+    const perms = user.permissions || [];
+    return perms.includes('ops.trainers.delete') || perms.includes('*');
+  }, [user, isAuthLoading]);
+
+  const requireTrainerPermission = (actionDesc: string, allowed: boolean): boolean => {
+    if (!allowed) {
+      toast.error(`You do not have permission to ${actionDesc}. Please contact your administrator.`);
+      return false;
+    }
+    return true;
+  };
+
   const [activeTab, setActiveTab] = React.useState<'directory' | 'availability'>('directory');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
@@ -84,10 +116,11 @@ export function TrainersWorkspace() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
-  // Fetch Users for Trainer Registration
+  // Fetch Users for Trainer Registration (only when modal is open and permitted)
   const { data: staffUsers = [] } = useQuery({
     queryKey: ['admin-users-for-trainer-registration'],
     queryFn: () => fetchUsersApi(),
+    enabled: isRegisterModalOpen && canCreateTrainers,
   });
 
   // Fetch Real Branches for Slot & Eligibility Evaluation
@@ -207,6 +240,7 @@ export function TrainersWorkspace() {
 
   // Open Edit Modal with trainer data
   const handleOpenEdit = (trainer: TrainerProfile) => {
+    if (!requireTrainerPermission('edit trainers', canEditTrainers)) return;
     setSelectedTrainer(trainer);
     setEditStatus((trainer.trainer_status as 'ACTIVE' | 'INACTIVE') || 'ACTIVE');
     setEditExperienceYears(String(trainer.experience_years ?? '0'));
@@ -309,7 +343,10 @@ export function TrainersWorkspace() {
             </Button>
             <Button
               size="sm"
-              onClick={() => setIsRegisterModalOpen(true)}
+              onClick={() => {
+                if (!requireTrainerPermission('register trainers', canCreateTrainers)) return;
+                setIsRegisterModalOpen(true);
+              }}
               className="gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -389,7 +426,7 @@ export function TrainersWorkspace() {
                 <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-3" />
                 <h3 className="font-semibold text-lg">Unable to Load Trainers</h3>
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                  {(error as Error)?.message || 'An error occurred while connecting to the backend API.'}
+                  {(error as any)?.response?.data?.error || (error as any)?.response?.data?.detail || (error as Error)?.message || 'An error occurred while connecting to the backend API.'}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
                   Try Again
@@ -406,7 +443,10 @@ export function TrainersWorkspace() {
                 </p>
                 <Button
                   size="sm"
-                  onClick={() => setIsRegisterModalOpen(true)}
+                  onClick={() => {
+                    if (!requireTrainerPermission('register trainers', canCreateTrainers)) return;
+                    setIsRegisterModalOpen(true);
+                  }}
                   className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                   <UserPlus className="w-4 h-4 mr-1" />
@@ -526,6 +566,7 @@ export function TrainersWorkspace() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
+                                  if (!requireTrainerPermission('delete trainers', canDeleteTrainers)) return;
                                   setSelectedTrainer(trainer);
                                   setIsDeleteModalOpen(true);
                                 }}
@@ -628,6 +669,7 @@ export function TrainersWorkspace() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
+                              if (!requireTrainerPermission('delete trainers', canDeleteTrainers)) return;
                               setSelectedTrainer(trainer);
                               setIsDeleteModalOpen(true);
                             }}

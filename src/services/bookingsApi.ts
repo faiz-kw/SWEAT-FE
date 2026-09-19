@@ -22,6 +22,13 @@ export const bookingsApi = {
     return res.data.results || res.data;
   },
 
+  getBookableMembers: async (search?: string): Promise<any[]> => {
+    const params: any = { bookable_only: true };
+    if (search) params.search = search;
+    const res = await api.get('/tenant/user-profiles/', { params });
+    return res.data.results || res.data;
+  },
+
   getBooking: async (id: string): Promise<Booking> => {
     const res = await api.get(`/tenant/bookings/${id}/`);
     return res.data;
@@ -46,6 +53,18 @@ export const bookingsApi = {
     }
   ): Promise<any> => {
     const res = await api.post(`/tenant/bookings/${bookingId}/cancel/`, data);
+    return res.data;
+  },
+
+  rescheduleBooking: async (
+    bookingId: string,
+    data: {
+      to_occurrence_id: string;
+      reason_code?: string;
+      reason_text?: string;
+    }
+  ): Promise<Booking> => {
+    const res = await api.post(`/tenant/bookings/${bookingId}/reschedule/`, data);
     return res.data;
   },
 
@@ -95,15 +114,40 @@ export const bookingsApi = {
     return res.data.results || res.data;
   },
 
+  resetMemberRestriction: async (stateId: string, reason?: string): Promise<MemberAttendanceState> => {
+    const res = await api.post(`/tenant/member-attendance-states/${stateId}/reset-restriction/`, { reason });
+    return res.data;
+  },
+
   // Policies & Rules
-  getBookingPolicySets: async (): Promise<BookingPolicySet[]> => {
-    const res = await api.get('/tenant/booking-policy-sets/');
+  getBookingPolicySets: async (params?: { branch_id?: string; status?: string }): Promise<BookingPolicySet[]> => {
+    const res = await api.get('/tenant/booking-policy-sets/', { params });
     return res.data.results || res.data;
+  },
+
+  createBookingPolicySet: async (data: Partial<BookingPolicySet>): Promise<BookingPolicySet> => {
+    const res = await api.post('/tenant/booking-policy-sets/', data);
+    return res.data;
+  },
+
+  updateBookingPolicySet: async (id: string, data: Partial<BookingPolicySet>): Promise<BookingPolicySet> => {
+    const res = await api.patch(`/tenant/booking-policy-sets/${id}/`, data);
+    return res.data;
   },
 
   getBookingCancellationRules: async (): Promise<BookingCancellationRule[]> => {
     const res = await api.get('/tenant/booking-cancellation-rules/');
     return res.data.results || res.data;
+  },
+
+  createBookingCancellationRule: async (data: Partial<BookingCancellationRule>): Promise<BookingCancellationRule> => {
+    const res = await api.post('/tenant/booking-cancellation-rules/', data);
+    return res.data;
+  },
+
+  updateBookingCancellationRule: async (id: string, data: Partial<BookingCancellationRule>): Promise<BookingCancellationRule> => {
+    const res = await api.patch(`/tenant/booking-cancellation-rules/${id}/`, data);
+    return res.data;
   },
 
   getAttendancePolicySets: async (): Promise<AttendancePolicySet[]> => {

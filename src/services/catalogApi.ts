@@ -24,7 +24,7 @@ export const catalogApi = {
   },
 
   async createPackage(payload: {
-    code: string;
+    code?: string;
     name: string;
     program?: string | null;
     status?: string;
@@ -119,7 +119,7 @@ export const catalogApi = {
   },
 
   async createProgram(payload: {
-    code: string;
+    code?: string;
     name: string;
     program_type: string;
     category?: string | null;
@@ -154,7 +154,7 @@ export const catalogApi = {
   },
 
   async createProgramCategory(payload: {
-    code: string;
+    code?: string;
     name: string;
     description?: string | null;
     display_order?: number;
@@ -171,7 +171,7 @@ export const catalogApi = {
   },
 
   async createProgramType(payload: {
-    code: string;
+    code?: string;
     name: string;
     description?: string | null;
     display_order?: number;
@@ -201,7 +201,7 @@ export const catalogApi = {
   },
 
   async createTermsDocument(payload: {
-    code: string;
+    code?: string;
     name: string;
     document_type: string;
     status?: string;
@@ -256,5 +256,12 @@ export const catalogApi = {
   }): Promise<TermsAcceptance> {
     const res = await api.post<TermsAcceptance>('/tenant/terms-acceptances/', payload);
     return res.data;
+  },
+
+  // Audit Events
+  async getAuditEvents(params?: { entity_type?: string; entity_id?: string; action?: string }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/business-audit-events/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
   },
 };

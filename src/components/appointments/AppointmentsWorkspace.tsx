@@ -26,9 +26,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '../../lib/permissions';
 
 export const AppointmentsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canCreate = can('ops.appointments.create');
+  const canEdit = can('ops.appointments.edit');
   const [activeTab, setActiveTab] = useState<'appointments' | 'types'>('appointments');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -158,7 +162,7 @@ export const AppointmentsWorkspace: React.FC = () => {
         }
         actions={
           <div className="flex items-center gap-2">
-            {activeTab === 'types' && (
+            {canCreate && activeTab === 'types' && (
               <Button
                 size="sm"
                 onClick={() => setIsCreateTypeOpen(true)}
@@ -310,7 +314,7 @@ export const AppointmentsWorkspace: React.FC = () => {
                     </div>
 
                     <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2">
-                      {appt.status === 'CONFIRMED' && (
+                      {appt.status === 'CONFIRMED' && canEdit && (
                         <>
                           <Button
                             size="sm"

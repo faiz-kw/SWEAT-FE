@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { usePermissions } from '../../lib/permissions';
 
 interface DiscountsWorkspaceProps {
   initialTab?: 'campaigns' | 'rules' | 'redemptions' | 'simulator';
@@ -38,6 +39,8 @@ interface DiscountsWorkspaceProps {
 
 export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({ initialTab = 'campaigns' }) => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canCreate = can('finance.discounts.create') || can('finance.pricing.create') || can('core.settings.edit');
   const [activeTab, setActiveTab] = useState<'campaigns' | 'rules' | 'redemptions' | 'simulator'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -207,14 +210,16 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({ initialT
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setIsCreateCampaignOpen(true)}
-              className="gap-1.5"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Create Campaign</span>
-            </Button>
+            {canCreate && (
+              <Button
+                size="sm"
+                onClick={() => setIsCreateCampaignOpen(true)}
+                className="gap-1.5"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Create Campaign</span>
+              </Button>
+            )}
           </div>
         }
       />

@@ -18,6 +18,7 @@ import {
   TrainerProfileOption,
   BranchOption,
   ProgramOption,
+  ClassesMetadata,
 } from '../types/classes';
 
 export const classesApi = {
@@ -225,5 +226,11 @@ export const classesApi = {
     const params = runId ? { planning_run_id: runId } : {};
     const res = await api.get<any>('/tenant/class-schedule-recommendations/', { params });
     return res.data?.results || res.data || [];
+  },
+
+  // --- Classes Metadata & Configuration ---
+  async getClassesMetadata(): Promise<ClassesMetadata> {
+    const res = await api.get<ClassesMetadata>('/tenant/classes/metadata/');
+    return res.data;
   },
 };

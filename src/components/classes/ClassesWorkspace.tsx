@@ -53,11 +53,15 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '../../lib/permissions';
 
 export const ClassesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isAuthorized = !user?.role || user?.role === 'ORG_ADMIN' || user?.role === 'SUPER_ADMIN' || (user?.permissions && user.permissions.includes('core.settings.edit'));
+  const { can } = usePermissions();
+  const canCreate = can('ops.classes.create');
+  const canEdit = can('ops.classes.edit');
+  const canDelete = can('ops.classes.delete');
 
   const [activeTab, setActiveTab] = useState<'categories' | 'templates' | 'rules' | 'occurrences' | 'content'>('categories');
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,6 +82,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [editingTemplate, setEditingTemplate] = useState<ClassTemplate | null>(null);
 
   const [isCreateRuleOpen, setIsCreateRuleOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<ClassScheduleRule | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
 
   const [isGenerateOccurrencesOpen, setIsGenerateOccurrencesOpen] = useState(false);
@@ -107,33 +112,29 @@ export const ClassesWorkspace: React.FC = () => {
   const [isCreateContentOpen, setIsCreateContentOpen] = useState(false);
   const [isCreateMappingOpen, setIsCreateMappingOpen] = useState(false);
 
-  // Forms state
+  // Forms state (Tenant-facing Code fields removed)
   const [categoryForm, setCategoryForm] = useState({
-    code: '',
     name: '',
     description: '',
-    display_order: '',
-    status: '',
+    display_order: 1 as number | string,
+    status: 'ACTIVE',
   });
 
   const [templateForm, setTemplateForm] = useState({
-    code: '',
     name: '',
     category: '',
     program: '',
     description: '',
-    default_duration_minutes: '',
-    default_capacity: '',
-    default_trial_capacity: '',
-    default_waitlist_capacity: '',
-    default_delivery_mode: '',
-    allow_booking: false,
+    default_duration_minutes: '60' as number | string,
+    default_capacity: '20' as number | string,
+    default_trial_capacity: '0' as number | string,
+    default_waitlist_capacity: '0' as number | string,
+    default_delivery_mode: 'OFFLINE' as DeliveryMode,
+    allow_booking: true,
     allow_trial: false,
     allow_waitlist: false,
-    allow_reschedule: false,
-    min_age: '',
-    max_age: '',
-    status: '',
+    allow_reschedule: true,
+    status: 'ACTIVE' as ClassTemplateStatus,
   });
 
   const [ruleForm, setRuleForm] = useState({
@@ -231,6 +232,12 @@ export const ClassesWorkspace: React.FC = () => {
   const { data: contentMappings = [], refetch: refetchMappings } = useQuery({
     queryKey: ['class-content-mappings'],
     queryFn: () => classesApi.getContentMappings(),
+  });
+
+  // Canonical Backend Metadata for zero hardcoded dropdown options
+  const { data: metadata, isLoading: loadingMetadata } = useQuery({
+    queryKey: ['classes-metadata'],
+    queryFn: () => classesApi.getClassesMetadata(),
   });
 
   // External dropdown data (Real backend queries)
@@ -446,6 +453,7 @@ export const ClassesWorkspace: React.FC = () => {
 
   const openNewRuleModal = () => {
     setRuleError(null);
+    setEditingRule(null);
     const defaultBranchId = selectedBranchFilter || (branches.length === 1 ? branches[0].id : '');
     setRuleForm({
       class_template: '',
@@ -461,6 +469,27 @@ export const ClassesWorkspace: React.FC = () => {
       trial_capacity_override: '',
       waitlist_capacity_override: '',
       status: 'ACTIVE',
+    });
+    setIsCreateRuleOpen(true);
+  };
+
+  const openEditRuleModal = (rule: ClassScheduleRule) => {
+    setRuleError(null);
+    setEditingRule(rule);
+    setRuleForm({
+      class_template: rule.class_template || '',
+      branch: rule.branch || '',
+      recurrence_type: (rule as any).recurrence_type || 'WEEKLY',
+      days_of_week: rule.days_of_week || [],
+      start_time: rule.start_time ? rule.start_time.substring(0, 5) : '',
+      end_time: rule.end_time ? rule.end_time.substring(0, 5) : '',
+      valid_from: rule.valid_from || new Date().toISOString().split('T')[0],
+      valid_until: rule.valid_until || '',
+      delivery_mode: rule.delivery_mode || 'OFFLINE',
+      capacity_override: rule.capacity_override != null ? String(rule.capacity_override) : '',
+      trial_capacity_override: rule.trial_capacity_override != null ? String(rule.trial_capacity_override) : '',
+      waitlist_capacity_override: rule.waitlist_capacity_override != null ? String(rule.waitlist_capacity_override) : '',
+      status: rule.status || 'ACTIVE',
     });
     setIsCreateRuleOpen(true);
   };
@@ -517,9 +546,8 @@ export const ClassesWorkspace: React.FC = () => {
   const saveCategoryMutation = useMutation({
     mutationFn: (data: typeof categoryForm) => {
       const payload: any = {
-        code: data.code,
         name: data.name,
-        description: data.description,
+        description: data.description || '',
         display_order: data.display_order ? Number(data.display_order) : 1,
         status: (data.status as 'ACTIVE' | 'INACTIVE') || 'ACTIVE',
       };
@@ -532,18 +560,35 @@ export const ClassesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['class-categories'] });
       setIsCreateCategoryOpen(false);
       setEditingCategory(null);
-      setCategoryForm({ code: '', name: '', description: '', display_order: '', status: '' });
+      setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' });
+      toast.success(editingCategory ? 'Category updated' : 'Category created');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save category');
+    },
+  });
+
+  const toggleCategoryStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) => {
+      return classesApi.updateCategory(id, { status });
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['class-categories'] });
+      toast.success(vars.status === 'ACTIVE' ? 'Category activated' : 'Category deactivated');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to update category status');
     },
   });
 
   const saveTemplateMutation = useMutation({
     mutationFn: (data: typeof templateForm) => {
+      const selectedCat = categories.find((c) => c.id === data.category);
       const payload: any = {
-        code: data.code,
-        name: data.name,
+        name: data.name || selectedCat?.name || '',
         category: data.category || null,
         program: data.program || null,
-        description: data.description,
+        description: data.description || '',
         default_duration_minutes: data.default_duration_minutes ? Number(data.default_duration_minutes) : 60,
         default_capacity: data.default_capacity ? Number(data.default_capacity) : 20,
         default_trial_capacity: data.default_trial_capacity ? Number(data.default_trial_capacity) : 0,
@@ -553,8 +598,6 @@ export const ClassesWorkspace: React.FC = () => {
         allow_trial: data.allow_trial,
         allow_waitlist: data.allow_waitlist,
         allow_reschedule: data.allow_reschedule,
-        min_age: data.min_age ? Number(data.min_age) : null,
-        max_age: data.max_age ? Number(data.max_age) : null,
         status: (data.status as ClassTemplateStatus) || 'ACTIVE',
       };
       if (editingTemplate) {
@@ -567,32 +610,46 @@ export const ClassesWorkspace: React.FC = () => {
       setIsCreateTemplateOpen(false);
       setEditingTemplate(null);
       resetTemplateForm();
+      toast.success(editingTemplate ? 'Template updated' : 'Template created');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save template');
+    },
+  });
+
+  const toggleTemplateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: ClassTemplateStatus }) => {
+      return classesApi.updateTemplate(id, { status });
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['class-templates'] });
+      toast.success(vars.status === 'ACTIVE' ? 'Template activated' : 'Template deactivated');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to update template status');
     },
   });
 
   const resetTemplateForm = () => {
     setTemplateForm({
-      code: '',
       name: '',
       category: '',
       program: '',
       description: '',
-      default_duration_minutes: '',
-      default_capacity: '',
-      default_trial_capacity: '',
-      default_waitlist_capacity: '',
-      default_delivery_mode: '',
-      allow_booking: false,
+      default_duration_minutes: '60',
+      default_capacity: '20',
+      default_trial_capacity: '0',
+      default_waitlist_capacity: '0',
+      default_delivery_mode: 'OFFLINE',
+      allow_booking: true,
       allow_trial: false,
       allow_waitlist: false,
-      allow_reschedule: false,
-      min_age: '',
-      max_age: '',
-      status: '',
+      allow_reschedule: true,
+      status: 'ACTIVE',
     });
   };
 
-  const createRuleMutation = useMutation({
+  const saveRuleMutation = useMutation({
     mutationFn: (data: typeof ruleForm) => {
       const payload: any = {
         class_template: data.class_template,
@@ -609,16 +666,21 @@ export const ClassesWorkspace: React.FC = () => {
         waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
         status: data.status || 'ACTIVE',
       };
+      if (editingRule) {
+        return classesApi.updateScheduleRule(editingRule.id, payload);
+      }
       return classesApi.createScheduleRule(payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
       setIsCreateRuleOpen(false);
+      setEditingRule(null);
       setRuleError(null);
+      toast.success(editingRule ? 'Schedule rule updated' : 'Schedule rule created');
     },
     onError: (err: any) => {
       const resp = err?.response?.data;
-      let errorMsg = 'Failed to create schedule rule.';
+      let errorMsg = 'Failed to save schedule rule.';
       if (typeof resp === 'string') {
         errorMsg = resp;
       } else if (resp && typeof resp === 'object') {
@@ -638,6 +700,19 @@ export const ClassesWorkspace: React.FC = () => {
         }
       }
       setRuleError(errorMsg);
+    },
+  });
+
+  const toggleRuleStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) => {
+      return classesApi.updateScheduleRule(id, { status });
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
+      toast.success(vars.status === 'ACTIVE' ? 'Rule activated' : 'Rule deactivated');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to update rule status');
     },
   });
 
@@ -827,14 +902,13 @@ export const ClassesWorkspace: React.FC = () => {
   // Filter helpers
   const filteredCategories = categories.filter((c) => {
     const term = searchTerm.toLowerCase();
-    return c.name.toLowerCase().includes(term) || c.code.toLowerCase().includes(term);
+    return c.name.toLowerCase().includes(term);
   });
 
   const filteredTemplates = templates.filter((tpl) => {
     const term = searchTerm.toLowerCase();
     return (
       tpl.name.toLowerCase().includes(term) ||
-      tpl.code.toLowerCase().includes(term) ||
       (tpl.category_name || '').toLowerCase().includes(term) ||
       (tpl.program_name || '').toLowerCase().includes(term)
     );
@@ -881,31 +955,31 @@ export const ClassesWorkspace: React.FC = () => {
         }
         actions={
           <div className="flex items-center gap-2">
-            {isAuthorized && activeTab === 'categories' && (
-              <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '', description: '', display_order: categories.length + 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }} className="gap-1.5">
+            {canCreate && activeTab === 'categories' && (
+              <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: categories.length + 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }} className="gap-1.5">
                 <Plus className="size-3.5" />
                 <span>New Category</span>
               </Button>
             )}
-            {isAuthorized && activeTab === 'templates' && (
+            {canCreate && activeTab === 'templates' && (
               <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }} className="gap-1.5">
                 <Plus className="size-3.5" />
                 <span>New Class Template</span>
               </Button>
             )}
-            {isAuthorized && activeTab === 'rules' && (
+            {canCreate && activeTab === 'rules' && (
               <Button size="sm" onClick={openNewRuleModal} className="gap-1.5">
                 <Plus className="size-3.5" />
                 <span>New Recurring Rule</span>
               </Button>
             )}
-            {isAuthorized && activeTab === 'occurrences' && (
+            {canCreate && activeTab === 'occurrences' && (
               <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5">
                 <Plus className="size-3.5" />
                 <span>Schedule Session</span>
               </Button>
             )}
-            {isAuthorized && activeTab === 'content' && (
+            {canCreate && activeTab === 'content' && (
               <div className="flex items-center gap-1.5">
                 <Button size="sm" variant="outline" onClick={() => setIsCreateMappingOpen(true)} className="gap-1.5 text-xs">
                   <Sparkles className="size-3.5" />
@@ -988,7 +1062,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search categories by code or name..."
+                  placeholder="Search categories by name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 bg-background"
@@ -1010,8 +1084,8 @@ export const ClassesWorkspace: React.FC = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   Create categories like HIIT, Mobility, Strength, or Recovery to organize class templates.
                 </p>
-                {isAuthorized && (
-                  <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '', description: '', display_order: 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }}>
+                {canCreate && (
+                  <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }}>
                     <Plus className="size-3.5 mr-1" /> Add Category
                   </Button>
                 )}
@@ -1022,7 +1096,10 @@ export const ClassesWorkspace: React.FC = () => {
                   <div key={cat.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">{cat.code}</span>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                          <Tag className="size-3.5 text-primary" />
+                          <span>Category</span>
+                        </div>
                         <Badge variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'} className={cat.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
                           {cat.status}
                         </Badge>
@@ -1034,26 +1111,40 @@ export const ClassesWorkspace: React.FC = () => {
                     </div>
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                       <span>Order: #{cat.display_order}</span>
-                      {isAuthorized && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingCategory(cat);
-                            setCategoryForm({
-                              code: cat.code,
-                              name: cat.name,
-                              description: cat.description || '',
-                              display_order: cat.display_order,
-                              status: cat.status,
-                            });
-                            setIsCreateCategoryOpen(true);
-                          }}
-                          className="text-xs gap-1 h-7"
-                        >
-                          <Edit2 className="size-3" /> Edit
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingCategory(cat);
+                              setCategoryForm({
+                                name: cat.name,
+                                description: cat.description || '',
+                                display_order: cat.display_order,
+                                status: cat.status,
+                              });
+                              setIsCreateCategoryOpen(true);
+                            }}
+                            className="text-xs gap-1 h-7"
+                          >
+                            <Edit2 className="size-3" /> Edit
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleCategoryStatusMutation.mutate({
+                              id: cat.id,
+                              status: cat.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                            })}
+                            className={`text-xs h-7 ${cat.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
+                          >
+                            {cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1070,7 +1161,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search templates by code, name, category, or program..."
+                  placeholder="Search class templates by name or category..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 bg-background"
@@ -1092,7 +1183,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   Create high-intensity, mobility, or strength workout templates to schedule group classes.
                 </p>
-                {isAuthorized && (
+                {canCreate && (
                   <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }}>
                     <Plus className="size-3.5 mr-1" /> New Template
                   </Button>
@@ -1104,10 +1195,13 @@ export const ClassesWorkspace: React.FC = () => {
                   <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">{tpl.code}</span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                          <Award className="size-3.5 text-primary" />
+                          <span>Class Template</span>
+                        </div>
+                        <Badge variant={tpl.status === 'ACTIVE' ? 'default' : 'secondary'} className={tpl.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
                           {tpl.status}
-                        </span>
+                        </Badge>
                       </div>
                       <h3 className="text-base font-semibold text-foreground mt-2">{tpl.name}</h3>
                       {tpl.description && (
@@ -1145,60 +1239,74 @@ export const ClassesWorkspace: React.FC = () => {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-1.5 text-xs">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedTemplateForAvail(tpl);
-                          setIsBranchAvailOpen(true);
-                        }}
-                        className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
-                      >
-                        <Building2 className="size-3" /> Branches
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedTemplateForPricing(tpl);
-                          setIsPricingOpen(true);
-                        }}
-                        className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
-                      >
-                        <DollarSign className="size-3" /> Pricing
-                      </Button>
-                      {isAuthorized && (
+                      <div className="flex items-center gap-1">
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
                           onClick={() => {
-                            setEditingTemplate(tpl);
-                            setTemplateForm({
-                              code: tpl.code,
-                              name: tpl.name,
-                              category: tpl.category || '',
-                              program: tpl.program || '',
-                              description: tpl.description || '',
-                              default_duration_minutes: tpl.default_duration_minutes,
-                              default_capacity: tpl.default_capacity,
-                              default_trial_capacity: tpl.default_trial_capacity || 0,
-                              default_waitlist_capacity: tpl.default_waitlist_capacity || 0,
-                              default_delivery_mode: tpl.default_delivery_mode,
-                              allow_booking: tpl.allow_booking,
-                              allow_trial: tpl.allow_trial,
-                              allow_waitlist: tpl.allow_waitlist,
-                              allow_reschedule: tpl.allow_reschedule,
-                              min_age: tpl.min_age ? String(tpl.min_age) : '',
-                              max_age: tpl.max_age ? String(tpl.max_age) : '',
-                              status: tpl.status,
-                            });
-                            setIsCreateTemplateOpen(true);
+                            setSelectedTemplateForAvail(tpl);
+                            setIsBranchAvailOpen(true);
                           }}
-                          className="text-xs gap-1 h-7"
+                          className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
                         >
-                          <Edit2 className="size-3" /> Edit
+                          <Building2 className="size-3" /> Branches
                         </Button>
-                      )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setSelectedTemplateForPricing(tpl);
+                            setIsPricingOpen(true);
+                          }}
+                          className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
+                        >
+                          <DollarSign className="size-3" /> Pricing
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingTemplate(tpl);
+                              setTemplateForm({
+                                name: tpl.name,
+                                category: tpl.category || '',
+                                program: tpl.program || '',
+                                description: tpl.description || '',
+                                default_duration_minutes: tpl.default_duration_minutes,
+                                default_capacity: tpl.default_capacity,
+                                default_trial_capacity: tpl.default_trial_capacity || 0,
+                                default_waitlist_capacity: tpl.default_waitlist_capacity || 0,
+                                default_delivery_mode: tpl.default_delivery_mode,
+                                allow_booking: tpl.allow_booking,
+                                allow_trial: tpl.allow_trial,
+                                allow_waitlist: tpl.allow_waitlist,
+                                allow_reschedule: tpl.allow_reschedule,
+                                status: tpl.status,
+                              });
+                              setIsCreateTemplateOpen(true);
+                            }}
+                            className="text-xs gap-1 h-7"
+                          >
+                            <Edit2 className="size-3" /> Edit
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleTemplateStatusMutation.mutate({
+                              id: tpl.id,
+                              status: tpl.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                            })}
+                            className={`text-xs h-7 ${tpl.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
+                          >
+                            {tpl.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1215,7 +1323,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search rules by class or branch..."
+                  placeholder="Search rules by class, branch, or schedule..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 bg-background"
@@ -1249,7 +1357,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   Configure recurring weekly timetable patterns to automatically populate occurrence slots.
                 </p>
-                {isAuthorized && (
+                {canCreate && (
                   <Button size="sm" onClick={openNewRuleModal}>
                     <Plus className="size-3.5 mr-1" /> New Recurring Rule
                   </Button>
@@ -1287,25 +1395,50 @@ export const ClassesWorkspace: React.FC = () => {
                             {rule.valid_from} to {rule.valid_until || 'Ongoing'}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+                            <Badge variant={rule.status === 'ACTIVE' ? 'default' : 'secondary'} className={rule.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
                               {rule.status}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            {isAuthorized && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedRuleForGen(rule);
-                                  setGenFromDate(selectedDate);
-                                  setIsGenerateOccurrencesOpen(true);
-                                }}
-                                className="text-xs gap-1 h-7"
-                              >
-                                <Calendar className="size-3" /> Generate Sessions
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-end gap-1.5">
+                              {canEdit && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => openEditRuleModal(rule)}
+                                  className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
+                                >
+                                  <Edit2 className="size-3" /> Edit
+                                </Button>
+                              )}
+                              {canEdit && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleRuleStatusMutation.mutate({
+                                    id: rule.id,
+                                    status: rule.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                  })}
+                                  className={`text-xs h-7 ${rule.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
+                                >
+                                  {rule.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                </Button>
+                              )}
+                              {canCreate && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRuleForGen(rule);
+                                    setGenFromDate(selectedDate);
+                                    setIsGenerateOccurrencesOpen(true);
+                                  }}
+                                  className="text-xs gap-1 h-7"
+                                >
+                                  <Calendar className="size-3" /> Generate Sessions
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1368,7 +1501,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   No sessions generated for {selectedDate}. Generate sessions from recurring rules or schedule a one-off session.
                 </p>
-                {isAuthorized && (
+                {canCreate && (
                   <Button size="sm" onClick={openNewOccurrenceModal}>
                     <Plus className="size-3.5 mr-1" /> Schedule One-Off Session
                   </Button>
@@ -1424,9 +1557,9 @@ export const ClassesWorkspace: React.FC = () => {
                           <span>
                             Trainers:{' '}
                             {occ.trainers && occ.trainers.length > 0
-                              ? occ.trainers.map((t: any) => `${t.trainer_name || t.trainer_code} (${t.trainer_role})`).join(', ')
+                              ? occ.trainers.map((t: any) => `${t.trainer_name || 'Trainer'} (${t.trainer_role})`).join(', ')
                               : occ.assigned_trainers && occ.assigned_trainers.length > 0
-                              ? occ.assigned_trainers.map((t) => t.trainer_name || t.trainer_code).join(', ')
+                              ? occ.assigned_trainers.map((t) => t.trainer_name || 'Trainer').join(', ')
                               : 'Unassigned'}
                           </span>
                         </div>
@@ -1447,7 +1580,7 @@ export const ClassesWorkspace: React.FC = () => {
                     </div>
 
                     <div className="mt-5 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2">
-                      {isAuthorized && (
+                      {canEdit && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -1517,7 +1650,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   Upload workout playlists, video instructions, and workout cards for the Content Studio.
                 </p>
-                {isAuthorized && (
+                {canCreate && (
                   <Button size="sm" onClick={() => setIsCreateContentOpen(true)}>
                     <Plus className="size-3.5 mr-1" /> Add Content Item
                   </Button>
@@ -1563,21 +1696,11 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* CREATE / EDIT CLASS CATEGORY MODAL */}
       <Dialog open={isCreateCategoryOpen} onOpenChange={setIsCreateCategoryOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingCategory ? 'Edit Class Category' : 'Create Class Category'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2 text-xs sm:text-sm">
-            <div>
-              <Label className="mb-1 block">Code *</Label>
-              <Input
-                type="text"
-                value={categoryForm.code}
-                onChange={(e) => setCategoryForm({ ...categoryForm, code: e.target.value })}
-                placeholder="Enter category code..."
-                disabled={!!editingCategory}
-              />
-            </div>
             <div>
               <Label className="mb-1 block">Name *</Label>
               <Input
@@ -1614,8 +1737,9 @@ export const ClassesWorkspace: React.FC = () => {
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Status...</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
+                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1624,7 +1748,7 @@ export const ClassesWorkspace: React.FC = () => {
             <Button variant="outline" onClick={() => setIsCreateCategoryOpen(false)}>Cancel</Button>
             <Button
               onClick={() => saveCategoryMutation.mutate(categoryForm)}
-              disabled={!categoryForm.code || !categoryForm.name || saveCategoryMutation.isPending}
+              disabled={!categoryForm.name || saveCategoryMutation.isPending}
             >
               {saveCategoryMutation.isPending ? 'Saving...' : 'Save Category'}
             </Button>
@@ -1634,7 +1758,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* CREATE / EDIT CLASS TEMPLATE MODAL */}
       <Dialog open={isCreateTemplateOpen} onOpenChange={setIsCreateTemplateOpen}>
-        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingTemplate ? 'Edit Class Template' : 'Create Class Template'}</DialogTitle>
           </DialogHeader>
@@ -1644,41 +1768,28 @@ export const ClassesWorkspace: React.FC = () => {
               <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">Basic Information</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <Label className="mb-1 block">Code *</Label>
-                  <Input
-                    type="text"
-                    value={templateForm.code}
-                    onChange={(e) => setTemplateForm({ ...templateForm, code: e.target.value })}
-                    placeholder="Enter template code..."
-                    disabled={!!editingTemplate}
-                  />
-                </div>
-                <div>
-                  <Label className="mb-1 block">Class Name *</Label>
-                  <Input
-                    type="text"
-                    value={templateForm.name}
-                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                    placeholder="Enter class name..."
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <div>
-                  <Label className="mb-1 block">Category</Label>
+                  <Label className="mb-1 block">Select Class Name *</Label>
                   <select
                     value={templateForm.category}
-                    onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value })}
+                    onChange={(e) => {
+                      const catId = e.target.value;
+                      const cat = categories.find((c) => c.id === catId);
+                      setTemplateForm({
+                        ...templateForm,
+                        category: catId,
+                        name: cat ? cat.name : '',
+                      });
+                    }}
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="">Select Category...</option>
+                    <option value="">Select Class Name...</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <Label className="mb-1 block">Program (Commercial Access)</Label>
+                  <Label className="mb-1 block">Program</Label>
                   <select
                     value={templateForm.program}
                     onChange={(e) => setTemplateForm({ ...templateForm, program: e.target.value })}
@@ -1790,7 +1901,7 @@ export const ClassesWorkspace: React.FC = () => {
 
             {/* DELIVERY & STATUS */}
             <div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-1 block">Delivery Mode</Label>
                   <select
@@ -1799,19 +1910,10 @@ export const ClassesWorkspace: React.FC = () => {
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Delivery Mode...</option>
-                    <option value="OFFLINE">OFFLINE</option>
-                    <option value="ONLINE">ONLINE</option>
-                    <option value="HYBRID">HYBRID</option>
+                    {(metadata?.delivery_modes || []).map((m) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
                   </select>
-                </div>
-                <div>
-                  <Label className="mb-1 block">Min Age</Label>
-                  <Input
-                    type="number"
-                    value={templateForm.min_age}
-                    onChange={(e) => setTemplateForm({ ...templateForm, min_age: e.target.value })}
-                    placeholder="None"
-                  />
                 </div>
                 <div>
                   <Label className="mb-1 block">Status</Label>
@@ -1821,10 +1923,9 @@ export const ClassesWorkspace: React.FC = () => {
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Status...</option>
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="DRAFT">DRAFT</option>
-                    <option value="INACTIVE">INACTIVE</option>
-                    <option value="ARCHIVED">ARCHIVED</option>
+                    {(metadata?.statuses || []).map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1834,7 +1935,7 @@ export const ClassesWorkspace: React.FC = () => {
             <Button variant="outline" onClick={() => setIsCreateTemplateOpen(false)}>Cancel</Button>
             <Button
               onClick={() => saveTemplateMutation.mutate(templateForm)}
-              disabled={!templateForm.code || !templateForm.name || saveTemplateMutation.isPending}
+              disabled={!templateForm.category || saveTemplateMutation.isPending}
             >
               {saveTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
             </Button>
@@ -1842,12 +1943,12 @@ export const ClassesWorkspace: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* CREATE RECURRING RULE MODAL */}
+      {/* CREATE / EDIT RECURRING RULE MODAL */}
       <Dialog open={isCreateRuleOpen} onOpenChange={setIsCreateRuleOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span>Create Recurring Schedule Rule</span>
+              <span>{editingRule ? 'Edit Recurring Schedule Rule' : 'Create Recurring Schedule Rule'}</span>
               <span className="text-[10px] px-2 py-0.5 font-normal bg-primary/10 text-primary border border-primary/20 rounded-full">
                 Branch Hours Aware
               </span>
@@ -1875,7 +1976,7 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="">Select Template</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
               </div>
@@ -1901,9 +2002,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <Clock className="size-3.5 text-primary" />
                   <span>{getEffectiveOperatingWindow().text}</span>
                 </div>
-                {branchWorkingHours.length > 0 && (
+                {ruleBranchWorkingHours.length > 0 && (
                   <span className="text-[10px] text-muted-foreground">
-                    {branchWorkingHours.filter((w: any) => w.is_open).length} open days/wk
+                    {ruleBranchWorkingHours.filter((w: any) => w.is_open).length} open days/wk
                   </span>
                 )}
               </div>
@@ -2085,9 +2186,9 @@ export const ClassesWorkspace: React.FC = () => {
                   onChange={(e) => setRuleForm({ ...ruleForm, delivery_mode: e.target.value as any })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="OFFLINE">OFFLINE</option>
-                  <option value="ONLINE">ONLINE</option>
-                  <option value="HYBRID">HYBRID</option>
+                  {(metadata?.delivery_modes || []).map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -2097,8 +2198,9 @@ export const ClassesWorkspace: React.FC = () => {
                   onChange={(e) => setRuleForm({ ...ruleForm, status: e.target.value })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
+                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -2107,7 +2209,7 @@ export const ClassesWorkspace: React.FC = () => {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setIsCreateRuleOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => createRuleMutation.mutate(ruleForm)}
+              onClick={() => saveRuleMutation.mutate(ruleForm)}
               disabled={
                 !ruleForm.class_template ||
                 !ruleForm.branch ||
@@ -2117,11 +2219,13 @@ export const ClassesWorkspace: React.FC = () => {
                 !ruleForm.end_time ||
                 ruleForm.end_time <= ruleForm.start_time ||
                 Boolean(ruleForm.valid_until && ruleForm.valid_until < ruleForm.valid_from) ||
-                createRuleMutation.isPending
+                saveRuleMutation.isPending
               }
             >
-              {createRuleMutation.isPending
+              {saveRuleMutation.isPending
                 ? 'Validating & Saving...'
+                : editingRule
+                ? 'Update Recurring Rule'
                 : 'Save Recurring Rule'}
             </Button>
           </DialogFooter>
@@ -2172,7 +2276,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* SCHEDULE ONE-OFF OCCURRENCE MODAL */}
       <Dialog open={isCreateOccurrenceOpen} onOpenChange={setIsCreateOccurrenceOpen}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-card">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl md:max-w-2xl max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-card">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/60 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="size-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -2222,7 +2326,7 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="">Select Template</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
               </div>
@@ -2365,9 +2469,9 @@ export const ClassesWorkspace: React.FC = () => {
                       onChange={(e) => setOccurrenceForm({ ...occurrenceForm, delivery_mode: e.target.value as any })}
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                     >
-                      <option value="OFFLINE">OFFLINE</option>
-                      <option value="ONLINE">ONLINE</option>
-                      <option value="HYBRID">HYBRID</option>
+                      {(metadata?.delivery_modes || []).map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2400,7 +2504,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* ASSIGN TRAINER MODAL */}
       <Dialog open={isAssignTrainerOpen && !!selectedOccurrence} onOpenChange={setIsAssignTrainerOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Assign Qualified Trainer</DialogTitle>
           </DialogHeader>
@@ -2429,7 +2533,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <option value="">Choose qualified trainer...</option>
                   {trainers.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.trainer_name || t.trainer_code} ({t.trainer_code})
+                      {t.trainer_name || 'Trainer'}
                     </option>
                   ))}
                 </select>
@@ -2442,9 +2546,9 @@ export const ClassesWorkspace: React.FC = () => {
                   onChange={(e) => setTrainerRoleInput(e.target.value as any)}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="LEAD">Lead Trainer</option>
-                  <option value="ASSISTANT">Assistant Trainer</option>
-                  <option value="SUBSTITUTE">Substitute Trainer</option>
+                  {(metadata?.trainer_roles || []).map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -2478,7 +2582,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* BRANCH AVAILABILITY MODAL */}
       <Dialog open={isBranchAvailOpen && !!selectedTemplateForAvail} onOpenChange={setIsBranchAvailOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Branch Availability: {selectedTemplateForAvail?.name}</DialogTitle>
           </DialogHeader>
@@ -2512,7 +2616,7 @@ export const ClassesWorkspace: React.FC = () => {
               </table>
             </div>
 
-            {isAuthorized && (
+            {canEdit && (
               <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
                 <h5 className="font-semibold text-foreground text-xs">Add / Override Branch Availability</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2536,8 +2640,9 @@ export const ClassesWorkspace: React.FC = () => {
                       onChange={(e) => setBranchAvailForm({ ...branchAvailForm, status: e.target.value as any })}
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      <option value="ENABLED">ENABLED</option>
-                      <option value="DISABLED">DISABLED</option>
+                      {(metadata?.branch_avail_statuses || []).map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2560,7 +2665,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* CLASS PRICING MODAL */}
       <Dialog open={isPricingOpen && !!selectedTemplateForPricing} onOpenChange={setIsPricingOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Class Pricing: {selectedTemplateForPricing?.name}</DialogTitle>
           </DialogHeader>
@@ -2596,7 +2701,7 @@ export const ClassesWorkspace: React.FC = () => {
               </table>
             </div>
 
-            {isAuthorized && (
+            {canEdit && (
               <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
                 <h5 className="font-semibold text-foreground text-xs">Add Standalone / Pay-Per-Use Price</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2642,7 +2747,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* CREATE CONTENT ITEM MODAL */}
       <Dialog open={isCreateContentOpen} onOpenChange={setIsCreateContentOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Register Content Item</DialogTitle>
           </DialogHeader>
@@ -2663,11 +2768,9 @@ export const ClassesWorkspace: React.FC = () => {
                 onChange={(e) => setContentForm({ ...contentForm, content_type: e.target.value as any })}
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                <option value="VIDEO">VIDEO</option>
-                <option value="VIDEO_LINK">VIDEO_LINK</option>
-                <option value="DOCUMENT">DOCUMENT</option>
-                <option value="IMAGE">IMAGE</option>
-                <option value="OTHER">OTHER</option>
+                {(metadata?.content_types || []).map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -2685,7 +2788,7 @@ export const ClassesWorkspace: React.FC = () => {
                 value={contentForm.description}
                 onChange={(e) => setContentForm({ ...contentForm, description: e.target.value })}
                 placeholder="Workout details..."
-                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-h-[50px]"
+                className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-h-[50px]"
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2704,8 +2807,9 @@ export const ClassesWorkspace: React.FC = () => {
                   onChange={(e) => setContentForm({ ...contentForm, status: e.target.value as any })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
+                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -2724,7 +2828,7 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* MAP CONTENT ITEM MODAL */}
       <Dialog open={isCreateMappingOpen} onOpenChange={setIsCreateMappingOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Map Content Item</DialogTitle>
           </DialogHeader>
@@ -2776,9 +2880,9 @@ export const ClassesWorkspace: React.FC = () => {
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="">All Modes</option>
-                <option value="OFFLINE">OFFLINE</option>
-                <option value="ONLINE">ONLINE</option>
-                <option value="HYBRID">HYBRID</option>
+                {(metadata?.delivery_modes || []).map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
           </div>

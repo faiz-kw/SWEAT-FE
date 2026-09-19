@@ -27,6 +27,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '../../lib/permissions';
 
 interface CommerceWorkspaceProps {
   initialTab?: 'orders' | 'invoices' | 'transactions' | 'refunds';
@@ -34,6 +35,9 @@ interface CommerceWorkspaceProps {
 
 export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab = 'orders' }) => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canRecordPayment = can('finance.payments.create') || can('finance.pricing.create') || can('core.settings.edit');
+  const canRefund = can('finance.refunds.create') || can('core.settings.edit');
   const [activeTab, setActiveTab] = useState<'orders' | 'invoices' | 'transactions' | 'refunds'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -350,7 +354,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                     </div>
 
                     <div className="mt-5 pt-3 border-t border-border flex items-center justify-between gap-2">
-                      {order.status !== 'PAID' && order.status !== 'REFUNDED' && (
+                      {order.status !== 'PAID' && order.status !== 'REFUNDED' && canRecordPayment && (
                         <>
                           <Button
                             size="sm"
@@ -512,7 +516,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                             </span>
                           </td>
                           <td className="px-4 py-3.5">
-                            {txn.status === 'SUCCESS' && (
+                            {txn.status === 'SUCCESS' && canRefund && (
                               <Button
                                 size="sm"
                                 variant="outline"

@@ -24,9 +24,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '../../lib/permissions';
 
 export const ApprovalsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canApprove = can('admin.approvals.edit') || can('admin.approvals.create') || can('admin.approvals.view');
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'governance'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter] = useState<string>('ALL');

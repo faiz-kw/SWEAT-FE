@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/dialog";
 import { useApp, useLocations, useAuth } from "@/contexts";
 import { ALL_NAV_ITEMS, findNavItem } from "@/lib/nav";
+import { hasPermission } from "@/lib/permissions";
+import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { useRouterState, useRouter, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
@@ -104,6 +106,7 @@ export function Topbar() {
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
 
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
+  const enabledModules = user?.enabledModules ?? null;
 
   const searchResults = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -116,13 +119,30 @@ export function Topbar() {
       if (item.visibility === "superadmin_only" && !isSuperAdmin) return false;
       if (item.visibility === "tenant_only" && isSuperAdmin) return false;
 
+      // Check tenant provisioned module restriction
+      if (
+        !isSuperAdmin &&
+        item.sectionId !== "dashboard" &&
+        item.sectionId !== "admin" &&
+        item.sectionId !== "platform"
+      ) {
+        if (!isSubmoduleAllowed(enabledModules, item.to, item.sectionId)) {
+          return false;
+        }
+      }
+
+      // Check granular effective user permission
+      if (item.permission && !hasPermission(user, item.permission)) {
+        return false;
+      }
+
       return (
         item.label.toLowerCase().includes(q) ||
         item.section.toLowerCase().includes(q) ||
         item.to.toLowerCase().includes(q)
       );
     }).slice(0, 8);
-  }, [searchQuery, isSuperAdmin]);
+  }, [searchQuery, isSuperAdmin, user, enabledModules]);
 
   // Global Ctrl/Cmd + K shortcut listener
   React.useEffect(() => {

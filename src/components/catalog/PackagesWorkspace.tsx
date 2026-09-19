@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Package as PackageIcon,
@@ -18,14 +18,23 @@ import {
   ToggleLeft,
   ToggleRight,
   Settings2,
-  BookOpen,
   Send,
   ChevronDown,
   ChevronUp,
-  FilePlus,
+  History,
+  FileSpreadsheet,
+  Globe,
+  Smartphone,
+  Check,
+  Calendar,
+  DollarSign,
+  Activity,
+  Info,
 } from 'lucide-react';
 import { catalogApi } from '@/services/catalogApi';
-import type { Package, Program, TermsDocument } from '@/types/catalog';
+import type { Package, PackageVersion, Program, TermsDocument, ProgramTypeItem } from '@/types/catalog';
+import { useAuth } from '@/contexts';
+import { toast } from 'sonner';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,10 +77,53 @@ function getErrorMessage(error: any): string {
 
 export const PackagesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'program-types' | 'programs' | 'packages' | 'terms'>('program-types');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  const hasCatalogPermission = useMemo(() => {
+    if (isAuthLoading || !user) return false;
+    if (user.isSuperAdmin) return true;
+    const perms = user.permissions || [];
+    return perms.includes('core.settings.edit') || perms.includes('*');
+  }, [user, isAuthLoading]);
+
+  const requirePermission = (actionDesc: string): boolean => {
+    if (!hasCatalogPermission) {
+      toast.error(`You do not have permission to ${actionDesc}. Please contact your administrator.`);
+      return false;
+    }
+    return true;
+  };
+
+  // Top tabs: Program Types | Programs | Legal Policies (Packages is nested inside Programs)
+  const [activeTab, setActiveTab] = useState<'program-types' | 'programs' | 'terms'>('programs');
+  
+  // Search state
   const [progSearchQuery, setProgSearchQuery] = useState('');
   const [ptSearchQuery, setPtSearchQuery] = useState('');
+  const [termsSearchQuery, setTermsSearchQuery] = useState('');
+
+  // Expandable programs state (Set of program IDs)
+  const [expandedProgramIds, setExpandedProgramIds] = useState<Set<string>>(new Set());
+
+  const toggleProgramExpanded = (programId: string) => {
+    setExpandedProgramIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(programId)) {
+        next.delete(programId);
+      } else {
+        next.add(programId);
+      }
+      return next;
+    });
+  };
+
+  // Version History Drawer / Modal state
+  const [historyPackage, setHistoryPackage] = useState<Package | null>(null);
+  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
+  const toggleVersionExpanded = (id: string) => setExpandedVersionId(prev => prev === id ? null : id);
+
+  // Audit Log Drawer / Modal state
+  const [auditPackage, setAuditPackage] = useState<Package | null>(null);
 
   // Creation Modals
   const [isNewPackageOpen, setIsNewPackageOpen] = useState(false);
@@ -82,7 +134,6 @@ export const PackagesWorkspace: React.FC = () => {
 
   // Edit Modals
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
-  const [editPkgCode, setEditPkgCode] = useState('');
   const [editPkgName, setEditPkgName] = useState('');
   const [editPkgStatus, setEditPkgStatus] = useState<'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [editPkgProgram, setEditPkgProgram] = useState('');
@@ -108,29 +159,27 @@ export const PackagesWorkspace: React.FC = () => {
   const [editProgTrial, setEditProgTrial] = useState(false);
   const [editProgStatus, setEditProgStatus] = useState<'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
 
-  // Program Type modal state
-  const [newPtCode, setNewPtCode] = useState('');
+  // Program Type modal state (no Code field)
   const [newPtName, setNewPtName] = useState('');
   const [newPtDesc, setNewPtDesc] = useState('');
   const [newPtOrder, setNewPtOrder] = useState(0);
   const [ptFormError, setPtFormError] = useState<string | null>(null);
 
-  const [editingProgramType, setEditingProgramType] = useState<import('@/types/catalog').ProgramTypeItem | null>(null);
+  const [editingProgramType, setEditingProgramType] = useState<ProgramTypeItem | null>(null);
   const [editPtName, setEditPtName] = useState('');
   const [editPtDesc, setEditPtDesc] = useState('');
   const [editPtOrder, setEditPtOrder] = useState(0);
   const [editPtStatus, setEditPtStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [editPtFormError, setEditPtFormError] = useState<string | null>(null);
 
-  // Legal Policies modal state
+  // Legal Policies modal state (no Code field)
   const [isNewTermsDocOpen, setIsNewTermsDocOpen] = useState(false);
-  const [newTermsCode, setNewTermsCode] = useState('');
   const [newTermsName, setNewTermsName] = useState('');
   const [newTermsType, setNewTermsType] = useState('MEMBERSHIP_TERMS');
   const [termsDocFormError, setTermsDocFormError] = useState<string | null>(null);
 
   const [isNewTermsVersionOpen, setIsNewTermsVersionOpen] = useState(false);
-  const [selectedTermsDoc, setSelectedTermsDoc] = useState<import('@/types/catalog').TermsDocument | null>(null);
+  const [selectedTermsDoc, setSelectedTermsDoc] = useState<TermsDocument | null>(null);
   const [newVerContent, setNewVerContent] = useState('');
   const [newVerEffectiveFrom, setNewVerEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 16));
   const [termsVerFormError, setTermsVerFormError] = useState<string | null>(null);
@@ -145,15 +194,14 @@ export const PackagesWorkspace: React.FC = () => {
   const [pkgFormError, setPkgFormError] = useState<string | null>(null);
   const [progFormError, setProgFormError] = useState<string | null>(null);
 
-  // Form states
-  const [newPkgCode, setNewPkgCode] = useState('');
+  // Package Form state (no Code field)
   const [newPkgName, setNewPkgName] = useState('');
   const [newPkgProgram, setNewPkgProgram] = useState('');
   const [newPkgTotalDays, setNewPkgTotalDays] = useState(180);
   const [newPkgDurationVal, setNewPkgDurationVal] = useState(6);
   const [newPkgDurationUnit, setNewPkgDurationUnit] = useState('MONTH');
 
-  // ─── Duration auto-calc helper ────────────────────────────────────────────
+  // Duration helper
   const calcDays = (val: number, unit: string): number => {
     const multiplier: Record<string, number> = {
       DAY: 1,
@@ -163,7 +211,7 @@ export const PackagesWorkspace: React.FC = () => {
     };
     return Math.max(1, val * (multiplier[unit] ?? 1));
   };
-  // ─────────────────────────────────────────────────────────────────────────
+
   const [newPkgValidity, setNewPkgValidity] = useState(180);
   const [newPkgSalePrice, setNewPkgSalePrice] = useState('');
   const [newPkgDisplayPrice, setNewPkgDisplayPrice] = useState('');
@@ -176,6 +224,7 @@ export const PackagesWorkspace: React.FC = () => {
   const [newPkgShowApp, setNewPkgShowApp] = useState(true);
   const [newPkgPublishNow, setNewPkgPublishNow] = useState(true);
 
+  // New Version Form state
   const [newVerName, setNewVerName] = useState('');
   const [newVerDurationVal, setNewVerDurationVal] = useState(6);
   const [newVerDurationUnit, setNewVerDurationUnit] = useState('MONTH');
@@ -192,7 +241,7 @@ export const PackagesWorkspace: React.FC = () => {
   const [newVerTaxIncluded, setNewVerTaxIncluded] = useState(true);
   const [newVerPublishNow, setNewVerPublishNow] = useState(false);
 
-  const [newProgCode, setNewProgCode] = useState('');
+  // Program Form state (no Code field)
   const [newProgName, setNewProgName] = useState('');
   const [newProgDesc, setNewProgDesc] = useState('');
   const [newProgType, setNewProgType] = useState('');
@@ -202,6 +251,7 @@ export const PackagesWorkspace: React.FC = () => {
   const {
     data: programTypes = [],
     isLoading: isProgramTypesLoading,
+    refetch: refetchProgramTypes,
   } = useQuery({
     queryKey: ['program-types'],
     queryFn: () => catalogApi.getProgramTypes(),
@@ -213,7 +263,6 @@ export const PackagesWorkspace: React.FC = () => {
     isError: isPackagesError,
     error: packagesError,
     refetch: refetchPackages,
-    isFetching: isPackagesFetching,
   } = useQuery({
     queryKey: ['packages'],
     queryFn: () => catalogApi.getPackages(),
@@ -237,13 +286,12 @@ export const PackagesWorkspace: React.FC = () => {
     isError: isTermsError,
     error: termsError,
     refetch: refetchTerms,
-    isFetching: isTermsFetching,
   } = useQuery({
     queryKey: ['terms-documents'],
     queryFn: () => catalogApi.getTermsDocuments(),
   });
 
-  // Per-document versions (only loaded when a doc is expanded)
+  // Terms versions
   const {
     data: expandedVersions = [],
     isLoading: isVersionsLoading,
@@ -253,16 +301,43 @@ export const PackagesWorkspace: React.FC = () => {
     enabled: Boolean(expandedTermsDocId),
   });
 
+  // Package Audit query
+  const {
+    data: auditEvents = [],
+    isLoading: isAuditLoading,
+    refetch: refetchAudit,
+  } = useQuery({
+    queryKey: ['package-audit-events', auditPackage?.id],
+    queryFn: () =>
+      catalogApi.getAuditEvents({
+        entity_type: 'Package',
+        entity_id: auditPackage?.id,
+      }),
+    enabled: Boolean(auditPackage?.id),
+  });
+
+  // Map packages to their program
+  const packagesByProgram = useMemo(() => {
+    const map = new Map<string, Package[]>();
+    for (const pkg of packages) {
+      if (pkg.program) {
+        const list = map.get(pkg.program) || [];
+        list.push(pkg);
+        map.set(pkg.program, list);
+      }
+    }
+    return map;
+  }, [packages]);
+
   // Mutations
   const createPackageMutation = useMutation({
     mutationFn: async () => {
       const pkg = await catalogApi.createPackage({
-        code: newPkgCode.trim().toUpperCase(),
         name: newPkgName.trim(),
         program: newPkgProgram,
         status: 'ACTIVE',
       });
-      // Also create initial version if commercial values provided
+      // Create initial version if duration provided
       if (newPkgTotalDays > 0) {
         await catalogApi.createPackageVersion(pkg.id, {
           name_snapshot: `${newPkgName.trim()} v1`,
@@ -285,10 +360,14 @@ export const PackagesWorkspace: React.FC = () => {
       }
       return pkg;
     },
-    onSuccess: () => {
+    onSuccess: (pkg) => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
       setIsNewPackageOpen(false);
-      setNewPkgCode('');
+      // Auto expand the program to show the newly created package
+      if (pkg.program) {
+        setExpandedProgramIds((prev) => new Set([...prev, pkg.program!]));
+      }
       setNewPkgName('');
       setNewPkgProgram('');
       setNewPkgSalePrice('');
@@ -297,6 +376,7 @@ export const PackagesWorkspace: React.FC = () => {
       setNewPkgPassportSessions('');
       setNewPkgPassportCost('');
       setPkgFormError(null);
+      toast.success('Package created successfully.');
     },
     onError: (err: any) => {
       setPkgFormError(getErrorMessage(err));
@@ -306,15 +386,14 @@ export const PackagesWorkspace: React.FC = () => {
   const updatePackageMutation = useMutation({
     mutationFn: async () => {
       if (!editingPackage) return;
-      // 1. Update package identity metadata
+      // 1. Update package identity metadata (preserve code automatically in backend)
       const updatedPkg = await catalogApi.updatePackage(editingPackage.id, {
-        code: editPkgCode.trim().toUpperCase(),
         name: editPkgName.trim(),
         status: editPkgStatus,
         program: editPkgProgram,
       });
 
-      // 2. Check if commercial / version terms were modified or need saving
+      // 2. Check if commercial version terms modified
       const activeVer = editingPackage.active_version || (editingPackage as any).latest_version;
       const firstPrice = activeVer?.prices?.[0];
       const homeSessionEnt = activeVer?.entitlements?.find(
@@ -367,9 +446,22 @@ export const PackagesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       setEditingPackage(null);
       setPkgFormError(null);
+      toast.success('Package updated successfully.');
     },
     onError: (err: any) => {
       setPkgFormError(getErrorMessage(err));
+    },
+  });
+
+  const togglePackageStatusMutation = useMutation({
+    mutationFn: ({ id, newStatus }: { id: string; newStatus: 'ACTIVE' | 'INACTIVE' }) =>
+      catalogApi.updatePackage(id, { status: newStatus }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      toast.success('Package status updated.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
     },
   });
 
@@ -380,20 +472,30 @@ export const PackagesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       setIsNewVersionOpen(false);
       setSelectedPackage(null);
+      toast.success('New package version created successfully.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
     },
   });
 
   const createProgramMutation = useMutation({
-    mutationFn: catalogApi.createProgram,
+    mutationFn: () =>
+      catalogApi.createProgram({
+        name: newProgName.trim(),
+        description: newProgDesc.trim() || null,
+        program_type: newProgType || (programTypes[0]?.id ?? ''),
+        trial_allowed: newProgTrial,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programs'] });
       setIsNewProgramOpen(false);
-      setNewProgCode('');
       setNewProgName('');
       setNewProgDesc('');
       setNewProgType('');
       setNewProgTrial(false);
       setProgFormError(null);
+      toast.success('Program created successfully.');
     },
     onError: (err: any) => {
       setProgFormError(getErrorMessage(err));
@@ -407,6 +509,7 @@ export const PackagesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['programs'] });
       setEditingProgram(null);
       setProgFormError(null);
+      toast.success('Program updated successfully.');
     },
     onError: (err: any) => {
       setProgFormError(getErrorMessage(err));
@@ -416,7 +519,6 @@ export const PackagesWorkspace: React.FC = () => {
   const createProgramTypeMutation = useMutation({
     mutationFn: () =>
       catalogApi.createProgramType({
-        code: newPtCode.trim().toUpperCase(),
         name: newPtName.trim(),
         description: newPtDesc.trim() || null,
         display_order: newPtOrder,
@@ -424,11 +526,11 @@ export const PackagesWorkspace: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['program-types'] });
       setIsNewProgramTypeOpen(false);
-      setNewPtCode('');
       setNewPtName('');
       setNewPtDesc('');
       setNewPtOrder(0);
       setPtFormError(null);
+      toast.success('Program Type created successfully.');
     },
     onError: (err: any) => {
       setPtFormError(getErrorMessage(err));
@@ -442,6 +544,7 @@ export const PackagesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['program-types'] });
       setEditingProgramType(null);
       setEditPtFormError(null);
+      toast.success('Program Type updated successfully.');
     },
     onError: (err: any) => {
       setEditPtFormError(getErrorMessage(err));
@@ -451,22 +554,20 @@ export const PackagesWorkspace: React.FC = () => {
   const createTermsDocMutation = useMutation({
     mutationFn: () =>
       catalogApi.createTermsDocument({
-        code: newTermsCode.trim().toUpperCase(),
         name: newTermsName.trim(),
         document_type: newTermsType,
       }),
     onSuccess: (newDoc) => {
       queryClient.invalidateQueries({ queryKey: ['terms-documents'] });
       setIsNewTermsDocOpen(false);
-      setNewTermsCode('');
       setNewTermsName('');
       setTermsDocFormError(null);
-      // Auto-open version creator for the new document
       setSelectedTermsDoc(newDoc);
       setNewVerContent('');
       setNewVerEffectiveFrom(new Date().toISOString().slice(0, 16));
       setTermsVerFormError(null);
       setIsNewTermsVersionOpen(true);
+      toast.success('Policy created. Add draft version content.');
     },
     onError: (err: any) => {
       setTermsDocFormError(getErrorMessage(err));
@@ -490,6 +591,7 @@ export const PackagesWorkspace: React.FC = () => {
       setSelectedTermsDoc(null);
       setNewVerContent('');
       setTermsVerFormError(null);
+      toast.success('Draft policy version saved.');
     },
     onError: (err: any) => {
       setTermsVerFormError(getErrorMessage(err));
@@ -507,27 +609,16 @@ export const PackagesWorkspace: React.FC = () => {
       setIsPublishConfirmOpen(false);
       setPublishTarget(null);
       setPublishError(null);
+      toast.success('Policy version published successfully.');
     },
     onError: (err: any) => {
       setPublishError(getErrorMessage(err));
     },
   });
 
-  // Filtered packages
-  const filteredPackages = packages.filter((pkg) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      pkg.name?.toLowerCase().includes(q) ||
-      pkg.code?.toLowerCase().includes(q) ||
-      pkg.program_name?.toLowerCase().includes(q)
-    );
-  });
-
-  // Resolve friendly label for Program Type (avoiding raw UUIDs)
+  // Resolve friendly label for Program Type
   const getProgramTypeLabel = (prog: Program) => {
     if (prog.program_type_name) return prog.program_type_name;
-    if (prog.program_type_code) return prog.program_type_code;
     const match = programTypes.find(
       (pt) => pt.id === prog.program_type || pt.code === prog.program_type
     );
@@ -538,25 +629,43 @@ export const PackagesWorkspace: React.FC = () => {
     return prog.program_type || 'Program';
   };
 
-  // Filtered programs
+  // Filtered program types (search by name or description)
+  const filteredProgramTypes = programTypes.filter((pt) => {
+    const q = ptSearchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      pt.name?.toLowerCase().includes(q) ||
+      (pt.description && pt.description.toLowerCase().includes(q))
+    );
+  });
+
+  // Filtered programs (search by name or type or package name)
   const filteredPrograms = programs.filter((prog) => {
     const q = progSearchQuery.toLowerCase().trim();
     if (!q) return true;
     const ptLabel = getProgramTypeLabel(prog).toLowerCase();
+    const progPackages = packagesByProgram.get(prog.id) || [];
+    const matchesPackageName = progPackages.some((p) => p.name?.toLowerCase().includes(q));
     return (
       prog.name?.toLowerCase().includes(q) ||
-      prog.code?.toLowerCase().includes(q) ||
       ptLabel.includes(q) ||
-      prog.program_type?.toLowerCase().includes(q)
+      (prog.description && prog.description.toLowerCase().includes(q)) ||
+      matchesPackageName
     );
   });
 
-  const activePackagesCount = packages.filter((p) => p.status === 'ACTIVE').length;
-  const packagesWithActiveVersion = packages.filter((p) => Boolean(p.active_version)).length;
+  // Filtered terms docs (search by name or type)
+  const filteredTermsDocs = termsDocs.filter((doc) => {
+    const q = termsSearchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      doc.name?.toLowerCase().includes(q) ||
+      doc.document_type?.toLowerCase().includes(q)
+    );
+  });
 
   const startEditPackage = (pkg: Package) => {
     setEditingPackage(pkg);
-    setEditPkgCode(pkg.code || '');
     setEditPkgName(pkg.name);
     setEditPkgStatus((pkg.status as any) || 'ACTIVE');
     setEditPkgProgram(pkg.program || '');
@@ -603,16 +712,13 @@ export const PackagesWorkspace: React.FC = () => {
     setEditingProgram(prog);
     setEditProgName(prog.name);
     setEditProgDesc(prog.description || '');
-    const matchedPt = programTypes.find(
-      (pt) => pt.id === prog.program_type || pt.code === prog.program_type
-    );
-    setEditProgType(matchedPt ? matchedPt.id : (prog.program_type || ''));
-    setEditProgTrial(Boolean(prog.trial_allowed));
-    setEditProgStatus((prog.status as any) || 'ACTIVE');
+    setEditProgType(prog.program_type);
+    setEditProgTrial(prog.trial_allowed);
+    setEditProgStatus(prog.status);
     setProgFormError(null);
   };
 
-  const startEditProgramType = (pt: import('@/types/catalog').ProgramTypeItem) => {
+  const startEditProgramType = (pt: ProgramTypeItem) => {
     setEditingProgramType(pt);
     setEditPtName(pt.name);
     setEditPtDesc(pt.description || '');
@@ -621,128 +727,119 @@ export const PackagesWorkspace: React.FC = () => {
     setEditPtFormError(null);
   };
 
-  // Filtered program types
-  const filteredProgramTypes = programTypes.filter((pt) => {
-    const q = ptSearchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      pt.name?.toLowerCase().includes(q) ||
-      pt.code?.toLowerCase().includes(q) ||
-      pt.description?.toLowerCase().includes(q)
-    );
-  });
+  const openAddPackageForProgram = (programId: string) => {
+    if (!requirePermission('create Packages')) return;
+    setNewPkgProgram(programId);
+    setNewPkgName('');
+    setNewPkgDurationVal(6);
+    setNewPkgDurationUnit('MONTH');
+    setNewPkgTotalDays(calcDays(6, 'MONTH'));
+    setNewPkgValidity(calcDays(6, 'MONTH'));
+    setNewPkgSalePrice('');
+    setNewPkgDisplayPrice('');
+    setNewPkgTaxPercentage('18');
+    setNewPkgTaxIncluded(true);
+    setNewPkgMaxSessions('');
+    setNewPkgPassportSessions('');
+    setNewPkgPassportCost('');
+    setNewPkgShowWeb(true);
+    setNewPkgShowApp(true);
+    setNewPkgPublishNow(true);
+    setPkgFormError(null);
+    setIsNewPackageOpen(true);
+  };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="space-y-6 max-w-[1440px] mx-auto px-2 sm:px-4 lg:px-6">
       <PageHeader
-        title="Catalog & Commercial Packages"
-        description="Tenant-authoritative catalog: commercial memberships, immutable published versions, business programs, and legal policies."
+        title="Programs & Packages"
+        description="Configure your program catalog, commercial package tiers, immutable pricing versions, and legal policies."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (activeTab === 'packages') refetchPackages();
-                if (activeTab === 'programs') refetchPrograms();
-                if (activeTab === 'terms') refetchTerms();
-                if (activeTab === 'program-types') queryClient.invalidateQueries({ queryKey: ['program-types'] });
-              }}
-              disabled={isPackagesFetching || isProgramsFetching || isTermsFetching}
-              className="gap-1.5"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${
-                  isPackagesFetching || isProgramsFetching || isTermsFetching ? 'animate-spin' : ''
-                }`}
-              />
-              <span>Refresh</span>
-            </Button>
-            {activeTab === 'program-types' && (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {activeTab === 'program-types' && hasCatalogPermission && (
               <Button
                 onClick={() => {
                   setPtFormError(null);
+                  setNewPtName('');
+                  setNewPtDesc('');
+                  setNewPtOrder(0);
                   setIsNewProgramTypeOpen(true);
                 }}
+                className="gap-2 shadow-xs"
                 size="sm"
-                className="gap-1.5"
               >
                 <Plus className="w-4 h-4" />
                 <span>New Program Type</span>
               </Button>
             )}
-            {activeTab === 'packages' && (
-              <Button
-                onClick={() => {
-                  setPkgFormError(null);
-                  setIsNewPackageOpen(true);
-                }}
-                size="sm"
-                className="gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Package</span>
-              </Button>
-            )}
-            {activeTab === 'terms' && (
-              <Button
-                onClick={() => {
-                  setTermsDocFormError(null);
-                  setIsNewTermsDocOpen(true);
-                }}
-                size="sm"
-                className="gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Legal Policy</span>
-              </Button>
-            )}
-            {activeTab === 'programs' && (
+            {activeTab === 'programs' && hasCatalogPermission && (
               <Button
                 onClick={() => {
                   setProgFormError(null);
+                  setNewProgName('');
+                  setNewProgDesc('');
+                  setNewProgType(programTypes[0]?.id ?? '');
+                  setNewProgTrial(false);
                   setIsNewProgramOpen(true);
                 }}
+                className="gap-2 shadow-xs"
                 size="sm"
-                className="gap-1.5"
               >
                 <Plus className="w-4 h-4" />
                 <span>New Program</span>
               </Button>
             )}
+            {activeTab === 'terms' && hasCatalogPermission && (
+              <Button
+                onClick={() => {
+                  setTermsDocFormError(null);
+                  setNewTermsName('');
+                  setNewTermsType('MEMBERSHIP_TERMS');
+                  setIsNewTermsDocOpen(true);
+                }}
+                className="gap-2 shadow-xs"
+                size="sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Policy Document</span>
+              </Button>
+            )}
           </div>
         }
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+      />
+
+      <PageBody>
+        {/* KPI Tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <KpiTile
-            title="Total Programs"
-            value={programs.length}
-            icon={Layers}
+            title="Program Types"
+            value={programTypes.length}
+            icon={<Settings2 className="w-5 h-5 text-indigo-500" />}
+            subtitle="Catalog classification tiers"
+          />
+          <KpiTile
+            title="Active Programs"
+            value={programs.filter((p) => p.status === 'ACTIVE').length}
+            icon={<Layers className="w-5 h-5 text-blue-500" />}
+            subtitle={`Across ${programs.length} total programs`}
           />
           <KpiTile
             title="Total Packages"
             value={packages.length}
-            icon={PackageIcon}
+            icon={<PackageIcon className="w-5 h-5 text-primary" />}
+            subtitle={`${packages.filter((p) => p.status === 'ACTIVE').length} active packages`}
           />
           <KpiTile
-            title="Active Packages"
-            value={activePackagesCount}
-            variant="success"
-            icon={CheckCircle2}
-          />
-          <KpiTile
-            title="Commercialized"
-            value={packagesWithActiveVersion}
-            description="With active version"
-            icon={ShieldCheck}
+            title="Legal Policies"
+            value={termsDocs.length}
+            icon={<FileText className="w-5 h-5 text-purple-500" />}
+            subtitle="Policy & Terms Documents"
           />
         </div>
-      </PageHeader>
 
-      <PageBody className="space-y-6">
-        {/* Navigation Tabs */}
-        <div className="flex items-center justify-between border-b border-border/80 pb-3">
-          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl text-sm flex-wrap">
+        {/* Workspace Top Tabs */}
+        <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-6 gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/50 text-xs sm:text-sm font-medium overflow-x-auto max-w-full">
             <button
               onClick={() => setActiveTab('program-types')}
               className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all ${
@@ -767,24 +864,9 @@ export const PackagesWorkspace: React.FC = () => {
               }`}
             >
               <Layers className="w-4 h-4" />
-              <span>Programs</span>
+              <span>Programs & Packages</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
                 {programs.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('packages')}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all ${
-                activeTab === 'packages'
-                  ? 'bg-background text-foreground shadow-xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <PackageIcon className="w-4 h-4" />
-              <span>Packages</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
-                {packages.length}
               </span>
             </button>
 
@@ -805,7 +887,9 @@ export const PackagesWorkspace: React.FC = () => {
           </div>
         </div>
 
+        {/* ========================================================================= */}
         {/* TAB 0: PROGRAM TYPES */}
+        {/* ========================================================================= */}
         {activeTab === 'program-types' && (
           <div className="space-y-4">
             {/* Search */}
@@ -814,7 +898,7 @@ export const PackagesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search program types by code, name, or description..."
+                  placeholder="Search program types by name or description..."
                   value={ptSearchQuery}
                   onChange={(e) => setPtSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -843,10 +927,13 @@ export const PackagesWorkspace: React.FC = () => {
                     ? `No program type matched "${ptSearchQuery}". Try a different search term.`
                     : 'Program Types classify your programs (e.g. Membership, Personal Training, Pilates). Create the first one to get started.'}
                 </p>
-                {!ptSearchQuery && (
+                {!ptSearchQuery && hasCatalogPermission && (
                   <Button
                     onClick={() => {
                       setPtFormError(null);
+                      setNewPtName('');
+                      setNewPtDesc('');
+                      setNewPtOrder(0);
                       setIsNewProgramTypeOpen(true);
                     }}
                     size="sm"
@@ -871,9 +958,9 @@ export const PackagesWorkspace: React.FC = () => {
                   >
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
-                        <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded bg-muted border border-border/40 shrink-0">
-                          {pt.code}
-                        </span>
+                        <h4 className="text-base font-semibold text-foreground truncate" title={pt.name}>
+                          {pt.name}
+                        </h4>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                           <Badge
                             variant={pt.status === 'ACTIVE' ? 'default' : 'secondary'}
@@ -881,50 +968,53 @@ export const PackagesWorkspace: React.FC = () => {
                           >
                             {pt.status}
                           </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
-                            onClick={() => startEditProgramType(pt)}
-                            title="Edit program type"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={`w-7 h-7 shrink-0 ${
-                              pt.status === 'ACTIVE'
-                                ? 'text-amber-500 hover:text-amber-600'
-                                : 'text-emerald-500 hover:text-emerald-600'
-                            }`}
-                            onClick={() =>
-                              updateProgramTypeMutation.mutate({
-                                id: pt.id,
-                                payload: { status: pt.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' },
-                              })
-                            }
-                            title={pt.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                          >
-                            {pt.status === 'ACTIVE' ? (
-                              <ToggleRight className="w-4 h-4" />
-                            ) : (
-                              <ToggleLeft className="w-4 h-4" />
-                            )}
-                          </Button>
+                          {hasCatalogPermission && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
+                                onClick={() => startEditProgramType(pt)}
+                                title="Edit program type"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`w-7 h-7 shrink-0 ${
+                                  pt.status === 'ACTIVE'
+                                    ? 'text-amber-500 hover:text-amber-600'
+                                    : 'text-emerald-500 hover:text-emerald-600'
+                                }`}
+                                onClick={() => {
+                                  updateProgramTypeMutation.mutate({
+                                    id: pt.id,
+                                    payload: { status: pt.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' },
+                                  });
+                                }}
+                                title={pt.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                              >
+                                {pt.status === 'ACTIVE' ? (
+                                  <ToggleRight className="w-4 h-4" />
+                                ) : (
+                                  <ToggleLeft className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      <div className="min-w-0">
-                        <h4 className="text-base font-semibold text-foreground truncate" title={pt.name}>{pt.name}</h4>
-                        {pt.description && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words" title={pt.description}>{pt.description}</p>
-                        )}
-                      </div>
+                      {pt.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 break-words" title={pt.description}>
+                          {pt.description}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50 flex-wrap gap-1">
                       <span>Display order: {pt.display_order}</span>
                       <span className="text-[10px] text-muted-foreground/60">
-                        {new Date(pt.updated_at).toLocaleDateString()}
+                        Updated {new Date(pt.updated_at).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
@@ -934,7 +1024,9 @@ export const PackagesWorkspace: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 1: PROGRAMS */}
+        {/* ========================================================================= */}
+        {/* TAB 1: PROGRAMS & NESTED PACKAGES */}
+        {/* ========================================================================= */}
         {activeTab === 'programs' && (
           <div className="space-y-4">
             {/* Search bar */}
@@ -943,7 +1035,7 @@ export const PackagesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search programs by code, name, or type..."
+                  placeholder="Search programs by name or type..."
                   value={progSearchQuery}
                   onChange={(e) => setProgSearchQuery(e.target.value)}
                   className="pl-9 text-sm"
@@ -951,14 +1043,16 @@ export const PackagesWorkspace: React.FC = () => {
               </div>
             </div>
 
+            {/* Loading */}
             {isProgramsLoading && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-36 bg-muted/40 rounded-2xl border border-border/60 animate-pulse p-5" />
+                  <div key={i} className="h-32 bg-muted/40 rounded-2xl border border-border/60 animate-pulse p-5" />
                 ))}
               </div>
             )}
 
+            {/* Error */}
             {isProgramsError && (
               <div className="p-6 bg-destructive/10 border border-destructive/20 rounded-2xl text-center space-y-2">
                 <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
@@ -978,6 +1072,7 @@ export const PackagesWorkspace: React.FC = () => {
               </div>
             )}
 
+            {/* Empty State */}
             {!isProgramsLoading && !isProgramsError && filteredPrograms.length === 0 && (
               <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
                 <Layers className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
@@ -987,83 +1082,342 @@ export const PackagesWorkspace: React.FC = () => {
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
                   {progSearchQuery
                     ? `No program matched "${progSearchQuery}". Try a different search term.`
-                    : 'Programs group packages and classes (e.g. Strength, Pilates, Personal Training).'}
+                    : 'Programs group packages and classes (e.g. Strength, Pilates, Personal Training). Create your first Program to begin adding packages.'}
                 </p>
-                {!progSearchQuery && (
+                {!progSearchQuery && hasCatalogPermission && (
                   <Button
                     onClick={() => {
                       setProgFormError(null);
+                      setNewProgName('');
+                      setNewProgDesc('');
+                      setNewProgType(programTypes[0]?.id ?? '');
+                      setNewProgTrial(false);
                       setIsNewProgramOpen(true);
                     }}
                     size="sm"
                   >
-                    Create Program
+                    Create First Program
                   </Button>
                 )}
               </div>
             )}
 
+            {/* Programs List with Nested Packages */}
             {!isProgramsLoading && !isProgramsError && filteredPrograms.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 {filteredPrograms.map((prog) => {
                   const typeLabel = getProgramTypeLabel(prog);
+                  const progPkgs = packagesByProgram.get(prog.id) || [];
+                  const isExpanded = expandedProgramIds.has(prog.id);
+
                   return (
                     <div
                       key={prog.id}
-                      className="p-4 sm:p-5 bg-card border border-border/60 hover:border-border transition-colors rounded-2xl space-y-3 shadow-xs flex flex-col justify-between"
+                      className={`bg-card border rounded-2xl transition-all shadow-xs overflow-hidden ${
+                        prog.status === 'INACTIVE'
+                          ? 'border-border/40 opacity-75'
+                          : 'border-border/70 hover:border-primary/40'
+                      }`}
                     >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
-                          <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded bg-muted border border-border/40 shrink-0">
-                            {prog.code}
-                          </span>
-                          <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                            <Badge
-                              variant="outline"
-                              className="text-xs font-medium max-w-[140px] truncate"
-                              title={typeLabel}
-                            >
+                      {/* Program Header Row */}
+                      <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-bold text-foreground truncate" title={prog.name}>
+                              {prog.name}
+                            </h3>
+                            <Badge variant="outline" className="text-xs font-medium max-w-[160px] truncate" title={typeLabel}>
                               {typeLabel}
                             </Badge>
                             <Badge
                               variant={prog.status === 'ACTIVE' ? 'default' : 'secondary'}
-                              className="text-xs shrink-0"
+                              className="text-xs"
                             >
                               {prog.status}
                             </Badge>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
-                              onClick={() => startEditProgram(prog)}
-                              title="Edit program"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
+                            {prog.trial_allowed && (
+                              <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 bg-emerald-500/5">
+                                Trials Allowed
+                              </Badge>
+                            )}
                           </div>
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-base font-semibold text-foreground truncate" title={prog.name}>
-                            {prog.name}
-                          </h4>
                           {prog.description && (
-                            <p
-                              className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words"
-                              title={prog.description}
-                            >
+                            <p className="text-xs text-muted-foreground line-clamp-1 break-words">
                               {prog.description}
                             </p>
                           )}
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
+                            <span className="flex items-center gap-1 font-medium">
+                              <PackageIcon className="w-3.5 h-3.5 text-primary" />
+                              {progPkgs.length} {progPkgs.length === 1 ? 'Package' : 'Packages'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Program Actions */}
+                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                          {hasCatalogPermission && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openAddPackageForProgram(prog.id)}
+                                className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add Package</span>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => startEditProgram(prog)}
+                                className="text-xs h-8 text-muted-foreground hover:text-foreground gap-1"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Edit</span>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  updateProgramMutation.mutate({
+                                    id: prog.id,
+                                    payload: { status: prog.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' },
+                                  });
+                                }}
+                                className={`text-xs h-8 gap-1 ${
+                                  prog.status === 'ACTIVE'
+                                    ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
+                                    : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
+                                }`}
+                              >
+                                {prog.status === 'ACTIVE' ? (
+                                  <>
+                                    <ToggleRight className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Deactivate</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ToggleLeft className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Activate</span>
+                                  </>
+                                )}
+                              </Button>
+                            </>
+                          )}
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => toggleProgramExpanded(prog.id)}
+                            className="text-xs h-8 gap-1 px-3"
+                          >
+                            <span>{isExpanded ? 'Hide Packages' : 'View Packages'}</span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50 flex-wrap gap-1">
-                        <span>{prog.packages_count ?? 0} packages linked</span>
-                        {prog.trial_allowed && (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
-                            Trials Allowed
-                          </span>
-                        )}
-                      </div>
+
+                      {/* Nested Packages Container */}
+                      {isExpanded && (
+                        <div className="border-t border-border/60 bg-muted/20 p-4 sm:p-5 space-y-3">
+                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <span>Packages for {prog.name} ({progPkgs.length})</span>
+                            {hasCatalogPermission && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openAddPackageForProgram(prog.id)}
+                                className="h-6 text-xs text-primary hover:text-primary/80 gap-1 p-0 font-medium"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Add New Package</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          {progPkgs.length === 0 ? (
+                            <div className="p-6 text-center bg-card/60 border border-dashed border-border/80 rounded-xl space-y-2">
+                              <PackageIcon className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+                              <p className="text-xs text-muted-foreground">No packages created under this program yet.</p>
+                              {hasCatalogPermission && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openAddPackageForProgram(prog.id)}
+                                  className="h-7 text-xs gap-1 mt-1"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add First Package</span>
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {progPkgs.map((pkg) => {
+                                const activeVer = pkg.active_version || (pkg as any).latest_version;
+                                const firstPrice = activeVer?.prices?.[0];
+                                const homeEnt = activeVer?.entitlements?.find(
+                                  (e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION'
+                                );
+
+                                return (
+                                  <div
+                                    key={pkg.id}
+                                    className="bg-card border border-border/70 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs transition"
+                                  >
+                                    <div className="space-y-2.5">
+                                      {/* Package Header */}
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <h4 className="text-sm font-semibold text-foreground truncate" title={pkg.name}>
+                                            {pkg.name}
+                                          </h4>
+                                        </div>
+                                        <Badge
+                                          variant={pkg.status === 'ACTIVE' ? 'default' : 'secondary'}
+                                          className="text-[10px] shrink-0"
+                                        >
+                                          {pkg.status}
+                                        </Badge>
+                                      </div>
+
+                                      {/* Active Version & Commercial Details */}
+                                      {activeVer ? (
+                                        <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 space-y-1.5 text-xs">
+                                          <div className="flex items-center justify-between text-muted-foreground">
+                                            <span className="flex items-center gap-1 font-medium text-foreground">
+                                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                              v{activeVer.version_number} Current
+                                            </span>
+                                            <span className="font-mono text-[11px]">
+                                              {activeVer.duration_value} {activeVer.duration_unit?.toLowerCase()}(s)
+                                            </span>
+                                          </div>
+                                          {firstPrice && (
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                {firstPrice.currency || '₹'} {firstPrice.total_price || firstPrice.sale_price}
+                                              </span>
+                                              {homeEnt?.allocated_units && (
+                                                <span className="text-[11px] text-muted-foreground font-mono">
+                                                  {homeEnt.allocated_units} sessions
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="p-2.5 bg-amber-500/10 rounded-lg border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Draft state (no active version)</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Package Actions Bar */}
+                                    <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1 flex-wrap">
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setHistoryPackage(pkg)}
+                                          className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
+                                          title="View immutable version history"
+                                        >
+                                          <History className="w-3 h-3" />
+                                          <span>Versions</span>
+                                        </Button>
+
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setAuditPackage(pkg)}
+                                          className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
+                                          title="View audit logs"
+                                        >
+                                          <Activity className="w-3 h-3" />
+                                          <span>Audit</span>
+                                        </Button>
+                                      </div>
+
+                                      {hasCatalogPermission && (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedPackage(pkg);
+                                              setNewVerName(`${pkg.name} v${(activeVer?.version_number ?? 0) + 1}`);
+                                              setNewVerDurationVal(activeVer?.duration_value ?? 6);
+                                              setNewVerDurationUnit(activeVer?.duration_unit ?? 'MONTH');
+                                              setNewVerTotalDays(activeVer?.total_days ?? 180);
+                                              setNewVerValidity(activeVer?.validity_days ?? 180);
+                                              setNewVerSalePrice(firstPrice?.sale_price ? String(firstPrice.sale_price) : '');
+                                              setNewVerDisplayPrice(firstPrice?.display_price ? String(firstPrice.display_price) : '');
+                                              setNewVerTaxPercentage(firstPrice?.tax_percent ? String(firstPrice.tax_percent) : '18');
+                                              setNewVerTaxIncluded(firstPrice?.prices_include_tax ?? true);
+                                              setNewVerMaxSessions(homeEnt?.allocated_units ? String(homeEnt.allocated_units) : '');
+                                              setNewVerShowWeb(activeVer?.show_on_web ?? true);
+                                              setNewVerShowApp(activeVer?.show_on_app ?? true);
+                                              setNewVerPublishNow(false);
+                                              setIsNewVersionOpen(true);
+                                            }}
+                                            className="h-6 text-[11px] px-2 text-primary hover:text-primary/80 gap-1 font-medium"
+                                            title="Create new version snapshot"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                            <span>New Version</span>
+                                          </Button>
+
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => startEditPackage(pkg)}
+                                            className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                                            title="Edit package"
+                                          >
+                                            <Pencil className="w-3 h-3" />
+                                          </Button>
+
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => {
+                                              togglePackageStatusMutation.mutate({
+                                                id: pkg.id,
+                                                newStatus: pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                              });
+                                            }}
+                                            className={`w-6 h-6 ${
+                                              pkg.status === 'ACTIVE'
+                                                ? 'text-amber-500 hover:text-amber-600'
+                                                : 'text-emerald-500 hover:text-emerald-600'
+                                            }`}
+                                            title={pkg.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                          >
+                                            {pkg.status === 'ACTIVE' ? (
+                                              <ToggleRight className="w-3.5 h-3.5" />
+                                            ) : (
+                                              <ToggleLeft className="w-3.5 h-3.5" />
+                                            )}
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1072,176 +1426,25 @@ export const PackagesWorkspace: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: PACKAGES */}
-        {activeTab === 'packages' && (
-          <div className="space-y-6">
-            {/* Search bar */}
+        {/* ========================================================================= */}
+        {/* TAB 2: TERMS & LEGAL POLICIES */}
+        {/* ========================================================================= */}
+        {activeTab === 'terms' && (
+          <div className="space-y-4">
+            {/* Search */}
             <div className="flex flex-col sm:flex-row gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search packages by code, name, or linked program..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search policies by name or type..."
+                  value={termsSearchQuery}
+                  onChange={(e) => setTermsSearchQuery(e.target.value)}
                   className="pl-9 text-sm"
                 />
               </div>
             </div>
 
-            {/* Loading */}
-            {isPackagesLoading && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-44 bg-muted/40 rounded-2xl border border-border/60 animate-pulse p-5" />
-                ))}
-              </div>
-            )}
-
-            {/* Error */}
-            {isPackagesError && (
-              <div className="p-6 bg-destructive/10 border border-destructive/20 rounded-2xl text-center space-y-2">
-                <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-                <p className="text-destructive font-semibold text-sm">Failed to load packages from tenant database.</p>
-                <p className="text-xs text-muted-foreground max-w-lg mx-auto font-mono">
-                  {getErrorMessage(packagesError)}
-                </p>
-                <Button
-                  onClick={() => refetchPackages()}
-                  variant="destructive"
-                  size="sm"
-                  className="mt-3 gap-1.5"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Retry
-                </Button>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {!isPackagesLoading && !isPackagesError && filteredPackages.length === 0 && (
-              <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
-                <PackageIcon className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-foreground">
-                  {searchQuery ? 'No matching packages found' : 'No packages configured'}
-                </h3>
-                <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
-                  {searchQuery
-                    ? `No package matched "${searchQuery}". Try a different search term.`
-                    : 'Create commercial packages with immutable published versions, session allocations, and branch availability.'}
-                </p>
-                {!searchQuery && (
-                  <Button
-                    onClick={() => {
-                      setPkgFormError(null);
-                      setIsNewPackageOpen(true);
-                    }}
-                    size="sm"
-                  >
-                    Create First Package
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Cards Grid */}
-            {!isPackagesLoading && !isPackagesError && filteredPackages.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredPackages.map((pkg) => (
-                  <div
-                    key={pkg.id}
-                    className="bg-card border border-border/60 hover:border-primary/50 transition rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-xs"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
-                            {pkg.code}
-                          </span>
-                          <h3 className="text-base font-semibold text-foreground mt-1.5">{pkg.name}</h3>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Badge
-                            variant={pkg.status === 'ACTIVE' ? 'default' : 'secondary'}
-                            className="text-xs"
-                          >
-                            {pkg.status}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-muted-foreground hover:text-foreground"
-                            onClick={() => startEditPackage(pkg)}
-                            title="Edit package metadata"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {pkg.program_name && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Tag className="w-3.5 h-3.5 text-primary" />
-                          <span>Program: {pkg.program_name}</span>
-                        </div>
-                      )}
-
-                      {/* Active Version Info */}
-                      {pkg.active_version ? (
-                        <div className="p-3 bg-muted/30 rounded-xl border border-border/50 space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground font-medium flex items-center gap-1">
-                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                              Active Version: v{pkg.active_version.version_number}
-                            </span>
-                            <span className="text-foreground font-mono">
-                              {pkg.active_version.duration_value} {pkg.active_version.duration_unit?.toLowerCase()}(s)
-                            </span>
-                          </div>
-                          {pkg.active_version.prices && pkg.active_version.prices.length > 0 && (
-                            <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                              {pkg.active_version.prices[0].currency} {pkg.active_version.prices[0].total_price}
-                              <span className="text-xs text-muted-foreground font-normal ml-1">incl. tax</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span>No active version published yet (Draft state).</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="pt-2 border-t border-border/50 flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-primary" />
-                        Version Immutability
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedPackage(pkg);
-                          setIsNewVersionOpen(true);
-                        }}
-                        className="text-xs h-7 text-primary hover:text-primary/80 gap-1 px-2"
-                      >
-                        <span>New Version</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: TERMS & LEGAL */}
-        {activeTab === 'terms' && (
-          <div className="space-y-4">
             {/* Loading */}
             {isTermsLoading && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1266,163 +1469,169 @@ export const PackagesWorkspace: React.FC = () => {
               </div>
             )}
 
-            {/* Empty */}
-            {!isTermsLoading && !isTermsError && termsDocs.length === 0 && (
+            {/* Empty State */}
+            {!isTermsLoading && !isTermsError && filteredTermsDocs.length === 0 && (
               <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
                 <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-foreground">No legal policies registered</h3>
+                <h3 className="text-base font-semibold text-foreground">
+                  {termsSearchQuery ? 'No matching policy documents' : 'No legal policies registered'}
+                </h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
-                  Configure membership terms, attendance commitment, cancellation policies, and privacy notices.
-                  Each policy supports versioned content and member acceptance tracking.
+                  {termsSearchQuery
+                    ? `No policy matched "${termsSearchQuery}". Try a different search term.`
+                    : 'Create policy documents (e.g. Membership Terms, Cancellation Policy) and publish versioned legal texts with immutable member acceptance tracking.'}
                 </p>
-                <Button
-                  onClick={() => {
-                    setTermsDocFormError(null);
-                    setIsNewTermsDocOpen(true);
-                  }}
-                  size="sm"
-                >
-                  Create First Legal Policy
-                </Button>
+                {!termsSearchQuery && hasCatalogPermission && (
+                  <Button
+                    onClick={() => {
+                      setTermsDocFormError(null);
+                      setNewTermsName('');
+                      setNewTermsType('MEMBERSHIP_TERMS');
+                      setIsNewTermsDocOpen(true);
+                    }}
+                    size="sm"
+                  >
+                    Create Policy Document
+                  </Button>
+                )}
               </div>
             )}
 
-            {/* Cards */}
-            {!isTermsLoading && !isTermsError && termsDocs.length > 0 && (
-              <div className="space-y-3">
-                {termsDocs.map((doc) => {
+            {/* Cards Grid */}
+            {!isTermsLoading && !isTermsError && filteredTermsDocs.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredTermsDocs.map((doc) => {
                   const isExpanded = expandedTermsDocId === doc.id;
+                  const activeVer = doc.active_version;
+
                   return (
                     <div
                       key={doc.id}
-                      className="bg-card border border-border/60 rounded-2xl shadow-xs overflow-hidden"
+                      className="bg-card border border-border/60 hover:border-primary/40 transition rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-xs"
                     >
-                      {/* Card header */}
-                      <div className="p-5 flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border/50">
-                              {doc.code}
-                            </span>
-                            <Badge variant="outline" className="text-xs">{doc.document_type}</Badge>
-                            <Badge
-                              variant={doc.status === 'ACTIVE' ? 'default' : 'secondary'}
-                              className="text-xs"
-                            >
-                              {doc.status}
-                            </Badge>
-                          </div>
-                          <h4 className="text-base font-semibold text-foreground">{doc.name}</h4>
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              Active version: {doc.active_version ? `v${doc.active_version.version_number}` : 'None'}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <BookOpen className="w-3.5 h-3.5 text-primary" />
-                              {doc.versions_count ?? 0} version{(doc.versions_count ?? 0) !== 1 ? 's' : ''}
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-base font-semibold text-foreground">{doc.name}</h3>
+                            <span className="text-xs text-muted-foreground">
+                              {doc.document_type.replace(/_/g, ' ')}
                             </span>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs gap-1"
-                            onClick={() => {
-                              setSelectedTermsDoc(doc);
-                              setNewVerContent('');
-                              setNewVerEffectiveFrom(new Date().toISOString().slice(0, 16));
-                              setTermsVerFormError(null);
-                              setIsNewTermsVersionOpen(true);
-                            }}
+                          <Badge
+                            variant={doc.status === 'ACTIVE' ? 'default' : 'secondary'}
+                            className="text-xs shrink-0"
                           >
-                            <FilePlus className="w-3.5 h-3.5" />
-                            New Version
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-muted-foreground"
-                            onClick={() => setExpandedTermsDocId(isExpanded ? null : doc.id)}
-                            title={isExpanded ? 'Collapse versions' : 'Show versions'}
-                          >
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </Button>
+                            {doc.status}
+                          </Badge>
                         </div>
+
+                        {activeVer ? (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/50 space-y-1 text-xs">
+                            <div className="flex items-center justify-between text-muted-foreground">
+                              <span className="font-semibold text-foreground flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                Active: v{activeVer.version_number}
+                              </span>
+                              <span className="text-muted-foreground/80">
+                                {new Date(activeVer.effective_from).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {activeVer.content_text && (
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1 italic">
+                                "{activeVer.content_text}"
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span>No active version published (Draft state).</span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Versions panel */}
-                      {isExpanded && (
-                        <div className="border-t border-border/60 bg-muted/20 px-5 py-4 space-y-2">
-                          {isVersionsLoading && (
-                            <div className="text-xs text-muted-foreground animate-pulse">Loading versions...</div>
-                          )}
-                          {!isVersionsLoading && expandedVersions.length === 0 && (
-                            <div className="text-xs text-muted-foreground text-center py-3">
-                              No versions yet. Click "New Version" to create the first draft.
-                            </div>
-                          )}
-                          {!isVersionsLoading && expandedVersions.map((ver) => (
-                            <div
-                              key={ver.id}
-                              className="flex items-center justify-between p-3 bg-card rounded-xl border border-border/50 gap-3"
+                      {/* Version expand / actions */}
+                      <div className="pt-3 border-t border-border/50 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedTermsDocId(isExpanded ? null : doc.id)}
+                            className="text-xs h-7 text-muted-foreground hover:text-foreground gap-1 px-2"
+                          >
+                            <span>{isExpanded ? 'Hide Versions' : 'View All Versions'}</span>
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </Button>
+
+                          {hasCatalogPermission && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTermsDoc(doc);
+                                setNewVerContent('');
+                                setNewVerEffectiveFrom(new Date().toISOString().slice(0, 16));
+                                setTermsVerFormError(null);
+                                setIsNewTermsVersionOpen(true);
+                              }}
+                              className="text-xs h-7 text-primary hover:text-primary/80 gap-1 px-2"
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-xs font-mono text-muted-foreground shrink-0">
-                                  v{ver.version_number}
-                                </span>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge
-                                      variant={
-                                        ver.status === 'ACTIVE' ? 'default'
-                                        : ver.status === 'DRAFT' ? 'secondary'
-                                        : 'outline'
-                                      }
-                                      className="text-[10px] h-4"
-                                    >
-                                      {ver.status}
-                                    </Badge>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      Effective: {ver.effective_from ? new Date(ver.effective_from).toLocaleDateString() : '—'}
-                                    </span>
-                                  </div>
-                                  {ver.content_text && (
-                                    <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-xs">
-                                      {ver.content_text.slice(0, 80)}{ver.content_text.length > 80 ? '…' : ''}
+                              <Plus className="w-3 h-3" />
+                              <span>New Version</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Inline versions list */}
+                        {isExpanded && (
+                          <div className="pt-2 border-t border-border/40 space-y-2">
+                            {isVersionsLoading ? (
+                              <p className="text-xs text-muted-foreground animate-pulse">Loading versions...</p>
+                            ) : expandedVersions.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No versions found for this document.</p>
+                            ) : (
+                              expandedVersions.map((ver) => (
+                                <div
+                                  key={ver.id}
+                                  className="p-2.5 rounded-lg bg-background border border-border/60 text-xs flex items-center justify-between gap-2"
+                                >
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-semibold text-foreground">v{ver.version_number}</span>
+                                      <Badge
+                                        variant={ver.status === 'ACTIVE' ? 'default' : 'secondary'}
+                                        className="text-[10px] py-0 px-1.5"
+                                      >
+                                        {ver.status}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      From: {new Date(ver.effective_from).toLocaleDateString()}
                                     </p>
+                                  </div>
+                                  {ver.status === 'DRAFT' && hasCatalogPermission && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        setPublishTarget({
+                                          docId: doc.id,
+                                          versionId: ver.id,
+                                          versionNum: ver.version_number,
+                                        });
+                                        setPublishError(null);
+                                        setIsPublishConfirmOpen(true);
+                                      }}
+                                      className="text-xs h-6 px-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                                    >
+                                      Publish
+                                    </Button>
                                   )}
                                 </div>
-                              </div>
-                              {ver.status === 'DRAFT' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs gap-1 shrink-0 text-emerald-600 border-emerald-500/50 hover:bg-emerald-500/10"
-                                  onClick={() => {
-                                    setPublishTarget({ docId: doc.id, versionId: ver.id, versionNum: ver.version_number });
-                                    setPublishError(null);
-                                    setIsPublishConfirmOpen(true);
-                                  }}
-                                >
-                                  <Send className="w-3 h-3" />
-                                  Publish
-                                </Button>
-                              )}
-                              {ver.status === 'ACTIVE' && (
-                                <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 shrink-0">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Live
-                                </span>
-                              )}
-                              {ver.status === 'RETIRED' && (
-                                <span className="text-[10px] text-muted-foreground/60 font-medium shrink-0">Retired</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1432,175 +1641,401 @@ export const PackagesWorkspace: React.FC = () => {
         )}
       </PageBody>
 
-      {/* MODAL: NEW LEGAL POLICY (Document) */}
-      <Dialog open={isNewTermsDocOpen} onOpenChange={setIsNewTermsDocOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>New Legal Policy</DialogTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Creates a policy document. You'll be prompted to add Version 1 immediately after.
-            </p>
-          </DialogHeader>
-          <div className="space-y-4 text-sm pt-2">
-            {termsDocFormError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                {termsDocFormError}
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Code *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. MEMBERSHIP-TOS"
-                  value={newTermsCode}
-                  onChange={(e) => setNewTermsCode(e.target.value.toUpperCase())}
-                  className="uppercase font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Membership Terms"
-                  value={newTermsName}
-                  onChange={(e) => setNewTermsName(e.target.value)}
-                  className="text-sm"
-                />
+      {/* ========================================================================= */}
+      {/* MODAL: PACKAGE VERSION HISTORY (READ-ONLY SNAPSHOTS) */}
+      {/* ========================================================================= */}
+      {historyPackage && (
+        <Dialog open={Boolean(historyPackage)} onOpenChange={(open) => { if (!open) { setHistoryPackage(null); setExpandedVersionId(null); } }}>
+          <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-3xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
+            {/* Header */}
+            <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-border/60 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <History className="w-4 h-4 text-primary shrink-0" />
+                    <h2 className="font-bold text-base text-foreground leading-snug">
+                      Version History — {historyPackage.name}
+                    </h2>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Immutable commercial snapshots · click a version to view all fields
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] shrink-0 font-mono">
+                  {historyPackage.versions?.length ?? 0} version{(historyPackage.versions?.length ?? 0) !== 1 ? 's' : ''}
+                </Badge>
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Policy Type *</label>
-              <select
-                value={newTermsType}
-                onChange={(e) => setNewTermsType(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="MEMBERSHIP_TERMS">Membership Terms</option>
-                <option value="ATTENDANCE_COMMITMENT_POLICY">Attendance Commitment Policy</option>
-                <option value="CANCELLATION_POLICY">Cancellation Policy</option>
-                <option value="PRIVACY_NOTICE">Privacy Notice</option>
-                <option value="REWARD_POLICY">Reward Policy</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsNewTermsDocOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!newTermsCode.trim() || !newTermsName.trim() || createTermsDocMutation.isPending}
-              onClick={() => {
-                setTermsDocFormError(null);
-                createTermsDocMutation.mutate();
-              }}
-            >
-              {createTermsDocMutation.isPending ? 'Creating...' : 'Create & Add Version 1 →'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* MODAL: NEW VERSION */}
-      <Dialog open={isNewTermsVersionOpen} onOpenChange={setIsNewTermsVersionOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Create Draft Version</DialogTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Target: <span className="font-mono text-primary font-semibold">{selectedTermsDoc?.name}</span>
-            </p>
-          </DialogHeader>
-          <div className="space-y-4 text-sm pt-2">
-            {termsVerFormError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                {termsVerFormError}
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Effective From *</label>
-              <input
-                type="datetime-local"
-                value={newVerEffectiveFrom}
-                onChange={(e) => setNewVerEffectiveFrom(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <span className="text-[10px] text-muted-foreground">When this version will become effective once published</span>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Policy Content</label>
-              <textarea
-                placeholder="Paste the full legal text here (optional — can be added later)..."
-                value={newVerContent}
-                onChange={(e) => setNewVerContent(e.target.value)}
-                rows={8}
-                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y font-mono"
-              />
-            </div>
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
-              <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>Version is created in <strong>Draft</strong> state. You must explicitly publish it to make it live and member-facing.</span>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsNewTermsVersionOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!newVerEffectiveFrom || createTermsVersionMutation.isPending}
-              onClick={() => {
-                setTermsVerFormError(null);
-                createTermsVersionMutation.mutate();
-              }}
-            >
-              {createTermsVersionMutation.isPending ? 'Saving...' : 'Save as Draft'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            {/* Scrollable version list */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-3">
+              {historyPackage.versions && historyPackage.versions.length > 0 ? (
+                historyPackage.versions
+                  .slice()
+                  .sort((a, b) => b.version_number - a.version_number)
+                  .map((ver) => {
+                    const isCurrent = ver.status === 'ACTIVE';
+                    const isExpanded = expandedVersionId === ver.id;
+                    const prices = ver.prices ?? [];
+                    const ents = ver.entitlement_definitions ?? [];
+                    const homeEnt = ents.find(e => e.entitlement_type === 'HOME_BRANCH_SESSION');
+                    const crossEnt = ents.find(e => e.entitlement_type === 'CROSS_BRANCH_SESSION');
+                    const classEnt = ents.find(e => e.entitlement_type === 'CLASS_SESSION');
+                    const ptEnt = ents.find(e => e.entitlement_type === 'PERSONAL_TRAINING_SESSION');
+                    const openEnt = ents.find(e => e.entitlement_type === 'OPEN_ACCESS');
+                    const otherEnts = ents.filter(e => !['HOME_BRANCH_SESSION','CROSS_BRANCH_SESSION','CLASS_SESSION','PERSONAL_TRAINING_SESSION','OPEN_ACCESS'].includes(e.entitlement_type));
 
-      {/* MODAL: PUBLISH CONFIRMATION */}
-      <Dialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="w-4 h-4 text-emerald-500 shrink-0" />
-              Publish Version v{publishTarget?.versionNum}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-sm py-2">
-            {publishError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                {publishError}
-              </div>
-            )}
-            <p className="text-muted-foreground">
-              Publishing makes this version <strong>live and member-facing</strong>.
-              Any existing active version will be <span className="text-amber-600 dark:text-amber-400 font-medium">retired</span> automatically.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Published versions are <strong>immutable</strong> — you cannot edit content after publishing.
-            </p>
-          </div>
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsPublishConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={publishTermsVersionMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => {
-                setPublishError(null);
-                publishTermsVersionMutation.mutate();
-              }}
-            >
-              {publishTermsVersionMutation.isPending ? 'Publishing...' : 'Confirm Publish'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                    const firstPrice = prices[0];
+                    const durationLabel = `${ver.duration_value} ${ver.duration_unit?.toLowerCase()}(s)${ver.total_days ? ` (${ver.total_days}d)` : ''}`;
+                    const validityLabel = ver.validity_days ? `${ver.validity_days} days` : ver.total_days ? `${ver.total_days} days` : '—';
+                    const channels = [ver.show_on_web && 'Web', ver.show_on_app && 'App'].filter(Boolean).join(', ') || 'None';
 
-      {/* MODAL: NEW PROGRAM TYPE */}
+                    return (
+                      <div
+                        key={ver.id}
+                        className={`rounded-xl border overflow-hidden transition-all ${
+                          isCurrent
+                            ? 'border-primary/40 ring-1 ring-primary/20 bg-primary/5'
+                            : 'border-border/60 bg-card'
+                        }`}
+                      >
+                        {/* Version summary header — always visible, click to expand */}
+                        <button
+                          type="button"
+                          onClick={() => toggleVersionExpanded(ver.id)}
+                          className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-muted/30 transition-colors"
+                          aria-expanded={isExpanded}
+                        >
+                          {/* Version number badge */}
+                          <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                            isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                          }`}>
+                            v{ver.version_number}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <span className="font-semibold text-sm text-foreground truncate">
+                                {ver.name_snapshot || historyPackage.name}
+                              </span>
+                              <Badge variant={isCurrent ? 'default' : 'secondary'} className="text-[10px] shrink-0">
+                                {isCurrent ? 'CURRENT' : ver.status}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono shrink-0">READ-ONLY</span>
+                            </div>
+                            {/* Quick-glance summary row */}
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
+                              <span>📅 {durationLabel}</span>
+                              {firstPrice && <span>💰 {firstPrice.currency || 'INR'} {firstPrice.total_price || firstPrice.sale_price}</span>}
+                              <span>🕐 Validity: {validityLabel}</span>
+                              <span>📡 {channels}</span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                              Created {new Date(ver.created_at).toLocaleDateString()}
+                              {ver.published_at && ` · Published ${new Date(ver.published_at).toLocaleDateString()}`}
+                            </p>
+                          </div>
+
+                          {/* Chevron */}
+                          <div className="shrink-0 text-muted-foreground mt-1">
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </div>
+                        </button>
+
+                        {/* Expanded detail panel */}
+                        {isExpanded && (
+                          <div className="border-t border-border/40 px-4 pb-4 pt-3 space-y-4 text-xs">
+
+                            {/* — Duration & Validity — */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Duration &amp; Validity</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="bg-muted/30 rounded-lg p-2.5">
+                                  <p className="text-[10px] text-muted-foreground mb-0.5">Duration</p>
+                                  <p className="font-semibold text-foreground">{ver.duration_value} {ver.duration_unit?.toLowerCase()}(s)</p>
+                                </div>
+                                <div className="bg-muted/30 rounded-lg p-2.5">
+                                  <p className="text-[10px] text-muted-foreground mb-0.5">Total Days</p>
+                                  <p className="font-semibold text-foreground">{ver.total_days ?? '—'}</p>
+                                </div>
+                                <div className="bg-muted/30 rounded-lg p-2.5">
+                                  <p className="text-[10px] text-muted-foreground mb-0.5">Validity Days</p>
+                                  <p className="font-semibold text-foreground">{ver.validity_days ?? ver.total_days ?? '—'}</p>
+                                </div>
+                                <div className="bg-muted/30 rounded-lg p-2.5">
+                                  <p className="text-[10px] text-muted-foreground mb-0.5">Effective From</p>
+                                  <p className="font-semibold text-foreground">{new Date(ver.effective_from).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* — Pricing — */}
+                            {prices.length > 0 ? (
+                              <div>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pricing</p>
+                                <div className="space-y-2">
+                                  {prices.map((price, pi) => (
+                                    <div key={pi} className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                      <div>
+                                        <p className="text-[10px] text-muted-foreground mb-0.5">Base Price</p>
+                                        <p className="font-semibold text-foreground">{price.currency || 'INR'} {price.base_price}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] text-muted-foreground mb-0.5">Tax ({price.tax_percent || price.tax_percentage || 0}%)</p>
+                                        <p className="font-semibold text-foreground">{price.prices_include_tax ? 'Included' : 'Exclusive'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] text-muted-foreground mb-0.5">Total Price</p>
+                                        <p className="font-bold text-emerald-600 dark:text-emerald-400">{price.currency || 'INR'} {price.total_price || price.sale_price}</p>
+                                      </div>
+                                      {price.branch_name && (
+                                        <div>
+                                          <p className="text-[10px] text-muted-foreground mb-0.5">Branch</p>
+                                          <p className="font-semibold text-foreground">{price.branch_name}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pricing</p>
+                                <p className="text-muted-foreground italic">No pricing configured for this version.</p>
+                              </div>
+                            )}
+
+                            {/* — Entitlements — */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Entitlements &amp; Sessions</p>
+                              {ents.length > 0 ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {homeEnt && (
+                                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">🏠 Home Branch Sessions</p>
+                                      <p className="font-semibold text-foreground">
+                                        {homeEnt.is_unlimited ? 'Unlimited' : homeEnt.allocated_units ? `${homeEnt.allocated_units} sessions` : '—'}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {crossEnt && (
+                                    <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">🌐 Session Passport (Cross-Branch)</p>
+                                      <p className="font-semibold text-foreground">
+                                        {crossEnt.is_unlimited ? 'Unlimited' : crossEnt.allocated_units ? `${crossEnt.allocated_units} sessions` : '—'}
+                                      </p>
+                                      {crossEnt.extra_unit_price && (
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">Extra unit: ₹{crossEnt.extra_unit_price}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                  {classEnt && (
+                                    <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">🧘 Class Sessions</p>
+                                      <p className="font-semibold text-foreground">
+                                        {classEnt.is_unlimited ? 'Unlimited' : classEnt.allocated_units ? `${classEnt.allocated_units} sessions` : '—'}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {ptEnt && (
+                                    <div className="bg-teal-500/5 border border-teal-500/20 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">💪 PT Sessions</p>
+                                      <p className="font-semibold text-foreground">
+                                        {ptEnt.is_unlimited ? 'Unlimited' : ptEnt.allocated_units ? `${ptEnt.allocated_units} sessions` : '—'}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {openEnt && (
+                                    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">🔓 Open Access</p>
+                                      <p className="font-semibold text-foreground">Included</p>
+                                    </div>
+                                  )}
+                                  {otherEnts.map((e, ei) => (
+                                    <div key={ei} className="bg-muted/30 rounded-lg p-2.5">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">{e.entitlement_type.replace(/_/g, ' ')}</p>
+                                      <p className="font-semibold text-foreground">
+                                        {e.is_unlimited ? 'Unlimited' : e.allocated_units ? `${e.allocated_units} units` : '—'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-muted-foreground italic">No entitlements defined for this version.</p>
+                              )}
+                            </div>
+
+                            {/* — Distribution & Flags — */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Distribution &amp; Flags</p>
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                                  ver.show_on_web ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400' : 'bg-muted/30 border-border/50 text-muted-foreground'
+                                }`}>
+                                  <Globe className="w-3 h-3" /> Web {ver.show_on_web ? '✓' : '✗'}
+                                </span>
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                                  ver.show_on_app ? 'bg-violet-500/10 border-violet-500/30 text-violet-600 dark:text-violet-400' : 'bg-muted/30 border-border/50 text-muted-foreground'
+                                }`}>
+                                  <Smartphone className="w-3 h-3" /> App {ver.show_on_app ? '✓' : '✗'}
+                                </span>
+                                {ver.is_trial_package && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400">
+                                    ⚡ Trial Package
+                                  </span>
+                                )}
+                                {ver.only_for_trial && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400">
+                                    🔒 Trial-Only
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* — Description — */}
+                            {ver.description_snapshot && (
+                              <div>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Description</p>
+                                <p className="text-[11px] text-muted-foreground bg-muted/30 rounded-lg p-2.5 whitespace-pre-wrap">{ver.description_snapshot}</p>
+                              </div>
+                            )}
+
+                            {/* — Timestamps — */}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                              <span>Created: {new Date(ver.created_at).toLocaleString()}</span>
+                              {ver.published_at && <span>Published: {new Date(ver.published_at).toLocaleString()}</span>}
+                              {ver.effective_until && <span>Expires: {new Date(ver.effective_until).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+              ) : historyPackage.active_version ? (
+                <div className="p-4 rounded-xl border bg-primary/5 border-primary/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-foreground">
+                      v{historyPackage.active_version.version_number} — {historyPackage.active_version.name_snapshot}
+                    </span>
+                    <Badge variant="default" className="text-[10px]">CURRENT</Badge>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">READ-ONLY</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/40 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Duration</span>
+                      <span className="font-semibold text-foreground">
+                        {historyPackage.active_version.duration_value} {historyPackage.active_version.duration_unit?.toLowerCase()}(s)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Validity</span>
+                      <span className="font-semibold text-foreground">
+                        {historyPackage.active_version.validity_days ?? historyPackage.active_version.total_days ?? '—'} days
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Pricing</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {historyPackage.active_version.prices?.[0]?.total_price
+                          ? `₹ ${historyPackage.active_version.prices[0].total_price}`
+                          : 'Configured'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Sessions</span>
+                      <span className="font-semibold text-foreground">
+                        {historyPackage.active_version.entitlements?.find(e => e.entitlement_type === 'HOME_BRANCH_SESSION')?.allocated_units ?? '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8 text-center bg-card border border-dashed border-border/80 rounded-xl">
+                  <History className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No versions created yet for this package.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 sm:px-6 py-4 border-t border-border/60 shrink-0 flex justify-end">
+              <Button type="button" variant="outline" onClick={() => { setHistoryPackage(null); setExpandedVersionId(null); }}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: PACKAGE AUDIT LOG */}
+      {/* ========================================================================= */}
+      {auditPackage && (
+        <Dialog open={Boolean(auditPackage)} onOpenChange={(open) => !open && setAuditPackage(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-500" />
+                <span>Audit Trail — {auditPackage.name}</span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Chronological record of who modified this package and when.
+              </p>
+            </DialogHeader>
+
+            <div className="space-y-3 pt-2">
+              {isAuditLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-muted/40 rounded-xl border border-border/50 animate-pulse" />
+                  ))}
+                </div>
+              ) : auditEvents.length === 0 ? (
+                <div className="p-8 text-center bg-card border border-dashed border-border/80 rounded-xl">
+                  <Activity className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No audit events recorded yet for this package.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {auditEvents.map((evt: any) => (
+                    <div
+                      key={evt.id}
+                      className="p-3 bg-muted/20 border border-border/60 rounded-xl space-y-1 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-semibold text-foreground font-mono">
+                          {evt.action || evt.event_type}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(evt.created_at || evt.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                        <span>Actor: {evt.actor_email || evt.actor_name || evt.actor || 'System'}</span>
+                        {evt.ip_address && <span>IP: {evt.ip_address}</span>}
+                      </div>
+                      {evt.metadata && Object.keys(evt.metadata).length > 0 && (
+                        <pre className="p-2 bg-background border border-border/40 rounded text-[10px] font-mono text-muted-foreground overflow-x-auto mt-1">
+                          {JSON.stringify(evt.metadata, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setAuditPackage(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: NEW PROGRAM TYPE (NO CODE FIELD) */}
+      {/* ========================================================================= */}
       <Dialog open={isNewProgramTypeOpen} onOpenChange={setIsNewProgramTypeOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
@@ -1615,28 +2050,15 @@ export const PackagesWorkspace: React.FC = () => {
                 {ptFormError}
               </div>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Code *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. MEMBERSHIP"
-                  value={newPtCode}
-                  onChange={(e) => setNewPtCode(e.target.value.toUpperCase())}
-                  className="uppercase font-mono text-sm"
-                />
-                <span className="text-[10px] text-muted-foreground">Unique identifier, uppercase</span>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Membership"
-                  value={newPtName}
-                  onChange={(e) => setNewPtName(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
+              <Input
+                type="text"
+                placeholder="e.g. Membership"
+                value={newPtName}
+                onChange={(e) => setNewPtName(e.target.value)}
+                className="text-sm"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Description</label>
@@ -1665,7 +2087,7 @@ export const PackagesWorkspace: React.FC = () => {
               Cancel
             </Button>
             <Button
-              disabled={!newPtCode.trim() || !newPtName.trim() || createProgramTypeMutation.isPending}
+              disabled={!newPtName.trim() || createProgramTypeMutation.isPending}
               onClick={() => {
                 setPtFormError(null);
                 createProgramTypeMutation.mutate();
@@ -1677,13 +2099,14 @@ export const PackagesWorkspace: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: EDIT PROGRAM TYPE */}
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT PROGRAM TYPE (NO CODE FIELD) */}
+      {/* ========================================================================= */}
       {editingProgramType && (
         <Dialog open={Boolean(editingProgramType)} onOpenChange={(open) => !open && setEditingProgramType(null)}>
           <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Edit Program Type</DialogTitle>
-              <p className="text-xs text-muted-foreground font-mono">Code: {editingProgramType.code}</p>
             </DialogHeader>
             <div className="space-y-4 text-sm pt-2">
               {editPtFormError && (
@@ -1729,7 +2152,7 @@ export const PackagesWorkspace: React.FC = () => {
                   type="number"
                   min={0}
                   value={editPtOrder}
-                  onChange={(e) => setNewPtOrder(Number(e.target.value))}
+                  onChange={(e) => setEditPtOrder(Number(e.target.value))}
                   className="text-sm"
                 />
               </div>
@@ -1760,7 +2183,205 @@ export const PackagesWorkspace: React.FC = () => {
         </Dialog>
       )}
 
-      {/* MODAL: NEW PACKAGE */}
+      {/* ========================================================================= */}
+      {/* MODAL: NEW PROGRAM (NO CODE FIELD) */}
+      {/* ========================================================================= */}
+      <Dialog open={isNewProgramOpen} onOpenChange={setIsNewProgramOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Create New Program</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm pt-2">
+            {progFormError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                {progFormError}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Program Name *</label>
+              <Input
+                type="text"
+                placeholder="e.g. Strength & Conditioning"
+                value={newProgName}
+                onChange={(e) => setNewProgName(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
+              <select
+                value={newProgType || (programTypes[0]?.id ?? '')}
+                onChange={(e) => setNewProgType(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {programTypes.length === 0 ? (
+                  <option value="">Loading / No program types configured</option>
+                ) : (
+                  programTypes.map((pt) => (
+                    <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
+                      {pt.name}{pt.status === 'INACTIVE' ? ' — Inactive' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+              <Input
+                type="text"
+                placeholder="Optional program description..."
+                value={newProgDesc}
+                onChange={(e) => setNewProgDesc(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="new_prog_trial"
+                checked={newProgTrial}
+                onChange={(e) => setNewProgTrial(e.target.checked)}
+                className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="new_prog_trial" className="text-xs text-foreground cursor-pointer select-none">
+                Allow trial bookings for this program
+              </label>
+            </div>
+          </div>
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsNewProgramOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!newProgName.trim() || createProgramMutation.isPending}
+              onClick={() => {
+                setProgFormError(null);
+                createProgramMutation.mutate();
+              }}
+            >
+              {createProgramMutation.isPending ? 'Creating...' : 'Create Program'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT PROGRAM (NO CODE FIELD) */}
+      {/* ========================================================================= */}
+      {editingProgram && (
+        <Dialog open={Boolean(editingProgram)} onOpenChange={(open) => !open && setEditingProgram(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>Edit Program</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-sm pt-2">
+              {progFormError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                  {progFormError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Program Name *</label>
+                  <Input
+                    type="text"
+                    value={editProgName}
+                    onChange={(e) => setEditProgName(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Status</label>
+                  <select
+                    value={editProgStatus}
+                    onChange={(e) => setEditProgStatus(e.target.value as any)}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="ARCHIVED">Archived</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+                <Input
+                  type="text"
+                  value={editProgDesc}
+                  onChange={(e) => setEditProgDesc(e.target.value)}
+                  placeholder="Optional program description..."
+                  className="text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
+                <select
+                  value={editProgType}
+                  onChange={(e) => setEditProgType(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {programTypes.length === 0 ? (
+                    <option value="">Loading / No program types configured</option>
+                  ) : (
+                    programTypes.map((pt) => (
+                      <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
+                        {pt.name}{pt.status === 'INACTIVE' ? ' — Inactive' : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="trial_allowed"
+                  checked={editProgTrial}
+                  onChange={(e) => setEditProgTrial(e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="trial_allowed" className="text-xs text-foreground cursor-pointer select-none">
+                  Allow trial bookings for this program
+                </label>
+              </div>
+            </div>
+            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingProgram(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!editProgName.trim() || updateProgramMutation.isPending}
+                onClick={() => {
+                  setProgFormError(null);
+                  updateProgramMutation.mutate({
+                    id: editingProgram.id,
+                    payload: {
+                      name: editProgName.trim(),
+                      description: editProgDesc.trim() || null,
+                      program_type: editProgType,
+                      trial_allowed: editProgTrial,
+                      status: editProgStatus,
+                    },
+                  });
+                }}
+              >
+                {updateProgramMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: NEW PACKAGE (NO CODE FIELD) */}
+      {/* ========================================================================= */}
       <Dialog open={isNewPackageOpen} onOpenChange={setIsNewPackageOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
@@ -1805,33 +2426,21 @@ export const PackagesWorkspace: React.FC = () => {
                     <option value="">Select Program (Required)</option>
                     {programs.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.code})
+                        {p.name}
                       </option>
                     ))}
                   </select>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Package Code *</label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. GOLD-ANNUAL"
-                    value={newPkgCode}
-                    onChange={(e) => setNewPkgCode(e.target.value.toUpperCase())}
-                    className="uppercase font-mono text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Package Name *</label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. Gold Annual Membership"
-                    value={newPkgName}
-                    onChange={(e) => setNewPkgName(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Package Name *</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Gold Annual Membership"
+                  value={newPkgName}
+                  onChange={(e) => setNewPkgName(e.target.value)}
+                  className="text-sm"
+                />
               </div>
             </div>
 
@@ -1849,7 +2458,9 @@ export const PackagesWorkspace: React.FC = () => {
                     onChange={(e) => {
                       const v = Math.max(1, Number(e.target.value));
                       setNewPkgDurationVal(v);
-                      setNewPkgTotalDays(calcDays(v, newPkgDurationUnit));
+                      const d = calcDays(v, newPkgDurationUnit);
+                      setNewPkgTotalDays(d);
+                      setNewPkgValidity(d);
                     }}
                     className="text-sm"
                   />
@@ -1862,7 +2473,9 @@ export const PackagesWorkspace: React.FC = () => {
                     onChange={(e) => {
                       const u = e.target.value;
                       setNewPkgDurationUnit(u);
-                      setNewPkgTotalDays(calcDays(newPkgDurationVal, u));
+                      const d = calcDays(newPkgDurationVal, u);
+                      setNewPkgTotalDays(d);
+                      setNewPkgValidity(d);
                     }}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
@@ -1872,21 +2485,19 @@ export const PackagesWorkspace: React.FC = () => {
                     <option value="YEAR">Year(s)</option>
                   </select>
                 </div>
-                {/* Total Days — auto-calculated, read-only */}
+                {/* Total Days */}
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
                     Total Days
                     <span className="text-[9px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">auto</span>
                   </label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      readOnly
-                      value={newPkgTotalDays}
-                      className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
-                      tabIndex={-1}
-                    />
-                  </div>
+                  <Input
+                    type="number"
+                    readOnly
+                    value={newPkgTotalDays}
+                    className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
+                    tabIndex={-1}
+                  />
                 </div>
               </div>
             </div>
@@ -2028,7 +2639,6 @@ export const PackagesWorkspace: React.FC = () => {
             </Button>
             <Button
               disabled={
-                !newPkgCode.trim() ||
                 !newPkgName.trim() ||
                 !newPkgProgram ||
                 newPkgTotalDays <= 0 ||
@@ -2049,7 +2659,9 @@ export const PackagesWorkspace: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: EDIT PACKAGE */}
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT PACKAGE (NO CODE FIELD) */}
+      {/* ========================================================================= */}
       {editingPackage && (
         <Dialog open={Boolean(editingPackage)} onOpenChange={(open) => !open && setEditingPackage(null)}>
           <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
@@ -2078,22 +2690,12 @@ export const PackagesWorkspace: React.FC = () => {
                     <option value="">Select Program (Required)</option>
                     {programs.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.code})
+                        {p.name}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Package Code *</label>
-                    <Input
-                      type="text"
-                      placeholder="e.g. GOLD-ANNUAL"
-                      value={editPkgCode}
-                      onChange={(e) => setEditPkgCode(e.target.value.toUpperCase())}
-                      className="text-sm font-mono"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-foreground mb-1">Package Name *</label>
                     <Input
@@ -2158,21 +2760,19 @@ export const PackagesWorkspace: React.FC = () => {
                       <option value="YEAR">Year(s)</option>
                     </select>
                   </div>
-                  {/* Total Days — auto-calculated, read-only */}
+                  {/* Total Days */}
                   <div>
                     <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
                       Total Days
                       <span className="text-[9px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">auto</span>
                     </label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        readOnly
-                        value={editPkgTotalDays}
-                        className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
-                        tabIndex={-1}
-                      />
-                    </div>
+                    <Input
+                      type="number"
+                      readOnly
+                      value={editPkgTotalDays}
+                      className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
+                      tabIndex={-1}
+                    />
                   </div>
                 </div>
               </div>
@@ -2314,7 +2914,6 @@ export const PackagesWorkspace: React.FC = () => {
               </Button>
               <Button
                 disabled={
-                  !editPkgCode.trim() ||
                   !editPkgName.trim() ||
                   !editPkgProgram ||
                   editPkgTotalDays <= 0 ||
@@ -2332,14 +2931,16 @@ export const PackagesWorkspace: React.FC = () => {
         </Dialog>
       )}
 
-      {/* MODAL: NEW VERSION */}
+      {/* ========================================================================= */}
+      {/* MODAL: NEW PACKAGE VERSION */}
+      {/* ========================================================================= */}
       {selectedPackage && (
         <Dialog open={isNewVersionOpen} onOpenChange={setIsNewVersionOpen}>
           <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Create New Package Version</DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Target: <span className="font-mono text-primary font-semibold">{selectedPackage.name}</span>
+                Target: <span className="font-semibold text-primary">{selectedPackage.name}</span>
               </p>
             </DialogHeader>
             <div className="space-y-4 text-sm pt-2">
@@ -2389,7 +2990,7 @@ export const PackagesWorkspace: React.FC = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Total Days — auto-calculated, read-only */}
+                {/* Total Days */}
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
                     Total Days
@@ -2587,216 +3188,167 @@ export const PackagesWorkspace: React.FC = () => {
         </Dialog>
       )}
 
-      {/* MODAL: NEW PROGRAM */}
-      <Dialog open={isNewProgramOpen} onOpenChange={setIsNewProgramOpen}>
+      {/* ========================================================================= */}
+      {/* MODAL: NEW LEGAL POLICY (NO CODE FIELD) */}
+      {/* ========================================================================= */}
+      <Dialog open={isNewTermsDocOpen} onOpenChange={setIsNewTermsDocOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Create New Program</DialogTitle>
+            <DialogTitle>Create Legal Policy Document</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Documents can hold versioned legal texts that members accept during onboarding or purchase.
+            </p>
           </DialogHeader>
           <div className="space-y-4 text-sm pt-2">
-            {progFormError && (
+            {termsDocFormError && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                {progFormError}
+                {termsDocFormError}
               </div>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Program Code *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. STRENGTH"
-                  value={newProgCode}
-                  onChange={(e) => setNewProgCode(e.target.value.toUpperCase())}
-                  className="uppercase font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Program Name *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Strength & Conditioning"
-                  value={newProgName}
-                  onChange={(e) => setNewProgName(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
-            </div>
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
-              <select
-                value={newProgType || (programTypes[0]?.id ?? '')}
-                onChange={(e) => setNewProgType(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {programTypes.length === 0 ? (
-                  <option value="">Loading / No program types configured</option>
-                ) : (
-                  programTypes.map((pt) => (
-                    <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
-                      {pt.name} ({pt.code}){pt.status === 'INACTIVE' ? ' — Inactive' : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
               <Input
                 type="text"
-                placeholder="Optional program description..."
-                value={newProgDesc}
-                onChange={(e) => setNewProgDesc(e.target.value)}
+                placeholder="e.g. Membership Terms"
+                value={newTermsName}
+                onChange={(e) => setNewTermsName(e.target.value)}
                 className="text-sm"
               />
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="new_prog_trial"
-                checked={newProgTrial}
-                onChange={(e) => setNewProgTrial(e.target.checked)}
-                className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-              />
-              <label htmlFor="new_prog_trial" className="text-xs text-foreground cursor-pointer select-none">
-                Allow trial bookings for this program
-              </label>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Policy Type *</label>
+              <select
+                value={newTermsType}
+                onChange={(e) => setNewTermsType(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="MEMBERSHIP_TERMS">Membership Terms</option>
+                <option value="ATTENDANCE_COMMITMENT_POLICY">Attendance Commitment Policy</option>
+                <option value="CANCELLATION_POLICY">Cancellation Policy</option>
+                <option value="PRIVACY_NOTICE">Privacy Notice</option>
+                <option value="REWARD_POLICY">Reward Policy</option>
+                <option value="OTHER">Other</option>
+              </select>
             </div>
           </div>
           <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsNewProgramOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => setIsNewTermsDocOpen(false)}>
               Cancel
             </Button>
             <Button
-              disabled={!newProgCode.trim() || !newProgName.trim() || createProgramMutation.isPending}
+              disabled={!newTermsName.trim() || createTermsDocMutation.isPending}
               onClick={() => {
-                setProgFormError(null);
-                createProgramMutation.mutate({
-                  code: newProgCode.trim().toUpperCase(),
-                  name: newProgName.trim(),
-                  description: newProgDesc.trim() || null,
-                  program_type: newProgType || (programTypes[0]?.id ?? ''),
-                  trial_allowed: newProgTrial,
-                });
+                setTermsDocFormError(null);
+                createTermsDocMutation.mutate();
               }}
             >
-              {createProgramMutation.isPending ? 'Creating...' : 'Create Program'}
+              {createTermsDocMutation.isPending ? 'Creating...' : 'Create & Add Version 1 →'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: EDIT PROGRAM */}
-      {editingProgram && (
-        <Dialog open={Boolean(editingProgram)} onOpenChange={(open) => !open && setEditingProgram(null)}>
-          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle>Edit Program</DialogTitle>
-              <p className="text-xs text-muted-foreground font-mono">Code: {editingProgram.code}</p>
-            </DialogHeader>
-            <div className="space-y-4 text-sm pt-2">
-              {progFormError && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                  {progFormError}
-                </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Program Name *</label>
-                  <Input
-                    type="text"
-                    value={editProgName}
-                    onChange={(e) => setEditProgName(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Status</label>
-                  <select
-                    value={editProgStatus}
-                    onChange={(e) => setEditProgStatus(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                    <option value="ARCHIVED">Archived</option>
-                  </select>
-                </div>
+      {/* ========================================================================= */}
+      {/* MODAL: NEW TERMS VERSION */}
+      {/* ========================================================================= */}
+      <Dialog open={isNewTermsVersionOpen} onOpenChange={setIsNewTermsVersionOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Create Draft Version</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Target: <span className="font-semibold text-primary">{selectedTermsDoc?.name}</span>
+            </p>
+          </DialogHeader>
+          <div className="space-y-4 text-sm pt-2">
+            {termsVerFormError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                {termsVerFormError}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
-                <Input
-                  type="text"
-                  value={editProgDesc}
-                  onChange={(e) => setEditProgDesc(e.target.value)}
-                  placeholder="Optional program description..."
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
-                <select
-                  value={editProgType}
-                  onChange={(e) => setEditProgType(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {programTypes.length === 0 ? (
-                    <option value="">Loading / No program types configured</option>
-                  ) : (
-                    programTypes.map((pt) => (
-                      <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
-                        {pt.name} ({pt.code}){pt.status === 'INACTIVE' ? ' — Inactive' : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="trial_allowed"
-                  checked={editProgTrial}
-                  onChange={(e) => setEditProgTrial(e.target.checked)}
-                  className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                />
-                <label htmlFor="trial_allowed" className="text-xs text-foreground cursor-pointer select-none">
-                  Allow trial bookings for this program
-                </label>
-              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Effective From *</label>
+              <input
+                type="datetime-local"
+                value={newVerEffectiveFrom}
+                onChange={(e) => setNewVerEffectiveFrom(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="text-[10px] text-muted-foreground">When this version will become effective once published</span>
             </div>
-            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditingProgram(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={!editProgName.trim() || updateProgramMutation.isPending}
-                onClick={() => {
-                  setProgFormError(null);
-                  updateProgramMutation.mutate({
-                    id: editingProgram.id,
-                    payload: {
-                      name: editProgName.trim(),
-                      description: editProgDesc.trim() || null,
-                      program_type: editProgType,
-                      trial_allowed: editProgTrial,
-                      status: editProgStatus,
-                    },
-                  });
-                }}
-              >
-                {updateProgramMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Policy Content</label>
+              <textarea
+                placeholder="Paste the full legal text here (optional — can be added later)..."
+                value={newVerContent}
+                onChange={(e) => setNewVerContent(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y font-mono"
+              />
+            </div>
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+              <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>Version is created in <strong>Draft</strong> state. You must explicitly publish it to make it live and member-facing.</span>
+            </div>
+          </div>
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsNewTermsVersionOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!newVerEffectiveFrom || createTermsVersionMutation.isPending}
+              onClick={() => {
+                setTermsVerFormError(null);
+                createTermsVersionMutation.mutate();
+              }}
+            >
+              {createTermsVersionMutation.isPending ? 'Saving...' : 'Save as Draft'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: PUBLISH TERMS VERSION CONFIRMATION */}
+      {/* ========================================================================= */}
+      <Dialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-emerald-500 shrink-0" />
+              Publish Version v{publishTarget?.versionNum}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm py-2">
+            {publishError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                {publishError}
+              </div>
+            )}
+            <p className="text-muted-foreground">
+              Publishing makes this version <strong>live and member-facing</strong>.
+              Any existing active version will be <span className="text-amber-600 dark:text-amber-400 font-medium">retired</span> automatically.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Published versions are <strong>immutable</strong> — you cannot edit content after publishing.
+            </p>
+          </div>
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsPublishConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={publishTermsVersionMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => {
+                setPublishError(null);
+                publishTermsVersionMutation.mutate();
+              }}
+            >
+              {publishTermsVersionMutation.isPending ? 'Publishing...' : 'Confirm Publish'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

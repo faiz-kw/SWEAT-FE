@@ -201,3 +201,20 @@ export interface ProgramOption {
   status?: string;
 }
 
+export interface ClassesMetadataOption<T = string> {
+  value: T;
+  label: string;
+  full_name?: string;
+}
+
+export interface ClassesMetadata {
+  statuses: ClassesMetadataOption<string>[];
+  delivery_modes: ClassesMetadataOption<DeliveryMode>[];
+  recurrence_types: ClassesMetadataOption<string>[];
+  weekdays: ClassesMetadataOption<number>[];
+  trainer_roles: ClassesMetadataOption<TrainerOccurrenceRole>[];
+  content_types: ClassesMetadataOption<string>[];
+  branch_avail_statuses: ClassesMetadataOption<string>[];
+}
+
+

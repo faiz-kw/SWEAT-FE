@@ -29,6 +29,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { usePermissions } from '../../lib/permissions';
 
 interface RewardsWorkspaceProps {
   initialTab?: 'referrals' | 'programs' | 'accounts' | 'ledger' | 'rules';
@@ -38,6 +39,8 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
   initialTab = 'referrals',
 }) => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canGrant = can('rewards.programs.create') || can('rewards.programs.edit') || can('core.settings.edit');
   const [activeTab, setActiveTab] = useState<
     'referrals' | 'programs' | 'accounts' | 'ledger' | 'rules'
   >(initialTab);
@@ -394,7 +397,7 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
                             </Badge>
                           </td>
                           <td className="px-5 py-4 text-right">
-                            {ref.status === 'REGISTERED' && (
+                            {ref.status === 'REGISTERED' && canGrant && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -522,17 +525,19 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
                         </Badge>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedAccount(acc);
-                            setIsGrantOpen(true);
-                          }}
-                          className="text-xs h-7"
-                        >
-                          Grant Points
-                        </Button>
+                        {canGrant && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedAccount(acc);
+                              setIsGrantOpen(true);
+                            }}
+                            className="text-xs h-7"
+                          >
+                            Grant Points
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -41,6 +41,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/lib/permissions';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
   NEW_LEAD: { label: 'New Lead', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
@@ -59,6 +60,9 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
 
 export function LeadsWorkspace() {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canCreate = can('sales.leads.create');
+  const canEdit = can('sales.leads.edit');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
 
@@ -231,14 +235,16 @@ export function LeadsWorkspace() {
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setIsCreateOpen(true)}
-              className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Lead</span>
-            </Button>
+            {canCreate && (
+              <Button
+                size="sm"
+                onClick={() => setIsCreateOpen(true)}
+                className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Lead</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -301,10 +307,12 @@ export function LeadsWorkspace() {
             <p className="text-xs sm:text-sm text-muted-foreground mt-1 mb-6">
               There are no prospective members in your database matching the current filter.
             </p>
-            <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Add First Lead
-            </Button>
+            {canCreate && (
+              <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add First Lead
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -374,31 +382,33 @@ export function LeadsWorkspace() {
                           {lead.assigned_sales_name || 'Unassigned'}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedLead(lead);
-                                setTargetStatus(lead.current_status);
-                                setIsStatusOpen(true);
-                              }}
-                              className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                            >
-                              Update Status
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedLead(lead);
-                                setIsTrialOpen(true);
-                              }}
-                              className="h-8 text-xs"
-                            >
-                              Book Trial
-                            </Button>
-                          </div>
+                          {canEdit && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedLead(lead);
+                                  setTargetStatus(lead.current_status);
+                                  setIsStatusOpen(true);
+                                }}
+                                className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                              >
+                                Update Status
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedLead(lead);
+                                  setIsTrialOpen(true);
+                                }}
+                                className="h-8 text-xs"
+                              >
+                                Book Trial
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -454,31 +464,33 @@ export function LeadsWorkspace() {
                       )}
                     </div>
 
-                    <div className="border-t border-border/40 pt-3 flex items-center justify-between gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setTargetStatus(lead.current_status);
-                          setIsStatusOpen(true);
-                        }}
-                        className="h-8 text-xs flex-1"
-                      >
-                        Status
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setIsTrialOpen(true);
-                        }}
-                        className="h-8 text-xs flex-1 bg-primary text-primary-foreground"
-                      >
-                        Book Trial
-                      </Button>
-                    </div>
+                    {canEdit && (
+                      <div className="border-t border-border/40 pt-3 flex items-center justify-between gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setTargetStatus(lead.current_status);
+                            setIsStatusOpen(true);
+                          }}
+                          className="h-8 text-xs flex-1"
+                        >
+                          Status
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setIsTrialOpen(true);
+                          }}
+                          className="h-8 text-xs flex-1 bg-primary text-primary-foreground"
+                        >
+                          Book Trial
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

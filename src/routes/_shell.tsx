@@ -6,7 +6,9 @@ import { Topbar } from "@/components/shell/Topbar";
 import { AppProvider, useAuth } from "@/contexts";
 import { isAuthenticated, refreshAndHydrateSession } from "@/services";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
+import { hasPermission } from "@/lib/permissions";
 import { NAV } from "@/lib/nav";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_shell")({
   beforeLoad: async () => {
@@ -24,7 +26,7 @@ export const Route = createFileRoute("/_shell")({
 });
 
 /** System-level section IDs that are always accessible regardless of enabledModules */
-const ALWAYS_ALLOWED_SECTIONS = new Set(["dashboard", "admin"]);
+const ALWAYS_ALLOWED_SECTIONS = new Set(["dashboard"]);
 
 function ShellLayout() {
   const { isAuthenticated: isAuth, isLoading, user } = useAuth();
@@ -38,55 +40,61 @@ function ShellLayout() {
     }
   }, [isLoading, isAuth, navigate]);
 
-  // Route-level access guard: redirect if a tenant user navigates directly to a blocked URL.
+  // Route-level access guard: redirect if a tenant user navigates directly to an unpermitted URL.
   // This closes the "sidebar-only" gap — even if someone pastes a blocked URL in the address bar,
-  // they get bounced back to the dashboard.
+  // they get bounced back to the dashboard with an Access Denied alert.
   React.useEffect(() => {
-    if (!user) return;
+    if (isLoading || !user) return;
+
+    const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
 
     // Platform Core (including White Label) is STRICTLY Platform Super Admin only
     if (pathname.startsWith("/platform")) {
-      const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
       if (!isSuper || user.userType === "tenant") {
+        toast.error("Access denied: Platform Core is restricted to super administrators.");
         void navigate({ to: "/" });
         return;
       }
     }
 
-    if (user.enabledModules === null) return;  // super admin — unrestricted
-    if (pathname === "/") return;  // dashboard is always allowed
+    if (isSuper) return; // Super admin unrestricted
+    if (pathname === "/") return; // Dashboard is always allowed
 
     // Find which nav section this path belongs to
     const section = NAV.find((s) =>
-      s.items.some((item) => item.to !== "/" && pathname.startsWith(item.to))
+      s.items.some((item) => item.to !== "/" && (pathname === item.to || pathname.startsWith(item.to + "/")))
     );
-    if (!section) return;  // unknown route — let the router 404 it
+    if (!section) return; // Unknown route — let router 404
 
     // Find the specific nav item that matches this path
     const navItem = section.items.find(
-      (item) => item.to !== "/" && pathname.startsWith(item.to)
+      (item) => item.to !== "/" && (pathname === item.to || pathname.startsWith(item.to + "/"))
     );
     if (!navItem) return;
 
-    // Guard items restricted to super admins (e.g. Services, Configuration, Forms, Integrations, API)
-    if (navItem.visibility === "superadmin_only") {
-      const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
-      if (!isSuper || user.userType === "tenant") {
+    // Guard items restricted to super admins
+    if (navItem.visibility === "superadmin_only" || section.visibility === "superadmin_only") {
+      toast.error("Access denied: You do not have permission to view this administration page.");
+      void navigate({ to: "/" });
+      return;
+    }
+
+    // Check tenant provisioned module restriction (skip dashboard and admin)
+    if (section.id !== "dashboard" && section.id !== "admin") {
+      const isProvisioned = isSubmoduleAllowed(user.enabledModules, navItem.to, section.id);
+      if (!isProvisioned) {
+        toast.error(`Access denied: Module '${section.label}' is not provisioned for this tenant.`);
         void navigate({ to: "/" });
         return;
       }
     }
 
-    // Always-allowed system sections
-    if (ALWAYS_ALLOWED_SECTIONS.has(section.id)) return;
-
-    // Check permission against tenant's provisioned modules
-    const allowed = isSubmoduleAllowed(user.enabledModules, navItem.to, section.id);
-    if (!allowed) {
-      // Access denied — redirect to dashboard silently
+    // Check granular effective user permission
+    if (navItem.permission && !hasPermission(user, navItem.permission)) {
+      toast.error("Access denied: You do not have permission to view this page. Please contact your administrator.");
       void navigate({ to: "/" });
     }
-  }, [pathname, user, navigate]);
+  }, [pathname, user, isLoading, navigate]);
 
   if (isLoading) {
     return (

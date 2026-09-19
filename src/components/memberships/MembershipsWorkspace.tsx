@@ -25,9 +25,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '../../lib/permissions';
 
 export const MembershipsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canEdit = can('members.memberships.edit');
   const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>('memberships');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -361,24 +364,28 @@ export const MembershipsWorkspace: React.FC = () => {
                                 >
                                   <FileText className="size-3.5" />
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleOpenConsume(mem)}
-                                  className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
-                                  title="Check-In / Consume Session"
-                                >
-                                  <Activity className="size-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleOpenFreeze(mem)}
-                                  className="h-7 w-7 p-0 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
-                                  title="Freeze Membership"
-                                >
-                                  <Snowflake className="size-3.5" />
-                                </Button>
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleOpenConsume(mem)}
+                                    className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
+                                    title="Check-In / Consume Session"
+                                  >
+                                    <Activity className="size-3.5" />
+                                  </Button>
+                                )}
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleOpenFreeze(mem)}
+                                    className="h-7 w-7 p-0 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+                                    title="Freeze Membership"
+                                  >
+                                    <Snowflake className="size-3.5" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
