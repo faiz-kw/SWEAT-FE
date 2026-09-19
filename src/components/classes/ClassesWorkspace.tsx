@@ -24,6 +24,10 @@ import {
   CalendarX,
   Info,
   ExternalLink,
+  Activity,
+  Pencil,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { toast } from 'sonner';
@@ -84,6 +88,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [isCreateRuleOpen, setIsCreateRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<ClassScheduleRule | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
+  const [auditRule, setAuditRule] = useState<ClassScheduleRule | null>(null);
 
   const [isGenerateOccurrencesOpen, setIsGenerateOccurrencesOpen] = useState(false);
   const [selectedRuleForGen, setSelectedRuleForGen] = useState<ClassScheduleRule | null>(null);
@@ -233,6 +238,29 @@ export const ClassesWorkspace: React.FC = () => {
     queryKey: ['class-content-mappings'],
     queryFn: () => classesApi.getContentMappings(),
   });
+
+  // Recurring Schedule Rule Audit Query
+  const {
+    data: rawRuleAuditEvents = [],
+    isLoading: isRuleAuditLoading,
+  } = useQuery({
+    queryKey: ['rule-audit-events', auditRule?.id],
+    queryFn: () =>
+      classesApi.getAuditEvents({
+        entity_type: 'ClassScheduleRule',
+        entity_id: auditRule?.id,
+      }),
+    enabled: Boolean(auditRule?.id),
+  });
+
+  const ruleAuditEvents = React.useMemo(() => {
+    if (!auditRule?.id) return [];
+    return rawRuleAuditEvents.filter((evt: any) => {
+      if (evt.entity_id && evt.entity_id !== auditRule.id) return false;
+      if (evt.entity_type && evt.entity_type !== 'ClassScheduleRule') return false;
+      return true;
+    });
+  }, [rawRuleAuditEvents, auditRule?.id]);
 
   // Canonical Backend Metadata for zero hardcoded dropdown options
   const { data: metadata, isLoading: loadingMetadata } = useQuery({
@@ -1364,87 +1392,154 @@ export const ClassesWorkspace: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-                <div className="overflow-x-auto scrollbar-thin">
-                  <table className="w-full text-left text-xs sm:text-sm">
-                    <thead className="bg-muted/60 text-[11px] font-semibold uppercase text-muted-foreground border-b border-border tracking-wider">
-                      <tr>
-                        <th className="px-4 py-3">Class Template</th>
-                        <th className="px-4 py-3">Branch</th>
-                        <th className="px-4 py-3">Weekdays</th>
-                        <th className="px-4 py-3">Time Window</th>
-                        <th className="px-4 py-3">Validity</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {filteredRules.map((rule) => (
-                        <tr key={rule.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-foreground">{rule.class_name || rule.template_name || rule.class_template}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{rule.branch_name || rule.branch}</td>
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs">
-                              {(rule.days_of_week || []).map((d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]).join(', ')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
-                            {rule.start_time} - {rule.end_time}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
-                            {rule.valid_from} to {rule.valid_until || 'Ongoing'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant={rule.status === 'ACTIVE' ? 'default' : 'secondary'} className={rule.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
-                              {rule.status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {canEdit && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => openEditRuleModal(rule)}
-                                  className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
-                                >
-                                  <Edit2 className="size-3" /> Edit
-                                </Button>
-                              )}
-                              {canEdit && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => toggleRuleStatusMutation.mutate({
-                                    id: rule.id,
-                                    status: rule.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                                  })}
-                                  className={`text-xs h-7 ${rule.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
-                                >
-                                  {rule.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                </Button>
-                              )}
-                              {canCreate && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedRuleForGen(rule);
-                                    setGenFromDate(selectedDate);
-                                    setIsGenerateOccurrencesOpen(true);
-                                  }}
-                                  className="text-xs gap-1 h-7"
-                                >
-                                  <Calendar className="size-3" /> Generate Sessions
-                                </Button>
-                              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredRules.map((rule) => {
+                  const className = rule.class_name || rule.template_name || (templates.find((t) => t.id === rule.class_template)?.name) || 'Class Schedule';
+                  const branchName = rule.branch_name || (branches.find((b) => b.id === rule.branch)?.name) || 'Studio Branch';
+
+                  return (
+                    <div
+                      key={rule.id}
+                      className="bg-card border border-border/70 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs transition"
+                    >
+                      <div className="space-y-2.5">
+                        {/* Card Header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-semibold text-foreground truncate" title={className}>
+                              {className}
+                            </h4>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="truncate">{branchName}</span>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                          <Badge
+                            variant={rule.status === 'ACTIVE' ? 'default' : 'secondary'}
+                            className={rule.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] shrink-0' : 'text-[10px] shrink-0'}
+                          >
+                            {rule.status}
+                          </Badge>
+                        </div>
+
+                        {/* Details Block */}
+                        <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 space-y-2 text-xs">
+                          {/* Time Window */}
+                          <div className="flex items-center justify-between text-muted-foreground">
+                            <span className="flex items-center gap-1.5 font-semibold text-foreground font-mono">
+                              <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+                              {rule.start_time ? formatTime12h(rule.start_time) : '--'} – {rule.end_time ? formatTime12h(rule.end_time) : '--'}
+                            </span>
+                          </div>
+
+                          {/* Weekdays */}
+                          <div className="pt-0.5">
+                            <div className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Schedule Days</div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                                const isActive = (rule.days_of_week || []).includes(d);
+                                return (
+                                  <span
+                                    key={d}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                      isActive
+                                        ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                                        : 'bg-muted/30 text-muted-foreground/40 border border-transparent'
+                                    }`}
+                                  >
+                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Validity & Capacity */}
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                            <span className="flex items-center gap-1 truncate">
+                              <Calendar className="w-3 h-3 shrink-0" />
+                              {rule.valid_from} to {rule.valid_until || 'Ongoing'}
+                            </span>
+                            {rule.capacity_override ? (
+                              <span className="font-mono flex items-center gap-1 shrink-0">
+                                <Users className="w-3 h-3" />
+                                {rule.capacity_override} Cap
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Actions Bar */}
+                      <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1 flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAuditRule(rule)}
+                            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
+                            title="View audit logs"
+                          >
+                            <Activity className="w-3 h-3 text-indigo-500" />
+                            <span>Audit</span>
+                          </Button>
+
+                          {canCreate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRuleForGen(rule);
+                                setGenFromDate(selectedDate);
+                                setIsGenerateOccurrencesOpen(true);
+                              }}
+                              className="h-6 text-[11px] px-2 text-primary hover:text-primary/80 gap-1 font-medium"
+                              title="Generate sessions"
+                            >
+                              <Calendar className="w-3 h-3" />
+                              <span>Generate</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        {canEdit && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditRuleModal(rule)}
+                              className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                              title="Edit schedule rule"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => toggleRuleStatusMutation.mutate({
+                                id: rule.id,
+                                status: rule.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                              })}
+                              className={`w-6 h-6 shrink-0 ${
+                                rule.status === 'ACTIVE'
+                                  ? 'text-amber-500 hover:text-amber-600'
+                                  : 'text-emerald-500 hover:text-emerald-600'
+                              }`}
+                              title={rule.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                            >
+                              {rule.status === 'ACTIVE' ? (
+                                <ToggleRight className="w-4 h-4" />
+                              ) : (
+                                <ToggleLeft className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2273,6 +2368,128 @@ export const ClassesWorkspace: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* MODAL: RECURRING RULE AUDIT LOG */}
+      {auditRule && (
+        <Dialog open={Boolean(auditRule)} onOpenChange={(open) => !open && setAuditRule(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-500" />
+                <span>Audit Trail — {auditRule.class_name || auditRule.template_name || 'Schedule Rule'}</span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Chronological record of who modified this schedule rule and when.
+              </p>
+            </DialogHeader>
+
+            <div className="space-y-3 pt-2">
+              {isRuleAuditLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-muted/40 rounded-xl border border-border/50 animate-pulse" />
+                  ))}
+                </div>
+              ) : ruleAuditEvents.length === 0 ? (
+                <div className="p-8 text-center bg-card border border-dashed border-border/80 rounded-xl">
+                  <Activity className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No audit events recorded yet for this schedule rule.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {ruleAuditEvents.map((evt: any) => {
+                    const actionRaw = evt.action || evt.action_code || evt.event_type || '';
+                    const actionTitle = actionRaw
+                      .replace(/_/g, ' ')
+                      .toLowerCase()
+                      .replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Schedule Rule Updated';
+                    const isCreate = actionRaw.toUpperCase().includes('CREATE');
+                    const actorDisplay = evt.actor_email || evt.actor_name || evt.actor || 'Administrator';
+                    const data = evt.after_data || evt.metadata || {};
+
+                    const formatDays = (days: any): string => {
+                      if (!days) return '';
+                      if (Array.isArray(days)) {
+                        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                        return days.map((d) => (typeof d === 'number' ? dayNames[d - 1] || d : d)).join(', ');
+                      }
+                      return String(days);
+                    };
+
+                    return (
+                      <div
+                        key={evt.id}
+                        className="p-3.5 bg-card border border-border/70 rounded-xl space-y-2 text-xs shadow-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className={`size-2 rounded-full shrink-0 ${isCreate ? 'bg-emerald-500' : 'bg-primary'}`} />
+                            <span className="font-semibold text-foreground text-xs sm:text-sm">
+                              {actionTitle}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {new Date(evt.created_at || evt.occurred_at || evt.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-muted-foreground text-[11px] flex-wrap gap-1">
+                          <span>
+                            Modified by: <strong className="text-foreground font-medium">{actorDisplay}</strong>
+                          </span>
+                          {evt.ip_address && <span className="text-muted-foreground/60">IP: {evt.ip_address}</span>}
+                        </div>
+
+                        {evt.event_description && (
+                          <div className="p-2.5 bg-muted/40 rounded-lg text-xs text-foreground/90 leading-relaxed border border-border/40">
+                            {evt.event_description}
+                          </div>
+                        )}
+
+                        {/* Client-friendly attribute summary badges with ZERO raw code/JSON */}
+                        {data && typeof data === 'object' && Object.keys(data).length > 0 && (
+                          <div className="pt-0.5 flex items-center gap-1.5 flex-wrap">
+                            {data.status && (
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                data.status === 'ACTIVE'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                  : 'bg-muted text-muted-foreground border-border'
+                              }`}>
+                                Status: {data.status}
+                              </span>
+                            )}
+                            {data.days && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
+                                Active Days: {formatDays(data.days)}
+                              </span>
+                            )}
+                            {(data.time_window || (data.start_time && data.end_time)) && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/60 font-mono">
+                                Time Window: {data.time_window || `${data.start_time} – ${data.end_time}`}
+                              </span>
+                            )}
+                            {data.capacity_override && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/60">
+                                Capacity: {data.capacity_override}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setAuditRule(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* SCHEDULE ONE-OFF OCCURRENCE MODAL */}
       <Dialog open={isCreateOccurrenceOpen} onOpenChange={setIsCreateOccurrenceOpen}>

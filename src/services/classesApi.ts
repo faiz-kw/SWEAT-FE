@@ -233,4 +233,11 @@ export const classesApi = {
     const res = await api.get<ClassesMetadata>('/tenant/classes/metadata/');
     return res.data;
   },
+
+  // --- Audit Events ---
+  async getAuditEvents(params?: { entity_type?: string; entity_id?: string; action?: string }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/business-audit-events/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
 };
