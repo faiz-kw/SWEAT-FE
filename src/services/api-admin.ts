@@ -523,3 +523,53 @@ export async function revokeAllSessionsApi(targetUserId?: string): Promise<Revok
   const res = await api.post<RevokeSessionsResponse>("/auth/sessions/revoke-all/", payload);
   return res.data;
 }
+
+// ── BRANCH SCHEDULE & OPERATING EXCEPTIONS ─────────────────────────────
+
+export interface BranchWorkingHoursItem {
+  id?: string;
+  branch: string;
+  day_of_week: number; // 1 = Monday .. 7 = Sunday
+  is_open: boolean;
+  open_time?: string | null;
+  close_time?: string | null;
+  is_24_hours: boolean;
+}
+
+export interface BranchOperatingExceptionItem {
+  id?: string;
+  branch: string;
+  exception_date: string; // YYYY-MM-DD
+  is_closed: boolean;
+  open_time?: string | null;
+  close_time?: string | null;
+  reason?: string | null;
+  created_at?: string;
+}
+
+export async function fetchBranchWorkingHoursApi(branchId: string): Promise<BranchWorkingHoursItem[]> {
+  const res = await api.get<any>(`/tenant/branch-working-hours/?branch=${branchId}`);
+  return toArray<BranchWorkingHoursItem>(res.data);
+}
+
+export async function saveBranchWorkingHoursBulkApi(branchId: string, schedule: BranchWorkingHoursItem[]): Promise<any> {
+  const res = await api.post<any>('/tenant/branch-working-hours/bulk-sync/', {
+    branch_id: branchId,
+    schedule,
+  });
+  return res.data;
+}
+
+export async function fetchBranchOperatingExceptionsApi(branchId: string): Promise<BranchOperatingExceptionItem[]> {
+  const res = await api.get<any>(`/tenant/branch-operating-exceptions/?branch=${branchId}`);
+  return toArray<BranchOperatingExceptionItem>(res.data);
+}
+
+export async function createBranchOperatingExceptionApi(payload: Partial<BranchOperatingExceptionItem>): Promise<BranchOperatingExceptionItem> {
+  const res = await api.post<BranchOperatingExceptionItem>('/tenant/branch-operating-exceptions/', payload);
+  return res.data;
+}
+
+export async function deleteBranchOperatingExceptionApi(exceptionId: string): Promise<void> {
+  await api.delete(`/tenant/branch-operating-exceptions/${exceptionId}/`);
+}

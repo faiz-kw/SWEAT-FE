@@ -90,6 +90,8 @@ export interface AuthUser {
   tenantId: string;
   tenantName: string;
   role: string;
+  roles?: { code: string; name: string; scope: string; branch_id?: string | null; branch_name?: string | null }[];
+  permissions?: string[];
   isSuperAdmin: boolean; // True for platform super admins (no tenant)
   userType: 'platform' | 'tenant';
   isOrgWide: boolean;
@@ -360,17 +362,27 @@ export function getCurrentUser(): AuthUser | null {
   }
 
   // Build base user from JWT claims
-  // isSuperAdmin: is_superuser in JWT, OR role is 'Super Admin', OR no tenant assigned
-  const isSuperAdmin = !!(payload.is_superuser) || payload.role === 'Super Admin' || !payload.tid;
+  const hasTenant = !!payload.tid;
+  const isSuperAdmin = !hasTenant && (!!(payload.is_superuser) || payload.role === 'Super Admin' || (_userProfile as any)?.user_type === 'platform');
   const userType: 'platform' | 'tenant' = (_userProfile as any)?.user_type ?? (isSuperAdmin ? 'platform' : 'tenant');
   const allowedLocationIds = payload.loc || [];
-  const isOrgWide = isSuperAdmin || allowedLocationIds.includes('*') || allowedLocationIds.length === 0 || payload.role === 'ORG_ADMIN' || (_userProfile as any)?.roles?.some((r: any) => r.scope === 'ORG');
+  const isOrgWide = isSuperAdmin || allowedLocationIds.includes('*') || allowedLocationIds.length === 0 || payload.role === 'ORG_ADMIN' || (_userProfile as any)?.is_org_wide || (_userProfile as any)?.roles?.some((r: any) => r.scope === 'ORG' || r.code === 'ORG_ADMIN');
+
+  const resolvedRole =
+    _userProfile?.role ||
+    (_userProfile as any)?.roles?.[0]?.name ||
+    (_userProfile as any)?.roles?.[0]?.code ||
+    payload.role ||
+    (payload as any).roles?.[0] ||
+    (isSuperAdmin ? 'Super Admin' : 'Member');
 
   const base: AuthUser = {
     userId: payload.sub,
     tenantId: payload.tid || '',
     tenantName: _userProfile?.tenantName ?? (isSuperAdmin ? 'Global Platform HQ' : 'Tenant Organization'),
-    role: payload.role,
+    role: resolvedRole,
+    roles: (_userProfile as any)?.roles ?? [],
+    permissions: (_userProfile as any)?.permissions ?? [],
     isSuperAdmin,
     userType,
     isOrgWide,
@@ -463,7 +475,12 @@ async function _hydrateUserProfile(baseUrl: string, token: string): Promise<void
       last_name: string;
       full_name: string;
       email: string;
-      role: string;
+      role?: string;
+      role_code?: string;
+      roles?: { code: string; name: string; scope: string; branch_id?: string | null; branch_name?: string | null }[];
+      permissions?: string[];
+      user_type?: 'platform' | 'tenant';
+      is_org_wide?: boolean;
       is_superuser: boolean;
       tenant_id: string | null;
       tenant_name: string | null;
@@ -499,17 +516,25 @@ async function _hydrateUserProfile(baseUrl: string, token: string): Promise<void
           .filter(Boolean) as LocationInfo[]
       : [];
 
+    const userRole = me.role || me.roles?.[0]?.name || me.roles?.[0]?.code || (me.is_superuser ? 'Super Admin' : 'Member');
+    const isSuperAdminUser = (!me.tenant_id) && (me.is_superuser || userRole === 'Super Admin' || me.user_type === 'platform');
+
     setUserProfile({
+      role: userRole,
+      roles: me.roles || [],
+      permissions: me.permissions || [],
+      userType: me.user_type || (isSuperAdminUser ? 'platform' : 'tenant'),
+      isOrgWide: !!me.is_org_wide || isSuperAdminUser,
       firstName: me.first_name,
       lastName: me.last_name,
       email: me.email,
-      tenantName: me.tenant_name || (me.is_superuser || me.role === 'Super Admin' || !me.tenant_id ? 'Global Platform HQ' : 'Tenant Organization'),
+      tenantName: me.tenant_name || (isSuperAdminUser ? 'Global Platform HQ' : 'Tenant Organization'),
       locations,
       fullName,
       initials,
       branding: me.branding ?? null,
       // Store enabledModules: null for super admins (unrestricted), list for tenant users
-      enabledModules: (me.is_superuser || me.role === 'Super Admin' || !me.tenant_id)
+      enabledModules: isSuperAdminUser
         ? null
         : (me.enabled_modules ?? []),
     });

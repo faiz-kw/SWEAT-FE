@@ -103,7 +103,7 @@ export function Topbar() {
   const searchContainerRef = React.useRef<HTMLDivElement>(null);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
 
-  const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
+  const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
 
   const searchResults = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -456,7 +456,7 @@ export function Topbar() {
                       {displayName}
                     </div>
                     <div className="text-[9.5px] text-primary font-extrabold uppercase tracking-wider mt-0.2">
-                      {role || "SUPER ADMIN"}
+                      {role || (isSuperAdmin ? "SUPER ADMIN" : "MEMBER")}
                     </div>
                   </div>
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-tr from-teal-600 to-emerald-500 text-xs font-bold text-white shadow-2xs ring-1 ring-primary/20">
@@ -482,7 +482,7 @@ export function Topbar() {
                   <div className="text-[9.5px] font-bold text-muted-foreground uppercase tracking-wider">Tenant Scope</div>
                   <div className="text-xs font-bold text-foreground truncate mt-0.5 flex items-center gap-1">
                     <ShieldCheck className="size-3 text-primary" />
-                    {tenantName || (role === "Super Admin" ? "Global Platform (Super Admin)" : "Tenant Organization")}
+                    {tenantName || (isSuperAdmin ? "Global Platform (Super Admin)" : "Tenant Organization")}
                   </div>
                 </div>
                 <DropdownMenuSeparator />

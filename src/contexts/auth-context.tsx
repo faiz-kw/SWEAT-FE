@@ -88,13 +88,19 @@ interface MeApiResponse {
   first_name: string;
   last_name: string;
   full_name: string;
-  role: string;
+  role?: string;
+  role_code?: string;
+  roles?: { code: string; name: string; scope: string; branch_id?: string | null; branch_name?: string | null }[];
+  permissions?: string[];
+  user_type?: 'platform' | 'tenant';
+  is_org_wide?: boolean;
   is_superuser: boolean;
   tenant_id: string | null;
   tenant_name: string | null;
   active_location_id: string | null;
   /** Provisioned module list from tenant. null = super admin (unrestricted). */
   enabled_modules: string[] | null;
+  tenant_enabled_modules?: string[] | null;
   allowed_locations: { id: string; name: string; city: string; address?: string }[];
   branding?: import('@/services').TenantBrandingProfile | null;
 }
@@ -202,7 +208,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .filter(Boolean) as LocationInfo[]
         : [];
 
-      const enabledModules = (me.is_superuser || me.role === 'Super Admin' || !me.tenant_id)
+      const userRole = me.role || me.roles?.[0]?.name || me.roles?.[0]?.code || (me.is_superuser ? 'Super Admin' : 'Member');
+      const isSuperAdminUser = (!me.tenant_id) && (me.is_superuser || userRole === 'Super Admin' || me.user_type === 'platform');
+      const enabledModules = isSuperAdminUser
         ? null
         : (me.enabled_modules ?? []);
 
@@ -210,20 +218,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newBranding = me.branding ?? (me as any).branding ?? null;
       const hasChanged =
         !current ||
+        current.role !== userRole ||
         current.firstName !== me.first_name ||
         current.lastName !== me.last_name ||
         current.email !== me.email ||
         current.tenantName !== (me.tenant_name || '') ||
+        JSON.stringify(current.roles) !== JSON.stringify(me.roles ?? []) ||
+        JSON.stringify(current.permissions) !== JSON.stringify(me.permissions ?? []) ||
         JSON.stringify(current.enabledModules) !== JSON.stringify(enabledModules) ||
         JSON.stringify(current.branding) !== JSON.stringify(newBranding) ||
         JSON.stringify(current.locations) !== JSON.stringify(locations);
 
       if (hasChanged) {
         setUserProfile({
+          role: userRole,
+          roles: me.roles || [],
+          permissions: me.permissions || [],
+          userType: me.user_type || (isSuperAdminUser ? 'platform' : 'tenant'),
+          isOrgWide: !!me.is_org_wide || isSuperAdminUser,
           firstName: me.first_name,
           lastName: me.last_name,
           email: me.email,
-          tenantName: me.tenant_name || (me.is_superuser || me.role === 'Super Admin' || !me.tenant_id ? 'Global Platform HQ' : 'Tenant Organization'),
+          tenantName: me.tenant_name || (isSuperAdminUser ? 'Global Platform HQ' : 'Tenant Organization'),
           locations,
           fullName,
           initials,

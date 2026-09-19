@@ -180,8 +180,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Identity — now from real JWT claims + /me/ profile
     tenantId: user?.tenantId ?? '',
-    tenantName: user?.tenantName || (user?.role === 'Super Admin' || !user?.tenantId ? 'Global Platform HQ' : 'Tenant Organization'),
-    role: user?.role ?? 'Super Admin',
+    tenantName: user?.tenantName || (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Global Platform HQ' : 'Tenant Organization'),
+    role: user?.role ?? (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Super Admin' : 'Member'),
     branding: user?.branding ?? null,
   };
 

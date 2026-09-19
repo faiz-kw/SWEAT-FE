@@ -61,7 +61,7 @@ export function Sidebar() {
   const [filterQuery, setFilterQuery] = React.useState("");
 
   // Role-based nav filtering — Super Admins see Platform Core, tenant users don't
-  const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === 'Super Admin';
+  const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === 'Super Admin');
   const roleFilteredNav = React.useMemo(() => getFilteredNav(isSuperAdmin), [isSuperAdmin]);
 
   // Tenant's provisioned module/submodule list. null = unrestricted (super admin).

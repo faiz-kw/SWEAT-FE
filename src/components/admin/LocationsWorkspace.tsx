@@ -1,7 +1,8 @@
 import * as React from "react";
 import {
   MapPin, Plus, Phone, Clock, Users, Building, Edit2, Trash2, RefreshCw,
-  ChevronDown, CheckCircle2, AlertCircle, Building2, ShieldCheck, Eye, Search, Filter
+  ChevronDown, CheckCircle2, AlertCircle, Building2, ShieldCheck, Eye, Search, Filter,
+  CalendarDays
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ClockTimePicker } from "@/components/ui/clock-time-picker";
+import { BranchScheduleModal } from "./BranchScheduleModal";
 import {
   fetchLocationsApi,
   createLocationApi,
@@ -47,6 +49,8 @@ export function LocationsWorkspace() {
   const [loading, setLoading] = React.useState(true);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingLocation, setEditingLocation] = React.useState<LocationRow | null>(null);
+  const [scheduleModalOpen, setScheduleModalOpen] = React.useState(false);
+  const [scheduleBranch, setScheduleBranch] = React.useState<LocationRow | null>(null);
 
   // Filter & Search states
   const [tenantFilter, setTenantFilter] = React.useState("all");
@@ -125,6 +129,11 @@ export function LocationsWorkspace() {
     setOpenTime(op);
     setCloseTime(cl);
     setModalOpen(true);
+  };
+
+  const handleOpenSchedule = (loc: LocationRow) => {
+    setScheduleBranch(loc);
+    setScheduleModalOpen(true);
   };
 
   const handlePhoneChange = (val: string) => {
@@ -401,16 +410,27 @@ export function LocationsWorkspace() {
                   )}
                 </div>
 
-                <div className="pt-4 mt-4 border-t border-border/40 flex items-center justify-between gap-2">
+                <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleOpenSchedule(loc)}
+                    className="flex-1 text-xs gap-1.5 h-8 min-w-0 border-primary/30 hover:border-primary text-primary hover:bg-primary/10 font-medium"
+                    title="Configure recurring weekly schedule, closed days, and festive closures"
+                  >
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Schedule & Holidays</span>
+                  </Button>
                   {isSuperAdmin ? (
                     <>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleOpenEdit(loc)}
-                        className="flex-1 text-xs gap-1.5 h-8 min-w-0"
+                        className="text-xs gap-1.5 h-8 px-2.5 shrink-0"
+                        title="Edit branch details"
                       >
-                        <Edit2 className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Edit Studio Branch</span>
+                        <Edit2 className="h-3.5 w-3.5 shrink-0" />
                       </Button>
                       <Button
                         size="sm"
@@ -427,9 +447,10 @@ export function LocationsWorkspace() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleOpenEdit(loc)}
-                      className="w-full text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+                      className="text-xs gap-1.5 h-8 px-2.5 text-muted-foreground hover:text-foreground shrink-0"
+                      title="View branch details"
                     >
-                      <Eye className="h-3.5 w-3.5" /> View Branch Details
+                      <Eye className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>
@@ -622,6 +643,24 @@ export function LocationsWorkspace() {
                       {openTime} - {closeTime}
                     </span>
                   </div>
+
+                  {editingLocation && (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const target = editingLocation;
+                          setModalOpen(false);
+                          handleOpenSchedule(target);
+                        }}
+                        className="w-full text-xs gap-2 h-9 border-primary/30 text-primary hover:bg-primary/10 font-medium"
+                      >
+                        <CalendarDays className="h-4 w-4" />
+                        Manage Weekly Closed Days & Festive Holidays →
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-4 border-t border-border/40">
@@ -642,6 +681,13 @@ export function LocationsWorkspace() {
             </div>
           </div>
         )}
+
+        {/* Branch Schedule & Operating Exceptions Modal */}
+        <BranchScheduleModal
+          open={scheduleModalOpen}
+          onOpenChange={setScheduleModalOpen}
+          branch={scheduleBranch}
+        />
       </PageBody>
     </div>
   );
