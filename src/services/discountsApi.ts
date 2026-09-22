@@ -106,4 +106,13 @@ export const discountsApi = {
     const res = await api.post('/tenant/discount-redemptions/redeem/', data);
     return res.data;
   },
+
+  toggleCouponStatus: async (codeId: string, status?: 'ACTIVE' | 'INACTIVE'): Promise<DiscountCode> => {
+    const res = await api.post(`/tenant/discount-codes/${codeId}/toggle-status/`, { status });
+    return res.data;
+  },
+
+  deleteCoupon: async (codeId: string): Promise<void> => {
+    await api.delete(`/tenant/discount-codes/${codeId}/`);
+  },
 };

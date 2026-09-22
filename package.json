@@ -6,7 +6,7 @@
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File scripts/start_all.ps1",
     "dev": "vite dev --port 5173",
-    "backend": "python backend/manage.py runserver 8080",
+    "backend": "python backend/manage.py runserver 8000",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

@@ -48,6 +48,8 @@ import { Route as ShellCrmFollowUpsRouteImport } from './routes/_shell/crm.follo
 import { Route as ShellCrmLeadsRouteImport } from './routes/_shell/crm.leads'
 import { Route as ShellCrmOffersRouteImport } from './routes/_shell/crm.offers'
 import { Route as ShellCrmPipelineRouteImport } from './routes/_shell/crm.pipeline'
+import { Route as ShellCrmSettingsRouteImport } from './routes/_shell/crm.settings'
+import { Route as ShellCrmSetupRouteImport } from './routes/_shell/crm.setup'
 import { Route as ShellCrmTrialsRouteImport } from './routes/_shell/crm.trials'
 import { Route as ShellCsAtRiskRouteImport } from './routes/_shell/cs.at-risk'
 import { Route as ShellCsFeedbackRouteImport } from './routes/_shell/cs.feedback'
@@ -311,6 +313,16 @@ const ShellCrmOffersRoute = ShellCrmOffersRouteImport.update({
 const ShellCrmPipelineRoute = ShellCrmPipelineRouteImport.update({
   id: '/crm/pipeline',
   path: '/crm/pipeline',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellCrmSettingsRoute = ShellCrmSettingsRouteImport.update({
+  id: '/crm/settings',
+  path: '/crm/settings',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellCrmSetupRoute = ShellCrmSetupRouteImport.update({
+  id: '/crm/setup',
+  path: '/crm/setup',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmTrialsRoute = ShellCrmTrialsRouteImport.update({
@@ -678,6 +690,8 @@ export interface FileRoutesByFullPath {
   '/crm/leads': typeof ShellCrmLeadsRoute
   '/crm/offers': typeof ShellCrmOffersRoute
   '/crm/pipeline': typeof ShellCrmPipelineRoute
+  '/crm/settings': typeof ShellCrmSettingsRoute
+  '/crm/setup': typeof ShellCrmSetupRoute
   '/crm/trials': typeof ShellCrmTrialsRoute
   '/cs/at-risk': typeof ShellCsAtRiskRoute
   '/cs/feedback': typeof ShellCsFeedbackRoute
@@ -781,6 +795,8 @@ export interface FileRoutesByTo {
   '/crm/leads': typeof ShellCrmLeadsRoute
   '/crm/offers': typeof ShellCrmOffersRoute
   '/crm/pipeline': typeof ShellCrmPipelineRoute
+  '/crm/settings': typeof ShellCrmSettingsRoute
+  '/crm/setup': typeof ShellCrmSetupRoute
   '/crm/trials': typeof ShellCrmTrialsRoute
   '/cs/at-risk': typeof ShellCsAtRiskRoute
   '/cs/feedback': typeof ShellCsFeedbackRoute
@@ -886,6 +902,8 @@ export interface FileRoutesById {
   '/_shell/crm/leads': typeof ShellCrmLeadsRoute
   '/_shell/crm/offers': typeof ShellCrmOffersRoute
   '/_shell/crm/pipeline': typeof ShellCrmPipelineRoute
+  '/_shell/crm/settings': typeof ShellCrmSettingsRoute
+  '/_shell/crm/setup': typeof ShellCrmSetupRoute
   '/_shell/crm/trials': typeof ShellCrmTrialsRoute
   '/_shell/cs/at-risk': typeof ShellCsAtRiskRoute
   '/_shell/cs/feedback': typeof ShellCsFeedbackRoute
@@ -991,6 +1009,8 @@ export interface FileRouteTypes {
     | '/crm/leads'
     | '/crm/offers'
     | '/crm/pipeline'
+    | '/crm/settings'
+    | '/crm/setup'
     | '/crm/trials'
     | '/cs/at-risk'
     | '/cs/feedback'
@@ -1094,6 +1114,8 @@ export interface FileRouteTypes {
     | '/crm/leads'
     | '/crm/offers'
     | '/crm/pipeline'
+    | '/crm/settings'
+    | '/crm/setup'
     | '/crm/trials'
     | '/cs/at-risk'
     | '/cs/feedback'
@@ -1198,6 +1220,8 @@ export interface FileRouteTypes {
     | '/_shell/crm/leads'
     | '/_shell/crm/offers'
     | '/_shell/crm/pipeline'
+    | '/_shell/crm/settings'
+    | '/_shell/crm/setup'
     | '/_shell/crm/trials'
     | '/_shell/cs/at-risk'
     | '/_shell/cs/feedback'
@@ -1541,6 +1565,20 @@ declare module '@tanstack/react-router' {
       path: '/crm/pipeline'
       fullPath: '/crm/pipeline'
       preLoaderRoute: typeof ShellCrmPipelineRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/settings': {
+      id: '/_shell/crm/settings'
+      path: '/crm/settings'
+      fullPath: '/crm/settings'
+      preLoaderRoute: typeof ShellCrmSettingsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/setup': {
+      id: '/_shell/crm/setup'
+      path: '/crm/setup'
+      fullPath: '/crm/setup'
+      preLoaderRoute: typeof ShellCrmSetupRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/crm/trials': {
@@ -2058,6 +2096,8 @@ interface ShellRouteChildren {
   ShellCrmLeadsRoute: typeof ShellCrmLeadsRoute
   ShellCrmOffersRoute: typeof ShellCrmOffersRoute
   ShellCrmPipelineRoute: typeof ShellCrmPipelineRoute
+  ShellCrmSettingsRoute: typeof ShellCrmSettingsRoute
+  ShellCrmSetupRoute: typeof ShellCrmSetupRoute
   ShellCrmTrialsRoute: typeof ShellCrmTrialsRoute
   ShellCsAtRiskRoute: typeof ShellCsAtRiskRoute
   ShellCsFeedbackRoute: typeof ShellCsFeedbackRoute
@@ -2154,6 +2194,8 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellCrmLeadsRoute: ShellCrmLeadsRoute,
   ShellCrmOffersRoute: ShellCrmOffersRoute,
   ShellCrmPipelineRoute: ShellCrmPipelineRoute,
+  ShellCrmSettingsRoute: ShellCrmSettingsRoute,
+  ShellCrmSetupRoute: ShellCrmSetupRoute,
   ShellCrmTrialsRoute: ShellCrmTrialsRoute,
   ShellCsAtRiskRoute: ShellCsAtRiskRoute,
   ShellCsFeedbackRoute: ShellCsFeedbackRoute,

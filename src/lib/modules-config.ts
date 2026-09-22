@@ -30,13 +30,12 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
     submodules: [
       { id: "/crm/leads", label: "Leads & Enquiries", to: "/crm/leads", description: "Inbound and outbound prospect lead records." },
       { id: "/crm/pipeline", label: "Visual Sales Pipeline", to: "/crm/pipeline", description: "Kanban board of open deals and pipeline stages." },
-      { id: "/crm/ai-calling", label: "Sarvam AI Voice Calling", to: "/crm/ai-calling", description: "Autonomous outbound AI calling & follow-up agent." },
       { id: "/crm/trials", label: "Trial Sessions", to: "/crm/trials", description: "Free and paid workout trial booking tracker." },
       { id: "/crm/activities", label: "Sales Activities", to: "/crm/activities", description: "Calls, meetings, and sales interaction logs." },
       { id: "/crm/follow-ups", label: "Task Follow-ups", to: "/crm/follow-ups", description: "Scheduled tasks and reminders for sales reps." },
       { id: "/crm/offers", label: "Special Offers", to: "/crm/offers", description: "Targeted promotional packages and deals." },
       { id: "/crm/coupons", label: "Discount Coupons", to: "/crm/coupons", description: "Promo code management and redemption rules." },
-      { id: "/crm/campaigns", label: "Marketing Campaigns", to: "/crm/campaigns", description: "Broadcast and drip outreach campaigns." },
+      { id: "/crm/setup", label: "CRM Setup", to: "/crm/setup", description: "Configurable lead sources, stage SLAs, trial reminders, and channels." },
     ],
   },
   {
@@ -218,13 +217,23 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
 /** Set of all module IDs in the catalog for fast lookup */
 const CATALOG_MODULE_IDS = new Set(FEATURE_MODULES_CATALOG.map((m) => m.id));
 
+/** Canonical path aliases for submodules whose route path differs from DB submodule_code */
+const SUBMODULE_PATH_ALIASES: Record<string, string[]> = {
+  "/crm/setup": ["/crm/setup", "/crm/settings"],
+  "/crm/settings": ["/crm/setup", "/crm/settings"],
+};
+
 /**
  * Returns all submodule paths belonging to a module ID.
  */
 export function getSubmodulePathsForModule(moduleId: string): string[] {
   const mod = FEATURE_MODULES_CATALOG.find((m) => m.id === moduleId);
   if (!mod) return [];
-  return mod.submodules.map((s) => s.to);
+  const paths = mod.submodules.map((s) => s.to);
+  if (moduleId === "crm") {
+    return Array.from(new Set([...paths, "/crm/settings"]));
+  }
+  return paths;
 }
 
 /**
@@ -257,8 +266,10 @@ export function isSubmoduleAllowed(
   // Wildcard — allow everything
   if (enabledModules.includes("*") || enabledModules.includes("all")) return true;
 
-  // Direct submodule path match (e.g. "/crm/trials" is explicitly in the list)
-  if (enabledModules.includes(submodulePath)) return true;
+  const candidatePaths = SUBMODULE_PATH_ALIASES[submodulePath] || [submodulePath];
+
+  // Direct submodule path match (including canonical aliases)
+  if (candidatePaths.some((p) => enabledModules.includes(p))) return true;
 
   // If the parent module ID is in the FEATURE_MODULES_CATALOG
   if (parentModuleId && CATALOG_MODULE_IDS.has(parentModuleId)) {
@@ -266,10 +277,13 @@ export function isSubmoduleAllowed(
     if (enabledModules.includes(parentModuleId)) {
       const parentSubmodules = getSubmodulePathsForModule(parentModuleId);
       // If no granular submodule overrides exist, all submodules of this module are allowed
-      const hasGranularOverrides = enabledModules.some((item) => parentSubmodules.includes(item));
+      const hasGranularOverrides = enabledModules.some((item) =>
+        parentSubmodules.includes(item) ||
+        (SUBMODULE_PATH_ALIASES[item] && SUBMODULE_PATH_ALIASES[item].some((alt) => parentSubmodules.includes(alt)))
+      );
       if (!hasGranularOverrides) return true;
       // Granular overrides exist — only allow if explicitly listed
-      return enabledModules.includes(submodulePath);
+      return candidatePaths.some((p) => enabledModules.includes(p));
     }
     // Module is in catalog but NOT in the tenant's provisioned list — deny
     return false;
@@ -278,10 +292,11 @@ export function isSubmoduleAllowed(
   // Nav section is NOT in the FEATURE_MODULES_CATALOG (e.g. "coaching", "support",
   // "performance", "marketing", "automation", "reports").
   // Check if any enabled entry is a path-prefix match for the item.
-  if (enabledModules.some((entry) => entry.startsWith("/") && submodulePath.startsWith(entry))) {
+  if (enabledModules.some((entry) => entry.startsWith("/") && candidatePaths.some((cp) => cp.startsWith(entry)))) {
     return true;
   }
 
   // Default deny for uncatalogued sections not explicitly granted
   return false;
 }
+

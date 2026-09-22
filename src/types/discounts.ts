@@ -35,6 +35,9 @@ export interface DiscountCode {
   package?: string | null;
   package_name?: string | null;
   status: CodeStatus;
+  computed_status?: 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'USAGE_EXHAUSTED' | 'INACTIVE';
+  redemption_count?: number;
+  usage_remaining?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +56,8 @@ export interface DiscountCampaign {
   valid_from: string;
   valid_until?: string | null;
   status: CampaignStatus;
+  computed_status?: 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'USAGE_EXHAUSTED' | 'INACTIVE';
+  usage_remaining?: number | null;
   configuration?: Record<string, any>;
   codes?: DiscountCode[];
   redemption_count?: number;

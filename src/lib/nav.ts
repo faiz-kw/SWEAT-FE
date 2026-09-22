@@ -114,13 +114,13 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Leads", to: "/crm/leads", badgeKey: "leads", permission: "crm.leads.view" },
       { label: "Lead Pipeline", to: "/crm/pipeline", permission: "crm.pipeline.view" },
-      { label: "AI Calling", to: "/crm/ai-calling", permission: "crm.ai-calling.view" },
       { label: "Trial Management", to: "/crm/trials", permission: "crm.trials.view" },
-      { label: "Sales Activities", to: "/crm/activities", permission: "crm.pipeline.view" },
+      { label: "Sales Activities", to: "/crm/activities", permission: "crm.leads.view" },
       { label: "Follow-ups", to: "/crm/follow-ups", permission: "crm.follow-ups.view" },
       { label: "Offers", to: "/crm/offers", permission: "crm.campaigns.view" },
       { label: "Coupons", to: "/crm/coupons", permission: "crm.campaigns.view" },
       { label: "Campaigns", to: "/crm/campaigns", permission: "crm.campaigns.view" },
+      { label: "CRM Setup", to: "/crm/setup", permission: "crm.settings.view" },
     ],
   },
   {

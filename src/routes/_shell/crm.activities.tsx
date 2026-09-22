@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { SalesActivitiesWorkspace } from "@/components/crm/SalesActivitiesWorkspace";
 
 export const Route = createFileRoute("/_shell/crm/activities")({
   head: () => ({
     meta: [
       { title: "Sales Activities · PerformanceOS Admin" },
-      { name: "description", content: "Sales Activities workspace in the PerformanceOS fitness business operating system." },
+      { name: "description", content: "Real customer outreach logs, calls, WhatsApp touchpoints, and studio visits." },
       { property: "og:title", content: "Sales Activities · PerformanceOS Admin" },
-      { property: "og:description", content: "Sales Activities workspace in the PerformanceOS fitness business operating system." },
+      { property: "og:description", content: "Real customer outreach logs, calls, WhatsApp touchpoints, and studio visits." },
     ],
   }),
-  component: () => <ModuleView path="/crm/activities" />,
+  component: () => <SalesActivitiesWorkspace />,
 });

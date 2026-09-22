@@ -10,6 +10,13 @@ export const Route = createFileRoute("/_shell/crm/offers")({
       { property: "og:description", content: "Offers workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <DiscountsWorkspace initialTab="rules" />,
+  component: () => (
+    <DiscountsWorkspace
+      mode="offers"
+      initialTab="rules"
+      title="Offers & Dynamic Rules"
+      subtitle="Configure automated member retention incentives, eligibility thresholds, and workout rewards."
+    />
+  ),
 });
 

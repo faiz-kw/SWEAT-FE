@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { FollowUpsWorkspace } from "@/components/crm/FollowUpsWorkspace";
 
 export const Route = createFileRoute("/_shell/crm/follow-ups")({
   head: () => ({
     meta: [
-      { title: "Follow-ups · PerformanceOS Admin" },
-      { name: "description", content: "Follow-ups workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Follow-ups · PerformanceOS Admin" },
-      { property: "og:description", content: "Follow-ups workspace in the PerformanceOS fitness business operating system." },
+      { title: "Follow-ups & Work Queue · PerformanceOS Admin" },
+      { name: "description", content: "Agent work queue: overdue sales tasks, today's calls, and post-trial outreach." },
+      { property: "og:title", content: "Follow-ups & Work Queue · PerformanceOS Admin" },
+      { property: "og:description", content: "Agent work queue: overdue sales tasks, today's calls, and post-trial outreach." },
     ],
   }),
-  component: () => <ModuleView path="/crm/follow-ups" />,
+  component: () => <FollowUpsWorkspace />,
 });

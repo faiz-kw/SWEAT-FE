@@ -4,12 +4,10 @@ import { LeadsWorkspace } from "@/components/crm/LeadsWorkspace";
 export const Route = createFileRoute("/_shell/crm/leads")({
   head: () => ({
     meta: [
-      { title: "Leads · PerformanceOS Admin" },
-      { name: "description", content: "Leads workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Leads · PerformanceOS Admin" },
-      { property: "og:description", content: "Leads workspace in the PerformanceOS fitness business operating system." },
+      { title: "Leads & Prospects · PerformanceOS Admin" },
+      { name: "description", content: "Commercial prospect directory and lead intake in PerformanceOS." },
+      { property: "og:title", content: "Leads & Prospects · PerformanceOS Admin" },
     ],
   }),
-  component: () => <LeadsWorkspace />,
+  component: () => <LeadsWorkspace initialViewMode="LIST" />,
 });
-

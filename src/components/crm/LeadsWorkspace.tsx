@@ -1,7 +1,7 @@
 /**
  * src/components/crm/LeadsWorkspace.tsx — Layer 2 Production CRM & Leads Workspace
  * Real API integration with backend tenant database. Zero mock fallback.
- * Responsive across Mobile, Tablet, Laptop, and Desktop.
+ * Responsive across Mobile (320px+), Tablet, Laptop, and Desktop.
  */
 
 import * as React from 'react';
@@ -23,11 +23,17 @@ import {
   Sparkles,
   ChevronRight,
   MoreVertical,
+  Kanban,
+  List,
+  Eye,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { AttentionQueueView } from './AttentionQueueView';
 
 import { crmApi } from '@/services/crmApi';
-import type { Lead, LeadStatus, LeadSource } from '@/types/crm';
+import type { Lead, LeadStatus } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -41,44 +47,89 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useRouter } from '@tanstack/react-router';
+import { CRMPageHeader } from './common/CRMPageHeader';
+import { CRMKpiTile } from './common/CRMKpiTile';
+import { CRMEmptyState } from './common/CRMEmptyState';
+import { CRMErrorState } from './common/CRMErrorState';
+import { formatCrmLabel } from '@/lib/crmLabels';
 import { usePermissions } from '@/lib/permissions';
+import { NewLeadModal } from './NewLeadModal';
+import { LeadDetailModal } from './LeadDetailModal';
 
-const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
-  NEW_LEAD: { label: 'New Lead', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  TRIAL_BOOKED: { label: 'Trial Booked', color: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
-  TRIAL_CONFIRMED: { label: 'Trial Confirmed', color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' },
-  TRIAL_ATTENDED: { label: 'Trial Attended', color: 'bg-teal-500/10 text-teal-500 border-teal-500/20' },
-  NO_SHOW: { label: 'No Show', color: 'bg-rose-500/10 text-rose-500 border-rose-500/20' },
-  FOLLOW_UP_PENDING: { label: 'Follow-up Pending', color: 'bg-purple-500/10 text-purple-500 border-purple-500/20' },
-  INTERESTED: { label: 'Interested', color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' },
-  HOT_LEAD: { label: 'Hot Lead', color: 'bg-orange-500/10 text-orange-500 border-orange-500/20' },
-  PAYMENT_PENDING: { label: 'Payment Pending', color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
-  CONVERTED: { label: 'Converted Member', color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' },
-  NOT_INTERESTED: { label: 'Not Interested', color: 'bg-muted text-muted-foreground border-border' },
-  LOST: { label: 'Lost', color: 'bg-muted text-muted-foreground border-border' },
+const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgBadge: string }> = {
+  NEW_LEAD: { label: 'New Lead', color: 'text-blue-500 border-blue-500/20', bgBadge: 'bg-blue-500/10' },
+  TRIAL_BOOKED: { label: 'Trial Booked', color: 'text-amber-500 border-amber-500/20', bgBadge: 'bg-amber-500/10' },
+  TRIAL_CONFIRMED: { label: 'Trial Confirmed', color: 'text-indigo-500 border-indigo-500/20', bgBadge: 'bg-indigo-500/10' },
+  TRIAL_ATTENDED: { label: 'Trial Attended', color: 'text-teal-500 border-teal-500/20', bgBadge: 'bg-teal-500/10' },
+  NO_SHOW: { label: 'No Show', color: 'text-rose-500 border-rose-500/20', bgBadge: 'bg-rose-500/10' },
+  FOLLOW_UP_PENDING: { label: 'Follow-up Pending', color: 'text-purple-500 border-purple-500/20', bgBadge: 'bg-purple-500/10' },
+  INTERESTED: { label: 'Interested', color: 'text-cyan-500 border-cyan-500/20', bgBadge: 'bg-cyan-500/10' },
+  HOT_LEAD: { label: 'Hot Lead', color: 'text-orange-500 border-orange-500/20', bgBadge: 'bg-orange-500/10' },
+  PAYMENT_PENDING: { label: 'Payment Pending', color: 'text-yellow-600 border-yellow-500/20', bgBadge: 'bg-yellow-500/10' },
+  CONVERTED: { label: 'Converted Member', color: 'text-emerald-500 border-emerald-500/20', bgBadge: 'bg-emerald-500/10' },
+  NOT_INTERESTED: { label: 'Not Interested', color: 'text-muted-foreground border-border', bgBadge: 'bg-muted' },
+  LOST: { label: 'Lost', color: 'text-muted-foreground border-border', bgBadge: 'bg-muted' },
 };
 
-export function LeadsWorkspace() {
+const PIPELINE_COLUMNS: Array<{ status: LeadStatus; label: string }> = [
+  { status: 'NEW_LEAD', label: 'New Lead' },
+  { status: 'TRIAL_BOOKED', label: 'Trial Booked' },
+  { status: 'INTERESTED', label: 'Interested' },
+  { status: 'HOT_LEAD', label: 'Hot Lead' },
+  { status: 'CONVERTED', label: 'Converted' },
+];
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs < 24) return `${hrs}h ${remMins}m`;
+  const days = Math.floor(hrs / 24);
+  const remHrs = hrs % 24;
+  return `${days}d ${remHrs}h`;
+}
+
+interface LeadsWorkspaceProps {
+  initialViewMode?: 'LIST' | 'PIPELINE' | 'ATTENTION';
+}
+
+export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const canCreate = can('sales.leads.create');
-  const canEdit = can('sales.leads.edit');
+
+  // Authoritative Effective Permissions
+  const canCreate = can('crm.leads.create') || can('sales.leads.create');
+  const canEdit = can('crm.leads.edit') || can('sales.leads.edit');
+  const canView = can('crm.leads.view') || can('sales.leads.view') || canCreate || canEdit;
+
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
+  const [sourceFilter, setSourceFilter] = React.useState<string>('ALL');
+  const [campaignFilter, setCampaignFilter] = React.useState<string>('');
+  const [slaFilter, setSlaFilter] = React.useState<string>('ALL');
+  const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
+  const [viewMode, setViewMode] = React.useState<'LIST' | 'PIPELINE' | 'ATTENTION'>(initialViewMode);
+
+  React.useEffect(() => {
+    setViewMode(initialViewMode);
+  }, [initialViewMode]);
+
+  const handleToggleView = (mode: 'LIST' | 'PIPELINE' | 'ATTENTION') => {
+    setViewMode(mode);
+    if (mode === 'LIST') router.navigate({ to: '/crm/leads' });
+    else if (mode === 'PIPELINE') router.navigate({ to: '/crm/pipeline' });
+  };
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [selectedLead, setSelectedLead] = React.useState<Lead | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = React.useState(false);
   const [isStatusOpen, setIsStatusOpen] = React.useState(false);
   const [isTrialOpen, setIsTrialOpen] = React.useState(false);
-
-  // New Lead Form State
-  const [newFirst, setNewFirst] = React.useState('');
-  const [newLast, setNewLast] = React.useState('');
-  const [newPhone, setNewPhone] = React.useState('');
-  const [newEmail, setNewEmail] = React.useState('');
-  const [newCompany, setNewCompany] = React.useState('');
-  const [newSourceId, setNewSourceId] = React.useState('');
 
   // Status Change Form State
   const [targetStatus, setTargetStatus] = React.useState<LeadStatus>('INTERESTED');
@@ -94,6 +145,18 @@ export function LeadsWorkspace() {
   const [trialType, setTrialType] = React.useState('GROUP_CLASS');
 
   // Queries
+  const { data: sources = [] } = useQuery({
+    queryKey: ['lead-sources'],
+    queryFn: () => crmApi.getLeadSources(),
+    enabled: canView,
+  });
+
+  const { data: branches = [] } = useQuery({
+    queryKey: ['active-branches'],
+    queryFn: () => crmApi.getBranches(),
+    enabled: canView,
+  });
+
   const {
     data: leads = [],
     isLoading,
@@ -101,47 +164,47 @@ export function LeadsWorkspace() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter],
     queryFn: () =>
       crmApi.getLeads({
         current_status: statusFilter,
         search: searchQuery || undefined,
+        lead_source_id: sourceFilter !== 'ALL' ? sourceFilter : undefined,
+        campaign: campaignFilter.trim() || undefined,
+        sla_status: slaFilter !== 'ALL' ? slaFilter : undefined,
+        branch_id: branchFilter !== 'ALL' ? branchFilter : undefined,
       }),
+    enabled: canView,
   });
 
-  const { data: sources = [] } = useQuery({
-    queryKey: ['lead-sources'],
-    queryFn: () => crmApi.getLeadSources(),
+  const metrics = React.useMemo(() => {
+    return {
+      total: leads.length,
+      converted: leads.filter((l) => l.current_status === 'CONVERTED').length,
+      inquiries: leads.filter((l) => ['NEW_LEAD', 'INTERESTED', 'HOT_LEAD'].includes(l.current_status)).length,
+      trials: leads.filter((l) => ['TRIAL_BOOKED', 'TRIAL_CONFIRMED', 'TRIAL_ATTENDED'].includes(l.current_status)).length,
+      slaBreaches: leads.filter((l) => l.sla?.sla_status === 'BREACHED').length,
+    };
+  }, [leads]);
+
+  const { data: metadata } = useQuery({
+    queryKey: ['lead-metadata'],
+    queryFn: () => crmApi.getMetadata(),
+    enabled: canView,
+    staleTime: 10 * 60 * 1000,
   });
 
   // Mutations
-  const createMutation = useMutation({
-    mutationFn: crmApi.createLead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Lead created successfully!');
-      setIsCreateOpen(false);
-      setNewFirst('');
-      setNewLast('');
-      setNewPhone('');
-      setNewEmail('');
-      setNewCompany('');
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || 'Failed to create lead');
-    },
-  });
-
   const transitionMutation = useMutation({
     mutationFn: ({ leadId, payload }: { leadId: string; payload: any }) =>
       crmApi.transitionStatus(leadId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Lead status updated!');
+      toast.success('Lead stage updated successfully.');
       setIsStatusOpen(false);
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Failed to update status');
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to update stage');
     },
   });
 
@@ -154,25 +217,9 @@ export function LeadsWorkspace() {
       setIsTrialOpen(false);
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Failed to book trial');
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to book trial');
     },
   });
-
-  const handleCreateLead = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFirst.trim() || !newLast.trim()) {
-      toast.error('First and last name are required');
-      return;
-    }
-    createMutation.mutate({
-      first_name: newFirst.trim(),
-      last_name: newLast.trim(),
-      phone_normalized: newPhone.trim() || undefined,
-      email_normalized: newEmail.trim() || undefined,
-      company_name: newCompany.trim() || undefined,
-      lead_source: newSourceId || undefined,
-    });
-  };
 
   const handleTransitionStatus = () => {
     if (!selectedLead) return;
@@ -204,27 +251,97 @@ export function LeadsWorkspace() {
     });
   };
 
+  const openLeadDetail = (lead: Lead) => {
+    setSelectedLead(lead);
+    setIsDetailOpen(true);
+  };
+
+  const openStatusModal = (lead: Lead) => {
+    setSelectedLead(lead);
+    setTargetStatus(lead.current_status);
+    setIsStatusOpen(true);
+  };
+
+  const openTrialModal = (lead: Lead) => {
+    setSelectedLead(lead);
+    setIsTrialOpen(true);
+  };
+
+  // RBAC View Denied State
+  if (!canView) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-14 h-14 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mb-4">
+          <Lock className="w-7 h-7" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
+        <p className="text-sm text-muted-foreground mt-1 max-w-md">
+          You do not have permission to view CRM leads. Contact your studio administrator to grant{' '}
+          <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">crm.leads.view</code> privilege.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Page Header */}
-      <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 py-4 sm:py-5 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                <Users className="w-5 h-5" />
-              </span>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">CRM & Leads Pipeline</h1>
-              <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                Layer 2 Verified
-              </Badge>
+      <CRMPageHeader
+        title={viewMode === 'LIST' ? 'Leads & Prospects' : 'Visual Sales Pipeline'}
+        subtitle={
+          viewMode === 'LIST'
+            ? 'Commercial prospect directory: lead intake, touchpoint history, trial bookings, and conversion tracking.'
+            : 'Kanban board of open deals, prospective trials, and stage progression.'
+        }
+        icon={viewMode === 'LIST' ? Users : Kanban}
+        badgeText={viewMode === 'LIST' ? 'Commercial' : 'Pipeline'}
+        actions={
+          <>
+            {/* View Mode Toggle */}
+            <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+              <button
+                onClick={() => handleToggleView('LIST')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+                  viewMode === 'LIST'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Table View"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+              <button
+                onClick={() => handleToggleView('PIPELINE')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+                  viewMode === 'PIPELINE'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Pipeline Board"
+              >
+                <Kanban className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Pipeline</span>
+              </button>
+              <button
+                onClick={() => handleToggleView('ATTENTION')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+                  viewMode === 'ATTENTION'
+                    ? 'bg-background text-foreground shadow-xs font-semibold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Attention Queue"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                <span className="hidden sm:inline">Attention</span>
+                {metrics.slaBreaches > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">
+                    {metrics.slaBreaches}
+                  </span>
+                )}
+              </button>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Commercial prospect lifecycle: lead intake, touchpoint history, trial bookings, and conversion.
-            </p>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -235,28 +352,74 @@ export function LeadsWorkspace() {
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
+
             {canCreate && (
               <Button
                 size="sm"
                 onClick={() => setIsCreateOpen(true)}
-                className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>New Lead</span>
               </Button>
             )}
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+        {/* KPI Metrics Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
+          <CRMKpiTile
+            label="Total Leads"
+            value={metrics.total}
+            isLoading={isLoading}
+            isError={isError}
+            hint="All registered prospects"
+          />
+          <CRMKpiTile
+            label="Active Inquiries"
+            value={metrics.inquiries}
+            isLoading={isLoading}
+            isError={isError}
+            badge={{ text: 'In Pipeline', variant: 'info' }}
+            hint="New & Interested"
+          />
+          <CRMKpiTile
+            label="Trial Engagements"
+            value={metrics.trials}
+            isLoading={isLoading}
+            isError={isError}
+            badge={{ text: 'Booked / Attended', variant: 'warning' }}
+            hint="Prospect workouts"
+          />
+          <CRMKpiTile
+            label="Converted Members"
+            value={metrics.converted}
+            isLoading={isLoading}
+            isError={isError}
+            badge={{ text: 'Paying', variant: 'positive' }}
+            hint="Successful conversions"
+          />
+          <CRMKpiTile
+            label="SLA Breached"
+            value={metrics.slaBreaches}
+            isLoading={isLoading}
+            isError={isError}
+            badge={{
+              text: metrics.slaBreaches > 0 ? 'Urgent' : 'Clear',
+              variant: metrics.slaBreaches > 0 ? 'negative' : 'positive',
+            }}
+            hint="Require outreach"
+          />
+        </div>
         {/* Search & Status Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-5 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name, phone, email, or company..."
+              placeholder="Search by name, phone, email, or location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 text-xs sm:text-sm"
@@ -280,6 +443,65 @@ export function LeadsWorkspace() {
           </div>
         </div>
 
+        {/* Secondary Attribution & SLA Filters Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 mb-6 p-3 rounded-xl border border-border/70 bg-card/40 text-xs">
+          {/* Branch Filter */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-muted-foreground">Branch</span>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+            >
+              <option value="ALL">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Source Filter */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-muted-foreground">Lead Source</span>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+            >
+              <option value="ALL">All Sources</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Campaign Filter */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-muted-foreground">Campaign</span>
+            <Input
+              placeholder="Filter by campaign..."
+              value={campaignFilter}
+              onChange={(e) => setCampaignFilter(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+
+          {/* SLA Filter */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-muted-foreground">SLA Response Status</span>
+            <select
+              value={slaFilter}
+              onChange={(e) => setSlaFilter(e.target.value)}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+            >
+              <option value="ALL">All SLA States</option>
+              <option value="BREACHED">⚠️ Breached SLA</option>
+              <option value="ON_TRACK">✅ On Track</option>
+              <option value="DISABLED">Policy Disabled</option>
+            </select>
+          </div>
+        </div>
+
         {/* Content View */}
         {isLoading ? (
           <div className="space-y-3">
@@ -287,34 +509,118 @@ export function LeadsWorkspace() {
               <Skeleton key={i} className="h-16 w-full rounded-xl" />
             ))}
           </div>
+        ) : viewMode === 'ATTENTION' ? (
+          /* --- ATTENTION QUEUE VIEW --- */
+          <AttentionQueueView
+            branchFilter={branchFilter}
+            searchQuery={searchQuery}
+            onOpenLeadDetail={openLeadDetail}
+            onBookTrialClick={openTrialModal}
+            onStatusTransitionClick={openStatusModal}
+          />
         ) : isError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center">
-            <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-3" />
-            <h3 className="font-semibold text-lg">Unable to Load Leads</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              {(error as Error)?.message || 'An error occurred while connecting to the backend API.'}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              Try Again
-            </Button>
-          </div>
+          <CRMErrorState
+            title="Unable to Load Leads"
+            message={
+              (error as any)?.response?.data?.error ||
+              (error as any)?.response?.data?.detail ||
+              (error as Error)?.message ||
+              'A valid tenant authentication is required to access leads.'
+            }
+            onRetry={() => refetch()}
+          />
         ) : leads.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/80 bg-card/30 p-12 text-center max-w-lg mx-auto mt-8">
-            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
-              <Users className="w-6 h-6" />
-            </div>
-            <h3 className="font-semibold text-base sm:text-lg">No Leads Found</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 mb-6">
-              There are no prospective members in your database matching the current filter.
-            </p>
-            {canCreate && (
-              <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                Add First Lead
-              </Button>
-            )}
+          <CRMEmptyState
+            icon={Users}
+            title="No Leads Found"
+            description="There are no prospective members matching your current filter criteria. Book or register an enquiry to build your sales pipeline."
+            actionLabel={canCreate ? 'Add First Lead' : undefined}
+            onAction={() => setIsCreateOpen(true)}
+            canAction={canCreate}
+          />
+        ) : viewMode === 'PIPELINE' ? (
+          /* --- PIPELINE KANBAN BOARD VIEW --- */
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
+            {PIPELINE_COLUMNS.map((col) => {
+              const colLeads = leads.filter((l) => l.current_status === col.status);
+              return (
+                <div
+                  key={col.status}
+                  className="rounded-xl border border-border/70 bg-muted/20 p-3 flex flex-col min-w-[240px] max-h-[75vh]"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-border/60 mb-3">
+                    <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+                      {col.label}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px] font-mono">
+                      {colLeads.length}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-2.5 overflow-y-auto flex-1 pr-1">
+                    {colLeads.length === 0 ? (
+                      <div className="p-4 text-center text-muted-foreground text-xs border border-dashed border-border/50 rounded-lg">
+                        Empty stage
+                      </div>
+                    ) : (
+                      colLeads.map((lead) => (
+                        <div
+                          key={lead.id}
+                          onClick={() => openLeadDetail(lead)}
+                          className="p-3 rounded-lg border border-border/60 bg-card hover:border-primary/40 transition-all cursor-pointer shadow-2xs space-y-2"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="font-semibold text-xs text-foreground">
+                              {lead.first_name} {lead.last_name}
+                            </div>
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground opacity-60 hover:opacity-100" />
+                          </div>
+
+                          {lead.interested_program_name && (
+                            <div className="text-[11px] text-primary font-medium truncate">
+                              {lead.interested_program_name}
+                            </div>
+                          )}
+
+                          {lead.attention?.is_stuck && (
+                            <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                              <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500" />
+                              <span className="truncate">{lead.attention.primary_reason_display || 'Action Required'}</span>
+                            </div>
+                          )}
+
+                          <div className="text-[11px] text-muted-foreground space-y-0.5">
+                            {lead.phone_normalized && (
+                              <div className="font-mono">{lead.phone_normalized}</div>
+                            )}
+                            {lead.branch_name && <div>📍 {lead.branch_name}</div>}
+                          </div>
+
+                          <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground">
+                            <span>{lead.source_name || 'Direct'}</span>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStatusModal(lead);
+                                }}
+                                className="text-primary hover:underline font-medium"
+                              >
+                                Move &rarr;
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
+          /* --- LIST / TABLE VIEW --- */
           <>
             {/* Desktop Data Table */}
             <div className="hidden md:block rounded-xl border border-border/60 bg-card overflow-hidden shadow-xs">
@@ -323,9 +629,9 @@ export function LeadsWorkspace() {
                   <tr>
                     <th className="px-5 py-3.5">Lead Name</th>
                     <th className="px-4 py-3.5">Contact</th>
-                    <th className="px-4 py-3.5">Source</th>
-                    <th className="px-4 py-3.5">Status</th>
-                    <th className="px-4 py-3.5">Assigned Rep</th>
+                    <th className="px-4 py-3.5">Branch &amp; Interest</th>
+                    <th className="px-4 py-3.5">Attribution &amp; Source</th>
+                    <th className="px-4 py-3.5">Stage &amp; SLA Status</th>
                     <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -333,13 +639,18 @@ export function LeadsWorkspace() {
                   {leads.map((lead) => {
                     const statusConf = STATUS_CONFIG[lead.current_status] || {
                       label: lead.current_status,
-                      color: 'bg-muted text-muted-foreground',
+                      color: 'text-muted-foreground border-border',
+                      bgBadge: 'bg-muted',
                     };
                     return (
-                      <tr key={lead.id} className="hover:bg-muted/20 transition-colors">
+                      <tr
+                        key={lead.id}
+                        className="hover:bg-muted/20 transition-colors cursor-pointer"
+                        onClick={() => openLeadDetail(lead)}
+                      >
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs shrink-0">
                               {lead.first_name.substring(0, 1)}
                               {lead.last_name.substring(0, 1)}
                             </div>
@@ -347,15 +658,15 @@ export function LeadsWorkspace() {
                               <div className="font-medium text-foreground">
                                 {lead.first_name} {lead.last_name}
                               </div>
-                              {lead.company_name && (
+                              {lead.area && (
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                  <Building2 className="w-3 h-3" />
-                                  <span>{lead.company_name}</span>
+                                  <span>📍 {lead.area}</span>
                                 </div>
                               )}
                             </div>
                           </div>
                         </td>
+
                         <td className="px-4 py-3.5 text-xs text-muted-foreground space-y-0.5">
                           {lead.phone_normalized && (
                             <div className="flex items-center gap-1.5 font-mono">
@@ -370,45 +681,103 @@ export function LeadsWorkspace() {
                             </div>
                           )}
                         </td>
+
+                        <td className="px-4 py-3.5 text-xs">
+                          <div className="font-medium text-foreground">{lead.branch_name || '—'}</div>
+                          {lead.interested_program_name ? (
+                            <div className="text-primary mt-0.5">{lead.interested_program_name}</div>
+                          ) : (
+                            <div className="text-muted-foreground mt-0.5">General Inquiry</div>
+                          )}
+                        </td>
+
                         <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                          {lead.source_name || lead.first_touch_source || 'Direct'}
+                          <div className="text-foreground font-medium">{lead.source_name || lead.first_touch_source || 'Direct / Walk In'}</div>
+                          {lead.campaign_reference ? (
+                            <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[140px]">
+                              📢 {lead.campaign_reference}
+                            </div>
+                          ) : lead.latest_touch_source ? (
+                            <div className="text-muted-foreground text-[11px] mt-0.5">
+                              Latest: {lead.latest_touch_source}
+                            </div>
+                          ) : null}
+                          <div className="text-[11px] mt-0.5">
+                            Rep: {lead.assigned_sales_name || 'Unassigned'}
+                          </div>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <Badge variant="outline" className={`text-xs ${statusConf.color}`}>
-                            {statusConf.label}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                          {lead.assigned_sales_name || 'Unassigned'}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          {canEdit && (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedLead(lead);
-                                  setTargetStatus(lead.current_status);
-                                  setIsStatusOpen(true);
-                                }}
-                                className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                              >
-                                Update Status
-                              </Button>
-                              <Button
+
+                        <td className="px-4 py-3.5 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${statusConf.color} ${statusConf.bgBadge}`}
+                            >
+                              {statusConf.label}
+                            </Badge>
+                            {lead.sla?.sla_status === 'BREACHED' && (
+                              <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold">
+                                Breached
+                              </Badge>
+                            )}
+                            {lead.sla?.sla_status === 'ON_TRACK' && (
+                              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                                On Track
+                              </Badge>
+                            )}
+                            {lead.attention?.is_stuck && (
+                              <Badge
                                 variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedLead(lead);
-                                  setIsTrialOpen(true);
-                                }}
-                                className="h-8 text-xs"
+                                className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold flex items-center gap-1"
+                                title={lead.attention.primary_reason_display || 'Attention Required'}
                               >
-                                Book Trial
-                              </Button>
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                <span>{lead.attention.primary_reason_display || 'Stuck'}</span>
+                              </Badge>
+                            )}
+                          </div>
+                          {lead.sla?.stage_age_seconds !== undefined && (
+                            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-muted-foreground/70" />
+                              <span>{formatDuration(lead.sla.stage_age_seconds)} in stage</span>
                             </div>
                           )}
+                        </td>
+
+                        <td
+                          className="px-4 py-3.5 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openLeadDetail(lead)}
+                              className="h-8 text-xs"
+                            >
+                              View
+                            </Button>
+                            {canEdit && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openStatusModal(lead)}
+                                  className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                                >
+                                  Status
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openTrialModal(lead)}
+                                  className="h-8 text-xs"
+                                >
+                                  Trial
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -417,17 +786,19 @@ export function LeadsWorkspace() {
               </table>
             </div>
 
-            {/* Mobile Cards View */}
+            {/* Mobile Cards View (Responsive 320px - 768px) */}
             <div className="grid grid-cols-1 gap-3 md:hidden">
               {leads.map((lead) => {
                 const statusConf = STATUS_CONFIG[lead.current_status] || {
                   label: lead.current_status,
-                  color: 'bg-muted text-muted-foreground',
+                  color: 'text-muted-foreground border-border',
+                  bgBadge: 'bg-muted',
                 };
                 return (
                   <div
                     key={lead.id}
-                    className="rounded-xl border border-border/70 bg-card p-4 shadow-xs space-y-3"
+                    onClick={() => openLeadDetail(lead)}
+                    className="rounded-xl border border-border/70 bg-card p-4 shadow-xs space-y-3 cursor-pointer hover:border-primary/40 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5">
@@ -439,58 +810,95 @@ export function LeadsWorkspace() {
                           <div className="font-semibold text-sm">
                             {lead.first_name} {lead.last_name}
                           </div>
-                          {lead.company_name && (
-                            <div className="text-xs text-muted-foreground">{lead.company_name}</div>
+                          {lead.branch_name && (
+                            <div className="text-xs text-muted-foreground">📍 {lead.branch_name}</div>
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className={`text-xs ${statusConf.color}`}>
-                        {statusConf.label}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${statusConf.color} ${statusConf.bgBadge}`}
+                        >
+                          {statusConf.label}
+                        </Badge>
+                        {lead.sla?.sla_status === 'BREACHED' && (
+                          <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold">
+                            SLA Breached
+                          </Badge>
+                        )}
+                        {lead.sla?.sla_status === 'ON_TRACK' && (
+                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                            On Track
+                          </Badge>
+                        )}
+                      </div>
                     </div>
 
                     <div className="text-xs text-muted-foreground space-y-1">
+                      {lead.interested_program_name && (
+                        <div className="font-medium text-primary">
+                          🎯 {lead.interested_program_name}
+                        </div>
+                      )}
+                      {lead.campaign_reference && (
+                        <div className="text-[11px] text-primary font-mono truncate">
+                          📢 {lead.campaign_reference}
+                        </div>
+                      )}
+                      {lead.sla?.stage_age_seconds !== undefined && (
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-muted-foreground/70" />
+                          <span>{formatDuration(lead.sla.stage_age_seconds)} in stage</span>
+                        </div>
+                      )}
                       {lead.phone_normalized && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 font-mono">
                           <Phone className="w-3.5 h-3.5" />
                           <span>{lead.phone_normalized}</span>
                         </div>
                       )}
                       {lead.email_normalized && (
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5" />
-                          <span>{lead.email_normalized}</span>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{lead.email_normalized}</span>
                         </div>
                       )}
                     </div>
 
-                    {canEdit && (
-                      <div className="border-t border-border/40 pt-3 flex items-center justify-between gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedLead(lead);
-                            setTargetStatus(lead.current_status);
-                            setIsStatusOpen(true);
-                          }}
-                          className="h-8 text-xs flex-1"
-                        >
-                          Status
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedLead(lead);
-                            setIsTrialOpen(true);
-                          }}
-                          className="h-8 text-xs flex-1 bg-primary text-primary-foreground"
-                        >
-                          Book Trial
-                        </Button>
-                      </div>
-                    )}
+                    <div
+                      className="border-t border-border/40 pt-2.5 flex items-center justify-between gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openLeadDetail(lead)}
+                        className="h-8 text-xs flex-1"
+                      >
+                        View
+                      </Button>
+                      {canEdit && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openStatusModal(lead)}
+                            className="h-8 text-xs flex-1 text-primary"
+                          >
+                            Status
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => openTrialModal(lead)}
+                            className="h-8 text-xs flex-1 bg-primary text-primary-foreground"
+                          >
+                            Trial
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -499,113 +907,29 @@ export function LeadsWorkspace() {
         )}
       </main>
 
-      {/* New Lead Modal */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={handleCreateLead}>
-            <DialogHeader>
-              <DialogTitle>Register New Lead</DialogTitle>
-              <DialogDescription>
-                Add a new prospective member to the dedicated tenant CRM database.
-              </DialogDescription>
-            </DialogHeader>
+      {/* --- MODALS --- */}
 
-            <div className="space-y-4 py-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">First Name *</Label>
-                  <Input
-                    value={newFirst}
-                    onChange={(e) => setNewFirst(e.target.value)}
-                    required
-                    className="h-9 text-xs"
-                    placeholder="e.g. Alex"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Last Name *</Label>
-                  <Input
-                    value={newLast}
-                    onChange={(e) => setNewLast(e.target.value)}
-                    required
-                    className="h-9 text-xs"
-                    placeholder="e.g. Mercer"
-                  />
-                </div>
-              </div>
+      {/* Complete + New Lead Intake Modal */}
+      <NewLeadModal
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        onSuccess={() => refetch()}
+      />
 
-              <div className="space-y-1">
-                <Label className="text-xs">Phone Number</Label>
-                <Input
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="h-9 text-xs"
-                  placeholder="+1 555 019 2831"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Email Address</Label>
-                <Input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="h-9 text-xs"
-                  placeholder="alex.mercer@company.com"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Company / Workplace</Label>
-                <Input
-                  value={newCompany}
-                  onChange={(e) => setNewCompany(e.target.value)}
-                  className="h-9 text-xs"
-                  placeholder="e.g. TechCorp Solutions"
-                />
-              </div>
-
-              {sources.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Attribution Source</Label>
-                  <select
-                    value={newSourceId}
-                    onChange={(e) => setNewSourceId(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
-                  >
-                    <option value="">Direct / Walk-in</option>
-                    {sources.map((src) => (
-                      <option key={src.id} value={src.id}>
-                        {src.name} ({src.source_type})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Saving...' : 'Create Lead'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Lead Detail / Edit Modal */}
+      <LeadDetailModal
+        lead={selectedLead}
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        onStatusTransitionClick={(l) => openStatusModal(l)}
+        onBookTrialClick={(l) => openTrialModal(l)}
+      />
 
       {/* Transition Status Modal */}
       <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Update Lead Status</DialogTitle>
+            <DialogTitle>Update Lead Stage</DialogTitle>
             <DialogDescription>
               Transition {selectedLead?.first_name} {selectedLead?.last_name} to a new pipeline stage.
             </DialogDescription>
@@ -619,16 +943,21 @@ export function LeadsWorkspace() {
                 onChange={(e) => setTargetStatus(e.target.value as LeadStatus)}
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
               >
-                {Object.entries(STATUS_CONFIG).map(([stKey, conf]) => (
-                  <option key={stKey} value={stKey}>
-                    {conf.label}
+                {metadata?.statuses?.map((st) => (
+                  <option key={st.value} value={st.value}>
+                    {st.label}
                   </option>
-                ))}
+                )) ||
+                  Object.entries(STATUS_CONFIG).map(([stKey, conf]) => (
+                    <option key={stKey} value={stKey}>
+                      {conf.label}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Reason / Note</Label>
+              <Label className="text-xs">Reason / Touchpoint Note</Label>
               <Input
                 placeholder="e.g. Spoke on call, interested in 12-month membership"
                 value={statusReason}
@@ -690,7 +1019,7 @@ export function LeadsWorkspace() {
               >
                 <option value="GROUP_CLASS">Group Class Trial</option>
                 <option value="PERSONAL_TRAINING">1-on-1 PT Consultation</option>
-                <option value="FITNESS_ASSESSMENT">Body Assessment & Goal Review</option>
+                <option value="FITNESS_ASSESSMENT">Body Assessment &amp; Goal Review</option>
               </select>
             </div>
           </div>
