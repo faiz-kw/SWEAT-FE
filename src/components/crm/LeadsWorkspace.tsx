@@ -56,6 +56,7 @@ import { formatCrmLabel } from '@/lib/crmLabels';
 import { usePermissions } from '@/lib/permissions';
 import { NewLeadModal } from './NewLeadModal';
 import { LeadDetailModal } from './LeadDetailModal';
+import { BookTrialModal } from './BookTrialModal';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgBadge: string }> = {
   NEW_LEAD: { label: 'New Lead', color: 'text-blue-500 border-blue-500/20', bgBadge: 'bg-blue-500/10' },
@@ -135,15 +136,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [targetStatus, setTargetStatus] = React.useState<LeadStatus>('INTERESTED');
   const [statusReason, setStatusReason] = React.useState('');
 
-  // Trial Booking Form State
-  const [trialDate, setTrialDate] = React.useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  });
-  const [trialTime, setTrialTime] = React.useState('10:00');
-  const [trialType, setTrialType] = React.useState('GROUP_CLASS');
-
   // Queries
   const { data: sources = [] } = useQuery({
     queryKey: ['lead-sources'],
@@ -208,18 +200,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     },
   });
 
-  const trialMutation = useMutation({
-    mutationFn: ({ leadId, payload }: { leadId: string; payload: any }) =>
-      crmApi.bookTrial(leadId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Trial booked and lead status updated!');
-      setIsTrialOpen(false);
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.message || 'Failed to book trial');
-    },
-  });
 
   const handleTransitionStatus = () => {
     if (!selectedLead) return;
@@ -229,24 +209,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         new_status: targetStatus,
         reason_code: 'CRM_UI_CHANGE',
         reason_text: statusReason || undefined,
-      },
-    });
-  };
-
-  const handleBookTrial = () => {
-    if (!selectedLead) return;
-    const startIso = `${trialDate}T${trialTime}:00Z`;
-    const endDt = new Date(`${trialDate}T${trialTime}:00Z`);
-    endDt.setHours(endDt.getHours() + 1);
-    const endIso = endDt.toISOString();
-
-    trialMutation.mutate({
-      leadId: selectedLead.id,
-      payload: {
-        branch_id: selectedLead.branch || '00000000-0000-0000-0000-000000000000',
-        scheduled_start: startIso,
-        scheduled_end: endIso,
-        trial_type: trialType,
       },
     });
   };
@@ -370,7 +332,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
         {/* KPI Metrics Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
           <CRMKpiTile
             label="Total Leads"
             value={metrics.total}
@@ -414,24 +376,25 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             hint="Require outreach"
           />
         </div>
+
         {/* Search & Status Filters */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-5 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border/50 pb-4 mb-5">
+          <div className="relative w-full lg:max-w-md shrink-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="Search by name, phone, email, or location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 text-xs sm:text-sm"
+              className="pl-9 h-9 text-xs sm:text-sm w-full"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1 w-full lg:w-auto shrink-0 no-scrollbar">
             {['ALL', 'NEW_LEAD', 'TRIAL_BOOKED', 'INTERESTED', 'HOT_LEAD', 'CONVERTED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
                   statusFilter === st
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -444,14 +407,14 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         </div>
 
         {/* Secondary Attribution & SLA Filters Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 mb-6 p-3 rounded-xl border border-border/70 bg-card/40 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6 p-3 rounded-xl border border-border/70 bg-card/40 text-xs">
           {/* Branch Filter */}
           <div className="space-y-1">
             <span className="text-[11px] font-medium text-muted-foreground">Branch</span>
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs truncate"
             >
               <option value="ALL">All Branches</option>
               {branches.map((b) => (
@@ -466,7 +429,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs truncate"
             >
               <option value="ALL">All Sources</option>
               {sources.map((s) => (
@@ -492,7 +455,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             <select
               value={slaFilter}
               onChange={(e) => setSlaFilter(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs truncate"
             >
               <option value="ALL">All SLA States</option>
               <option value="BREACHED">⚠️ Breached SLA</option>
@@ -622,168 +585,170 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         ) : (
           /* --- LIST / TABLE VIEW --- */
           <>
-            {/* Desktop Data Table */}
-            <div className="hidden md:block rounded-xl border border-border/60 bg-card overflow-hidden shadow-xs">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/40 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">Lead Name</th>
-                    <th className="px-4 py-3.5">Contact</th>
-                    <th className="px-4 py-3.5">Branch &amp; Interest</th>
-                    <th className="px-4 py-3.5">Attribution &amp; Source</th>
-                    <th className="px-4 py-3.5">Stage &amp; SLA Status</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {leads.map((lead) => {
-                    const statusConf = STATUS_CONFIG[lead.current_status] || {
-                      label: lead.current_status,
-                      color: 'text-muted-foreground border-border',
-                      bgBadge: 'bg-muted',
-                    };
-                    return (
-                      <tr
-                        key={lead.id}
-                        className="hover:bg-muted/20 transition-colors cursor-pointer"
-                        onClick={() => openLeadDetail(lead)}
-                      >
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs shrink-0">
-                              {lead.first_name.substring(0, 1)}
-                              {lead.last_name.substring(0, 1)}
-                            </div>
-                            <div>
-                              <div className="font-medium text-foreground">
-                                {lead.first_name} {lead.last_name}
+            {/* Desktop & Tablet Data Table with Horizontal Scroll Guard */}
+            <div className="hidden md:block rounded-xl border border-border/60 bg-card shadow-xs overflow-hidden">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm min-w-[960px]">
+                  <thead className="bg-muted/40 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5 min-w-[200px]">Lead Name</th>
+                      <th className="px-4 py-3.5 min-w-[190px]">Contact</th>
+                      <th className="px-4 py-3.5 min-w-[150px]">Branch &amp; Interest</th>
+                      <th className="px-4 py-3.5 min-w-[170px]">Attribution &amp; Source</th>
+                      <th className="px-4 py-3.5 min-w-[150px]">Stage &amp; SLA Status</th>
+                      <th className="px-4 py-3.5 min-w-[160px] text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {leads.map((lead) => {
+                      const statusConf = STATUS_CONFIG[lead.current_status] || {
+                        label: lead.current_status,
+                        color: 'text-muted-foreground border-border',
+                        bgBadge: 'bg-muted',
+                      };
+                      return (
+                        <tr
+                          key={lead.id}
+                          className="hover:bg-muted/20 transition-colors cursor-pointer"
+                          onClick={() => openLeadDetail(lead)}
+                        >
+                          <td className="px-5 py-3.5 min-w-[200px]">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs shrink-0">
+                                {lead.first_name.substring(0, 1)}
+                                {lead.last_name.substring(0, 1)}
                               </div>
-                              {lead.area && (
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                  <span>📍 {lead.area}</span>
+                              <div>
+                                <div className="font-medium text-foreground">
+                                  {lead.first_name} {lead.last_name}
                                 </div>
-                              )}
+                                {lead.area && (
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                    <span>📍 {lead.area}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground space-y-0.5">
-                          {lead.phone_normalized && (
-                            <div className="flex items-center gap-1.5 font-mono">
-                              <Phone className="w-3 h-3 text-muted-foreground/80" />
-                              <span>{lead.phone_normalized}</span>
-                            </div>
-                          )}
-                          {lead.email_normalized && (
-                            <div className="flex items-center gap-1.5">
-                              <Mail className="w-3 h-3 text-muted-foreground/80" />
-                              <span>{lead.email_normalized}</span>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3.5 text-xs">
-                          <div className="font-medium text-foreground">{lead.branch_name || '—'}</div>
-                          {lead.interested_program_name ? (
-                            <div className="text-primary mt-0.5">{lead.interested_program_name}</div>
-                          ) : (
-                            <div className="text-muted-foreground mt-0.5">General Inquiry</div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                          <div className="text-foreground font-medium">{lead.source_name || lead.first_touch_source || 'Direct / Walk In'}</div>
-                          {lead.campaign_reference ? (
-                            <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[140px]">
-                              📢 {lead.campaign_reference}
-                            </div>
-                          ) : lead.latest_touch_source ? (
-                            <div className="text-muted-foreground text-[11px] mt-0.5">
-                              Latest: {lead.latest_touch_source}
-                            </div>
-                          ) : null}
-                          <div className="text-[11px] mt-0.5">
-                            Rep: {lead.assigned_sales_name || 'Unassigned'}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3.5 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${statusConf.color} ${statusConf.bgBadge}`}
-                            >
-                              {statusConf.label}
-                            </Badge>
-                            {lead.sla?.sla_status === 'BREACHED' && (
-                              <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold">
-                                Breached
-                              </Badge>
+                          <td className="px-4 py-3.5 min-w-[190px] text-xs text-muted-foreground space-y-0.5">
+                            {lead.phone_normalized && (
+                              <div className="flex items-center gap-1.5 font-mono">
+                                <Phone className="w-3 h-3 text-muted-foreground/80 shrink-0" />
+                                <span>{lead.phone_normalized}</span>
+                              </div>
                             )}
-                            {lead.sla?.sla_status === 'ON_TRACK' && (
-                              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                                On Track
-                              </Badge>
+                            {lead.email_normalized && (
+                              <div className="flex items-center gap-1.5">
+                                <Mail className="w-3 h-3 text-muted-foreground/80 shrink-0" />
+                                <span className="truncate max-w-[170px]" title={lead.email_normalized}>{lead.email_normalized}</span>
+                              </div>
                             )}
-                            {lead.attention?.is_stuck && (
+                          </td>
+
+                          <td className="px-4 py-3.5 min-w-[150px] text-xs">
+                            <div className="font-medium text-foreground">{lead.branch_name || '—'}</div>
+                            {lead.interested_program_name ? (
+                              <div className="text-primary mt-0.5">{lead.interested_program_name}</div>
+                            ) : (
+                              <div className="text-muted-foreground mt-0.5">General Inquiry</div>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3.5 min-w-[170px] text-xs text-muted-foreground">
+                            <div className="text-foreground font-medium">{lead.source_name || lead.first_touch_source || 'Direct / Walk In'}</div>
+                            {lead.campaign_reference ? (
+                              <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[160px]">
+                                📢 {lead.campaign_reference}
+                              </div>
+                            ) : lead.latest_touch_source ? (
+                              <div className="text-muted-foreground text-[11px] mt-0.5">
+                                Latest: {lead.latest_touch_source}
+                              </div>
+                            ) : null}
+                            <div className="text-[11px] mt-0.5">
+                              Rep: {lead.assigned_sales_name || 'Unassigned'}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 min-w-[150px] space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <Badge
                                 variant="outline"
-                                className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold flex items-center gap-1"
-                                title={lead.attention.primary_reason_display || 'Attention Required'}
+                                className={`text-xs ${statusConf.color} ${statusConf.bgBadge}`}
                               >
-                                <AlertTriangle className="w-2.5 h-2.5" />
-                                <span>{lead.attention.primary_reason_display || 'Stuck'}</span>
+                                {statusConf.label}
                               </Badge>
-                            )}
-                          </div>
-                          {lead.sla?.stage_age_seconds !== undefined && (
-                            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-muted-foreground/70" />
-                              <span>{formatDuration(lead.sla.stage_age_seconds)} in stage</span>
-                            </div>
-                          )}
-                        </td>
-
-                        <td
-                          className="px-4 py-3.5 text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openLeadDetail(lead)}
-                              className="h-8 text-xs"
-                            >
-                              View
-                            </Button>
-                            {canEdit && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openStatusModal(lead)}
-                                  className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                                >
-                                  Status
-                                </Button>
-                                <Button
+                              {lead.sla?.sla_status === 'BREACHED' && (
+                                <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold">
+                                  Breached
+                                </Badge>
+                              )}
+                              {lead.sla?.sla_status === 'ON_TRACK' && (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                                  On Track
+                                </Badge>
+                              )}
+                              {lead.attention?.is_stuck && (
+                                <Badge
                                   variant="outline"
-                                  size="sm"
-                                  onClick={() => openTrialModal(lead)}
-                                  className="h-8 text-xs"
+                                  className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30 font-semibold flex items-center gap-1"
+                                  title={lead.attention.primary_reason_display || 'Attention Required'}
                                 >
-                                  Trial
-                                </Button>
-                              </>
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>{lead.attention.primary_reason_display || 'Stuck'}</span>
+                                </Badge>
+                              )}
+                            </div>
+                            {lead.sla?.stage_age_seconds !== undefined && (
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-muted-foreground/70" />
+                                <span>{formatDuration(lead.sla.stage_age_seconds)} in stage</span>
+                              </div>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+
+                          <td
+                            className="px-4 py-3.5 min-w-[160px] text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openLeadDetail(lead)}
+                                className="h-8 text-xs"
+                              >
+                                View
+                              </Button>
+                              {canEdit && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openStatusModal(lead)}
+                                    className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                                  >
+                                    Status
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openTrialModal(lead)}
+                                    className="h-8 text-xs"
+                                  >
+                                    Trial
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Mobile Cards View (Responsive 320px - 768px) */}
@@ -978,62 +943,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         </DialogContent>
       </Dialog>
 
-      {/* Book Trial Session Modal */}
-      <Dialog open={isTrialOpen} onOpenChange={setIsTrialOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Book Trial Session</DialogTitle>
-            <DialogDescription>
-              Schedule an introductory session for {selectedLead?.first_name} {selectedLead?.last_name}.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Session Date</Label>
-                <Input
-                  type="date"
-                  value={trialDate}
-                  onChange={(e) => setTrialDate(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Start Time</Label>
-                <Input
-                  type="time"
-                  value={trialTime}
-                  onChange={(e) => setTrialTime(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Trial Type</Label>
-              <select
-                value={trialType}
-                onChange={(e) => setTrialType(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
-              >
-                <option value="GROUP_CLASS">Group Class Trial</option>
-                <option value="PERSONAL_TRAINING">1-on-1 PT Consultation</option>
-                <option value="FITNESS_ASSESSMENT">Body Assessment &amp; Goal Review</option>
-              </select>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" size="sm" onClick={() => setIsTrialOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" disabled={trialMutation.isPending} onClick={handleBookTrial}>
-              {trialMutation.isPending ? 'Booking...' : 'Confirm Trial Booking'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Book Real Trial Session Modal (Authoritative Timetable & Capacity Locked) */}
+      <BookTrialModal
+        open={isTrialOpen}
+        onOpenChange={setIsTrialOpen}
+        lead={selectedLead}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['leads'] });
+          refetch();
+        }}
+      />
     </div>
   );
 }
