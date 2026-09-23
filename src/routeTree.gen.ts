@@ -44,6 +44,7 @@ import { Route as ShellCrmActivitiesRouteImport } from './routes/_shell/crm.acti
 import { Route as ShellCrmAiCallingRouteImport } from './routes/_shell/crm.ai-calling'
 import { Route as ShellCrmCampaignsRouteImport } from './routes/_shell/crm.campaigns'
 import { Route as ShellCrmCouponsRouteImport } from './routes/_shell/crm.coupons'
+import { Route as ShellCrmDashboardRouteImport } from './routes/_shell/crm.dashboard'
 import { Route as ShellCrmFollowUpsRouteImport } from './routes/_shell/crm.follow-ups'
 import { Route as ShellCrmLeadsRouteImport } from './routes/_shell/crm.leads'
 import { Route as ShellCrmOffersRouteImport } from './routes/_shell/crm.offers'
@@ -293,6 +294,11 @@ const ShellCrmCampaignsRoute = ShellCrmCampaignsRouteImport.update({
 const ShellCrmCouponsRoute = ShellCrmCouponsRouteImport.update({
   id: '/crm/coupons',
   path: '/crm/coupons',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellCrmDashboardRoute = ShellCrmDashboardRouteImport.update({
+  id: '/crm/dashboard',
+  path: '/crm/dashboard',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellCrmFollowUpsRoute = ShellCrmFollowUpsRouteImport.update({
@@ -686,6 +692,7 @@ export interface FileRoutesByFullPath {
   '/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/crm/campaigns': typeof ShellCrmCampaignsRoute
   '/crm/coupons': typeof ShellCrmCouponsRoute
+  '/crm/dashboard': typeof ShellCrmDashboardRoute
   '/crm/follow-ups': typeof ShellCrmFollowUpsRoute
   '/crm/leads': typeof ShellCrmLeadsRoute
   '/crm/offers': typeof ShellCrmOffersRoute
@@ -791,6 +798,7 @@ export interface FileRoutesByTo {
   '/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/crm/campaigns': typeof ShellCrmCampaignsRoute
   '/crm/coupons': typeof ShellCrmCouponsRoute
+  '/crm/dashboard': typeof ShellCrmDashboardRoute
   '/crm/follow-ups': typeof ShellCrmFollowUpsRoute
   '/crm/leads': typeof ShellCrmLeadsRoute
   '/crm/offers': typeof ShellCrmOffersRoute
@@ -898,6 +906,7 @@ export interface FileRoutesById {
   '/_shell/crm/ai-calling': typeof ShellCrmAiCallingRoute
   '/_shell/crm/campaigns': typeof ShellCrmCampaignsRoute
   '/_shell/crm/coupons': typeof ShellCrmCouponsRoute
+  '/_shell/crm/dashboard': typeof ShellCrmDashboardRoute
   '/_shell/crm/follow-ups': typeof ShellCrmFollowUpsRoute
   '/_shell/crm/leads': typeof ShellCrmLeadsRoute
   '/_shell/crm/offers': typeof ShellCrmOffersRoute
@@ -1005,6 +1014,7 @@ export interface FileRouteTypes {
     | '/crm/ai-calling'
     | '/crm/campaigns'
     | '/crm/coupons'
+    | '/crm/dashboard'
     | '/crm/follow-ups'
     | '/crm/leads'
     | '/crm/offers'
@@ -1110,6 +1120,7 @@ export interface FileRouteTypes {
     | '/crm/ai-calling'
     | '/crm/campaigns'
     | '/crm/coupons'
+    | '/crm/dashboard'
     | '/crm/follow-ups'
     | '/crm/leads'
     | '/crm/offers'
@@ -1216,6 +1227,7 @@ export interface FileRouteTypes {
     | '/_shell/crm/ai-calling'
     | '/_shell/crm/campaigns'
     | '/_shell/crm/coupons'
+    | '/_shell/crm/dashboard'
     | '/_shell/crm/follow-ups'
     | '/_shell/crm/leads'
     | '/_shell/crm/offers'
@@ -1537,6 +1549,13 @@ declare module '@tanstack/react-router' {
       path: '/crm/coupons'
       fullPath: '/crm/coupons'
       preLoaderRoute: typeof ShellCrmCouponsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/crm/dashboard': {
+      id: '/_shell/crm/dashboard'
+      path: '/crm/dashboard'
+      fullPath: '/crm/dashboard'
+      preLoaderRoute: typeof ShellCrmDashboardRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/crm/follow-ups': {
@@ -2092,6 +2111,7 @@ interface ShellRouteChildren {
   ShellCrmAiCallingRoute: typeof ShellCrmAiCallingRoute
   ShellCrmCampaignsRoute: typeof ShellCrmCampaignsRoute
   ShellCrmCouponsRoute: typeof ShellCrmCouponsRoute
+  ShellCrmDashboardRoute: typeof ShellCrmDashboardRoute
   ShellCrmFollowUpsRoute: typeof ShellCrmFollowUpsRoute
   ShellCrmLeadsRoute: typeof ShellCrmLeadsRoute
   ShellCrmOffersRoute: typeof ShellCrmOffersRoute
@@ -2190,6 +2210,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellCrmAiCallingRoute: ShellCrmAiCallingRoute,
   ShellCrmCampaignsRoute: ShellCrmCampaignsRoute,
   ShellCrmCouponsRoute: ShellCrmCouponsRoute,
+  ShellCrmDashboardRoute: ShellCrmDashboardRoute,
   ShellCrmFollowUpsRoute: ShellCrmFollowUpsRoute,
   ShellCrmLeadsRoute: ShellCrmLeadsRoute,
   ShellCrmOffersRoute: ShellCrmOffersRoute,

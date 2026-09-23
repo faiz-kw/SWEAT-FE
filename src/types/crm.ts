@@ -1063,5 +1063,137 @@ export interface LeadOffersResponse {
   rules: any[];
 }
 
+export interface CRMDashboardFilters {
+  date_from: string;
+  date_to: string;
+  preset: string;
+  branch_id: string;
+  agent_id: string;
+  lead_source_id: string;
+  campaign_name: string;
+  program_id: string;
+  platform: string;
+}
+
+export interface CRMDashboardSummary {
+  total_leads: number;
+  new_leads: number;
+  open_leads: number;
+  converted_members: number;
+  conversion_rate: number;
+  trials_booked: number;
+  trials_attended: number;
+  trial_no_shows: number;
+  overdue_followups: number;
+  leads_requiring_attention: number;
+  paid_revenue: string;
+  gross_revenue: string;
+  refund_amount: string;
+}
+
+export interface CRMLeadFunnelStage {
+  status: string;
+  display_label: string;
+  count: number;
+  percentage_of_total: number;
+  conversion_from_previous_stage: number | null;
+}
+
+export interface CRMSourcePerformanceItem {
+  source_id: string | null;
+  source_name: string;
+  source_type: string;
+  leads: number;
+  trials: number;
+  conversions: number;
+  conversion_rate: number;
+  paid_revenue: string;
+}
+
+export interface CRMCampaignSummaryItem {
+  id: string;
+  campaign_name: string;
+  platform: string;
+  leads: number;
+  trials: number;
+  conversions: number;
+  conversion_rate: number;
+  paid_revenue: string;
+}
+
+export interface CRMTrialPerformanceSummary {
+  booked: number;
+  confirmed: number;
+  attended: number;
+  no_show: number;
+  cancelled: number;
+  converted_after_trial: number;
+  attendance_rate: number;
+  top_programs: Array<{ program_id: string; program_name: string; count: number }>;
+}
+
+export interface CRMFollowupPerformanceSummary {
+  due_today: number;
+  overdue: number;
+  upcoming: number;
+  completed: number;
+  total_pending: number;
+  completion_rate: number;
+}
+
+export interface CRMAttentionPerformanceSummary {
+  stuck_leads: number;
+  sla_breached: number;
+  overdue_tasks: number;
+  awaiting_response: number;
+  total_active_leads: number;
+}
+
+export interface CRMAgentPerformanceItem {
+  agent_id: string;
+  agent_name: string;
+  email: string;
+  assigned_leads: number;
+  activities: number;
+  completed_followups: number;
+  trials_booked: number;
+  conversions: number;
+  paid_revenue: string;
+}
+
+export interface CRMBranchPerformanceItem {
+  branch_id: string;
+  branch_name: string;
+  code: string;
+  leads: number;
+  trials: number;
+  conversions: number;
+  conversion_rate: number;
+  paid_revenue: string;
+}
+
+export interface CRMTrendBucket {
+  date: string;
+  display_date: string;
+  leads: number;
+  trials: number;
+  conversions: number;
+  paid_revenue: number;
+}
+
+export interface CRMDashboardResponse {
+  filters: CRMDashboardFilters;
+  summary: CRMDashboardSummary;
+  funnel: CRMLeadFunnelStage[];
+  sources: CRMSourcePerformanceItem[];
+  campaigns: CRMCampaignSummaryItem[];
+  trials: CRMTrialPerformanceSummary;
+  followups: CRMFollowupPerformanceSummary;
+  attention: CRMAttentionPerformanceSummary;
+  agents: CRMAgentPerformanceItem[];
+  branches: CRMBranchPerformanceItem[];
+  trends: CRMTrendBucket[];
+}
+
 
 

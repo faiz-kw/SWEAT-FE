@@ -112,6 +112,7 @@ export const NAV: NavSection[] = [
     label: "CRM & Sales",
     icon: "Target",
     items: [
+      { label: "Dashboard", to: "/crm/dashboard", permission: "crm.dashboard.view" },
       { label: "Leads", to: "/crm/leads", badgeKey: "leads", permission: "crm.leads.view" },
       { label: "Lead Pipeline", to: "/crm/pipeline", permission: "crm.pipeline.view" },
       { label: "Trial Management", to: "/crm/trials", permission: "crm.trials.view" },

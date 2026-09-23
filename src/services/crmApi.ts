@@ -905,6 +905,20 @@ export const crmApi = {
     const res = await api.get<import('@/types/crm').LeadOffersResponse>(`/tenant/leads/${leadId}/offers/`);
     return res.data;
   },
+
+  getDashboardMetrics: async (params?: Partial<import('@/types/crm').CRMDashboardFilters>): Promise<import('@/types/crm').CRMDashboardResponse> => {
+    const sp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'ALL') {
+          sp.append(k, String(v));
+        }
+      });
+    }
+    const queryStr = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await api.get<import('@/types/crm').CRMDashboardResponse>(`/tenant/crm/dashboard/${queryStr}`);
+    return res.data;
+  },
 };
 
 

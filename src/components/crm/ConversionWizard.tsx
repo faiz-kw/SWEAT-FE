@@ -39,7 +39,10 @@ function formatDuration(value: number, unit: string): string {
 }
 
 function generateIdempotencyKey(): string {
-  return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `conv-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `conv-${Date.now()}-${Date.now().toString(36)}`;
 }
 
 // Presentation metadata for supported payment providers
