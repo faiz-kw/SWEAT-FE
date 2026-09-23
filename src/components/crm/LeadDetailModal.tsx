@@ -40,6 +40,8 @@ import {
   Bell,
   UserX,
   Sparkles,
+  Lock,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -124,6 +126,8 @@ export function LeadDetailModal({
   const { can } = usePermissions();
   const canEdit = can('crm.leads.edit') || can('sales.leads.edit');
   const canConvert = can('crm.leads.convert') || canEdit;
+  const canViewCommunications = can('crm.communications.view');
+  const canSendCommunications = can('crm.communications.send');
 
   const [activeTab, setActiveTab] = React.useState<TabType>('overview');
   const [isEditing, setIsEditing] = React.useState(false);
@@ -530,7 +534,7 @@ export function LeadDetailModal({
   const { data: communicationsList = [], isLoading: isCommunicationsLoading } = useQuery({
     queryKey: ['lead-communications', currentLead?.id],
     queryFn: () => crmApi.getCommunications({ lead_id: currentLead!.id }),
-    enabled: open && !!currentLead?.id && (activeTab === 'communications' || activeTab === 'overview'),
+    enabled: open && !!currentLead?.id && activeTab === 'communications' && canViewCommunications,
   });
 
   // Offers & Coupons Query (Phase 9)
@@ -912,7 +916,10 @@ export function LeadDetailModal({
             >
               <Send className="w-3.5 h-3.5" />
               Communications
-              {communicationsList.length > 0 && (
+              {!canViewCommunications && (
+                <Lock className="w-3 h-3 text-muted-foreground ml-0.5" />
+              )}
+              {canViewCommunications && communicationsList.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
                   {communicationsList.length}
                 </span>
@@ -2315,20 +2322,31 @@ export function LeadDetailModal({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5"
-                    onClick={() => {
-                      setIsComposeOpen(true);
-                      setComposeChannel('WHATSAPP');
-                      setComposeRecipient(currentLead?.phone_normalized || '');
-                    }}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Compose Message
-                  </Button>
+                  {canSendCommunications && (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5"
+                      onClick={() => {
+                        setIsComposeOpen(true);
+                        setComposeChannel('WHATSAPP');
+                        setComposeRecipient(currentLead?.phone_normalized || '');
+                      }}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Compose Message
+                    </Button>
+                  )}
                 </div>
               </div>
+
+              {!canViewCommunications ? (
+                <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6 space-y-2">
+                  <Shield className="w-8 h-8 mx-auto text-muted-foreground/60" />
+                  <div className="font-semibold text-foreground text-sm">Access Restricted</div>
+                  <div>You do not have permission to view lead communications (required permission: <code>crm.communications.view</code>).</div>
+                </div>
+              ) : (
+                <>
 
               {/* CONSENT & DNC STATUS BAR */}
               <div className="p-3 rounded-lg bg-muted/40 border border-border text-xs flex flex-wrap items-center justify-between gap-2">
@@ -2498,6 +2516,8 @@ export function LeadDetailModal({
                       );
                     })}
                 </div>
+              )}
+                </>
               )}
             </div>
           )}

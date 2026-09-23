@@ -203,6 +203,12 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
 
   const handleTransitionStatus = () => {
     if (!selectedLead) return;
+    if (['TRIAL_BOOKED', 'TRIAL_CONFIRMED', 'TRIAL_ATTENDED', 'NO_SHOW'].includes(targetStatus)) {
+      setIsStatusOpen(false);
+      setIsTrialOpen(true);
+      toast.info('Book a real trial session to move this lead to Trial Booked.');
+      return;
+    }
     transitionMutation.mutate({
       leadId: selectedLead.id,
       payload: {

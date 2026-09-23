@@ -443,13 +443,21 @@ export const crmApi = {
 
   getAvailableTrialSlots: async (params: {
     branch_id: string;
-    date: string;
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    program_id?: string;
     class_category?: string;
+    lead_id?: string;
   }): Promise<TrialSlot[]> => {
     const sp = new URLSearchParams();
     sp.append('branch_id', params.branch_id);
-    sp.append('date', params.date);
+    if (params.date) sp.append('date', params.date);
+    if (params.date_from) sp.append('date_from', params.date_from);
+    if (params.date_to) sp.append('date_to', params.date_to);
+    if (params.program_id) sp.append('program_id', params.program_id);
     if (params.class_category) sp.append('class_category', params.class_category);
+    if (params.lead_id) sp.append('lead_id', params.lead_id);
     const res = await api.get<{ slots: TrialSlot[] }>(`/tenant/trial-bookings/available_slots/?${sp.toString()}`);
     return res.data.slots || [];
   },

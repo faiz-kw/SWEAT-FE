@@ -79,6 +79,17 @@ export const bookingsApi = {
     return res.data;
   },
 
+  confirmBooking: async (
+    bookingId: string,
+    data?: {
+      channel?: string;
+      notes?: string;
+    }
+  ): Promise<any> => {
+    const res = await api.post(`/tenant/bookings/${bookingId}/confirm/`, data || {});
+    return res.data;
+  },
+
   promoteWaitlist: async (occurrenceId: string): Promise<Booking> => {
     const res = await api.post('/tenant/bookings/promote-waitlist/', { occurrence_id: occurrenceId });
     return res.data;

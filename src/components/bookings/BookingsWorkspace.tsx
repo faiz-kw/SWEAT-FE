@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
+import { BookTrialModal } from '../crm/BookTrialModal';
 
 interface BookingsWorkspaceProps {
   initialTab?: 'bookings' | 'waitlist' | 'policies';
@@ -81,6 +82,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const [reschedulingTrialBooking, setReschedulingTrialBooking] = useState<any | null>(null);
 
   // Form states for Actions
   const [cancelReasonCode, setCancelReasonCode] = useState('MEMBER_REQUEST');
@@ -269,6 +271,19 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     },
   });
 
+  const confirmBookingMutation = useMutation({
+    mutationFn: (bookingId: string) => bookingsApi.confirmBooking(bookingId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-dashboard'] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to confirm booking.';
+      alert(typeof msg === 'object' ? JSON.stringify(msg) : String(msg));
+    },
+  });
+
   const promoteMutation = useMutation({
     mutationFn: (occurrenceId: string) => bookingsApi.promoteWaitlist(occurrenceId),
     onSuccess: () => {
@@ -312,8 +327,14 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const attendedCount = bookings.filter((b) => b.status === 'ATTENDED').length;
   const noShowCount = bookings.filter((b) => b.status === 'NO_SHOW').length;
 
-  const getStatusBadge = (status: BookingStatus) => {
+  const getStatusBadge = (status: BookingStatus | string) => {
     switch (status) {
+      case 'BOOKED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <Clock className="size-3" /> Booked
+          </span>
+        );
       case 'CONFIRMED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -587,48 +608,70 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                             {booking.branch_name || 'Main Studio'}
                           </td>
                           <td className="px-4 py-3.5">
-                            <span className="text-[11px] px-2 py-0.5 rounded bg-muted text-foreground mr-1.5 border border-border">
-                              {booking.booking_source}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground font-medium">
-                              {booking.booking_type}
-                            </span>
+                            {booking.is_trial || booking.booking_source === 'TRIAL' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                                TRIAL / PROSPECT
+                              </span>
+                            ) : (
+                              <>
+                                <span className="text-[11px] px-2 py-0.5 rounded bg-muted text-foreground mr-1.5 border border-border">
+                                  {booking.booking_source}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground font-medium">
+                                  {booking.booking_type === 'MEMBER' ? 'MEMBER / CLASS BOOKING' : booking.booking_type}
+                                </span>
+                              </>
+                            )}
                           </td>
                           <td className="px-4 py-3.5">{getStatusBadge(booking.status)}</td>
                           <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
-                            {booking.status === 'CONFIRMED' && (
+                            {booking.is_trial || booking.booking_source === 'TRIAL' ? (
                               <>
-                                {canEdit && (
+                                {/* TRIAL ACTIONS */}
+                                {canEdit && (booking.status === 'BOOKED' || (booking as any).confirmation_status === 'PENDING') && (
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => {
-                                      setSelectedBooking(booking);
-                                      setActionError(null);
-                                      setIsAttendanceModalOpen(true);
-                                    }}
-                                    className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                    onClick={() => confirmBookingMutation.mutate(booking.id)}
+                                    disabled={confirmBookingMutation.isPending}
+                                    className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"
                                   >
-                                    Check In
+                                    Confirm
                                   </Button>
                                 )}
-                                {canEdit && (
+                                {canEdit && booking.status !== 'CANCELLED' && booking.status !== 'RESCHEDULED' && (
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => {
-                                      setSelectedBooking(booking);
-                                      setRescheduleOccurrenceId('');
-                                      setRescheduleReasonText('');
-                                      setActionError(null);
-                                      setIsRescheduleModalOpen(true);
-                                    }}
+                                    onClick={() => setReschedulingTrialBooking(booking)}
                                     className="text-xs h-7 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
                                   >
                                     Reschedule
                                   </Button>
                                 )}
-                                {(canDelete || canEdit) && (
+                                {canEdit && (booking.status === 'CONFIRMED' || booking.status === 'BOOKED') && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'PRESENT' })}
+                                      disabled={attendanceMutation.isPending}
+                                      className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                    >
+                                      Check In
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'NO_SHOW' })}
+                                      disabled={attendanceMutation.isPending}
+                                      className="text-xs h-7 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                                    >
+                                      No Show
+                                    </Button>
+                                  </>
+                                )}
+                                {(canDelete || canEdit) && booking.status !== 'CANCELLED' && booking.status !== 'RESCHEDULED' && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -642,6 +685,58 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                                   >
                                     Cancel
                                   </Button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {booking.status === 'CONFIRMED' && (
+                                  <>
+                                    {canEdit && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setSelectedBooking(booking);
+                                          setActionError(null);
+                                          setIsAttendanceModalOpen(true);
+                                        }}
+                                        className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                      >
+                                        Check In
+                                      </Button>
+                                    )}
+                                    {canEdit && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setSelectedBooking(booking);
+                                          setRescheduleOccurrenceId('');
+                                          setRescheduleReasonText('');
+                                          setActionError(null);
+                                          setIsRescheduleModalOpen(true);
+                                        }}
+                                        className="text-xs h-7 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
+                                      >
+                                        Reschedule
+                                      </Button>
+                                    )}
+                                    {(canDelete || canEdit) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setSelectedBooking(booking);
+                                          setCancelReasonText('');
+                                          setActionError(null);
+                                          setIsCancelModalOpen(true);
+                                        }}
+                                        className="text-xs h-7 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    )}
+                                  </>
                                 )}
                               </>
                             )}
@@ -1713,6 +1808,41 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* TRIAL RESCHEDULE MODAL */}
+      <BookTrialModal
+        open={!!reschedulingTrialBooking}
+        onOpenChange={(open) => !open && setReschedulingTrialBooking(null)}
+        mode="reschedule"
+        existingTrial={
+          reschedulingTrialBooking
+            ? {
+                id: reschedulingTrialBooking.id,
+                lead: reschedulingTrialBooking.lead_id || reschedulingTrialBooking.user_profile || '',
+                lead_name: reschedulingTrialBooking.user_profile_name || reschedulingTrialBooking.member_name || '',
+                branch: reschedulingTrialBooking.branch || '',
+                branch_name: reschedulingTrialBooking.branch_name || '',
+                class_name: reschedulingTrialBooking.occurrence_title || reschedulingTrialBooking.class_name || '',
+                booking_date: reschedulingTrialBooking.occurrence_date || '',
+                scheduled_start: reschedulingTrialBooking.occurrence_start_at || reschedulingTrialBooking.start_at || '',
+                start_time: reschedulingTrialBooking.start_time || '',
+                end_time: reschedulingTrialBooking.end_time || '',
+                trainer_name: reschedulingTrialBooking.trainer_name || 'Unassigned',
+                status: reschedulingTrialBooking.status,
+                confirmation_status: reschedulingTrialBooking.confirmation_status || 'PENDING',
+                organization: '',
+                class_occurrence: reschedulingTrialBooking.occurrence || '',
+                trial_type: 'GENERAL',
+                booking_source: reschedulingTrialBooking.booking_source || 'TRIAL',
+                created_at: reschedulingTrialBooking.booked_at || reschedulingTrialBooking.created_at || '',
+                updated_at: reschedulingTrialBooking.updated_at || '',
+              }
+            : null
+        }
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['bookings'] });
+        }}
+      />
     </div>
   );
 };
