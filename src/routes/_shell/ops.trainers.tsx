@@ -1,7 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { TrainersWorkspace } from "@/components/trainers/TrainersWorkspace";
+import { getCurrentUser } from "@/services";
+import { isTrainerUser } from "@/lib/nav";
 
 export const Route = createFileRoute("/_shell/ops/trainers")({
+  beforeLoad: () => {
+    const user = getCurrentUser();
+    if (user && isTrainerUser(user)) {
+      throw redirect({ to: "/ops/calendar" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Trainers Operations · PerformanceOS" },

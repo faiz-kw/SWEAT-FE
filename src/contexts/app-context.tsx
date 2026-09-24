@@ -159,7 +159,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
-  const value: AppState = {
+  const toggleCollapsed = React.useCallback(() => setCollapsed((c) => !c), []);
+  const toggleMobile = React.useCallback(() => setMobileOpen((m) => !m), []);
+
+  const value: AppState = React.useMemo(() => ({
     // UI preferences
     locationId,
     setLocationId,
@@ -168,10 +171,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     density,
     setDensity,
     collapsed,
-    toggleCollapsed: () => setCollapsed((c) => !c),
+    toggleCollapsed,
     mobileOpen,
     setMobileOpen,
-    toggleMobile: () => setMobileOpen((m) => !m),
+    toggleMobile,
 
     // Theme preferences
     theme,
@@ -183,8 +186,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     tenantName: user?.tenantName || (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Global Platform HQ' : 'Tenant Organization'),
     role: user?.role ?? (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Super Admin' : 'Member'),
     branding: user?.branding ?? null,
-  };
-
+  }), [
+    locationId,
+    range,
+    density,
+    collapsed,
+    toggleCollapsed,
+    mobileOpen,
+    toggleMobile,
+    theme,
+    setTheme,
+    toggleTheme,
+    user?.tenantId,
+    user?.tenantName,
+    user?.userType,
+    user?.isSuperAdmin,
+    user?.role,
+    user?.branding,
+  ]);
 
   return (
     <Ctx.Provider value={value}>
@@ -208,9 +227,11 @@ export function useScope() {
   return React.useMemo(() => ({ tenantId, locationId }), [tenantId, locationId]);
 }
 
+const EMPTY_LOCATIONS: any[] = [];
+
 /** Returns the real locations from the authenticated user profile. */
 export function useLocations() {
   const { user } = useAuth();
-  return user?.locations ?? [];
+  return user?.locations ?? EMPTY_LOCATIONS;
 }
 

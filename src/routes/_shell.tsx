@@ -7,7 +7,7 @@ import { AppProvider, useAuth } from "@/contexts";
 import { isAuthenticated, refreshAndHydrateSession } from "@/services";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { hasPermission } from "@/lib/permissions";
-import { NAV } from "@/lib/nav";
+import { NAV, isOrganizationAdmin } from "@/lib/nav";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_shell")({
@@ -52,6 +52,15 @@ function ShellLayout() {
     if (pathname.startsWith("/platform")) {
       if (!isSuper || user.userType === "tenant") {
         toast.error("Access denied: Platform Core is restricted to super administrators.");
+        void navigate({ to: "/" });
+        return;
+      }
+    }
+
+    // Administration (/admin/*) is STRICTLY Organization Admin or Platform Super Admin only
+    if (pathname.startsWith("/admin")) {
+      if (!isSuper && !isOrganizationAdmin(user)) {
+        toast.error("Access denied: Administration is restricted to organization administrators.");
         void navigate({ to: "/" });
         return;
       }

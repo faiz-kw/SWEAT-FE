@@ -44,7 +44,6 @@ export const MODULES: Record<string, ModuleDef> = {
   "/ops/classes": { collection: "classes" },
   "/ops/bookings": { collection: "bookings" },
   "/ops/personal-training": { collection: "bookings", preset: preset("PT sessions", "type", "PT") },
-  "/ops/pilates": { collection: "bookings", preset: preset("Pilates", "type", "Pilates") },
   "/ops/assessments": { collection: "assessments" },
   "/ops/trainers": { collection: "trainers" },
   "/ops/programs": { collection: "programs" },

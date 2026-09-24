@@ -93,8 +93,71 @@ export const classesApi = {
   },
 
   // --- Class Occurrences ---
-  async getOccurrences(filters?: { branch_id?: string; occurrence_date?: string; status?: string }): Promise<ClassOccurrence[]> {
+  async getOccurrences(filters?: {
+    branch_id?: string;
+    occurrence_date?: string;
+    status?: string;
+    trainer_id?: string;
+    from_date?: string;
+    to_date?: string;
+  }): Promise<ClassOccurrence[]> {
     const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
+    return res.data?.results || res.data || [];
+  },
+
+  async getBookingsForOccurrence(occurrenceId: string): Promise<any[]> {
+    const res = await api.get<any>('/tenant/bookings/', { params: { occurrence_id: occurrenceId } });
+    return res.data?.results || res.data || [];
+  },
+
+  async recordAttendance(
+    bookingId: string,
+    status: 'PRESENT' | 'ABSENT' | 'LATE' | 'NO_SHOW',
+    biometrics?: {
+      latitude?: number | null;
+      longitude?: number | null;
+      accuracy?: number | null;
+      distance_meters?: number | null;
+      face_verified?: boolean;
+      liveness_score?: number | null;
+      liveness_method?: string;
+      selfie_image?: string;
+      challenges_passed?: string[];
+      check_in_method?: string;
+    }
+  ): Promise<any> {
+    const res = await api.post<any>(`/tenant/bookings/${bookingId}/record-attendance/`, {
+      status,
+      check_in_method: biometrics?.check_in_method || (biometrics?.face_verified ? 'FACE_LIVENESS' : 'MANUAL'),
+      ...biometrics,
+    });
+    return res.data;
+  },
+
+  async trainerCheckIn(
+    occurrenceId: string,
+    biometrics: {
+      latitude?: number | null;
+      longitude?: number | null;
+      accuracy?: number | null;
+      distance_meters?: number | null;
+      face_verified?: boolean;
+      liveness_score?: number | null;
+      liveness_method?: string;
+      selfie_image?: string;
+      challenges_passed?: string[];
+    }
+  ): Promise<any> {
+    const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/trainer-check-in/`, {
+      ...biometrics,
+      liveness_method: biometrics.liveness_method || 'FACE_LIVENESS',
+    });
+    return res.data;
+  },
+
+  async getBranchHolidays(branchId?: string): Promise<any[]> {
+    const params = branchId ? { branch_id: branchId } : {};
+    const res = await api.get<any>('/tenant/branch-operating-exceptions/', { params });
     return res.data?.results || res.data || [];
   },
 

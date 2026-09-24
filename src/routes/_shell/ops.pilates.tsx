@@ -1,15 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_shell/ops/pilates")({
-  head: () => ({
-    meta: [
-      { title: "Pilates · PerformanceOS Admin" },
-      { name: "description", content: "Pilates workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Pilates · PerformanceOS Admin" },
-      { property: "og:description", content: "Pilates workspace in the PerformanceOS fitness business operating system." },
-    ],
-  }),
-  component: () => <ModuleView path="/ops/pilates" />,
+  beforeLoad: () => {
+    throw redirect({ to: "/ops/classes" });
+  },
+  component: () => null,
 });

@@ -20,7 +20,9 @@ import {
   ArrowUpRight,
   AlertCircle,
   Briefcase,
+  Calendar,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
@@ -141,6 +143,7 @@ export function UsersWorkspace() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [inviteRole, setInviteRole] = React.useState("");
   const [inviteDepartmentId, setInviteDepartmentId] = React.useState("");
+  const [inviteReportsToId, setInviteReportsToId] = React.useState("");
   const [inviteBranchId, setInviteBranchId] = React.useState("");
   const [inviteTenantId, setInviteTenantId] = React.useState("");
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
@@ -151,10 +154,36 @@ export function UsersWorkspace() {
   const [editingUser, setEditingUser] = React.useState<AdminUserRow | null>(null);
   const [editRole, setEditRole] = React.useState("");
   const [editDepartmentId, setEditDepartmentId] = React.useState("");
+  const [editReportsToId, setEditReportsToId] = React.useState("");
   const [editBranchAccess, setEditBranchAccess] = React.useState<Record<string, boolean>>({});
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
+
+  // Open Invite Modal helper with safe default initializations
+  const handleOpenInviteModal = React.useCallback(() => {
+    if (!inviteRole && roles.length > 0) {
+      const defaultRole =
+        roles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
+        roles[0];
+      setInviteRole(defaultRole.id);
+    }
+    if (!inviteBranchId && branches.length > 0) setInviteBranchId(branches[0].id);
+    if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
+    setInviteReportsToId("");
+    setInviteModalOpen(true);
+  }, [inviteRole, roles, inviteBranchId, branches, inviteDepartmentId, departments]);
+
+  // Branch-scoped user: restrict branch selector once if not org-wide
+  const hasInitializedBranchRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!hasInitializedBranchRef.current && currentUser?.isOrgWide === false && branches.length > 0) {
+      hasInitializedBranchRef.current = true;
+      if (branchFilter === "all") {
+        setBranchFilter(branches[0].id);
+      }
+    }
+  }, [currentUser?.isOrgWide, branches, branchFilter]);
 
   // Load Data
   const loadData = React.useCallback(async () => {
@@ -182,11 +211,7 @@ export function UsersWorkspace() {
       } else {
         // Tenant Mode: Strictly fetch tenant users, tenant roles, tenant departments, and tenant branches
         const [fetchedUsers, fetchedRoles, fetchedBranches, fetchedDepts] = await Promise.all([
-          fetchUsersApi(
-            roleFilter === "all" ? undefined : roleFilter,
-            branchFilter === "all" ? undefined : branchFilter,
-            search ? search.trim() : undefined
-          ),
+          fetchUsersApi(),
           fetchRolesApi(),
           fetchBranchesApi(),
           fetchDepartmentsApi(),
@@ -196,21 +221,6 @@ export function UsersWorkspace() {
         setRoles(fetchedRoles);
         setBranches(fetchedBranches);
         setDepartments(fetchedDepts);
-
-        // Pre-select default staff role if none selected
-        if (!inviteRole && fetchedRoles.length > 0) {
-          const defaultRole =
-            fetchedRoles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
-            fetchedRoles[0];
-          setInviteRole(defaultRole.id);
-        }
-
-        // Branch-scoped user: restrict branch selector if not org-wide
-        if (currentUser?.isOrgWide === false && fetchedBranches.length > 0) {
-          if (branchFilter === "all") {
-            setBranchFilter(fetchedBranches[0].id);
-          }
-        }
       }
     } catch (err: any) {
       const msg = extractApiError(err, "Failed to load user records from database");
@@ -219,7 +229,7 @@ export function UsersWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatformAdmin, roleFilter, branchFilter, search, selectedTenantId, currentUser?.isOrgWide, inviteRole]);
+  }, [isPlatformAdmin, roleFilter, selectedTenantId]);
 
   React.useEffect(() => {
     loadData();
@@ -277,6 +287,16 @@ export function UsersWorkspace() {
     try {
       const selectedRoleObj = roles.find((r) => r.id === inviteRole || r.name === inviteRole) || roles[0];
       const targetRole = selectedRoleObj ? selectedRoleObj.name : inviteRole || "Staff";
+      const targetRoleCode = (selectedRoleObj?.code || "").toLowerCase();
+      const targetRoleNameLower = targetRole.toLowerCase();
+      const isTargetOrgAdmin =
+        targetRoleCode === "org_admin" ||
+        targetRoleCode === "tenant_admin" ||
+        targetRoleCode === "owner" ||
+        targetRoleNameLower.includes("org admin") ||
+        targetRoleNameLower.includes("super admin") ||
+        targetRoleNameLower.includes("tenant admin") ||
+        targetRoleNameLower.includes("platform");
 
       await inviteUserApi({
         email: inviteEmail.trim(),
@@ -286,6 +306,7 @@ export function UsersWorkspace() {
         role: targetRole,
         role_id: selectedRoleObj?.id,
         department_id: inviteDepartmentId || undefined,
+        reports_to_id: !isTargetOrgAdmin && inviteReportsToId ? inviteReportsToId : undefined,
         location_ids: inviteBranchId ? [inviteBranchId] : undefined,
         password: useCustomPassword && invitePassword.trim() ? invitePassword.trim() : undefined,
         tenant_id: isPlatformAdmin && userScope === "tenant" ? inviteTenantId : undefined,
@@ -306,6 +327,7 @@ export function UsersWorkspace() {
       setUseCustomPassword(false);
       setShowPassword(false);
       setInviteDepartmentId("");
+      setInviteReportsToId("");
       setInviteBranchId("");
       setInviteError(null);
       loadData();
@@ -331,6 +353,7 @@ export function UsersWorkspace() {
     setEditingUser(user);
     const roleId = roles.find((role) => role.name === user.role || role.code === user.role)?.id || user.branch_access?.[0]?.role_id || "";
     setEditRole(roleId);
+    setEditReportsToId(user.reports_to_id || "");
     setEditBranchAccess(branchAccessForRole(user, roleId));
     const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
     setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
@@ -346,11 +369,24 @@ export function UsersWorkspace() {
     setEditError(null);
     setEditSubmitting(true);
     try {
+      const editRoleObj = roles.find((role) => role.id === editRole || role.name === editRole);
+      const editRoleCode = (editRoleObj?.code || "").toLowerCase();
+      const editRoleNameLower = (editRoleObj?.name || "").toLowerCase();
+      const isEditOrgAdmin =
+        editRoleCode === "org_admin" ||
+        editRoleCode === "tenant_admin" ||
+        editRoleCode === "owner" ||
+        editRoleNameLower.includes("org admin") ||
+        editRoleNameLower.includes("super admin") ||
+        editRoleNameLower.includes("tenant admin") ||
+        editRoleNameLower.includes("platform");
+
       await updateUserApi(editingUser.id, {
         ...(editRole ? { role_id: editRole } : {}),
         ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
         is_active: editStatus === "Active",
         department_id: editDepartmentId || undefined,
+        reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null),
         ...(roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? {
           branch_access: branches.map((branch) => ({
             branch_id: branch.id, enabled: editBranchAccess[branch.id] === true,
@@ -499,14 +535,19 @@ export function UsersWorkspace() {
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
+            <Link to="/admin/rosters">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
+              >
+                <Calendar className="size-3.5" />
+                Staff Rosters
+              </Button>
+            </Link>
             <Button
               size="sm"
-              onClick={() => {
-                if (!inviteRole && roles.length > 0) setInviteRole(roles[0].name);
-                if (!inviteBranchId && branches.length > 0) setInviteBranchId(branches[0].id);
-                if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
-                setInviteModalOpen(true);
-              }}
+              onClick={handleOpenInviteModal}
               className="gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
             >
               <UserPlus className="size-3.5" />
@@ -744,7 +785,7 @@ export function UsersWorkspace() {
             </div>
             <Button
               size="sm"
-              onClick={() => setInviteModalOpen(true)}
+              onClick={handleOpenInviteModal}
               className="text-xs font-semibold bg-primary text-primary-foreground"
             >
               <UserPlus className="size-3.5 mr-1" /> Add Staff Member
@@ -760,7 +801,8 @@ export function UsersWorkspace() {
                     <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
                       <th className="py-3 px-4">Staff Member</th>
                       <th className="py-3 px-4">Role & Scope</th>
-                      {!isPlatformAdmin && <th className="py-3 px-4">Department</th>}
+                      {!isPlatformAdmin && departments.length > 0 && <th className="py-3 px-4">Department</th>}
+                      <th className="py-3 px-4">Reports To</th>
                       <th className="py-3 px-4">Branch / Studio</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
@@ -823,7 +865,7 @@ export function UsersWorkspace() {
                           </td>
 
                           {/* Department (Tenant Mode) */}
-                          {!isPlatformAdmin && (
+                          {!isPlatformAdmin && departments.length > 0 && (
                             <td className="py-3 px-4">
                               {u.department ? (
                                 <span className="inline-flex items-center gap-1 text-[11px] text-foreground font-medium">
@@ -831,10 +873,22 @@ export function UsersWorkspace() {
                                   {u.department}
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-muted-foreground italic">General</span>
+                                <span className="text-[11px] text-muted-foreground">—</span>
                               )}
                             </td>
                           )}
+
+                          {/* Reports To */}
+                          <td className="py-3 px-4">
+                            {u.reports_to_name ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-foreground font-medium">
+                                <Users className="size-3 text-muted-foreground" />
+                                {u.reports_to_name}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground">—</span>
+                            )}
+                          </td>
 
                           {/* Branch / Studio */}
                           <td className="py-3 px-4">
@@ -969,6 +1023,12 @@ export function UsersWorkspace() {
                         <MapPin className="size-3 text-primary" />
                         {u.active_location_name || "All Branches"}
                       </span>
+                      {u.reports_to_name && (
+                        <span className="flex items-center gap-1">
+                          <Users className="size-3 text-muted-foreground" />
+                          Reports to: {u.reports_to_name}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-end gap-1.5 pt-1">
@@ -1223,6 +1283,52 @@ export function UsersWorkspace() {
               </div>
             )}
 
+            {/* Reports To (Supervisor / Manager) — Optional for non-Org Admin roles */}
+            {(() => {
+              const selectedRoleObj = roles.find((r) => r.id === inviteRole || r.name === inviteRole);
+              const rCode = (selectedRoleObj?.code || "").toLowerCase();
+              const rName = (selectedRoleObj?.name || inviteRole || "").toLowerCase();
+              const isOrgAdmin =
+                rCode === "org_admin" ||
+                rCode === "tenant_admin" ||
+                rCode === "owner" ||
+                rName.includes("org admin") ||
+                rName.includes("super admin") ||
+                rName.includes("tenant admin") ||
+                rName.includes("platform");
+
+              if (isOrgAdmin) return null;
+
+              return (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Reports To (Supervisor / Manager) — Optional</Label>
+                  <Select
+                    value={inviteReportsToId || "none"}
+                    onValueChange={(val) => setInviteReportsToId(val === "none" ? "" : val)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background">
+                      <SelectValue placeholder="Select supervisor / manager (optional)" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs max-h-56">
+                      <SelectItem value="none">
+                        <span className="text-muted-foreground italic">(None / Direct Report to Gym)</span>
+                      </SelectItem>
+                      {users
+                        .filter((u) => u.is_active !== false)
+                        .map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            <span className="font-semibold">{u.full_name || `${u.first_name} ${u.last_name}`.trim() || u.email}</span>
+                            <span className="text-muted-foreground ml-1.5 text-[10px]">
+                              ({u.role_name || u.role || "Staff"})
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
+
             {/* Password & Direct Login Activation */}
             <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-2">
               <div className="flex items-center justify-between">
@@ -1399,6 +1505,52 @@ export function UsersWorkspace() {
               ) : (
                 <p className="text-xs text-muted-foreground">Organization-scoped roles apply to all branches. Choose a branch-scoped role to manage individual branch access.</p>
               )}
+
+              {/* Reports To (Supervisor / Manager) — Optional for non-Org Admin roles */}
+              {(() => {
+                const editRoleObj = roles.find((r) => r.id === editRole || r.name === editRole);
+                const rCode = (editRoleObj?.code || "").toLowerCase();
+                const rName = (editRoleObj?.name || editRole || "").toLowerCase();
+                const isOrgAdmin =
+                  rCode === "org_admin" ||
+                  rCode === "tenant_admin" ||
+                  rCode === "owner" ||
+                  rName.includes("org admin") ||
+                  rName.includes("super admin") ||
+                  rName.includes("tenant admin") ||
+                  rName.includes("platform");
+
+                if (isOrgAdmin) return null;
+
+                return (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Reports To (Supervisor / Manager) — Optional</Label>
+                    <Select
+                      value={editReportsToId || "none"}
+                      onValueChange={(val) => setEditReportsToId(val === "none" ? "" : val)}
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-background">
+                        <SelectValue placeholder="Select supervisor / manager (optional)" />
+                      </SelectTrigger>
+                      <SelectContent className="text-xs max-h-56">
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground italic">(None / Direct Report to Gym)</span>
+                        </SelectItem>
+                        {users
+                          .filter((u) => u.id !== editingUser?.id && u.is_active !== false)
+                          .map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              <span className="font-semibold">{u.full_name || `${u.first_name} ${u.last_name}`.trim() || u.email}</span>
+                              <span className="text-muted-foreground ml-1.5 text-[10px]">
+                                ({u.role_name || u.role || "Staff"})
+                              </span>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Account Status</Label>

@@ -28,19 +28,28 @@ import {
   Eye,
   Pencil,
   Trash2,
+  CalendarDays,
+  MoreHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts';
 import { api } from '@/services/api';
 import { workforceApi } from '@/services/workforceApi';
+import { approvalsApi } from '@/services/approvalsApi';
 import { fetchUsersApi } from '@/services/api-admin';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
+import { TrainerScheduleModal } from './TrainerScheduleModal';
+import { TrainerLeaveApplyDialog } from './TrainerLeaveApplyDialog';
+import { TrainerLeaveApprovalsModal } from './TrainerLeaveApprovalsModal';
+import { TrainerAllottedClassesModal } from './TrainerAllottedClassesModal';
+import { TrainerAllottedClassesView } from '../classes/TrainerAllottedClassesView';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Link } from '@tanstack/react-router';
 import {
   Dialog,
   DialogContent,
@@ -49,32 +58,42 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 
 export function TrainersWorkspace() {
   const queryClient = useQueryClient();
   const { user, isLoading: isAuthLoading } = useAuth();
+  const isOrgAdmin = isOrganizationAdmin(user);
+  const isTrainerRole = !isOrgAdmin && isTrainerUser(user);
 
   const canCreateTrainers = React.useMemo(() => {
     if (isAuthLoading || !user) return false;
-    if (user.isSuperAdmin) return true;
+    if (user.isSuperAdmin || isOrgAdmin) return true;
     const perms = user.permissions || [];
     return perms.includes('ops.trainers.create') || perms.includes('*');
-  }, [user, isAuthLoading]);
+  }, [user, isAuthLoading, isOrgAdmin]);
 
   const canEditTrainers = React.useMemo(() => {
     if (isAuthLoading || !user) return false;
-    if (user.isSuperAdmin) return true;
+    if (user.isSuperAdmin || isOrgAdmin) return true;
     const perms = user.permissions || [];
     return perms.includes('ops.trainers.edit') || perms.includes('*');
-  }, [user, isAuthLoading]);
+  }, [user, isAuthLoading, isOrgAdmin]);
 
   const canDeleteTrainers = React.useMemo(() => {
     if (isAuthLoading || !user) return false;
-    if (user.isSuperAdmin) return true;
+    if (user.isSuperAdmin || isOrgAdmin) return true;
     const perms = user.permissions || [];
     return perms.includes('ops.trainers.delete') || perms.includes('*');
-  }, [user, isAuthLoading]);
+  }, [user, isAuthLoading, isOrgAdmin]);
 
   const requireTrainerPermission = (actionDesc: string, allowed: boolean): boolean => {
     if (!allowed) {
@@ -84,21 +103,26 @@ export function TrainersWorkspace() {
     return true;
   };
 
-  const [activeTab, setActiveTab] = React.useState<'directory' | 'availability'>('directory');
+  const [activeTab, setActiveTab] = React.useState<'directory' | 'classes' | 'availability'>('directory');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [isLeaveApplyOpen, setIsLeaveApplyOpen] = React.useState(false);
+  const [isApprovalsModalOpen, setIsApprovalsModalOpen] = React.useState(false);
+  const [isAllottedClassesOpen, setIsAllottedClassesOpen] = React.useState(false);
+  const [directoryBranchId, setDirectoryBranchId] = React.useState<string>('ALL');
 
-  // Register Trainer Modal State
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = React.useState(false);
-  const [registerStaffUserId, setRegisterStaffUserId] = React.useState('');
-  const [registerTrainerCode, setRegisterTrainerCode] = React.useState('');
-  const [registerExperienceYears, setRegisterExperienceYears] = React.useState('3');
-  const [registerBio, setRegisterBio] = React.useState('');
-  const [registerScheduleBuffer, setRegisterScheduleBuffer] = React.useState(15);
-  const [registerCanTeachAll, setRegisterCanTeachAll] = React.useState(true);
-  const [registerLoading, setRegisterLoading] = React.useState(false);
+  // Pending Leave Requests count for Admin badge
+  const { data: pendingLeaveRequests = [] } = useQuery({
+    queryKey: ['trainer-leave-approvals-count'],
+    queryFn: () =>
+      approvalsApi.getRequests({
+        request_type: 'TRAINER_LEAVE_REQUEST',
+        status: 'PENDING',
+      }),
+  });
 
   // View Trainer Modal State
   const [isViewModalOpen, setIsViewModalOpen] = React.useState(false);
@@ -116,14 +140,7 @@ export function TrainersWorkspace() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
-  // Fetch Users for Trainer Registration (only when modal is open and permitted)
-  const { data: staffUsers = [] } = useQuery({
-    queryKey: ['admin-users-for-trainer-registration'],
-    queryFn: () => fetchUsersApi(),
-    enabled: isRegisterModalOpen && canCreateTrainers,
-  });
-
-  // Fetch Real Branches for Slot & Eligibility Evaluation
+  // Fetch Real Branches for Slot & Eligibility Evaluation and Directory Filtering
   const { data: branches = [] } = useQuery<{ id: string; name: string; city?: string }[]>({
     queryKey: ['tenant-branches-for-trainers'],
     queryFn: async () => {
@@ -157,7 +174,7 @@ export function TrainersWorkspace() {
   const [eligibleList, setEligibleList] = React.useState<EligibleTrainer[] | null>(null);
   const [isScanningEligible, setIsScanningEligible] = React.useState(false);
 
-  // Fetch Trainers from Real API
+  // Fetch Trainers from Real API (auto-syncs staff with trainer role and filters by branch)
   const {
     data: trainers = [],
     isLoading,
@@ -165,15 +182,38 @@ export function TrainersWorkspace() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['trainers', statusFilter, searchQuery],
+    queryKey: ['trainers', statusFilter, searchQuery, directoryBranchId],
     queryFn: () =>
       workforceApi.getTrainers({
         trainer_status: statusFilter,
         search: searchQuery || undefined,
+        branch_id: directoryBranchId === 'ALL' ? undefined : directoryBranchId,
       }),
   });
 
-  // Fetch Specialties from Real API
+  // Auto-detect trainer profile belonging to logged in user
+  const currentTrainer = React.useMemo(() => {
+    if (!trainers.length || !user) return null;
+    return (
+      trainers.find(
+        (t) =>
+          t.email?.toLowerCase() === user.email?.toLowerCase() ||
+          (t as any).user === user.id ||
+          (t as any).user_id === user.id
+      ) || null
+    );
+  }, [trainers, user]);
+
+  const isTrainer = !isOrgAdmin && (isTrainerRole || !!currentTrainer);
+
+  // Auto-select current trainer when logged in as a trainer
+  React.useEffect(() => {
+    if (isTrainer && currentTrainer) {
+      if (!selectedTrainer || selectedTrainer.id !== currentTrainer.id) {
+        setSelectedTrainer(currentTrainer);
+      }
+    }
+  }, [isTrainer, currentTrainer, selectedTrainer]);
   const { data: specialties = [] } = useQuery({
     queryKey: ['trainer-specialties'],
     queryFn: () => workforceApi.getSpecialties(),
@@ -202,41 +242,7 @@ export function TrainersWorkspace() {
     }
   };
 
-  // Handle register trainer submit
-  const handleRegisterTrainer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!registerStaffUserId) {
-      toast.error('Please select a staff member to register.');
-      return;
-    }
-    setRegisterLoading(true);
-    try {
-      await workforceApi.createTrainer({
-        user_id: registerStaffUserId,
-        trainer_code: registerTrainerCode.trim() || undefined,
-        experience_years: registerExperienceYears ? parseFloat(registerExperienceYears) : undefined,
-        bio: registerBio.trim() || undefined,
-        minimum_schedule_buffer_minutes: registerScheduleBuffer || 15,
-        can_teach_all_specialties: registerCanTeachAll,
-      });
-      toast.success('Trainer successfully registered!');
-      setIsRegisterModalOpen(false);
-      setRegisterStaffUserId('');
-      setRegisterTrainerCode('');
-      setRegisterBio('');
-      setRegisterExperienceYears('3');
-      refetch();
-    } catch (err: any) {
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.detail ||
-          err?.message ||
-          'Failed to register trainer'
-      );
-    } finally {
-      setRegisterLoading(false);
-    }
-  };
+
 
   // Open Edit Modal with trainer data
   const handleOpenEdit = (trainer: TrainerProfile) => {
@@ -312,13 +318,17 @@ export function TrainersWorkspace() {
               <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
                 <UserCheck className="w-5 h-5" />
               </span>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Trainers & Workforce</h1>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                {isTrainer ? 'Trainer Operations & Schedule' : 'Trainers & Workforce'}
+              </h1>
               <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                Layer 2 Verified
+                {isTrainer ? 'Trainer Active' : 'Layer 2 Verified'}
               </Badge>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Data-driven trainer qualifications, recurring work shifts, exceptions, and live scheduling eligibility.
+              {isTrainer
+                ? `Welcome back, ${currentTrainer?.trainer_name || user?.full_name || 'Coach'}. View your operational profile, weekly roster shifts, and allotted workout classes.`
+                : 'Data-driven trainer qualifications, recurring work shifts, exceptions, and live scheduling eligibility.'}
             </p>
           </div>
 
@@ -333,25 +343,56 @@ export function TrainersWorkspace() {
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setActiveTab('availability')}
-              className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Eligibility Scanner</span>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                if (!requireTrainerPermission('register trainers', canCreateTrainers)) return;
-                setIsRegisterModalOpen(true);
-              }}
-              className="gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Register Trainer</span>
-            </Button>
+            {!isTrainer && (
+              <>
+                <Link to="/admin/rosters">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
+                    title="Manage all staff rosters in Administration"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-primary" />
+                    <span>Staff Rosters</span>
+                  </Button>
+                </Link>
+                <Button
+                  size="sm"
+                  onClick={() => setActiveTab('availability')}
+                  className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Eligibility Scanner</span>
+                </Button>
+              </>
+            )}
+            {isTrainer && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (currentTrainer) setSelectedTrainer(currentTrainer);
+                    setIsLeaveApplyOpen(true);
+                  }}
+                  className="gap-1.5 h-9 border-amber-500/30 text-amber-600 hover:bg-amber-500/10 text-xs font-semibold"
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  <span>Apply for Leave</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (currentTrainer) setSelectedTrainer(currentTrainer);
+                    setIsScheduleModalOpen(true);
+                  }}
+                  className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm text-xs font-semibold"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>My Weekly Roster</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -359,31 +400,60 @@ export function TrainersWorkspace() {
       {/* Navigation Tabs & Filters */}
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setActiveTab('directory')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'directory'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              Trainer Directory ({trainers.length})
+              {isTrainer ? 'My Operational Profile' : `Trainer Directory (${trainers.length})`}
+            </button>
+            <button
+              onClick={() => setActiveTab('classes')}
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'classes'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>{isTrainer ? 'My Allotted Classes & Attendance' : 'Allotted Classes & Attendance'}</span>
             </button>
             <button
               onClick={() => setActiveTab('availability')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'availability'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              Slot Availability Engine
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isTrainer ? 'Check My Slot Availability' : 'Slot Availability Engine'}</span>
             </button>
           </div>
 
-          {activeTab === 'directory' && (
+          {activeTab === 'directory' && !isTrainer && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              {/* Branch Filter */}
+              <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
+                <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">Branch:</span>
+                <select
+                  value={directoryBranchId}
+                  onChange={(e) => setDirectoryBranchId(e.target.value)}
+                  className="h-7 rounded border-none bg-transparent px-1 text-xs font-semibold focus:outline-none cursor-pointer text-foreground"
+                >
+                  <option value="ALL">All Branches</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -432,26 +502,219 @@ export function TrainersWorkspace() {
                   Try Again
                 </Button>
               </div>
+            ) : isTrainer ? (
+              /* TRAINER DEDICATED VIEW: Auto-considered profile only, no multi-trainer directory or filters */
+              currentTrainer ? (
+                <div className="space-y-6">
+                  {/* Hero Profile Card */}
+                  <div className="rounded-2xl border border-border/60 bg-card p-6 sm:p-8 shadow-xs space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-border/60">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary font-bold text-xl flex items-center justify-center border border-primary/20">
+                          {(currentTrainer.trainer_name || currentTrainer.trainer_code || 'T').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                              {currentTrainer.trainer_name || 'Fitness Coach'}
+                            </h2>
+                            <Badge
+                              variant="outline"
+                              className={
+                                currentTrainer.trainer_status === 'ACTIVE'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs font-semibold'
+                                  : 'bg-muted text-muted-foreground text-xs'
+                              }
+                            >
+                              {currentTrainer.trainer_status}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span>{currentTrainer.email || user?.email}</span>
+                            <span>•</span>
+                            <span className="font-mono text-primary font-semibold">Code: {currentTrainer.trainer_code}</span>
+                            {currentTrainer.employee_code && (
+                              <>
+                                <span>•</span>
+                                <span>Emp Code: {currentTrainer.employee_code}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Direct Fast Actions */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTrainer(currentTrainer);
+                            setIsScheduleModalOpen(true);
+                          }}
+                          className="gap-1.5 h-9 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/5"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>View Roster & Shifts</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setActiveTab('classes')}
+                          className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold"
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          <span>View Allotted Classes</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Operational Details Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-xs text-muted-foreground font-medium block">Assigned Studios / Branch</span>
+                        <div className="font-semibold text-sm text-foreground">
+                          {currentTrainer.branch_names && currentTrainer.branch_names.length > 0
+                            ? currentTrainer.branch_names.join(', ')
+                            : 'All Gym Locations'}
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-xs text-muted-foreground font-medium block">Coaching Experience</span>
+                        <div className="font-semibold text-sm text-foreground">
+                          {currentTrainer.experience_years ? `${currentTrainer.experience_years} Years` : 'Certified Coach'}
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-xs text-muted-foreground font-medium block">Schedule Buffer Between Classes</span>
+                        <div className="font-semibold text-sm text-foreground">
+                          {currentTrainer.minimum_schedule_buffer_minutes || 0} Minutes
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-xs text-muted-foreground font-medium block">Scope of Delivery</span>
+                        <div className="font-semibold text-sm text-foreground">
+                          {currentTrainer.can_teach_all_specialties ? 'All Modalities & Classes' : 'Assigned Specialties'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Specialties & Certifications */}
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Qualified Specialties & Formats
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {currentTrainer.specialties && currentTrainer.specialties.length > 0 ? (
+                          currentTrainer.specialties.map((sp) => (
+                            <Badge
+                              key={sp.id}
+                              variant="outline"
+                              className="px-3 py-1 bg-primary/5 text-primary border-primary/20 text-xs font-semibold gap-1.5"
+                            >
+                              <Award className="w-3 h-3" />
+                              <span>{sp.name}</span>
+                              <span className="text-2xs text-muted-foreground font-normal">({sp.proficiency_level})</span>
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="outline" className="px-3 py-1 text-xs text-muted-foreground">
+                            General Fitness & Group Training
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bio */}
+                    {currentTrainer.bio && (
+                      <div className="space-y-1 pt-2 border-t border-border/40">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Coach Bio</h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{currentTrainer.bio}</p>
+                      </div>
+                    )}
+
+                    {/* Action Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border/60">
+                      <div
+                        onClick={() => {
+                          setSelectedTrainer(currentTrainer);
+                          setIsScheduleModalOpen(true);
+                        }}
+                        className="cursor-pointer p-4 rounded-xl border border-border/80 hover:border-primary/50 bg-card hover:bg-muted/30 transition-all space-y-2 group shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <Calendar className="w-4 h-4" />
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </div>
+                        <h4 className="font-semibold text-sm">Weekly Work Roster</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Inspect your weekly shifts, working hours, and active recurring schedule.
+                        </p>
+                      </div>
+
+                      <div
+                        onClick={() => setActiveTab('classes')}
+                        className="cursor-pointer p-4 rounded-xl border border-border/80 hover:border-emerald-500/50 bg-card hover:bg-muted/30 transition-all space-y-2 group shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                            <Award className="w-4 h-4" />
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
+                        </div>
+                        <h4 className="font-semibold text-sm">Allotted Workout Classes</h4>
+                        <p className="text-xs text-muted-foreground">
+                          View upcoming scheduled sessions, student rosters, and record attendance.
+                        </p>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          setSelectedTrainer(currentTrainer);
+                          setIsLeaveApplyOpen(true);
+                        }}
+                        className="cursor-pointer p-4 rounded-xl border border-border/80 hover:border-amber-500/50 bg-card hover:bg-muted/30 transition-all space-y-2 group shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                            <CalendarDays className="w-4 h-4" />
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-600 transition-colors" />
+                        </div>
+                        <h4 className="font-semibold text-sm">Apply for Leave / Absence</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Submit leave requests or schedule overrides for management review.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-card/30 p-12 text-center max-w-lg mx-auto mt-6">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+                    <UserCheck className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-semibold text-base sm:text-lg">Trainer Profile Synchronizing</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 mb-4">
+                    We are linking your staff credentials ({user?.email}) with your coaching profile.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => refetch()}>
+                    Refresh Status
+                  </Button>
+                </div>
+              )
             ) : trainers.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/80 bg-card/30 p-12 text-center max-w-lg mx-auto mt-6">
                 <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
                   <UserCheck className="w-6 h-6" />
                 </div>
                 <h3 className="font-semibold text-base sm:text-lg">No Trainers Registered</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1 mb-6">
-                  There are no trainer profiles in the active tenant database matching the selected filter.
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1 mb-2">
+                  {searchQuery || directoryBranchId !== 'ALL' || statusFilter !== 'ALL'
+                    ? 'No trainers found matching the current filters. Try changing the branch or search term.'
+                    : 'Staff members assigned the Trainer role or designation in Administration > Users automatically appear here.'}
                 </p>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (!requireTrainerPermission('register trainers', canCreateTrainers)) return;
-                    setIsRegisterModalOpen(true);
-                  }}
-                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <UserPlus className="w-4 h-4 mr-1" />
-                  Register First Trainer
-                </Button>
               </div>
             ) : (
               <>
@@ -462,6 +725,7 @@ export function TrainersWorkspace() {
                       <tr>
                         <th className="px-5 py-3.5">Trainer</th>
                         <th className="px-4 py-3.5">Trainer Code</th>
+                        <th className="px-4 py-3.5">Assigned Branch</th>
                         <th className="px-4 py-3.5">Experience</th>
                         <th className="px-4 py-3.5">Specialties</th>
                         <th className="px-4 py-3.5">Buffer</th>
@@ -485,6 +749,13 @@ export function TrainersWorkspace() {
                           </td>
                           <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground">
                             {trainer.trainer_code}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs">
+                            <span className="font-medium text-foreground">
+                              {trainer.branch_names && trainer.branch_names.length > 0
+                                ? trainer.branch_names.join(', ')
+                                : 'All Branches'}
+                            </span>
                           </td>
                           <td className="px-4 py-3.5 text-xs text-muted-foreground">
                             {trainer.experience_years ? `${trainer.experience_years} yrs` : '—'}
@@ -525,56 +796,90 @@ export function TrainersWorkspace() {
                             </Badge>
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
                                 onClick={() => {
                                   setSelectedTrainer(trainer);
-                                  setIsViewModalOpen(true);
+                                  setIsScheduleModalOpen(true);
                                 }}
-                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                title="View Details"
+                                className="h-8 px-2.5 text-xs font-semibold text-primary border-primary/30 bg-primary/5 hover:bg-primary/15 shadow-2xs"
+                                title="Configure Weekly Roster & Shifts"
                               >
-                                <Eye className="w-3.5 h-3.5 mr-1" />
-                                View
+                                <Calendar className="w-3.5 h-3.5 mr-1 text-primary" />
+                                Roster
                               </Button>
                               <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenEdit(trainer)}
-                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                title="Edit Profile"
-                              >
-                                <Pencil className="w-3.5 h-3.5 mr-1" />
-                                Edit
-                              </Button>
-                              <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
                                 onClick={() => {
                                   setSelectedTrainer(trainer);
-                                  setIsCheckModalOpen(true);
+                                  setIsAllottedClassesOpen(true);
                                 }}
-                                className="h-8 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                                title="Check Availability"
+                                className="h-8 px-2.5 text-xs font-semibold text-emerald-600 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15 shadow-2xs"
+                                title="View Allotted Classes & Mark Attendance"
                               >
-                                <Clock className="w-3.5 h-3.5 mr-1" />
-                                Check Slot
+                                <Award className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                                Classes
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  if (!requireTrainerPermission('delete trainers', canDeleteTrainers)) return;
-                                  setSelectedTrainer(trainer);
-                                  setIsDeleteModalOpen(true);
-                                }}
-                                className="h-8 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                                title="Delete Trainer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                    title="More actions"
+                                  >
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-44">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedTrainer(trainer);
+                                      setIsViewModalOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    <span>View Details</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleOpenEdit(trainer)}>
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    <span>Edit Profile</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedTrainer(trainer);
+                                      setIsLeaveApplyOpen(true);
+                                    }}
+                                  >
+                                    <CalendarDays className="w-4 h-4 mr-2 text-amber-600" />
+                                    <span>Apply Leave</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedTrainer(trainer);
+                                      setIsCheckModalOpen(true);
+                                    }}
+                                  >
+                                    <Clock className="w-4 h-4 mr-2 text-primary" />
+                                    <span>Check Slot</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedTrainer(trainer);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    <span>Delete Trainer</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </td>
                         </tr>
@@ -612,6 +917,15 @@ export function TrainersWorkspace() {
                         </Badge>
                       </div>
 
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="font-medium">Branch:</span>
+                        <span className="text-foreground font-medium">
+                          {trainer.branch_names && trainer.branch_names.length > 0
+                            ? trainer.branch_names.join(', ')
+                            : 'All Branches'}
+                        </span>
+                      </div>
+
                       {trainer.bio && (
                         <p className="text-xs text-muted-foreground line-clamp-2">{trainer.bio}</p>
                       )}
@@ -632,51 +946,86 @@ export function TrainersWorkspace() {
 
                       <div className="border-t border-border/40 pt-3 flex items-center justify-between gap-2 flex-wrap text-xs text-muted-foreground">
                         <span>Buffer: {trainer.minimum_schedule_buffer_minutes} min</span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               setSelectedTrainer(trainer);
-                              setIsViewModalOpen(true);
+                              setIsScheduleModalOpen(true);
                             }}
-                            className="h-7 px-2 text-xs"
+                            className="h-7 px-2 text-xs font-medium text-primary border-primary/30"
                           >
-                            <Eye className="w-3 h-3 mr-1" />
-                            View
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenEdit(trainer)}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <Pencil className="w-3 h-3 mr-1" />
-                            Edit
+                            <Calendar className="w-3 h-3 mr-1" />
+                            Roster
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               setSelectedTrainer(trainer);
-                              setIsCheckModalOpen(true);
+                              setIsAllottedClassesOpen(true);
                             }}
-                            className="h-7 px-2 text-xs text-primary"
+                            className="h-7 px-2 text-xs font-medium text-emerald-600 border-emerald-500/30"
                           >
-                            Check
+                            <Award className="w-3 h-3 mr-1" />
+                            Classes
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (!requireTrainerPermission('delete trainers', canDeleteTrainers)) return;
-                              setSelectedTrainer(trainer);
-                              setIsDeleteModalOpen(true);
-                            }}
-                            className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                              >
+                                <MoreHorizontal className="w-3.5 h-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsViewModalOpen(true);
+                                }}
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                <span>View Details</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenEdit(trainer)}>
+                                <Pencil className="w-4 h-4 mr-2" />
+                                <span>Edit Profile</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsLeaveApplyOpen(true);
+                                }}
+                              >
+                                <CalendarDays className="w-4 h-4 mr-2 text-amber-600" />
+                                <span>Apply Leave</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsCheckModalOpen(true);
+                                }}
+                              >
+                                <Clock className="w-4 h-4 mr-2 text-primary" />
+                                <span>Check Slot</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setIsDeleteModalOpen(true);
+                                }}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                <span>Delete Trainer</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </div>
@@ -684,6 +1033,20 @@ export function TrainersWorkspace() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Allotted Classes & Attendance View */}
+        {activeTab === 'classes' && (
+          <div className="space-y-4">
+            <TrainerAllottedClassesView
+              trainerId={isTrainer && currentTrainer ? currentTrainer.id : undefined}
+              trainerName={isTrainer && currentTrainer ? (currentTrainer.trainer_name || currentTrainer.trainer_code) : undefined}
+              onApplyLeave={() => {
+                if (currentTrainer) setSelectedTrainer(currentTrainer);
+                setIsLeaveApplyOpen(true);
+              }}
+            />
           </div>
         )}
 
@@ -766,47 +1129,89 @@ export function TrainersWorkspace() {
               />
             </div>
 
-            <Button
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium h-10 shadow-sm"
-              disabled={isScanningEligible}
-              onClick={async () => {
-                setIsScanningEligible(true);
-                setEligibleList(null);
-                try {
-                  const isoStart = `${checkDate}T${checkTime}:00Z`;
-                  const branchId = selectedBranchId || branches[0]?.id;
-                  const res = await workforceApi.findEligibleTrainers({
-                    start_datetime: isoStart,
-                    branch_id: branchId,
-                    duration_minutes: checkDuration,
-                    delivery_mode: checkDeliveryMode,
-                    specialty_code: checkSpecialty || undefined,
-                  });
-                  setEligibleList(res);
-                  if (res.length === 0) {
-                    toast.info('No trainers are available during this slot based on work schedules and exceptions.');
-                  } else {
-                    toast.success(`Found ${res.length} available and qualified trainer(s)!`);
+            {isTrainer ? (
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium h-10 shadow-sm"
+                disabled={isCheckingSlot}
+                onClick={async () => {
+                  if (currentTrainer) {
+                    setSelectedTrainer(currentTrainer);
+                    await handleCheckTrainerSlot();
                   }
-                } catch (err: any) {
-                  toast.error(err?.message || 'Failed to scan eligible trainers');
-                } finally {
-                  setIsScanningEligible(false);
-                }
-              }}
-            >
-              {isScanningEligible ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Scanning Rosters...
-                </>
-              ) : (
-                'Scan Available & Qualified Trainers'
-              )}
-            </Button>
+                }}
+              >
+                {isCheckingSlot ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Evaluating My Schedule...
+                  </>
+                ) : (
+                  'Check My Slot Availability'
+                )}
+              </Button>
+            ) : (
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium h-10 shadow-sm"
+                disabled={isScanningEligible}
+                onClick={async () => {
+                  setIsScanningEligible(true);
+                  setEligibleList(null);
+                  try {
+                    const isoStart = `${checkDate}T${checkTime}:00Z`;
+                    const branchId = selectedBranchId || branches[0]?.id;
+                    const res = await workforceApi.findEligibleTrainers({
+                      start_datetime: isoStart,
+                      branch_id: branchId,
+                      duration_minutes: checkDuration,
+                      delivery_mode: checkDeliveryMode,
+                      specialty_code: checkSpecialty || undefined,
+                    });
+                    setEligibleList(res);
+                    if (res.length === 0) {
+                      toast.info('No trainers are available during this slot based on work schedules and exceptions.');
+                    } else {
+                      toast.success(`Found ${res.length} available and qualified trainer(s)!`);
+                    }
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to scan eligible trainers');
+                  } finally {
+                    setIsScanningEligible(false);
+                  }
+                }}
+              >
+                {isScanningEligible ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Scanning Rosters...
+                  </>
+                ) : (
+                  'Scan Available & Qualified Trainers'
+                )}
+              </Button>
+            )}
 
             {/* Results Display */}
-            {eligibleList !== null && (
+            {isTrainer && availabilityResult && (
+              <div
+                className={`p-4 rounded-xl border text-sm ${
+                  availabilityResult.is_available
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
+                    : 'bg-destructive/10 border-destructive/20 text-destructive'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-semibold text-base">
+                  {availabilityResult.is_available ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-destructive" />
+                  )}
+                  {availabilityResult.is_available ? 'You are Available' : 'Schedule Conflict or Unavailable'}
+                </div>
+                <p className="mt-1 text-foreground/80 text-xs sm:text-sm">{availabilityResult.reason}</p>
+              </div>
+            )}
+
+            {!isTrainer && eligibleList !== null && (
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Available Trainers ({eligibleList.length})
@@ -935,147 +1340,7 @@ export function TrainersWorkspace() {
         </DialogContent>
       </Dialog>
 
-      {/* Register Trainer Modal */}
-      <Dialog open={isRegisterModalOpen} onOpenChange={setIsRegisterModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-emerald-600" />
-              <span>Register New Trainer</span>
-            </DialogTitle>
-            <DialogDescription>
-              Assign an operational trainer profile to a staff user to enable class scheduling, personal training, and live availability.
-            </DialogDescription>
-          </DialogHeader>
 
-          <form onSubmit={handleRegisterTrainer} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Select Staff Member *</Label>
-              <select
-                value={registerStaffUserId}
-                onChange={(e) => setRegisterStaffUserId(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-                required
-              >
-                <option value="">-- Choose a staff member --</option>
-                {staffUsers.map((u) => {
-                  const isTrainerRole =
-                    u.role?.toUpperCase().includes('TRAINER') ||
-                    u.role_name?.toUpperCase().includes('TRAINER');
-                  const alreadyRegistered = trainers.some(
-                    (t) => t.email?.toLowerCase() === u.email?.toLowerCase()
-                  );
-                  return (
-                    <option key={u.id} value={u.id} disabled={alreadyRegistered}>
-                      {u.full_name || u.email} ({u.email})
-                      {isTrainerRole ? ' [Trainer Role]' : ''}
-                      {alreadyRegistered ? ' [Already Registered]' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-              <p className="text-[11px] text-muted-foreground">
-                Staff members with the "Trainer Role" in Administration &gt; Roles are indicated above.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Trainer Code (Optional)</Label>
-                <Input
-                  placeholder="e.g. TRN-001 (auto if empty)"
-                  value={registerTrainerCode}
-                  onChange={(e) => setRegisterTrainerCode(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Experience (Years)</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="50"
-                  value={registerExperienceYears}
-                  onChange={(e) => setRegisterExperienceYears(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Professional Bio &amp; Qualifications</Label>
-              <Textarea
-                placeholder="e.g. Certified strength and conditioning coach specializing in HIIT and functional movement."
-                value={registerBio}
-                onChange={(e) => setRegisterBio(e.target.value)}
-                rows={3}
-                className="text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Schedule Buffer (Minutes)</Label>
-                <Input
-                  type="number"
-                  step="5"
-                  min="0"
-                  max="120"
-                  value={registerScheduleBuffer}
-                  onChange={(e) => setRegisterScheduleBuffer(parseInt(e.target.value) || 0)}
-                  className="h-9 text-xs"
-                />
-                <p className="text-[10px] text-muted-foreground">Rest time required between bookings.</p>
-              </div>
-
-              <div className="space-y-1.5 flex flex-col justify-center">
-                <Label className="text-xs font-semibold">Capabilities</Label>
-                <label className="flex items-center gap-2 text-xs mt-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={registerCanTeachAll}
-                    onChange={(e) => setRegisterCanTeachAll(e.target.checked)}
-                    className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-                  />
-                  <span>Can teach all fitness specialties</span>
-                </label>
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRegisterModalOpen(false)}
-                disabled={registerLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                disabled={registerLoading}
-              >
-                {registerLoading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Registering...</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Register Trainer</span>
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       {/* View Trainer Profile Modal */}
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
@@ -1358,6 +1623,46 @@ export function TrainersWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Trainer Schedule & Weekly Roster Modal */}
+      <TrainerScheduleModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        trainer={isTrainer ? (currentTrainer || selectedTrainer) : (selectedTrainer || trainers[0] || null)}
+        trainers={isTrainer && currentTrainer ? [currentTrainer] : trainers}
+        onSelectTrainer={(t) => setSelectedTrainer(t)}
+        branches={branches}
+        initialBranchId={
+          directoryBranchId !== 'ALL'
+            ? directoryBranchId
+            : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id
+        }
+      />
+
+      {/* Trainer Self-Service Leave Application Dialog */}
+      <TrainerLeaveApplyDialog
+        isOpen={isLeaveApplyOpen}
+        onClose={() => setIsLeaveApplyOpen(false)}
+        trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
+        branches={branches}
+      />
+
+      {/* Admin Leave & Override Approvals Modal */}
+      <TrainerLeaveApprovalsModal
+        isOpen={isApprovalsModalOpen}
+        onClose={() => setIsApprovalsModalOpen(false)}
+      />
+
+      {/* Trainer Allotted Classes & Attendance Modal */}
+      <TrainerAllottedClassesModal
+        trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
+        isOpen={isAllottedClassesOpen}
+        onClose={() => setIsAllottedClassesOpen(false)}
+        onApplyLeave={() => {
+          setIsAllottedClassesOpen(false);
+          setIsLeaveApplyOpen(true);
+        }}
+      />
     </div>
   );
 }

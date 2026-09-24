@@ -63,7 +63,6 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
       { id: "/ops/classes", label: "Group Fitness Classes", to: "/ops/classes", description: "HIIT, Spin, Zumba, and Strength group class rosters." },
       { id: "/ops/bookings", label: "Class Bookings", to: "/ops/bookings", description: "Client reservations, waitlists, and cancellation policies." },
       { id: "/ops/personal-training", label: "1-on-1 Personal Training", to: "/ops/personal-training", description: "Private trainer appointment scheduling and quotas." },
-      { id: "/ops/pilates", label: "Reformer Pilates Studio", to: "/ops/pilates", description: "Specialized reformer bed slot allocations." },
       { id: "/ops/assessments", label: "Body & Fitness Assessments", to: "/ops/assessments", description: "InBody, body fat %, and functional movement benchmarks." },
       { id: "/ops/trainers", label: "Trainer Roster & Shifts", to: "/ops/trainers", description: "Staff scheduling, payroll hours, and availability." },
       { id: "/ops/programs", label: "Workout Program Builder", to: "/ops/programs", description: "Structured multi-week workout and training templates." },
@@ -153,13 +152,12 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
   {
     id: "coaching",
     label: "Coaching & Athlete Development",
-    description: "Personal trainer allocations and workout program builders.",
+    description: "Personal trainer allocations and coach directory.",
     icon: "Dumbbell",
     submodules: [
       { id: "/coaching/trainers", label: "Trainers Roster", to: "/coaching/trainers", description: "Certified coach directory and availability." },
       { id: "/coaching/online-coaches", label: "Online Coaches", to: "/coaching/online-coaches", description: "Remote training and digital check-ins." },
       { id: "/coaching/nutrition-coaches", label: "Nutrition Coaches", to: "/coaching/nutrition-coaches", description: "Certified nutritionists and meal consultants." },
-      { id: "/coaching/program-builder", label: "Program Builder", to: "/coaching/program-builder", description: "Custom periodized workout programming." },
     ],
   },
   {

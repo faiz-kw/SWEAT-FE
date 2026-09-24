@@ -67,7 +67,7 @@ export function TenantOnboardingWizard() {
     enabled_modules: [
       "crm", "/crm/leads", "/crm/pipeline", "/crm/ai-calling", "/crm/trials", "/crm/activities", "/crm/follow-ups", "/crm/offers", "/crm/coupons", "/crm/campaigns",
       "members", "/members", "/members/client-360", "/members/memberships", "/members/renewals", "/members/freeze", "/members/transfers", "/members/attendance",
-      "ops", "/ops/calendar", "/ops/classes", "/ops/bookings", "/ops/personal-training", "/ops/pilates", "/ops/assessments", "/ops/trainers", "/ops/programs",
+      "ops", "/ops/calendar", "/ops/classes", "/ops/bookings", "/ops/personal-training", "/ops/assessments", "/ops/trainers", "/ops/programs",
       "finance", "/finance/invoices", "/finance/payments", "/finance/refunds", "/finance/outstanding", "/finance/expenses", "/finance/revenue",
       "ai", "/ai/coach", "/ai/trainer-copilot", "/ai/business-intelligence", "/ai/computer-vision", "/ai/live-sessions", "/ai/group-tracking",
       "nutrition", "/nutrition/diet-plans", "/nutrition/consultations", "/nutrition/food-logs", "/nutrition/supplements",

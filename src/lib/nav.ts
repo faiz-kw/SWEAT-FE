@@ -12,8 +12,9 @@ export type NavItem = {
    *  - 'all' (default): visible to all
    *  - 'superadmin_only': only Platform Super Admins see this
    *  - 'tenant_only': only tenant users see this
+   *  - 'admin_only': only Organization Admins and Platform Super Admins see this
    */
-  visibility?: "all" | "superadmin_only" | "tenant_only";
+  visibility?: "all" | "superadmin_only" | "tenant_only" | "admin_only";
 };
 
 export type NavSection = {
@@ -27,31 +28,149 @@ export type NavSection = {
    *  - 'all' (default): all authenticated users can see it
    *  - 'superadmin_only': only Platform Super Admins (no tenant) see this
    *  - 'tenant_only': only users with a tenant (not super admins) see this
+   *  - 'admin_only': only Organization Admins and Platform Super Admins see this
    */
-  visibility?: "all" | "superadmin_only" | "tenant_only";
+  visibility?: "all" | "superadmin_only" | "tenant_only" | "admin_only";
 };
+
+/**
+ * Check whether a user is an Organization Admin (or Platform Super Admin).
+ * Only these users can see and access the Administration section.
+ */
+export function isOrganizationAdmin(user: any): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  if (user.userType === "platform") return true;
+
+  const roleName = String(user.role || user.role_code || "").toUpperCase().trim();
+  if (
+    roleName === "ORG_ADMIN" ||
+    roleName === "ORGANIZATION ADMIN" ||
+    roleName === "ORG ADMIN" ||
+    roleName === "ADMIN" ||
+    roleName === "ADMINISTRATOR" ||
+    roleName === "TENANT_ADMIN" ||
+    roleName === "TENANT ADMIN" ||
+    roleName === "TENANT OWNER" ||
+    roleName === "TENANT_OWNER" ||
+    roleName === "SUPER ADMIN" ||
+    roleName.includes("ADMIN") ||
+    roleName.includes("OWNER")
+  ) {
+    return true;
+  }
+
+  // Check roles array
+  if (Array.isArray(user.roles) && user.roles.length > 0) {
+    const hasAdminRole = user.roles.some((r: any) => {
+      const code = String(r.code || "").toUpperCase().trim();
+      const name = String(r.name || "").toUpperCase().trim();
+      return (
+        code === "ORG_ADMIN" ||
+        code === "ADMIN" ||
+        code === "TENANT_OWNER" ||
+        name.includes("ADMIN") ||
+        name.includes("OWNER")
+      );
+    });
+    if (hasAdminRole) return true;
+  }
+
+  // Check specific admin permissions (do NOT match generic core.branch.view or core.dashboard.view)
+  if (Array.isArray(user.permissions) && user.permissions.length > 0) {
+    const adminPerms = [
+      "core.settings.edit",
+      "core.settings.manage",
+      "core.users.manage",
+      "core.users.create",
+      "core.users.delete",
+      "tenant.admin",
+      "admin.access",
+    ];
+    const hasAdminPerm = user.permissions.some((p: string) =>
+      typeof p === "string" && adminPerms.includes(p)
+    );
+    if (hasAdminPerm) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check whether an authenticated user has a Trainer / Coach identity.
+ * Evaluates role codes, role names, and optional email match against active trainer profiles.
+ * Always returns false for Organization Admins and Super Admins.
+ */
+export function isTrainerUser(user: any, trainers?: any[]): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin || user.userType === "platform") return false;
+  if (isOrganizationAdmin(user)) return false;
+
+  const roleName = String(user.role || user.role_code || "").toUpperCase().trim();
+  if (
+    roleName.includes("TRAINER") ||
+    roleName.includes("COACH") ||
+    roleName.includes("INSTRUCTOR")
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(user.roles)) {
+    const hasTrainerRole = user.roles.some((r: any) => {
+      const code = String(r.code || "").toUpperCase().trim();
+      const name = String(r.name || "").toUpperCase().trim();
+      return (
+        code.includes("TRAINER") ||
+        code.includes("COACH") ||
+        code.includes("INSTRUCTOR") ||
+        name.includes("TRAINER") ||
+        name.includes("COACH") ||
+        name.includes("INSTRUCTOR")
+      );
+    });
+    if (hasTrainerRole) return true;
+  }
+
+  if (trainers && Array.isArray(trainers) && trainers.length > 0 && user.email) {
+    const userEmail = String(user.email).toLowerCase().trim();
+    const isTrainerEmail = trainers.some(
+      (t) =>
+        (t.email && String(t.email).toLowerCase().trim() === userEmail) ||
+        t.user === user.id ||
+        t.user_id === user.id
+    );
+    if (isTrainerEmail) return true;
+  }
+
+  return false;
+}
 
 /**
  * Filter NAV sections and their items based on:
  * 1. Super Admin vs. Tenant scope (visibility)
- * 2. Tenant's plan/provisioned modules (enabledModules)
- * 3. User's effective permissions (hasPermission)
+ * 2. Organization Admin access for administration sections
+ * 3. Tenant's plan/provisioned modules (enabledModules)
+ * 4. User's effective permissions (hasPermission)
  *
  * Automatic pruning: Any section with 0 visible children is automatically hidden.
  */
 export function getFilteredNav(
   user: AuthUser | null | undefined,
   isSuperAdmin: boolean,
-  enabledModules: string[] | null = null
+  enabledModules: string[] | null = null,
+  isOrgAdmin: boolean = false
 ): NavSection[] {
   // Fail closed if no user context
   if (!user && !isSuperAdmin) return [];
+
+  const hasAdminAccess = isSuperAdmin || isOrgAdmin || isOrganizationAdmin(user);
 
   return NAV.filter((section) => {
     // 1. Check section visibility flag
     const vis = section.visibility ?? "all";
     if (vis === "superadmin_only" && !isSuperAdmin) return false;
     if (vis === "tenant_only" && isSuperAdmin) return false;
+    if (vis === "admin_only" && !hasAdminAccess) return false;
 
     // 2. Check section permission if specified
     if (section.permission && !hasPermission(user, section.permission)) {
@@ -67,6 +186,7 @@ export function getFilteredNav(
         const itemVis = item.visibility ?? "all";
         if (itemVis === "superadmin_only" && !isSuperAdmin) return false;
         if (itemVis === "tenant_only" && isSuperAdmin) return false;
+        if (itemVis === "admin_only" && !hasAdminAccess) return false;
 
         // 2. Check tenant provisioned module restriction (skip for system sections)
         if (
@@ -82,6 +202,11 @@ export function getFilteredNav(
 
         // 3. Check granular effective user permission
         if (item.permission && !hasPermission(user, item.permission)) {
+          return false;
+        }
+
+        // 4. Hide Trainers tab from Operations in Trainer login
+        if (isTrainerUser(user) && item.to === "/ops/trainers") {
           return false;
         }
 
@@ -147,7 +272,6 @@ export const NAV: NavSection[] = [
       { label: "Classes", to: "/ops/classes", permission: "ops.classes.view" },
       { label: "Bookings", to: "/ops/bookings", permission: "ops.bookings.view" },
       { label: "Personal Training", to: "/ops/personal-training", permission: "ops.personal-training.view" },
-      { label: "Pilates", to: "/ops/pilates", permission: "ops.pilates.view" },
       { label: "Assessments", to: "/ops/assessments", permission: "performance.analytics.view" },
       { label: "Trainers", to: "/ops/trainers", permission: "ops.trainers.view" },
       { label: "Programs", to: "/ops/programs", permission: "core.settings.view" },
@@ -187,7 +311,6 @@ export const NAV: NavSection[] = [
       { label: "Trainers", to: "/coaching/trainers", permission: "coaching.trainers.view" },
       { label: "Online Coaches", to: "/coaching/online-coaches", permission: "coaching.online-coaches.view" },
       { label: "Nutrition Coaches", to: "/coaching/nutrition-coaches", permission: "coaching.nutrition-coaches.view" },
-      { label: "Program Builder", to: "/coaching/program-builder", permission: "coaching.program-builder.view" },
     ],
   },
   {
@@ -288,8 +411,10 @@ export const NAV: NavSection[] = [
     id: "admin",
     label: "Administration",
     icon: "Settings",
+    visibility: "admin_only",
     items: [
       { label: "Users", to: "/admin/users", permission: "core.users.view" },
+      { label: "Staff Rosters", to: "/admin/rosters", permission: "ops.trainers.view" },
       { label: "Roles", to: "/admin/roles", permission: "core.roles.view" },
       { label: "Permissions", to: "/admin/permissions", permission: "core.permissions.view" },
       { label: "Locations", to: "/admin/locations", permission: "core.settings.view" },
@@ -325,8 +450,8 @@ export const ALL_NAV_ITEMS: {
   label: string;
   to: string;
   permission?: string;
-  visibility?: "all" | "superadmin_only" | "tenant_only";
-  sectionVisibility?: "all" | "superadmin_only" | "tenant_only";
+  visibility?: "all" | "superadmin_only" | "tenant_only" | "admin_only";
+  sectionVisibility?: "all" | "superadmin_only" | "tenant_only" | "admin_only";
 }[] = NAV.flatMap((s) =>
   s.items.map((i) => ({
     section: s.label,

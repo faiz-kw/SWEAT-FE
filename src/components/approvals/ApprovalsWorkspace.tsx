@@ -24,13 +24,28 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/contexts/auth-context';
+import { isOrganizationAdmin } from '@/lib/nav';
 import { usePermissions } from '../../lib/permissions';
 
-export const ApprovalsWorkspace: React.FC = () => {
+interface ApprovalsWorkspaceProps {
+  initialTab?: 'pending' | 'history' | 'governance';
+}
+
+export const ApprovalsWorkspace: React.FC<ApprovalsWorkspaceProps> = ({
+  initialTab = 'pending',
+}) => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isOrgAdmin = isOrganizationAdmin(user);
   const { can } = usePermissions();
-  const canApprove = can('admin.approvals.edit') || can('admin.approvals.create') || can('admin.approvals.view');
-  const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'governance'>('pending');
+  const canApprove =
+    isOrgAdmin ||
+    can('admin.approvals.edit') ||
+    can('admin.approvals.create') ||
+    can('admin.approvals.view') ||
+    can('automation.approvals.view');
+  const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'governance'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter] = useState<string>('ALL');
 
@@ -48,7 +63,7 @@ export const ApprovalsWorkspace: React.FC = () => {
     refetch: refetchRequests,
   } = useQuery({
     queryKey: ['approval-requests'],
-    queryFn: () => approvalsApi.getApprovalRequests(),
+    queryFn: () => approvalsApi.getRequests(),
   });
 
   const {
@@ -56,7 +71,7 @@ export const ApprovalsWorkspace: React.FC = () => {
     refetch: refetchActions,
   } = useQuery({
     queryKey: ['approval-actions'],
-    queryFn: () => approvalsApi.getApprovalActions(),
+    queryFn: () => approvalsApi.getActions(),
   });
 
   // Mutations
@@ -72,7 +87,7 @@ export const ApprovalsWorkspace: React.FC = () => {
       comment: string;
       allow_self_approval?: boolean;
     }) =>
-      approvalsApi.submitDecision(requestId, {
+      approvalsApi.actOnRequest(requestId, {
         action,
         comment,
         allow_self_approval,
@@ -269,7 +284,20 @@ export const ApprovalsWorkspace: React.FC = () => {
                           </td>
                           <td className="px-4 py-3.5">
                             <span className="text-foreground font-medium">{req.entity_type}</span>
-                            <div className="text-[11px] text-muted-foreground font-mono">{req.entity_id.slice(0, 8)}...</div>
+                            <div className="text-[11px] text-muted-foreground font-mono">{String(req.entity_id || '').slice(0, 8)}...</div>
+                            {(req.requested_payload?.reason || (req as any).payload?.reason) && (
+                              <div className="text-2xs text-muted-foreground mt-0.5 max-w-xs truncate" title={req.requested_payload?.reason || (req as any).payload?.reason}>
+                                Reason: {req.requested_payload?.reason || (req as any).payload?.reason}
+                              </div>
+                            )}
+                            {(req.requested_payload?.date_from || req.requested_payload?.start_date) && (
+                              <div className="text-3xs text-muted-foreground/80 font-mono mt-0.5">
+                                Dates: {req.requested_payload?.date_from || req.requested_payload?.start_date}
+                                {(req.requested_payload?.date_to || req.requested_payload?.end_date) && (req.requested_payload?.date_to || req.requested_payload?.end_date) !== (req.requested_payload?.date_from || req.requested_payload?.start_date) && (
+                                  <span> to {req.requested_payload?.date_to || req.requested_payload?.end_date}</span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3.5 text-foreground">{req.requested_by_email || 'Staff'}</td>
                           <td className="px-4 py-3.5">
@@ -418,9 +446,43 @@ export const ApprovalsWorkspace: React.FC = () => {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4 py-2 text-xs sm:text-sm">
-              <p className="text-xs text-muted-foreground">
-                Reviewing {selectedRequest.request_type} for entity {selectedRequest.entity_type}.
-              </p>
+              <div className="p-3 bg-muted/50 rounded-lg border border-border text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground">{selectedRequest.request_type}</span>
+                  <span className="text-muted-foreground font-mono">{selectedRequest.entity_type}</span>
+                </div>
+                {selectedRequest.requested_by_email && (
+                  <div className="text-muted-foreground">
+                    Requested By: <strong className="text-foreground">{selectedRequest.requested_by_email}</strong>
+                  </div>
+                )}
+                {(() => {
+                  const payload = selectedRequest.requested_payload || (selectedRequest as any).payload;
+                  if (!payload || typeof payload !== 'object') return null;
+                  const startDate = payload.date_from || payload.start_date;
+                  const endDate = payload.date_to || payload.end_date;
+                  const excType = payload.exception_type;
+                  const reason = payload.reason;
+                  return (
+                    <div className="pt-1.5 border-t border-border/60 text-2xs space-y-1">
+                      {startDate && (
+                        <div>
+                          Dates: <strong className="text-foreground">{startDate}</strong>
+                          {endDate && endDate !== startDate && (
+                            <span> to <strong className="text-foreground">{endDate}</strong></span>
+                          )}
+                        </div>
+                      )}
+                      {excType && (
+                        <div>Type: <strong className="text-foreground">{excType}</strong></div>
+                      )}
+                      {reason && (
+                        <div>Reason: <span className="italic text-foreground">"{reason}"</span></div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
 
               {modalError && (
                 <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs rounded-lg">

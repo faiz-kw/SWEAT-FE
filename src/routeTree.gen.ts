@@ -19,9 +19,11 @@ import { Route as ShellAdminAuditLogsRouteImport } from './routes/_shell/admin.a
 import { Route as ShellAdminConfigurationRouteImport } from './routes/_shell/admin.configuration'
 import { Route as ShellAdminFormsRouteImport } from './routes/_shell/admin.forms'
 import { Route as ShellAdminIntegrationsRouteImport } from './routes/_shell/admin.integrations'
+import { Route as ShellAdminLeaveApprovalsRouteImport } from './routes/_shell/admin.leave-approvals'
 import { Route as ShellAdminLocationsRouteImport } from './routes/_shell/admin.locations'
 import { Route as ShellAdminPermissionsRouteImport } from './routes/_shell/admin.permissions'
 import { Route as ShellAdminRolesRouteImport } from './routes/_shell/admin.roles'
+import { Route as ShellAdminRostersRouteImport } from './routes/_shell/admin.rosters'
 import { Route as ShellAdminSecurityRouteImport } from './routes/_shell/admin.security'
 import { Route as ShellAdminServicesRouteImport } from './routes/_shell/admin.services'
 import { Route as ShellAdminUsersRouteImport } from './routes/_shell/admin.users'
@@ -164,6 +166,12 @@ const ShellAdminIntegrationsRoute = ShellAdminIntegrationsRouteImport.update({
   path: '/admin/integrations',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellAdminLeaveApprovalsRoute =
+  ShellAdminLeaveApprovalsRouteImport.update({
+    id: '/admin/leave-approvals',
+    path: '/admin/leave-approvals',
+    getParentRoute: () => ShellRoute,
+  } as any)
 const ShellAdminLocationsRoute = ShellAdminLocationsRouteImport.update({
   id: '/admin/locations',
   path: '/admin/locations',
@@ -177,6 +185,11 @@ const ShellAdminPermissionsRoute = ShellAdminPermissionsRouteImport.update({
 const ShellAdminRolesRoute = ShellAdminRolesRouteImport.update({
   id: '/admin/roles',
   path: '/admin/roles',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAdminRostersRoute = ShellAdminRostersRouteImport.update({
+  id: '/admin/rosters',
+  path: '/admin/rosters',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminSecurityRoute = ShellAdminSecurityRouteImport.update({
@@ -667,9 +680,11 @@ export interface FileRoutesByFullPath {
   '/admin/configuration': typeof ShellAdminConfigurationRoute
   '/admin/forms': typeof ShellAdminFormsRoute
   '/admin/integrations': typeof ShellAdminIntegrationsRoute
+  '/admin/leave-approvals': typeof ShellAdminLeaveApprovalsRoute
   '/admin/locations': typeof ShellAdminLocationsRoute
   '/admin/permissions': typeof ShellAdminPermissionsRoute
   '/admin/roles': typeof ShellAdminRolesRoute
+  '/admin/rosters': typeof ShellAdminRostersRoute
   '/admin/security': typeof ShellAdminSecurityRoute
   '/admin/services': typeof ShellAdminServicesRoute
   '/admin/users': typeof ShellAdminUsersRoute
@@ -773,9 +788,11 @@ export interface FileRoutesByTo {
   '/admin/configuration': typeof ShellAdminConfigurationRoute
   '/admin/forms': typeof ShellAdminFormsRoute
   '/admin/integrations': typeof ShellAdminIntegrationsRoute
+  '/admin/leave-approvals': typeof ShellAdminLeaveApprovalsRoute
   '/admin/locations': typeof ShellAdminLocationsRoute
   '/admin/permissions': typeof ShellAdminPermissionsRoute
   '/admin/roles': typeof ShellAdminRolesRoute
+  '/admin/rosters': typeof ShellAdminRostersRoute
   '/admin/security': typeof ShellAdminSecurityRoute
   '/admin/services': typeof ShellAdminServicesRoute
   '/admin/users': typeof ShellAdminUsersRoute
@@ -881,9 +898,11 @@ export interface FileRoutesById {
   '/_shell/admin/configuration': typeof ShellAdminConfigurationRoute
   '/_shell/admin/forms': typeof ShellAdminFormsRoute
   '/_shell/admin/integrations': typeof ShellAdminIntegrationsRoute
+  '/_shell/admin/leave-approvals': typeof ShellAdminLeaveApprovalsRoute
   '/_shell/admin/locations': typeof ShellAdminLocationsRoute
   '/_shell/admin/permissions': typeof ShellAdminPermissionsRoute
   '/_shell/admin/roles': typeof ShellAdminRolesRoute
+  '/_shell/admin/rosters': typeof ShellAdminRostersRoute
   '/_shell/admin/security': typeof ShellAdminSecurityRoute
   '/_shell/admin/services': typeof ShellAdminServicesRoute
   '/_shell/admin/users': typeof ShellAdminUsersRoute
@@ -989,9 +1008,11 @@ export interface FileRouteTypes {
     | '/admin/configuration'
     | '/admin/forms'
     | '/admin/integrations'
+    | '/admin/leave-approvals'
     | '/admin/locations'
     | '/admin/permissions'
     | '/admin/roles'
+    | '/admin/rosters'
     | '/admin/security'
     | '/admin/services'
     | '/admin/users'
@@ -1095,9 +1116,11 @@ export interface FileRouteTypes {
     | '/admin/configuration'
     | '/admin/forms'
     | '/admin/integrations'
+    | '/admin/leave-approvals'
     | '/admin/locations'
     | '/admin/permissions'
     | '/admin/roles'
+    | '/admin/rosters'
     | '/admin/security'
     | '/admin/services'
     | '/admin/users'
@@ -1202,9 +1225,11 @@ export interface FileRouteTypes {
     | '/_shell/admin/configuration'
     | '/_shell/admin/forms'
     | '/_shell/admin/integrations'
+    | '/_shell/admin/leave-approvals'
     | '/_shell/admin/locations'
     | '/_shell/admin/permissions'
     | '/_shell/admin/roles'
+    | '/_shell/admin/rosters'
     | '/_shell/admin/security'
     | '/_shell/admin/services'
     | '/_shell/admin/users'
@@ -1376,6 +1401,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellAdminIntegrationsRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/admin/leave-approvals': {
+      id: '/_shell/admin/leave-approvals'
+      path: '/admin/leave-approvals'
+      fullPath: '/admin/leave-approvals'
+      preLoaderRoute: typeof ShellAdminLeaveApprovalsRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/admin/locations': {
       id: '/_shell/admin/locations'
       path: '/admin/locations'
@@ -1395,6 +1427,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/roles'
       fullPath: '/admin/roles'
       preLoaderRoute: typeof ShellAdminRolesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/rosters': {
+      id: '/_shell/admin/rosters'
+      path: '/admin/rosters'
+      fullPath: '/admin/rosters'
+      preLoaderRoute: typeof ShellAdminRostersRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/admin/security': {
@@ -2086,9 +2125,11 @@ interface ShellRouteChildren {
   ShellAdminConfigurationRoute: typeof ShellAdminConfigurationRoute
   ShellAdminFormsRoute: typeof ShellAdminFormsRoute
   ShellAdminIntegrationsRoute: typeof ShellAdminIntegrationsRoute
+  ShellAdminLeaveApprovalsRoute: typeof ShellAdminLeaveApprovalsRoute
   ShellAdminLocationsRoute: typeof ShellAdminLocationsRoute
   ShellAdminPermissionsRoute: typeof ShellAdminPermissionsRoute
   ShellAdminRolesRoute: typeof ShellAdminRolesRoute
+  ShellAdminRostersRoute: typeof ShellAdminRostersRoute
   ShellAdminSecurityRoute: typeof ShellAdminSecurityRoute
   ShellAdminServicesRoute: typeof ShellAdminServicesRoute
   ShellAdminUsersRoute: typeof ShellAdminUsersRoute
@@ -2185,9 +2226,11 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellAdminConfigurationRoute: ShellAdminConfigurationRoute,
   ShellAdminFormsRoute: ShellAdminFormsRoute,
   ShellAdminIntegrationsRoute: ShellAdminIntegrationsRoute,
+  ShellAdminLeaveApprovalsRoute: ShellAdminLeaveApprovalsRoute,
   ShellAdminLocationsRoute: ShellAdminLocationsRoute,
   ShellAdminPermissionsRoute: ShellAdminPermissionsRoute,
   ShellAdminRolesRoute: ShellAdminRolesRoute,
+  ShellAdminRostersRoute: ShellAdminRostersRoute,
   ShellAdminSecurityRoute: ShellAdminSecurityRoute,
   ShellAdminServicesRoute: ShellAdminServicesRoute,
   ShellAdminUsersRoute: ShellAdminUsersRoute,

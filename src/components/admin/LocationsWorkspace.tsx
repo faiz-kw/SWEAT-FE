@@ -64,7 +64,14 @@ export function LocationsWorkspace() {
   const [locPhoneError, setLocPhoneError] = React.useState("");
   const [locCapacity, setLocCapacity] = React.useState(150);
   const [locTenantId, setLocTenantId] = React.useState("");
+  const [locLatitude, setLocLatitude] = React.useState("");
+  const [locLongitude, setLocLongitude] = React.useState("");
+  const [locGeofenceRadius, setLocGeofenceRadius] = React.useState(200);
+  const [locGeofenceEnforcement, setLocGeofenceEnforcement] = React.useState<"STRICT" | "FLAG_AUDIT">("STRICT");
+  const [detectingGps, setDetectingGps] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+
+  const canEditLocations = isSuperAdmin || user?.userType === "tenant" || (typeof user?.role === "string" && (user.role.includes("Admin") || user.role.includes("admin")));
 
   // Clock Picker state
   const [openTime, setOpenTime] = React.useState("06:00");
@@ -110,6 +117,10 @@ export function LocationsWorkspace() {
     setLocPhoneError("");
     setLocCapacity(150);
     setLocTenantId(tenants[0]?.id || "");
+    setLocLatitude("");
+    setLocLongitude("");
+    setLocGeofenceRadius(200);
+    setLocGeofenceEnforcement("STRICT");
     setOpenTime("06:00");
     setCloseTime("22:00");
     setModalOpen(true);
@@ -125,10 +136,35 @@ export function LocationsWorkspace() {
     setLocPhoneError("");
     setLocCapacity(loc.capacity || 100);
     setLocTenantId(loc.tenant || "");
+    setLocLatitude(loc.latitude !== undefined && loc.latitude !== null ? String(loc.latitude) : "");
+    setLocLongitude(loc.longitude !== undefined && loc.longitude !== null ? String(loc.longitude) : "");
+    setLocGeofenceRadius(loc.geofence_radius_meters || 200);
+    setLocGeofenceEnforcement(loc.geofence_enforcement || "STRICT");
     const { openTime: op, closeTime: cl } = parseOperatingHours(loc.operating_hours || "06:00 - 22:00");
     setOpenTime(op);
     setCloseTime(cl);
     setModalOpen(true);
+  };
+
+  const handleDetectGps = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    setDetectingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocLatitude(pos.coords.latitude.toFixed(6));
+        setLocLongitude(pos.coords.longitude.toFixed(6));
+        setDetectingGps(false);
+        toast.success(`Coordinates detected: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} (Accuracy: ±${Math.round(pos.coords.accuracy)}m)`);
+      },
+      (err) => {
+        setDetectingGps(false);
+        toast.error(`GPS Error: ${err.message}. Please allow location access in your browser.`);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleOpenSchedule = (loc: LocationRow) => {
@@ -137,7 +173,7 @@ export function LocationsWorkspace() {
   };
 
   const handlePhoneChange = (val: string) => {
-    if (!isSuperAdmin) return;
+    if (!canEditLocations) return;
     const digits = sanitizePhone(val);
     setLocPhone(digits);
     if (digits.length > 0 && digits.length < 10) {
@@ -150,8 +186,8 @@ export function LocationsWorkspace() {
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isSuperAdmin) {
-      toast.error("Only Platform Super Admins can modify studio branch settings.");
+    if (!canEditLocations) {
+      toast.error("You do not have permission to modify studio branch settings.");
       return;
     }
 
@@ -176,6 +212,10 @@ export function LocationsWorkspace() {
         phone: locPhone || "",
         capacity: Number(locCapacity) || 100,
         operating_hours: operatingHours,
+        latitude: locLatitude ? parseFloat(locLatitude) : null,
+        longitude: locLongitude ? parseFloat(locLongitude) : null,
+        geofence_radius_meters: Number(locGeofenceRadius) || 200,
+        geofence_enforcement: locGeofenceEnforcement,
         is_active: true,
         ...(locTenantId ? { tenant: locTenantId } : {}),
       };
@@ -402,8 +442,23 @@ export function LocationsWorkspace() {
                     </div>
                   </div>
 
+                  {/* Geofencing & GPS summary pill */}
+                  <div className="mt-3 flex items-center justify-between text-2xs p-2 rounded-lg bg-muted/40 border border-border/60">
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <MapPin className="h-3 w-3 text-primary" />
+                      <span>{loc.latitude ? `${Number(loc.latitude).toFixed(3)}, ${Number(loc.longitude).toFixed(3)}` : "GPS Not Set"}</span>
+                    </span>
+                    <span className="flex items-center gap-1 font-medium">
+                      <span className="text-muted-foreground">Radius:</span>
+                      <span className="text-foreground">{loc.geofence_radius_meters || 200}m</span>
+                      <span className={`px-1 py-0.2 rounded text-3xs ${loc.geofence_enforcement === 'FLAG_AUDIT' ? 'bg-amber-500/10 text-amber-600' : 'bg-primary/10 text-primary font-bold'}`}>
+                        {loc.geofence_enforcement || 'STRICT'}
+                      </span>
+                    </span>
+                  </div>
+
                   {loc.phone && (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground font-mono truncate">
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground font-mono truncate">
                       <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="truncate">+91 {loc.phone.slice(0, 5)} {loc.phone.slice(5)}</span>
                     </div>
@@ -421,26 +476,28 @@ export function LocationsWorkspace() {
                     <CalendarDays className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">Schedule & Holidays</span>
                   </Button>
-                  {isSuperAdmin ? (
+                  {canEditLocations ? (
                     <>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleOpenEdit(loc)}
-                        className="text-xs gap-1.5 h-8 px-2.5 shrink-0"
-                        title="Edit branch details"
+                        className="text-xs gap-1.5 h-8 px-2.5 shrink-0 hover:border-primary text-primary"
+                        title="Configure branch details & geofence threshold"
                       >
                         <Edit2 className="h-3.5 w-3.5 shrink-0" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDeleteLocation(loc)}
-                        className="text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 h-8 px-2.5 shrink-0"
-                        title="Delete branch (Super Admin only)"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {isSuperAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteLocation(loc)}
+                          className="text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 h-8 px-2.5 shrink-0"
+                          title="Delete branch (Super Admin only)"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <Button
@@ -604,6 +661,90 @@ export function LocationsWorkspace() {
                   </p>
                 </div>
 
+                {/* Geofence & Location Coordinates Section */}
+                <div className="space-y-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1.5 font-semibold text-foreground text-xs">
+                      <MapPin className="h-3.5 w-3.5 text-primary" />
+                      Studio GPS & Geofencing Attendance Limit
+                    </Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={detectingGps || !canEditLocations}
+                      onClick={handleDetectGps}
+                      className="h-7 text-2xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      title="Autofill current device GPS latitude and longitude"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${detectingGps ? "animate-spin" : ""}`} />
+                      <span>{detectingGps ? "Detecting GPS..." : "Detect Current GPS"}</span>
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="loc_lat" className="text-2xs text-muted-foreground">Latitude</Label>
+                      <Input
+                        id="loc_lat"
+                        type="number"
+                        step="0.000001"
+                        value={locLatitude}
+                        disabled={!canEditLocations}
+                        onChange={(e) => setLocLatitude(e.target.value)}
+                        placeholder="e.g. 12.971598"
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="loc_lon" className="text-2xs text-muted-foreground">Longitude</Label>
+                      <Input
+                        id="loc_lon"
+                        type="number"
+                        step="0.000001"
+                        value={locLongitude}
+                        disabled={!canEditLocations}
+                        onChange={(e) => setLocLongitude(e.target.value)}
+                        placeholder="e.g. 77.594562"
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label htmlFor="loc_geofence" className="text-2xs text-muted-foreground">Max Allowed Distance (Meters)</Label>
+                      <Input
+                        id="loc_geofence"
+                        type="number"
+                        min={10}
+                        max={5000}
+                        value={locGeofenceRadius}
+                        disabled={!canEditLocations}
+                        onChange={(e) => setLocGeofenceRadius(Number(e.target.value))}
+                        placeholder="200"
+                        className="h-8 text-xs"
+                      />
+                      <span className="text-[10px] text-muted-foreground">Max radius for staff & member check-in</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="loc_policy" className="text-2xs text-muted-foreground">Enforcement Mode</Label>
+                      <select
+                        id="loc_policy"
+                        value={locGeofenceEnforcement}
+                        disabled={!canEditLocations}
+                        onChange={(e) => setLocGeofenceEnforcement(e.target.value as "STRICT" | "FLAG_AUDIT")}
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <option value="STRICT">Strict Lock (Block Outside Radius)</option>
+                        <option value="FLAG_AUDIT">Flag for Audit Only</option>
+                      </select>
+                      <span className="text-[10px] text-muted-foreground">Policy applied when attendee is outside radius</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Operating Hours — Analog Radial Clock Pickers (Responsive) */}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5">
@@ -618,7 +759,7 @@ export function LocationsWorkspace() {
                       <ClockTimePicker
                         id="loc_open_time"
                         value={openTime}
-                        disabled={!isSuperAdmin}
+                        disabled={!canEditLocations}
                         placeholder="Select Opening Time"
                         onChange={(time24) => setOpenTime(time24)}
                       />
@@ -631,7 +772,7 @@ export function LocationsWorkspace() {
                       <ClockTimePicker
                         id="loc_close_time"
                         value={closeTime}
-                        disabled={!isSuperAdmin}
+                        disabled={!canEditLocations}
                         placeholder="Select Closing Time"
                         onChange={(time24) => setCloseTime(time24)}
                       />
@@ -665,9 +806,9 @@ export function LocationsWorkspace() {
 
                 <div className="flex items-center justify-end gap-2 pt-4 border-t border-border/40">
                   <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
-                    {isSuperAdmin ? "Cancel" : "Close"}
+                    {canEditLocations ? "Cancel" : "Close"}
                   </Button>
-                  {isSuperAdmin && (
+                  {canEditLocations && (
                     <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground min-w-[120px]">
                       {saving ? (
                         <span className="flex items-center gap-2">
@@ -687,6 +828,11 @@ export function LocationsWorkspace() {
           open={scheduleModalOpen}
           onOpenChange={setScheduleModalOpen}
           branch={scheduleBranch}
+          availableBranches={locations.map((loc) => ({
+            id: loc.id,
+            name: loc.name,
+            city: loc.city,
+          }))}
         />
       </PageBody>
     </div>

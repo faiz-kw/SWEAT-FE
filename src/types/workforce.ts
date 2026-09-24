@@ -32,6 +32,8 @@ export interface TrainerProfile {
   can_teach_all_specialties: boolean;
   minimum_schedule_buffer_minutes: number;
   specialties?: SpecialtySummary[];
+  branch_ids?: string[];
+  branch_names?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -92,7 +94,14 @@ export interface EmployeeScheduleException {
   branch?: string | null;
   branch_name?: string | null;
   exception_date: string;
-  exception_type: 'LEAVE' | 'WEEKLY_OFF' | 'UNAVAILABLE' | 'SPECIAL_SHIFT' | 'OTHER';
+  exception_type:
+    | 'LEAVE'
+    | 'WEEKLY_OFF'
+    | 'WEEKLY_OFF_OVERRIDE'
+    | 'UNAVAILABLE'
+    | 'SPECIAL_SHIFT'
+    | 'TEMPORARY_AVAILABILITY'
+    | 'OTHER';
   is_available: boolean;
   start_time?: string | null;
   end_time?: string | null;

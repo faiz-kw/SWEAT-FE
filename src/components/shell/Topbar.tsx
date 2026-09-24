@@ -26,7 +26,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import { useApp, useLocations, useAuth } from "@/contexts";
-import { ALL_NAV_ITEMS, findNavItem } from "@/lib/nav";
+import { ALL_NAV_ITEMS, findNavItem, isOrganizationAdmin } from "@/lib/nav";
 import { hasPermission } from "@/lib/permissions";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { useRouterState, useRouter, Link } from "@tanstack/react-router";
@@ -57,13 +57,17 @@ function buildBreadcrumbs(pathname: string, navLabel?: string, sectionLabel?: st
   return crumbs;
 }
 
+const EMPTY_VALID_LOCATIONS: { id: string; name: string; city: string }[] = [];
+
 export function Topbar() {
   const {
-    toggleCollapsed,
-    toggleMobile,
     locationId,
     setLocationId,
     tenantName,
+    collapsed,
+    toggleCollapsed,
+    mobileOpen,
+    toggleMobile,
     role,
     theme,
     toggleTheme,
@@ -84,7 +88,7 @@ export function Topbar() {
           city: l.city || "Branch",
         }));
     }
-    return [];
+    return EMPTY_VALID_LOCATIONS;
   }, [rawLocations]);
 
   const isOrgWide = user?.isOrgWide !== false;
@@ -92,7 +96,8 @@ export function Topbar() {
   // Enforce branch scope: if branch-scoped, user cannot select 'all'
   React.useEffect(() => {
     if (!isOrgWide && validLocations.length > 0) {
-      if (locationId === "all" || !validLocations.some((l) => l.id === locationId)) {
+      const match = validLocations.find((l) => l.id === locationId);
+      if (!match) {
         setLocationId(validLocations[0].id);
       }
     }
@@ -106,6 +111,7 @@ export function Topbar() {
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
 
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
+  const isOrgAdmin = isOrganizationAdmin(user);
   const enabledModules = user?.enabledModules ?? null;
 
   const searchResults = React.useMemo(() => {
@@ -115,9 +121,11 @@ export function Topbar() {
       // Check section visibility
       if (item.sectionVisibility === "superadmin_only" && !isSuperAdmin) return false;
       if (item.sectionVisibility === "tenant_only" && isSuperAdmin) return false;
+      if (item.sectionVisibility === "admin_only" && !isOrgAdmin) return false;
       // Check item visibility
       if (item.visibility === "superadmin_only" && !isSuperAdmin) return false;
       if (item.visibility === "tenant_only" && isSuperAdmin) return false;
+      if (item.visibility === "admin_only" && !isOrgAdmin) return false;
 
       // Check tenant provisioned module restriction
       if (
@@ -142,7 +150,7 @@ export function Topbar() {
         item.to.toLowerCase().includes(q)
       );
     }).slice(0, 8);
-  }, [searchQuery, isSuperAdmin, user, enabledModules]);
+  }, [searchQuery, isSuperAdmin, isOrgAdmin, user, enabledModules]);
 
   // Global Ctrl/Cmd + K shortcut listener
   React.useEffect(() => {

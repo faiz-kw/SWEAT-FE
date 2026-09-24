@@ -73,18 +73,35 @@ export interface ClassOccurrence {
   id: string;
   class_template: string;
   template_name?: string;
+  class_name?: string;
   schedule_rule?: string;
   branch: string;
   branch_name?: string;
+  branch_latitude?: number | null;
+  branch_longitude?: number | null;
+  branch_geofence_radius_meters?: number;
+  branch_geofence_enforcement?: 'STRICT' | 'FLAG_AUDIT';
   occurrence_date: string;
   start_at: string;
   end_at: string;
+  start_time?: string;
+  end_time?: string;
   delivery_mode: DeliveryMode;
   capacity: number;
   trial_capacity: number;
   waitlist_capacity: number;
   status: ClassOccurrenceStatus;
   assigned_trainers?: ClassOccurrenceTrainerInfo[];
+  trainers?: ClassOccurrenceTrainerInfo[];
+  trainer_checked_in?: boolean;
+  trainer_check_in_details?: {
+    checked_in: boolean;
+    trainer_name?: string;
+    status: 'CONFIRMED' | 'PENDING' | 'UNASSIGNED' | 'UNKNOWN';
+  };
+  booking_count?: number;
+  waitlist_count?: number;
+  attendance_count?: number;
   created_at?: string;
 }
 

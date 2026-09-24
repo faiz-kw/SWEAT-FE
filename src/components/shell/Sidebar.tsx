@@ -29,7 +29,7 @@ import {
   Cpu,
 } from "lucide-react";
 
-import { NAV, getFilteredNav } from "@/lib/nav";
+import { NAV, getFilteredNav, isOrganizationAdmin } from "@/lib/nav";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { useApp } from "@/contexts";
 import { useAuth } from "@/contexts";
@@ -60,12 +60,14 @@ export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [filterQuery, setFilterQuery] = React.useState("");
 
-  // Effective permission & tenant module filtering
+  // Role-based nav filtering — Super Admins see Platform Core, Organization Admins see Administration
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === 'Super Admin');
+  const isOrgAdmin = isOrganizationAdmin(user);
   const enabledModules = user?.enabledModules ?? null;
+
   const roleFilteredNav = React.useMemo(
-    () => getFilteredNav(user, isSuperAdmin, enabledModules),
-    [user, isSuperAdmin, enabledModules]
+    () => getFilteredNav(user, isSuperAdmin, enabledModules, isOrgAdmin),
+    [user, isSuperAdmin, enabledModules, isOrgAdmin]
   );
 
   // ── Drag Resizing State & Handlers ──

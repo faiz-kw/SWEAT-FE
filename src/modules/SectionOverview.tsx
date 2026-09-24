@@ -5,7 +5,7 @@ import { KpiTile, MiniTable, PageBody, PageHeader, Section } from "@/components/
 import { StatusBadge } from "@/components/enterprise/StatusBadge";
 import { dateTime } from "@/components/enterprise/format";
 import { Button } from "@/components/ui/button";
-import { NAV, getFilteredNav } from "@/lib/nav";
+import { NAV, getFilteredNav, isOrganizationAdmin } from "@/lib/nav";
 import { useApp, useAuth } from "@/contexts";
 import { useModuleNavigate } from "@/modules/navigate";
 import { moduleDef } from "@/modules/registry";
@@ -73,13 +73,14 @@ export function SectionOverview({ sectionId }: { sectionId: string }) {
   const go = useModuleNavigate();
 
   const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
+  const isOrgAdmin = isOrganizationAdmin(user);
 
   const sections = React.useMemo(() => {
-    const filtered = getFilteredNav(isSuperAdmin);
+    const filtered = getFilteredNav(isSuperAdmin, isOrgAdmin);
     return (sectionId === "all" ? filtered : filtered.filter((s) => s.id === sectionId)).filter(
       (s) => s.id !== "dashboard"
     );
-  }, [sectionId, isSuperAdmin]);
+  }, [sectionId, isSuperAdmin, isOrgAdmin]);
 
   const cards = React.useMemo(
     () =>

@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { CalendarWorkspace } from "@/components/calendar/CalendarWorkspace";
 
 export const Route = createFileRoute("/_shell/ops/calendar")({
   head: () => ({
@@ -11,5 +10,6 @@ export const Route = createFileRoute("/_shell/ops/calendar")({
       { property: "og:description", content: "Calendar workspace in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <ModuleView path="/ops/calendar" />,
+  component: () => <CalendarWorkspace />,
 });
+

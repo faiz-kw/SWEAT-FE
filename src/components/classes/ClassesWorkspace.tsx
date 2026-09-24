@@ -28,6 +28,10 @@ import {
   Pencil,
   ToggleLeft,
   ToggleRight,
+  LayoutList,
+  LayoutGrid,
+  MapPin,
+  Filter,
 } from 'lucide-react';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { toast } from 'sonner';
@@ -45,6 +49,7 @@ import {
   TrainerOccurrenceRole,
 } from '../../types/classes';
 import { useAuth } from '../../contexts/auth-context';
+import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +63,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
+import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
+import { ClassAttendanceModal } from './ClassAttendanceModal';
 
 export const ClassesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
@@ -66,8 +73,19 @@ export const ClassesWorkspace: React.FC = () => {
   const canCreate = can('ops.classes.create');
   const canEdit = can('ops.classes.edit');
   const canDelete = can('ops.classes.delete');
+  const isOrgAdmin = isOrganizationAdmin(user);
+  const isTrainer = isTrainerUser(user);
+  const isAuthorized = !isTrainer && (isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
+  const isTrainerRole = !isAuthorized;
 
-  const [activeTab, setActiveTab] = useState<'categories' | 'templates' | 'rules' | 'occurrences' | 'content'>('categories');
+  const [activeTab, setActiveTab] = useState<'occurrences' | 'allotted_classes' | 'categories' | 'templates' | 'rules' | 'content'>(
+    isTrainerRole ? 'allotted_classes' : 'occurrences'
+  );
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom'>('today');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
+  const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
@@ -77,6 +95,23 @@ export const ClassesWorkspace: React.FC = () => {
     return `${year}-${month}-${day}`;
   });
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
+
+  const todayStr = React.useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const weekEndStr = React.useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
 
   // Modals state
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
@@ -222,9 +257,11 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   const { data: occurrences = [], isLoading: loadingOccurrences, refetch: refetchOccurrences } = useQuery({
-    queryKey: ['class-occurrences', selectedDate, selectedBranchFilter],
+    queryKey: ['class-occurrences', dateFilterMode, selectedDate, selectedBranchFilter],
     queryFn: () => classesApi.getOccurrences({
-      occurrence_date: selectedDate,
+      occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
+      from_date: dateFilterMode === 'week' ? todayStr : undefined,
+      to_date: dateFilterMode === 'week' ? weekEndStr : undefined,
       branch_id: selectedBranchFilter || undefined,
     }),
   });
@@ -944,9 +981,29 @@ export const ClassesWorkspace: React.FC = () => {
 
   const filteredOccurrences = occurrences.filter((occ) => {
     const term = searchTerm.toLowerCase();
-    const name = occ.template_name || '';
-    const branch = occ.branch_name || '';
-    return name.toLowerCase().includes(term) || branch.toLowerCase().includes(term);
+    const name = (occ.template_name || occ.class_name || '').toLowerCase();
+    const branch = (occ.branch_name || '').toLowerCase();
+    const trainerNames = [
+      ...(occ.trainers || []).map((t) => (t.trainer_name || t.trainer_code || '').toLowerCase()),
+      ...(occ.assigned_trainers || []).map((t) => (t.trainer_name || t.trainer_code || '').toLowerCase())
+    ].join(' ');
+
+    const matchesSearch = !term || name.includes(term) || branch.includes(term) || trainerNames.includes(term);
+    const matchesBranch = !selectedBranchFilter || occ.branch === selectedBranchFilter;
+    const matchesStatus = selectedStatusFilter === 'ALL' || occ.status === selectedStatusFilter;
+
+    const isCheckedIn = Boolean(
+      occ.trainer_checked_in ||
+      occ.trainer_check_in_details?.checked_in ||
+      (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
+      (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
+    );
+    const matchesCheckIn =
+      selectedCheckInFilter === 'ALL' ||
+      (selectedCheckInFilter === 'CHECKED_IN' && isCheckedIn) ||
+      (selectedCheckInFilter === 'PENDING' && !isCheckedIn);
+
+    return matchesSearch && matchesBranch && matchesStatus && matchesCheckIn;
   });
 
   const filteredRules = rules.filter((r) => {
@@ -960,6 +1017,27 @@ export const ClassesWorkspace: React.FC = () => {
     const term = searchTerm.toLowerCase();
     return item.title.toLowerCase().includes(term) || (item.description || '').toLowerCase().includes(term);
   });
+
+  // Non-admin / Trainer view: Only show Allotted Classes & Attendance
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background text-foreground">
+        <PageHeader
+          title="Assigned Classes & Attendance"
+          subtitle="View your scheduled sessions, check in booked members, and record class attendance."
+          actions={
+            <Button variant="outline" size="sm" onClick={refetchAll} title="Refresh" className="gap-1.5">
+              <RefreshCw className="size-3.5" />
+              <span>Refresh</span>
+            </Button>
+          }
+        />
+        <PageBody>
+          <TrainerAllottedClassesView />
+        </PageBody>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -1028,17 +1106,29 @@ export const ClassesWorkspace: React.FC = () => {
       />
 
       <PageBody>
-        {/* Navigation Tabs - 5 Tabs Ordered According to Source of Truth */}
+        {/* Navigation Tabs - Classes List & Schedule first for Admin */}
         <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scrollbar-none">
           <button
-            onClick={() => { setActiveTab('categories'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'categories'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+            onClick={() => { setActiveTab('occurrences'); setSearchTerm(''); }}
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'occurrences'
+                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            Class Categories ({categories.length})
+            <Calendar className="size-3.5" />
+            <span>Classes List & Schedule ({occurrences.length})</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('allotted_classes'); setSearchTerm(''); }}
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'allotted_classes'
+                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+            }`}
+          >
+            <Award className="size-3.5" />
+            <span>{isTrainerRole ? 'My Allotted Classes' : 'Trainer Attendance View'}</span>
           </button>
           <button
             onClick={() => { setActiveTab('templates'); setSearchTerm(''); }}
@@ -1051,6 +1141,16 @@ export const ClassesWorkspace: React.FC = () => {
             Class Templates ({templates.length})
           </button>
           <button
+            onClick={() => { setActiveTab('categories'); setSearchTerm(''); }}
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
+              activeTab === 'categories'
+                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+            }`}
+          >
+            Class Categories ({categories.length})
+          </button>
+          <button
             onClick={() => { setActiveTab('rules'); setSearchTerm(''); }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
               activeTab === 'rules'
@@ -1059,16 +1159,6 @@ export const ClassesWorkspace: React.FC = () => {
             }`}
           >
             Recurring Rules ({rules.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('occurrences'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'occurrences'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-            }`}
-          >
-            Daily Schedule & Sessions ({occurrences.length})
           </button>
           <button
             onClick={() => { setActiveTab('content'); setSearchTerm(''); }}
@@ -1081,6 +1171,13 @@ export const ClassesWorkspace: React.FC = () => {
             Content Studio ({contentItems.length})
           </button>
         </div>
+
+        {/* TAB 0: ALLOTTED CLASSES & ATTENDANCE */}
+        {activeTab === 'allotted_classes' && (
+          <div className="space-y-4 mt-4">
+            <TrainerAllottedClassesView />
+          </div>
+        )}
 
         {/* TAB 1: CLASS CATEGORIES */}
         {activeTab === 'categories' && (
@@ -1545,56 +1642,164 @@ export const ClassesWorkspace: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 4: DAILY SCHEDULE & SESSIONS */}
+        {/* TAB: CLASSES LIST & SCHEDULE SESSIONS */}
         {activeTab === 'occurrences' && (
           <div className="space-y-4 mt-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search sessions by class or branch..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-primary shrink-0 hidden sm:block" />
+            {/* Filter & Control Bar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                {/* Search */}
+                <div className="relative min-w-[200px] flex-1 max-w-xs">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-background w-full sm:w-auto text-xs"
+                    type="text"
+                    placeholder="Search class, branch, or trainer..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-8 pl-8 text-xs bg-background"
                   />
                 </div>
+
+                {/* Date Filter Tabs */}
+                <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('today')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      dateFilterMode === 'today'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('week')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      dateFilterMode === 'week'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Next 7 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('custom')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      dateFilterMode === 'custom'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Custom Date
+                  </button>
+                </div>
+
+                {/* Custom Date Input */}
+                {dateFilterMode === 'custom' && (
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                    />
+                  </div>
+                )}
+
+                {/* Branch Filter */}
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">All Branches</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+
+                {/* Trainer Check-In Filter */}
+                <select
+                  value={selectedCheckInFilter}
+                  onChange={(e) => setSelectedCheckInFilter(e.target.value as any)}
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                >
+                  <option value="ALL">All Trainer Check-ins</option>
+                  <option value="CHECKED_IN">Checked In</option>
+                  <option value="PENDING">Pending Check-in</option>
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={selectedStatusFilter}
+                  onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="OPEN">Open</option>
+                  <option value="FULL">Full</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+
+              {/* View Mode Toggle & Actions */}
+              <div className="flex items-center gap-2 self-end lg:self-center">
+                <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+                  <Button
+                    type="button"
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="h-7 px-2.5 text-xs font-semibold gap-1"
+                    title="List View"
+                  >
+                    <LayoutList className="size-3.5" />
+                    <span className="hidden sm:inline">List</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('cards')}
+                    className="h-7 px-2.5 text-xs font-semibold gap-1"
+                    title="Cards View"
+                  >
+                    <LayoutGrid className="size-3.5" />
+                    <span className="hidden sm:inline">Cards</span>
+                  </Button>
+                </div>
+
+                {canCreate && (
+                  <Button size="sm" onClick={openNewOccurrenceModal} className="h-8 text-xs font-semibold gap-1.5 shadow-2xs">
+                    <Plus className="size-3.5" />
+                    <span>Schedule Session</span>
+                  </Button>
+                )}
               </div>
             </div>
 
+            {/* Loading / Empty / Data Rendering */}
             {loadingOccurrences ? (
-              <div className="p-12 text-center text-muted-foreground text-sm">
+              <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
                 <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                Loading daily schedule from tenant database...
+                Loading classes schedule from database...
               </div>
             ) : filteredOccurrences.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+              <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
                 <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                   <Calendar className="size-6" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No Class Occurrences Scheduled</h3>
+                <h3 className="text-base font-semibold text-foreground">No Class Sessions Found</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  No sessions generated for {selectedDate}. Generate sessions from recurring rules or schedule a one-off session.
+                  {searchTerm || selectedBranchFilter || selectedStatusFilter !== 'ALL' || selectedCheckInFilter !== 'ALL'
+                    ? "No sessions match the selected filters. Try broadening your search or resetting filters."
+                    : `No sessions scheduled for the selected timeframe. Generate sessions from recurring rules or schedule a one-off session.`}
                 </p>
                 {canCreate && (
                   <Button size="sm" onClick={openNewOccurrenceModal}>
@@ -1602,105 +1807,383 @@ export const ClassesWorkspace: React.FC = () => {
                   </Button>
                 )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredOccurrences.map((occ) => (
-                  <div
-                    key={occ.id}
-                    className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                            {occ.delivery_mode}
-                          </span>
-                          <h3 className="text-base font-semibold text-foreground mt-2">
-                            {occ.template_name || occ.class_name || 'Class Session'}
-                          </h3>
-                          <p className="text-xs text-muted-foreground mt-0.5">{occ.branch_name || 'Branch Session'}</p>
-                        </div>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded font-medium ${
-                            occ.status === 'OPEN' || occ.status === 'SCHEDULED'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                              : occ.status === 'CANCELLED'
-                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                          }`}
-                        >
-                          {occ.status}
-                        </span>
-                      </div>
+            ) : viewMode === 'list' ? (
+              /* ==================== LIST / TABLE VIEW ==================== */
+              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
+                        <th className="py-3 px-4">Class Session</th>
+                        <th className="py-3 px-4">Branch</th>
+                        <th className="py-3 px-4">Date & Time</th>
+                        <th className="py-3 px-4">Assigned Trainer</th>
+                        <th className="py-3 px-4">Trainer Check-in</th>
+                        <th className="py-3 px-4">Bookings</th>
+                        <th className="py-3 px-4">Waitlist</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {filteredOccurrences.map((occ) => {
+                        const isCompleted = occ.status === 'COMPLETED';
+                        const isCancelled = occ.status === 'CANCELLED';
+                        const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
 
-                      <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Clock className="size-3.5 text-muted-foreground shrink-0" />
-                          <span>
-                            {new Date(occ.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-                            {new Date(occ.end_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Users className="size-3.5 text-muted-foreground shrink-0" />
-                          <span>
-                            Capacity: {occ.capacity} (Waitlist: {occ.waitlist_capacity})
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
-                          <span>
-                            Trainers:{' '}
-                            {occ.trainers && occ.trainers.length > 0
-                              ? occ.trainers.map((t: any) => `${t.trainer_name || 'Trainer'} (${t.trainer_role})`).join(', ')
-                              : occ.assigned_trainers && occ.assigned_trainers.length > 0
-                              ? occ.assigned_trainers.map((t) => t.trainer_name || 'Trainer').join(', ')
-                              : 'Unassigned'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="size-3.5 text-primary shrink-0" />
-                          <span>
-                            Workout Content:{' '}
-                            {(occ as any).active_content ? (
-                              <span className="font-semibold text-foreground">
-                                {(occ as any).active_content.title}
+                        const isCheckedIn = Boolean(
+                          occ.trainer_checked_in ||
+                          occ.trainer_check_in_details?.checked_in ||
+                          (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
+                          (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
+                        );
+
+                        const allTrainers = [
+                          ...(occ.trainers || []),
+                          ...(occ.assigned_trainers || []),
+                        ];
+                        const hasTrainer = allTrainers.length > 0;
+                        const leadTrainer = allTrainers[0];
+
+                        const startTimeFormatted = occ.start_at
+                          ? formatTime12h(occ.start_at.slice(11, 16))
+                          : (occ.start_time ? formatTime12h(occ.start_time.slice(0, 5)) : '');
+                        const endTimeFormatted = occ.end_at
+                          ? formatTime12h(occ.end_at.slice(11, 16))
+                          : (occ.end_time ? formatTime12h(occ.end_time.slice(0, 5)) : '');
+
+                        const bookedCount = occ.booking_count ?? 0;
+                        const waitlistCount = occ.waitlist_count ?? 0;
+
+                        return (
+                          <tr key={occ.id} className="hover:bg-muted/30 transition-colors">
+                            {/* Class Session Info */}
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                                <span>{occ.template_name || occ.class_name || 'Class Session'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium bg-primary/5 text-primary border-primary/20">
+                                  {occ.delivery_mode || 'OFFLINE'}
+                                </Badge>
+                                {(occ as any).active_content?.title && (
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate max-w-[140px]">
+                                    <Sparkles className="size-2.5 text-primary shrink-0" />
+                                    {(occ as any).active_content.title}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Branch */}
+                            <td className="py-3 px-4">
+                              <span className="inline-flex items-center gap-1 font-medium text-foreground text-xs">
+                                <MapPin className="size-3 text-primary shrink-0" />
+                                <span className="truncate max-w-[130px]">{occ.branch_name || 'Main Branch'}</span>
                               </span>
+                            </td>
+
+                            {/* Date & Time */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <div className="font-semibold text-foreground text-xs flex items-center gap-1">
+                                <Calendar className="size-3 text-muted-foreground shrink-0" />
+                                {occ.occurrence_date}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
+                                <Clock className="size-2.5 shrink-0" />
+                                {startTimeFormatted} – {endTimeFormatted}
+                              </div>
+                            </td>
+
+                            {/* Assigned Trainer */}
+                            <td className="py-3 px-4">
+                              {hasTrainer ? (
+                                <div className="space-y-0.5">
+                                  {allTrainers.slice(0, 2).map((t, idx) => (
+                                    <div key={t.id || idx} className="flex items-center gap-1 text-xs">
+                                      <span className="font-medium text-foreground truncate max-w-[120px]">
+                                        {t.trainer_name || t.trainer_code || 'Trainer'}
+                                      </span>
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
+                                        {t.trainer_role || 'Lead'}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                  {allTrainers.length > 2 && (
+                                    <span className="text-[10px] text-muted-foreground">+{allTrainers.length - 2} more</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground italic text-[11px]">Unassigned</span>
+                              )}
+                            </td>
+
+                            {/* Trainer Check-In Status */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              {isCheckedIn ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[11px] font-bold gap-1 px-2 py-0.5 inline-flex items-center"
+                                >
+                                  <CheckCircle2 className="size-3 text-emerald-500 shrink-0" />
+                                  <span>Checked In</span>
+                                </Badge>
+                              ) : hasTrainer ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[11px] font-semibold gap-1 px-2 py-0.5 inline-flex items-center"
+                                >
+                                  <Clock className="size-3 text-amber-500 shrink-0" />
+                                  <span>Pending Check-in</span>
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground bg-muted/40 text-[10px] px-1.5 py-0.5">
+                                  No Trainer
+                                </Badge>
+                              )}
+                            </td>
+
+                            {/* Bookings Made */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <Badge
+                                variant="outline"
+                                className={`text-xs font-bold px-2 py-0.5 ${
+                                  isFull
+                                    ? 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                                    : 'bg-primary/10 text-primary border-primary/20'
+                                }`}
+                              >
+                                {isFull ? `FULL (${bookedCount}/${occ.capacity})` : `${bookedCount} / ${occ.capacity} Booked`}
+                              </Badge>
+                            </td>
+
+                            {/* Waitlist */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              {waitlistCount > 0 ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 text-xs font-bold gap-1 px-2 py-0.5 inline-flex items-center"
+                                >
+                                  <Users className="size-2.5 shrink-0" />
+                                  <span>{waitlistCount} Waitlist</span>
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  0 / {occ.waitlist_capacity || 0}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Session Status */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] font-semibold px-2 py-0.5 ${
+                                  isCompleted
+                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                                    : isCancelled
+                                    ? 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                                    : occ.status === 'OPEN'
+                                    ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
+                                    : 'bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                {occ.status || 'SCHEDULED'}
+                              </Badge>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={() => setAttendanceModalOccurrence(occ)}
+                                  className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
+                                  title="Record or inspect attendance and member bookings"
+                                >
+                                  <Users className="size-3" />
+                                  <span>Attendance & Bookings</span>
+                                </Button>
+
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedOccurrence(occ);
+                                      setTrainerError(null);
+                                      setIsAssignTrainerOpen(true);
+                                    }}
+                                    className="h-7 px-2 text-xs"
+                                    title="Assign or reassign trainers"
+                                  >
+                                    Assign
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              /* ==================== CARDS VIEW ==================== */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOccurrences.map((occ) => {
+                  const isCompleted = occ.status === 'COMPLETED';
+                  const isCancelled = occ.status === 'CANCELLED';
+                  const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
+
+                  const isCheckedIn = Boolean(
+                    occ.trainer_checked_in ||
+                    occ.trainer_check_in_details?.checked_in ||
+                    (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
+                    (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
+                  );
+
+                  const allTrainers = [
+                    ...(occ.trainers || []),
+                    ...(occ.assigned_trainers || []),
+                  ];
+                  const hasTrainer = allTrainers.length > 0;
+
+                  const startTimeFormatted = occ.start_at
+                    ? formatTime12h(occ.start_at.slice(11, 16))
+                    : (occ.start_time ? formatTime12h(occ.start_time.slice(0, 5)) : '');
+                  const endTimeFormatted = occ.end_at
+                    ? formatTime12h(occ.end_at.slice(11, 16))
+                    : (occ.end_time ? formatTime12h(occ.end_time.slice(0, 5)) : '');
+
+                  const bookedCount = occ.booking_count ?? 0;
+                  const waitlistCount = occ.waitlist_count ?? 0;
+
+                  return (
+                    <div
+                      key={occ.id}
+                      className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
+                    >
+                      <div>
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                              {occ.delivery_mode}
+                            </span>
+                            <h3 className="text-base font-semibold text-foreground mt-2">
+                              {occ.template_name || occ.class_name || 'Class Session'}
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <MapPin className="size-3 text-primary shrink-0" />
+                              <span>{occ.branch_name || 'Branch Session'}</span>
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                occ.status === 'OPEN' || occ.status === 'SCHEDULED'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                  : occ.status === 'CANCELLED'
+                                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                              }`}
+                            >
+                              {occ.status}
+                            </span>
+                            {isCheckedIn ? (
+                              <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1">
+                                <CheckCircle2 className="size-2.5" /> Checked In
+                              </Badge>
+                            ) : hasTrainer ? (
+                              <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1">
+                                <Clock className="size-2.5" /> Pending Check-in
+                              </Badge>
                             ) : (
-                              <span className="text-muted-foreground italic">No content mapped yet</span>
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground bg-muted/40">
+                                Unassigned
+                              </Badge>
                             )}
-                          </span>
+                          </div>
+                        </div>
+
+                        {/* Details */}
+                        <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Clock className="size-3.5 text-primary shrink-0" />
+                            <span className="font-semibold text-foreground">
+                              {occ.occurrence_date} · {startTimeFormatted} - {endTimeFormatted}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50">
+                            <span className="font-semibold text-foreground">
+                              Bookings: <strong className="text-primary">{bookedCount} / {occ.capacity}</strong>
+                            </span>
+                            <span className="font-semibold text-foreground">
+                              Waitlist: <strong className={waitlistCount > 0 ? 'text-purple-600' : 'text-muted-foreground'}>{waitlistCount}</strong>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
+                            <span>
+                              Trainers:{' '}
+                              {hasTrainer
+                                ? allTrainers.map((t: any) => `${t.trainer_name || 'Trainer'} (${t.trainer_role || 'Lead'})`).join(', ')
+                                : 'Unassigned'}
+                            </span>
+                          </div>
+                          {(occ as any).active_content && (
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="size-3.5 text-primary shrink-0" />
+                              <span>
+                                Workout Content:{' '}
+                                <span className="font-semibold text-foreground">
+                                  {(occ as any).active_content.title}
+                                </span>
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="mt-5 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2">
-                      {canEdit && (
+                      {/* Footer Actions */}
+                      <div className="mt-5 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2">
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedOccurrence(occ);
-                            setTrainerError(null);
-                            setIsAssignTrainerOpen(true);
-                          }}
-                          className="flex-1 text-xs"
+                          onClick={() => setAttendanceModalOccurrence(occ)}
+                          className="flex-1 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                         >
-                          Assign Trainer
+                          <Users className="size-3.5" />
+                          <span>Attendance & Bookings</span>
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => assignContentMutation.mutate(occ.id)}
-                        disabled={assignContentMutation.isPending}
-                        className="flex-1 text-xs"
-                      >
-                        Rotate Content
-                      </Button>
+                        {canEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedOccurrence(occ);
+                              setTrainerError(null);
+                              setIsAssignTrainerOpen(true);
+                            }}
+                            className="text-xs"
+                          >
+                            Assign Trainer
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => assignContentMutation.mutate(occ.id)}
+                          disabled={assignContentMutation.isPending}
+                          className="text-xs"
+                        >
+                          Rotate
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -3114,6 +3597,16 @@ export const ClassesWorkspace: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Attendance & Bookings Modal */}
+      <ClassAttendanceModal
+        occurrence={attendanceModalOccurrence}
+        isOpen={!!attendanceModalOccurrence}
+        onClose={() => {
+          setAttendanceModalOccurrence(null);
+          refetchOccurrences();
+        }}
+      />
     </div>
   );
 };

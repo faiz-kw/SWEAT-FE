@@ -22,6 +22,8 @@ export interface AdminUserRow extends Row {
   active_location_id?: string;
   active_location_name?: string;
   allowed_locations?: any[];
+  reports_to_id?: string;
+  reports_to_name?: string;
   status: "Active" | "Inactive" | "Invited" | "Suspended";
   is_active: boolean;
   date_joined?: string;
@@ -69,6 +71,10 @@ export interface LocationRow extends Row {
   capacity: number;
   operating_hours: string;
   is_active: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofence_radius_meters?: number;
+  geofence_enforcement?: 'STRICT' | 'FLAG_AUDIT';
   tenant?: string;       // tenant ID (PrimaryKey)
   tenant_name?: string;  // tenant display name (read-only from API)
   created_at?: string;
@@ -220,6 +226,7 @@ export async function inviteUserApi(payload: {
   password?: string;
   location_ids?: string[];
   tenant_id?: string;
+  reports_to_id?: string;
 }): Promise<any> {
   const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
   let isTenant = false;
@@ -242,6 +249,7 @@ export async function inviteUserApi(payload: {
       role: payload.role,
       role_id: payload.role_id,
       department_id: payload.department_id,
+      reports_to_id: payload.reports_to_id,
       branch: locId,
       branch_id: locId,
       home_branch: locId,
@@ -376,6 +384,10 @@ export async function fetchLocationsApi(tenantId?: string): Promise<LocationRow[
       capacity: b.capacity || 100,
       operating_hours: b.operating_hours || '06:00 - 22:00',
       is_active: b.is_active ?? (b.status === 'ACTIVE'),
+      latitude: b.latitude ? Number(b.latitude) : null,
+      longitude: b.longitude ? Number(b.longitude) : null,
+      geofence_radius_meters: b.geofence_radius_meters || 200,
+      geofence_enforcement: b.geofence_enforcement || 'STRICT',
       created_at: b.created_at,
     }));
   }
@@ -391,11 +403,23 @@ export async function fetchTenantsForDropdownApi(): Promise<{ id: string; name: 
 }
 
 export async function createLocationApi(payload: Partial<LocationRow>): Promise<LocationRow> {
+  const currentUser = getCurrentUser();
+  const isTenant = currentUser?.userType === 'tenant';
+  if (isTenant) {
+    const res = await api.post<any>("/tenant/branches/", payload);
+    return res.data;
+  }
   const res = await api.post<LocationRow>("/platform/locations/", payload);
   return res.data;
 }
 
 export async function updateLocationApi(locationId: string, payload: Partial<LocationRow>): Promise<LocationRow> {
+  const currentUser = getCurrentUser();
+  const isTenant = currentUser?.userType === 'tenant';
+  if (isTenant) {
+    const res = await api.patch<any>(`/tenant/branches/${locationId}/`, payload);
+    return res.data;
+  }
   const res = await api.patch<LocationRow>(`/platform/locations/${locationId}/`, payload);
   return res.data;
 }
@@ -534,6 +558,9 @@ export interface BranchWorkingHoursItem {
   open_time?: string | null;
   close_time?: string | null;
   is_24_hours: boolean;
+  has_split_shift?: boolean;
+  open_time_2?: string | null;
+  close_time_2?: string | null;
 }
 
 export interface BranchOperatingExceptionItem {

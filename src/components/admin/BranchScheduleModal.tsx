@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
   Calendar, Clock, AlertCircle, CheckCircle2, Trash2, Plus,
-  RefreshCw, Info, CalendarDays
+  RefreshCw, Info, CalendarDays, Copy, Layers, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +39,16 @@ const DAYS_OF_WEEK = [
   { day: 7, name: "Sunday", short: "Sun" },
 ];
 
+interface DayScheduleConfig {
+  is_open: boolean;
+  open_time: string;
+  close_time: string;
+  is_24_hours: boolean;
+  has_split_shift: boolean;
+  open_time_2: string;
+  close_time_2: string;
+}
+
 interface BranchScheduleModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,29 +58,46 @@ interface BranchScheduleModalProps {
     city?: string;
     operating_hours?: string;
   } | null;
+  availableBranches?: {
+    id: string;
+    name: string;
+    city?: string;
+  }[];
 }
 
 export function BranchScheduleModal({
   open,
   onOpenChange,
   branch,
+  availableBranches = [],
 }: BranchScheduleModalProps) {
   const [activeTab, setActiveTab] = React.useState<"weekly" | "exceptions">("weekly");
   const [loading, setLoading] = React.useState(false);
   const [savingWeekly, setSavingWeekly] = React.useState(false);
 
+  // Quick Apply toolbar states
+  const [quickShift1Open, setQuickShift1Open] = React.useState("06:00");
+  const [quickShift1Close, setQuickShift1Close] = React.useState("11:30");
+  const [quickSplitShift, setQuickSplitShift] = React.useState(false);
+  const [quickShift2Open, setQuickShift2Open] = React.useState("16:30");
+  const [quickShift2Close, setQuickShift2Close] = React.useState("22:00");
+
+  // Replicate from branch state
+  const [sourceBranchId, setSourceBranchId] = React.useState("");
+  const [replicating, setReplicating] = React.useState(false);
+
   // Weekly schedule state (days 1 to 7)
-  const [weeklySchedule, setWeeklySchedule] = React.useState<
-    Record<number, { is_open: boolean; open_time: string; close_time: string; is_24_hours: boolean }>
-  >(() => {
-    const init: Record<number, any> = {};
+  const [weeklySchedule, setWeeklySchedule] = React.useState<Record<number, DayScheduleConfig>>(() => {
+    const init: Record<number, DayScheduleConfig> = {};
     for (let d = 1; d <= 7; d++) {
-      // Default: Mon-Sat open 06:00-22:00, Sun closed
       init[d] = {
         is_open: d !== 7,
         open_time: "06:00",
         close_time: "22:00",
         is_24_hours: false,
+        has_split_shift: false,
+        open_time_2: "16:30",
+        close_time_2: "22:00",
       };
     }
     return init;
@@ -85,6 +112,12 @@ export function BranchScheduleModal({
   const [newExcCloseTime, setNewExcCloseTime] = React.useState("14:00");
   const [addingException, setAddingException] = React.useState(false);
 
+  // Filter other branches for replicate feature
+  const otherBranches = React.useMemo(() => {
+    if (!branch?.id || !availableBranches) return [];
+    return availableBranches.filter((b) => b.id !== branch.id);
+  }, [availableBranches, branch?.id]);
+
   // Load data on modal open
   const loadData = React.useCallback(async () => {
     if (!branch?.id) return;
@@ -96,15 +129,18 @@ export function BranchScheduleModal({
       ]);
 
       if (hoursData && hoursData.length > 0) {
-        const next: Record<number, any> = {};
+        const next: Record<number, DayScheduleConfig> = {};
         for (let d = 1; d <= 7; d++) {
           const found = hoursData.find((h) => h.day_of_week === d);
           if (found) {
             next[d] = {
               is_open: !!found.is_open,
               open_time: found.open_time || "06:00",
-              close_time: found.close_time || "22:00",
+              close_time: found.close_time || (found.has_split_shift ? "11:30" : "22:00"),
               is_24_hours: !!found.is_24_hours,
+              has_split_shift: !!found.has_split_shift,
+              open_time_2: found.open_time_2 || "16:30",
+              close_time_2: found.close_time_2 || "22:00",
             };
           } else {
             next[d] = {
@@ -112,6 +148,9 @@ export function BranchScheduleModal({
               open_time: "06:00",
               close_time: "22:00",
               is_24_hours: false,
+              has_split_shift: false,
+              open_time_2: "16:30",
+              close_time_2: "22:00",
             };
           }
         }
@@ -131,24 +170,126 @@ export function BranchScheduleModal({
     }
   }, [open, branch?.id, loadData]);
 
-  // Presets
-  const applyPreset = (preset: "mon_sat" | "all_open" | "weekdays_only") => {
+  // Quick Apply actions
+  const handleApplyToAllDays = () => {
     setWeeklySchedule((prev) => {
       const next = { ...prev };
       for (let d = 1; d <= 7; d++) {
-        if (preset === "mon_sat") {
-          next[d] = { ...next[d], is_open: d !== 7 };
-        } else if (preset === "all_open") {
-          next[d] = { ...next[d], is_open: true };
-        } else if (preset === "weekdays_only") {
-          next[d] = { ...next[d], is_open: d <= 5 };
+        next[d] = {
+          ...next[d],
+          is_open: true,
+          open_time: quickShift1Open,
+          close_time: quickShift1Close,
+          has_split_shift: quickSplitShift,
+          open_time_2: quickShift2Open,
+          close_time_2: quickShift2Close,
+        };
+      }
+      return next;
+    });
+    toast.success("Applied to all 7 days! You can tweak individual days manually below before saving.");
+  };
+
+  const handleApplyMonFri = () => {
+    setWeeklySchedule((prev) => {
+      const next = { ...prev };
+      for (let d = 1; d <= 7; d++) {
+        if (d <= 5) {
+          next[d] = {
+            ...next[d],
+            is_open: true,
+            open_time: quickShift1Open,
+            close_time: quickShift1Close,
+            has_split_shift: quickSplitShift,
+            open_time_2: quickShift2Open,
+            close_time_2: quickShift2Close,
+          };
+        } else {
+          next[d] = { ...next[d], is_open: false };
         }
       }
       return next;
     });
-    toast.info("Schedule preset applied. Click 'Save Weekly Schedule' to persist.");
+    toast.success("Applied Mon–Fri (Sat & Sun marked closed)! Click 'Save Weekly Schedule' when ready.");
   };
 
+  const handleApplyMonSat = () => {
+    setWeeklySchedule((prev) => {
+      const next = { ...prev };
+      for (let d = 1; d <= 7; d++) {
+        if (d <= 6) {
+          next[d] = {
+            ...next[d],
+            is_open: true,
+            open_time: quickShift1Open,
+            close_time: quickShift1Close,
+            has_split_shift: quickSplitShift,
+            open_time_2: quickShift2Open,
+            close_time_2: quickShift2Close,
+          };
+        } else {
+          next[d] = { ...next[d], is_open: false };
+        }
+      }
+      return next;
+    });
+    toast.success("Applied Mon–Sat (Sunday marked closed)! Click 'Save Weekly Schedule' when ready.");
+  };
+
+  // Replicate schedule from another branch
+  const handleReplicateSchedule = async () => {
+    if (!sourceBranchId) {
+      toast.error("Please select a branch to replicate schedule from.");
+      return;
+    }
+    const sourceBranch = availableBranches.find((b) => b.id === sourceBranchId);
+    setReplicating(true);
+    try {
+      const hoursData = await fetchBranchWorkingHoursApi(sourceBranchId);
+      if (!hoursData || hoursData.length === 0) {
+        toast.warning(
+          `Branch "${sourceBranch?.name || "Selected"}" does not have custom schedule configured yet.`
+        );
+        return;
+      }
+
+      const next: Record<number, DayScheduleConfig> = {};
+      for (let d = 1; d <= 7; d++) {
+        const found = hoursData.find((h) => h.day_of_week === d);
+        if (found) {
+          next[d] = {
+            is_open: !!found.is_open,
+            open_time: found.open_time || "06:00",
+            close_time: found.close_time || (found.has_split_shift ? "11:30" : "22:00"),
+            is_24_hours: !!found.is_24_hours,
+            has_split_shift: !!found.has_split_shift,
+            open_time_2: found.open_time_2 || "16:30",
+            close_time_2: found.close_time_2 || "22:00",
+          };
+        } else {
+          next[d] = {
+            is_open: false,
+            open_time: "06:00",
+            close_time: "22:00",
+            is_24_hours: false,
+            has_split_shift: false,
+            open_time_2: "16:30",
+            close_time_2: "22:00",
+          };
+        }
+      }
+      setWeeklySchedule(next);
+      toast.success(
+        `Schedule successfully copied from "${sourceBranch?.name}"! Review and adjust any day before clicking "Save Weekly Schedule".`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to replicate schedule.");
+    } finally {
+      setReplicating(false);
+    }
+  };
+
+  // Per-day toggles
   const handleDayToggle = (day: number, checked: boolean) => {
     setWeeklySchedule((prev) => ({
       ...prev,
@@ -159,7 +300,24 @@ export function BranchScheduleModal({
     }));
   };
 
-  const handleTimeChange = (day: number, field: "open_time" | "close_time", timeStr: string) => {
+  const handleDaySplitToggle = (day: number) => {
+    setWeeklySchedule((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        has_split_shift: !prev[day].has_split_shift,
+        close_time: !prev[day].has_split_shift && prev[day].close_time === "22:00" ? "11:30" : prev[day].close_time,
+        open_time_2: prev[day].open_time_2 || "16:30",
+        close_time_2: prev[day].close_time_2 || "22:00",
+      },
+    }));
+  };
+
+  const handleTimeChange = (
+    day: number,
+    field: "open_time" | "close_time" | "open_time_2" | "close_time_2",
+    timeStr: string
+  ) => {
     setWeeklySchedule((prev) => ({
       ...prev,
       [day]: {
@@ -178,8 +336,11 @@ export function BranchScheduleModal({
         day_of_week: Number(dayStr),
         is_open: conf.is_open,
         is_24_hours: conf.is_24_hours,
+        has_split_shift: conf.is_open && !conf.is_24_hours ? conf.has_split_shift : false,
         open_time: conf.is_open && !conf.is_24_hours ? conf.open_time : null,
         close_time: conf.is_open && !conf.is_24_hours ? conf.close_time : null,
+        open_time_2: conf.is_open && !conf.is_24_hours && conf.has_split_shift ? conf.open_time_2 : null,
+        close_time_2: conf.is_open && !conf.is_24_hours && conf.has_split_shift ? conf.close_time_2 : null,
       }));
 
       await saveBranchWorkingHoursBulkApi(branch.id, payload);
@@ -248,7 +409,7 @@ export function BranchScheduleModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border-border bg-card">
+      <DialogContent className="sm:max-w-[780px] max-h-[92vh] overflow-y-auto p-0 gap-0 rounded-2xl border-border bg-card shadow-2xl">
         <DialogHeader className="p-6 pb-4 border-b border-border/60 bg-muted/20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -280,87 +441,254 @@ export function BranchScheduleModal({
               </TabsTrigger>
             </TabsList>
 
-            {/* TAB 1: WEEKLY OPERATING SCHEDULE (CLOSED DAYS) */}
+            {/* TAB 1: WEEKLY OPERATING SCHEDULE */}
             <TabsContent value="weekly" className="space-y-5 focus-visible:outline-none">
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-muted/30 rounded-xl border border-border/60 text-xs">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Info className="size-4 text-primary shrink-0" />
-                  <span>Toggle off any weekday to declare the branch as closed on that day.</span>
+              {/* REPLICATE SCHEDULE FROM ANOTHER BRANCH */}
+              {otherBranches.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-border/70 bg-muted/30">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Copy className="size-4 text-primary shrink-0" />
+                    <span className="font-semibold text-foreground">Replicate from another branch:</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={sourceBranchId}
+                      onChange={(e) => setSourceBranchId(e.target.value)}
+                      className="h-8 text-xs bg-background rounded-lg border border-border px-2.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="">Choose source branch...</option>
+                      {otherBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} {b.city ? `(${b.city})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5 font-medium hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                      disabled={!sourceBranchId || replicating}
+                      onClick={handleReplicateSchedule}
+                    >
+                      {replicating ? (
+                        <>
+                          <RefreshCw className="size-3.5 animate-spin" /> Copying...
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="size-3.5" /> Replicate Schedule
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2"
-                    onClick={() => applyPreset("mon_sat")}
-                  >
-                    Mon–Sat (Sun Closed)
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2"
-                    onClick={() => applyPreset("all_open")}
-                  >
-                    All 7 Days
-                  </Button>
+              )}
+
+              {/* QUICK APPLY TOOLBAR: CONFIGURE ONCE & APPLY ALL */}
+              <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-primary" />
+                    <span className="text-xs font-bold text-foreground">Quick Setup & Apply to All Days</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="quick-split-toggle"
+                      checked={quickSplitShift}
+                      onCheckedChange={(checked) => {
+                        setQuickSplitShift(checked);
+                        if (checked && quickShift1Close === "22:00") {
+                          setQuickShift1Close("11:30");
+                        }
+                      }}
+                    />
+                    <Label htmlFor="quick-split-toggle" className="text-xs font-semibold cursor-pointer select-none">
+                      Two Batches (Morning + Evening)
+                    </Label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Batch 1 */}
+                  <div className="p-2.5 rounded-lg bg-background/80 border border-border/60 space-y-1.5">
+                    <span className="text-[11px] font-bold text-primary block">
+                      {quickSplitShift ? "Morning Batch (Batch 1)" : "Operating Hours"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <ClockTimePicker
+                          id="quick_open_1"
+                          value={quickShift1Open}
+                          placeholder="Opens"
+                          onChange={(v) => setQuickShift1Open(v)}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono">to</span>
+                      <div className="flex-1">
+                        <ClockTimePicker
+                          id="quick_close_1"
+                          value={quickShift1Close}
+                          placeholder="Closes"
+                          onChange={(v) => setQuickShift1Close(v)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Batch 2 (Visible if split shift active) */}
+                  {quickSplitShift ? (
+                    <div className="p-2.5 rounded-lg bg-background/80 border border-border/60 space-y-1.5">
+                      <span className="text-[11px] font-bold text-primary block">
+                        Evening Batch (Batch 2)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <ClockTimePicker
+                            id="quick_open_2"
+                            value={quickShift2Open}
+                            placeholder="Opens"
+                            onChange={(v) => setQuickShift2Open(v)}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono">to</span>
+                        <div className="flex-1">
+                          <ClockTimePicker
+                            id="quick_close_2"
+                            value={quickShift2Close}
+                            placeholder="Closes"
+                            onChange={(v) => setQuickShift2Close(v)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="hidden sm:flex items-center text-xs text-muted-foreground px-3 py-2 rounded-lg bg-background/40 border border-border/30">
+                      <span>Enable "Two Batches" toggle above if this branch operates morning and evening split shifts.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Apply Buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-primary/10">
+                  <div className="text-[11px] text-muted-foreground">
+                    Click an action to apply these hours across days. You can still tweak individual days below:
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-[11px] font-semibold px-2.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={handleApplyToAllDays}
+                    >
+                      Apply to All 7 Days
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] font-semibold px-2.5"
+                      onClick={handleApplyMonSat}
+                    >
+                      Mon–Sat (Sun Closed)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] font-semibold px-2.5"
+                      onClick={handleApplyMonFri}
+                    >
+                      Mon–Fri Only
+                    </Button>
+                  </div>
                 </div>
               </div>
 
+              {/* DAYS LIST */}
               {loading ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground text-xs gap-2">
                   <RefreshCw className="size-4 animate-spin" /> Loading schedule...
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-bold text-foreground">Weekly Day-by-Day Hours</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Toggle off any day to close the branch completely.
+                    </span>
+                  </div>
+
                   {DAYS_OF_WEEK.map(({ day, name, short }) => {
                     const conf = weeklySchedule[day] || {
                       is_open: true,
                       open_time: "06:00",
                       close_time: "22:00",
                       is_24_hours: false,
+                      has_split_shift: false,
+                      open_time_2: "16:30",
+                      close_time_2: "22:00",
                     };
 
                     return (
                       <div
                         key={day}
-                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border transition-all ${
+                        className={`p-3.5 rounded-xl border transition-all ${
                           conf.is_open
-                            ? "bg-card border-border/80 shadow-2xs"
+                            ? "bg-card border-border/80 shadow-2xs space-y-3"
                             : "bg-destructive/5 border-destructive/20"
                         }`}
                       >
-                        {/* Day indicator & Open/Closed switch */}
-                        <div className="flex items-center justify-between sm:justify-start gap-3 min-w-[170px]">
-                          <div className="flex items-center gap-2">
+                        {/* Day Header Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
                             <span className="flex size-7 items-center justify-center rounded-lg bg-muted text-[11px] font-bold text-foreground font-mono">
                               {short}
                             </span>
                             <span className="text-sm font-semibold text-foreground">{name}</span>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              id={`switch-day-${day}`}
-                              checked={conf.is_open}
-                              onCheckedChange={(checked) => handleDayToggle(day, checked)}
-                            />
-                            <span
-                              className={`text-[11px] font-bold uppercase tracking-wider ${
-                                conf.is_open ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                              }`}
-                            >
-                              {conf.is_open ? "Open" : "Closed"}
-                            </span>
+                          <div className="flex items-center gap-3">
+                            {conf.is_open && (
+                              <Button
+                                type="button"
+                                variant={conf.has_split_shift ? "secondary" : "ghost"}
+                                size="sm"
+                                className={`h-7 text-[11px] gap-1.5 px-2.5 border ${
+                                  conf.has_split_shift
+                                    ? "border-primary/40 text-primary font-semibold bg-primary/10 hover:bg-primary/20"
+                                    : "border-border/60 text-muted-foreground hover:text-foreground"
+                                }`}
+                                onClick={() => handleDaySplitToggle(day)}
+                              >
+                                <Layers className="size-3" />
+                                {conf.has_split_shift ? "2 Batches Active" : "+ 2 Batches"}
+                              </Button>
+                            )}
+
+                            <div className="flex items-center gap-2 pl-2 border-l border-border/50">
+                              <Switch
+                                id={`switch-day-${day}`}
+                                checked={conf.is_open}
+                                onCheckedChange={(checked) => handleDayToggle(day, checked)}
+                              />
+                              <span
+                                className={`text-[11px] font-bold uppercase tracking-wider w-12 ${
+                                  conf.is_open ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                                }`}
+                              >
+                                {conf.is_open ? "Open" : "Closed"}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Hours or Closed indicator */}
-                        <div className="mt-2.5 sm:mt-0 flex items-center gap-2">
-                          {conf.is_open ? (
-                            <div className="flex items-center gap-2">
+                        {/* Hours or Closed notice */}
+                        {conf.is_open ? (
+                          !conf.has_split_shift ? (
+                            /* Single Batch Row */
+                            <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+                              <span className="text-[11px] text-muted-foreground w-16 shrink-0 font-medium">Hours:</span>
                               <div className="w-28">
                                 <ClockTimePicker
                                   id={`open-time-${day}`}
@@ -380,12 +708,70 @@ export function BranchScheduleModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5 text-xs text-destructive font-medium px-3 py-1.5 bg-destructive/10 rounded-lg border border-destructive/20">
-                              <AlertCircle className="size-3.5 shrink-0" />
-                              <span>Closed all day · Bookings blocked</span>
+                            /* Two Batches (Morning & Evening) */
+                            <div className="space-y-2 pt-1.5 border-t border-border/40 bg-muted/15 p-2.5 rounded-lg">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-primary w-24 shrink-0">
+                                    Morning Batch:
+                                  </span>
+                                  <div className="w-26">
+                                    <ClockTimePicker
+                                      id={`open-time-1-${day}`}
+                                      value={conf.open_time}
+                                      placeholder="Opens"
+                                      onChange={(timeStr) => handleTimeChange(day, "open_time", timeStr)}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-muted-foreground font-mono">to</span>
+                                  <div className="w-26">
+                                    <ClockTimePicker
+                                      id={`close-time-1-${day}`}
+                                      value={conf.close_time}
+                                      placeholder="Closes"
+                                      onChange={(timeStr) => handleTimeChange(day, "close_time", timeStr)}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-primary w-24 shrink-0">
+                                    Evening Batch:
+                                  </span>
+                                  <div className="w-26">
+                                    <ClockTimePicker
+                                      id={`open-time-2-${day}`}
+                                      value={conf.open_time_2}
+                                      placeholder="Opens"
+                                      onChange={(timeStr) => handleTimeChange(day, "open_time_2", timeStr)}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-muted-foreground font-mono">to</span>
+                                  <div className="w-26">
+                                    <ClockTimePicker
+                                      id={`close-time-2-${day}`}
+                                      value={conf.close_time_2}
+                                      placeholder="Closes"
+                                      onChange={(timeStr) => handleTimeChange(day, "close_time_2", timeStr)}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+                                  <Info className="size-3 text-muted-foreground shrink-0" />
+                                  Branch closed during afternoon interval
+                                </div>
+                              </div>
                             </div>
-                          )}
-                        </div>
+                          )
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs text-destructive font-medium px-3 py-1.5 bg-destructive/10 rounded-lg border border-destructive/20 mt-1">
+                            <AlertCircle className="size-3.5 shrink-0" />
+                            <span>Closed all day · Bookings blocked</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -400,7 +786,7 @@ export function BranchScheduleModal({
                   size="sm"
                   onClick={handleSaveWeekly}
                   disabled={savingWeekly || loading}
-                  className="bg-primary text-primary-foreground gap-2 min-w-[140px]"
+                  className="bg-primary text-primary-foreground gap-2 min-w-[150px]"
                 >
                   {savingWeekly ? (
                     <>
