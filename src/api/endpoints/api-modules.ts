@@ -3,7 +3,7 @@
  * Connects frontend store collections to real backend endpoints with location scoping.
  */
 
-import { api } from "./api";
+import { api } from '../client';
 import { type Row } from "@/services/store";
 
 // ── Cached default location resolver ─────────────────────────────────

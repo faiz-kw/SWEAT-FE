@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { fetchPublicBrandingApi, type PublicBrandingData } from '@/services/api-platform';
+import { fetchPublicBrandingApi, type PublicBrandingData } from '@/api/endpoints/api-platform';
 
 // Route definition for /login
 export const Route = createFileRoute('/login')({

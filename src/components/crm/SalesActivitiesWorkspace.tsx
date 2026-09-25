@@ -29,7 +29,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type { ActivityType, Lead } from '@/types/crm';
 import { LeadDetailModal } from './LeadDetailModal';
 import { CRMPageHeader } from './common/CRMPageHeader';

@@ -2,7 +2,7 @@
  * src/services/workforceApi.ts — API Client for Layer 2 Module A: Workforce & Trainers
  */
 
-import { api } from './api';
+import { api } from '../client';
 import type {
   TrainerProfile,
   TrainerSpecialty,

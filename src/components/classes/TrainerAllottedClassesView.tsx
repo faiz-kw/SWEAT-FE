@@ -18,14 +18,14 @@ import {
   LayoutList,
   LayoutGrid,
 } from 'lucide-react';
-import { classesApi } from '../../services/classesApi';
-import { workforceApi } from '../../services/workforceApi';
+import { classesApi } from '@/api/endpoints/classesApi';
+import { workforceApi } from '@/api/endpoints/workforceApi';
 import { ClassOccurrence } from '../../types/classes';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '../../contexts/auth-context';
+import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 
 interface TrainerAllottedClassesViewProps {

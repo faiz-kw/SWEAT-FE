@@ -15,7 +15,7 @@ import {
   fetchTenantUsageDetailsApi,
   type TenantUsageRow, 
   type UsageSummaryMetrics 
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 
 export function UsageWorkspace() {
   const [usages, setUsages] = React.useState<TenantUsageRow[]>([]);

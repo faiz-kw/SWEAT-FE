@@ -11,7 +11,7 @@ import {
   Lock,
   ShieldCheck,
 } from 'lucide-react';
-import { approvalsApi } from '../../services/approvalsApi';
+import { approvalsApi } from '@/api/endpoints/approvalsApi';
 import { ApprovalRequest, ApprovalActionType, ApprovalStatus } from '../../types/approvals';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin } from '@/lib/nav';
 import { usePermissions } from '../../lib/permissions';
 

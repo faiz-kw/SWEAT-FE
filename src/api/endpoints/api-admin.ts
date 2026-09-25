@@ -3,9 +3,9 @@
  * 100% Real REST Backend Architecture with PostgreSQL Persistence
  */
 
-import { api } from "./api";
-import { getCurrentUser, refreshAccessToken } from "./auth";
-import { type Row } from "./store";
+import { api } from '../client';
+import { getCurrentUser, refreshAccessToken } from '../auth/tokenManager';
+import { type Row } from '@/services/store';
 
 export interface AdminUserRow extends Row {
   branch_access?: { role_id: string; branch_id: string; branch_name: string; enabled: boolean }[];

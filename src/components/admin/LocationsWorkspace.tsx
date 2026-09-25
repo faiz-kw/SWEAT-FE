@@ -19,7 +19,7 @@ import {
   deleteLocationApi,
   fetchTenantsForDropdownApi,
   type LocationRow,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 import { useAuth } from "@/contexts";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

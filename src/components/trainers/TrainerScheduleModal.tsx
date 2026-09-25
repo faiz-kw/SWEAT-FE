@@ -33,10 +33,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { api } from '@/services/api';
-import { workforceApi } from '@/services/workforceApi';
+import { api } from '@/api/client';
+import { workforceApi } from '@/api/endpoints/workforceApi';
 import type { TrainerProfile, EmployeeWorkSchedule, EmployeeScheduleException } from '@/types/workforce';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/api/auth/AuthProvider';
 import { isTrainerUser } from '@/lib/nav';
 import { getWeekInfo, shiftWeek, getMonday, formatToDateStr } from '@/lib/roster-date-utils';
 import {
@@ -146,7 +146,7 @@ export function TrainerScheduleModal({
 
   // Query existing work schedules for target week
   const {
-    data: existingSchedules = [],
+    data: existingSchedulesData,
     isLoading: isLoadingSchedules,
     refetch: refetchSchedules,
   } = useQuery({
@@ -158,6 +158,8 @@ export function TrainerScheduleModal({
       }),
     enabled: !!trainer?.employee_profile && !!selectedBranchId && isOpen,
   });
+
+  const existingSchedules = React.useMemo(() => existingSchedulesData ?? [], [existingSchedulesData]);
 
   // Query schedule exceptions
   const {
@@ -176,6 +178,8 @@ export function TrainerScheduleModal({
 
   // Synchronize local 7-day state when server schedules load
   React.useEffect(() => {
+    if (!isOpen || !existingSchedulesData) return;
+
     const newState: Record<number, DayRosterState> = {
       1: { isOnDuty: false, startTime: '08:00', endTime: '16:00' },
       2: { isOnDuty: false, startTime: '08:00', endTime: '16:00' },
@@ -186,8 +190,8 @@ export function TrainerScheduleModal({
       7: { isOnDuty: false, startTime: '08:00', endTime: '16:00' },
     };
 
-    if (existingSchedules.length > 0) {
-      existingSchedules.forEach((shift) => {
+    if (existingSchedulesData.length > 0) {
+      existingSchedulesData.forEach((shift) => {
         const dow = shift.day_of_week;
         if (dow >= 1 && dow <= 7) {
           newState[dow] = {
@@ -205,7 +209,7 @@ export function TrainerScheduleModal({
     }
 
     setWeeklyState(newState);
-  }, [existingSchedules]);
+  }, [existingSchedulesData, isOpen]);
 
   // Bulk save mutation
   const bulkSyncMutation = useMutation({

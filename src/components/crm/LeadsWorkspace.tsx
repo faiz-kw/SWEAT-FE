@@ -28,11 +28,12 @@ import {
   Eye,
   Lock,
   AlertTriangle,
+  Inbox,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AttentionQueueView } from './AttentionQueueView';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, LeadStatus } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,12 +74,17 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgBadge:
   LOST: { label: 'Lost', color: 'text-muted-foreground border-border', bgBadge: 'bg-muted' },
 };
 
-const PIPELINE_COLUMNS: Array<{ status: LeadStatus; label: string }> = [
-  { status: 'NEW_LEAD', label: 'New Lead' },
-  { status: 'TRIAL_BOOKED', label: 'Trial Booked' },
-  { status: 'INTERESTED', label: 'Interested' },
-  { status: 'HOT_LEAD', label: 'Hot Lead' },
-  { status: 'CONVERTED', label: 'Converted' },
+const PIPELINE_COLUMNS: Array<{
+  status: LeadStatus;
+  label: string;
+  dot: string;
+  badgeColor: string;
+}> = [
+  { status: 'NEW_LEAD', label: 'New Lead', dot: 'bg-blue-500', badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' },
+  { status: 'TRIAL_BOOKED', label: 'Trial Booked', dot: 'bg-amber-500', badgeColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+  { status: 'INTERESTED', label: 'Interested', dot: 'bg-purple-500', badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' },
+  { status: 'HOT_LEAD', label: 'Hot Lead', dot: 'bg-rose-500', badgeColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+  { status: 'CONVERTED', label: 'Converted', dot: 'bg-emerald-500', badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
 ];
 
 function formatDuration(seconds: number): string {
@@ -113,6 +119,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [campaignFilter, setCampaignFilter] = React.useState<string>('');
   const [slaFilter, setSlaFilter] = React.useState<string>('ALL');
   const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
+  const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'UNASSIGNED'>('ALL');
   const [viewMode, setViewMode] = React.useState<'LIST' | 'PIPELINE' | 'ATTENTION'>(initialViewMode);
 
   React.useEffect(() => {
@@ -156,7 +163,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter],
     queryFn: () =>
       crmApi.getLeads({
         current_status: statusFilter,
@@ -165,9 +172,28 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         campaign: campaignFilter.trim() || undefined,
         sla_status: slaFilter !== 'ALL' ? slaFilter : undefined,
         branch_id: branchFilter !== 'ALL' ? branchFilter : undefined,
+        assigned_to_me: scopeFilter === 'MY_LEADS' ? true : undefined,
+        unassigned: scopeFilter === 'UNASSIGNED' ? true : undefined,
       }),
     enabled: canView,
   });
+
+  // Deep-link from notification (?lead_id=...)
+  React.useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const leadId = urlParams.get('lead_id');
+      if (leadId && leads.length > 0) {
+        const found = leads.find((l) => l.id === leadId);
+        if (found) {
+          setSelectedLead(found);
+          setIsDetailOpen(true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [leads]);
 
   const metrics = React.useMemo(() => {
     return {
@@ -336,7 +362,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+      <main className="max-w-[1600px] mx-auto w-full px-3 sm:px-6 py-6">
         {/* KPI Metrics Row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
           <CRMKpiTile
@@ -385,14 +411,52 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
 
         {/* Search & Status Filters */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border/50 pb-4 mb-5">
-          <div className="relative w-full lg:max-w-md shrink-0">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search by name, phone, email, or location..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 text-xs sm:text-sm w-full"
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:max-w-xl">
+            <div className="relative w-full">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name, phone, email, or location..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 text-xs sm:text-sm w-full"
+              />
+            </div>
+            {/* Scope Filter Tabs: All, My Leads, Unassigned */}
+            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 shrink-0">
+              <button
+                type="button"
+                onClick={() => setScopeFilter('ALL')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                  scopeFilter === 'ALL'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                All Permitted
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter('MY_LEADS')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                  scopeFilter === 'MY_LEADS'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                My Leads
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter('UNASSIGNED')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                  scopeFilter === 'UNASSIGNED'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Unassigned
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto py-1 w-full lg:w-auto shrink-0 no-scrollbar">
@@ -508,85 +572,116 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             canAction={canCreate}
           />
         ) : viewMode === 'PIPELINE' ? (
-          /* --- PIPELINE KANBAN BOARD VIEW --- */
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
-            {PIPELINE_COLUMNS.map((col) => {
-              const colLeads = leads.filter((l) => l.current_status === col.status);
-              return (
-                <div
-                  key={col.status}
-                  className="rounded-xl border border-border/70 bg-muted/20 p-3 flex flex-col min-w-[240px] max-h-[75vh]"
-                >
-                  <div className="flex items-center justify-between pb-2 border-b border-border/60 mb-3">
-                    <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
-                      {col.label}
-                    </span>
-                    <Badge variant="secondary" className="text-[10px] font-mono">
-                      {colLeads.length}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2.5 overflow-y-auto flex-1 pr-1">
-                    {colLeads.length === 0 ? (
-                      <div className="p-4 text-center text-muted-foreground text-xs border border-dashed border-border/50 rounded-lg">
-                        Empty stage
+          /* --- PIPELINE KANBAN BOARD VIEW (Fully Responsive Horizontal Canvas) --- */
+          <div className="w-full overflow-x-auto pb-6 scrollbar-thin">
+            <div className="flex gap-4 min-w-max pb-2">
+              {PIPELINE_COLUMNS.map((col) => {
+                const colLeads = leads.filter((l) => l.current_status === col.status);
+                return (
+                  <div
+                    key={col.status}
+                    className="w-[280px] sm:w-[310px] shrink-0 rounded-2xl border border-border/70 bg-card/60 dark:bg-muted/10 p-3.5 flex flex-col shadow-xs"
+                    style={{ minHeight: 'calc(100vh - 360px)' }}
+                  >
+                    <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot} shrink-0`} />
+                        <span className="font-bold text-xs text-foreground uppercase tracking-wider truncate">
+                          {col.label}
+                        </span>
                       </div>
-                    ) : (
-                      colLeads.map((lead) => (
-                        <div
-                          key={lead.id}
-                          onClick={() => openLeadDetail(lead)}
-                          className="p-3 rounded-lg border border-border/60 bg-card hover:border-primary/40 transition-all cursor-pointer shadow-2xs space-y-2"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="font-semibold text-xs text-foreground">
-                              {lead.first_name} {lead.last_name}
-                            </div>
-                            <Eye className="w-3.5 h-3.5 text-muted-foreground opacity-60 hover:opacity-100" />
-                          </div>
+                      <Badge variant="outline" className={`text-xs font-mono font-semibold px-2 py-0.5 rounded-full shrink-0 ${col.badgeColor}`}>
+                        {colLeads.length}
+                      </Badge>
+                    </div>
 
-                          {lead.interested_program_name && (
-                            <div className="text-[11px] text-primary font-medium truncate">
-                              {lead.interested_program_name}
-                            </div>
-                          )}
-
-                          {lead.attention?.is_stuck && (
-                            <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                              <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500" />
-                              <span className="truncate">{lead.attention.primary_reason_display || 'Action Required'}</span>
-                            </div>
-                          )}
-
-                          <div className="text-[11px] text-muted-foreground space-y-0.5">
-                            {lead.phone_normalized && (
-                              <div className="font-mono">{lead.phone_normalized}</div>
-                            )}
-                            {lead.branch_name && <div>📍 {lead.branch_name}</div>}
-                          </div>
-
-                          <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground">
-                            <span>{lead.source_name || 'Direct'}</span>
-                            {canEdit && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openStatusModal(lead);
-                                }}
-                                className="text-primary hover:underline font-medium"
-                              >
-                                Move &rarr;
-                              </button>
-                            )}
-                          </div>
+                    <div className="space-y-2.5 overflow-y-auto flex-1 pr-0.5">
+                      {colLeads.length === 0 ? (
+                        <div className="h-32 flex flex-col items-center justify-center p-4 text-center text-muted-foreground/60 text-xs border border-dashed border-border/60 rounded-xl bg-muted/10">
+                          <Inbox className="w-5 h-5 mb-1.5 opacity-40" />
+                          <span>No leads in {col.label}</span>
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        colLeads.map((lead) => {
+                          const initials = `${lead.first_name?.[0] || ''}${lead.last_name?.[0] || ''}`.toUpperCase() || 'L';
+                          return (
+                            <div
+                              key={lead.id}
+                              onClick={() => openLeadDetail(lead)}
+                              className="p-3.5 rounded-xl border border-border/70 bg-card hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer space-y-2.5 group"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
+                                    {initials}
+                                  </div>
+                                  <div className="font-semibold text-xs text-foreground truncate group-hover:text-primary transition-colors">
+                                    {lead.first_name} {lead.last_name}
+                                  </div>
+                                </div>
+                                <Eye className="w-3.5 h-3.5 text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+                              </div>
+
+                              {lead.interested_program_name && (
+                                <div className="text-[11px] text-primary font-semibold truncate bg-primary/5 px-2 py-0.5 rounded-md inline-block">
+                                  {lead.interested_program_name}
+                                </div>
+                              )}
+
+                              {lead.attention?.is_stuck && (
+                                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20">
+                                  <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500" />
+                                  <span className="truncate">{lead.attention.primary_reason_display || 'Action Required'}</span>
+                                </div>
+                              )}
+
+                              <div className="text-[11px] text-muted-foreground space-y-1">
+                                {lead.phone_normalized && (
+                                  <div className="flex items-center gap-1.5 font-mono">
+                                    <Phone className="w-3 h-3 opacity-60" />
+                                    <span>{lead.phone_normalized}</span>
+                                  </div>
+                                )}
+                                {lead.branch_name && (
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Building2 className="w-3 h-3 opacity-60 shrink-0" />
+                                    <span className="truncate">{lead.branch_name}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="font-semibold text-foreground/80">Agent:</span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-medium ${
+                                    lead.assigned_sales_name ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                                  }`}>
+                                    {lead.assigned_sales_name || 'Unassigned'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+                                <span className="truncate max-w-[120px]">{lead.source_name || 'Direct'}</span>
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openStatusModal(lead);
+                                    }}
+                                    className="text-primary hover:underline font-semibold text-[11px] flex items-center gap-0.5 shrink-0"
+                                  >
+                                    Move &rarr;
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         ) : (
           /* --- LIST / TABLE VIEW --- */
@@ -835,6 +930,14 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           <span className="truncate">{lead.email_normalized}</span>
                         </div>
                       )}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span className="font-semibold text-foreground">Agent:</span>
+                        <span className={`px-1.5 py-0.2 rounded text-[11px] font-medium ${
+                          lead.assigned_sales_name ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {lead.assigned_sales_name || 'Unassigned'}
+                        </span>
+                      </div>
                     </div>
 
                     <div

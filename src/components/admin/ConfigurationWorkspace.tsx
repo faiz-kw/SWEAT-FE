@@ -10,7 +10,7 @@ import {
   fetchTenantSettingsApi, 
   updateTenantSettingsApi, 
   type TenantSettingsData 
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 
 export function ConfigurationWorkspace() {
   const [settings, setSettings] = React.useState<TenantSettingsData>({

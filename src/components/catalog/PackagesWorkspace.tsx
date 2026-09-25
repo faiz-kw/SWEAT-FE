@@ -31,7 +31,7 @@ import {
   Activity,
   Info,
 } from 'lucide-react';
-import { catalogApi } from '@/services/catalogApi';
+import { catalogApi } from '@/api/endpoints/catalogApi';
 import type { Package, PackageVersion, Program, TermsDocument, ProgramTypeItem } from '@/types/catalog';
 import { useAuth } from '@/contexts';
 import { toast } from 'sonner';

@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type {
   TrialBooking,
   TrialConfirmationStatus,

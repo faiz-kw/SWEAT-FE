@@ -11,7 +11,7 @@ import { PageHeader, PageBody } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { onboardTenantApi, type OnboardTenantPayload } from "@/services/api-platform";
+import { onboardTenantApi, type OnboardTenantPayload } from "@/api/endpoints/api-platform";
 import { 
   FEATURE_MODULES_CATALOG, 
   getSubmodulePathsForModule,

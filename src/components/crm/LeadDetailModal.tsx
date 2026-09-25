@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import { ConversionWizard } from './ConversionWizard';
 import type {
   Lead,
@@ -113,7 +113,8 @@ interface LeadDetailModalProps {
   onBookTrialClick?: (lead: Lead) => void;
 }
 
-type TabType = 'overview' | 'timeline' | 'activities' | 'followups' | 'trial' | 'communications' | 'notes' | 'attribution' | 'offers';
+type TabType = 'overview' | 'timeline' | 'followups' | 'trial' | 'commercial' | 'attribution';
+type TimelineSubFilter = 'ALL' | 'ACTIVITIES' | 'COMMUNICATIONS' | 'NOTES' | 'STAGES' | 'TRIALS' | 'FOLLOWUPS';
 
 export function LeadDetailModal({
   lead,
@@ -130,6 +131,8 @@ export function LeadDetailModal({
   const canSendCommunications = can('crm.communications.send');
 
   const [activeTab, setActiveTab] = React.useState<TabType>('overview');
+  const [timelineFilter, setTimelineFilter] = React.useState<TimelineSubFilter>('ALL');
+  const [isAddingNote, setIsAddingNote] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
   const [conversionWizardOpen, setConversionWizardOpen] = React.useState(false);
 
@@ -273,21 +276,21 @@ export function LeadDetailModal({
   const { data: notesList = [], isLoading: isNotesLoading, isError: isNotesError } = useQuery({
     queryKey: ['lead-notes', currentLead?.id],
     queryFn: () => crmApi.getLeadNotes(currentLead!.id),
-    enabled: open && !!currentLead?.id && activeTab === 'notes',
+    enabled: open && !!currentLead?.id && (activeTab === 'timeline' || activeTab === 'overview'),
   });
 
   // Activities query
   const { data: activitiesList = [], isLoading: isActivitiesLoading, isError: isActivitiesError } = useQuery({
     queryKey: ['lead-activities', currentLead?.id],
     queryFn: () => crmApi.getLeadActivities(currentLead!.id),
-    enabled: open && !!currentLead?.id && (activeTab === 'activities' || activeTab === 'overview'),
+    enabled: open && !!currentLead?.id && (activeTab === 'timeline' || activeTab === 'overview'),
   });
 
   // Followups query
   const { data: followupsList = [], isLoading: isFollowupsLoading, isError: isFollowupsError } = useQuery({
     queryKey: ['lead-followups', currentLead?.id],
     queryFn: () => crmApi.getLeadFollowups(currentLead!.id),
-    enabled: open && !!currentLead?.id && activeTab === 'followups',
+    enabled: open && !!currentLead?.id && (activeTab === 'followups' || activeTab === 'overview'),
   });
 
   // Trials query
@@ -319,14 +322,21 @@ export function LeadDetailModal({
       if (onBookTrialClick) onBookTrialClick(currentLead!);
       else setActiveTab('trial');
     } else if (actionCode === 'CALL_LEAD') {
-      setActiveTab('activities');
+      setActiveTab('timeline');
+      setTimelineFilter('ACTIVITIES');
       setIsLoggingActivity(true);
       setActType('CALL');
     } else if (actionCode === 'CREATE_FOLLOWUP' || actionCode === 'POST_TRIAL_FOLLOWUP') {
       setActiveTab('followups');
       setIsSchedulingFollowup(true);
     } else if (actionCode === 'SEND_COMMUNICATION') {
-      setActiveTab('communications');
+      setActiveTab('timeline');
+      if (canViewCommunications) setTimelineFilter('COMMUNICATIONS');
+      if (canSendCommunications) {
+        setIsComposeOpen(true);
+        setComposeChannel('WHATSAPP');
+        setComposeRecipient(currentLead?.phone_normalized || '');
+      }
     } else if (actionCode === 'CONFIRM_TRIAL' || actionCode === 'RESCHEDULE_TRIAL') {
       setActiveTab('trial');
     } else if (actionCode === 'ASSIGN_LEAD') {
@@ -534,14 +544,14 @@ export function LeadDetailModal({
   const { data: communicationsList = [], isLoading: isCommunicationsLoading } = useQuery({
     queryKey: ['lead-communications', currentLead?.id],
     queryFn: () => crmApi.getCommunications({ lead_id: currentLead!.id }),
-    enabled: open && !!currentLead?.id && activeTab === 'communications' && canViewCommunications,
+    enabled: open && !!currentLead?.id && activeTab === 'timeline' && (timelineFilter === 'ALL' || timelineFilter === 'COMMUNICATIONS') && canViewCommunications,
   });
 
-  // Offers & Coupons Query (Phase 9)
+  // Offers & Commercial Query
   const { data: leadOffersData, isLoading: isOffersLoading } = useQuery({
     queryKey: ['lead-offers', currentLead?.id],
     queryFn: () => crmApi.getLeadOffers(currentLead!.id),
-    enabled: open && !!currentLead?.id && activeTab === 'offers',
+    enabled: open && !!currentLead?.id && (activeTab === 'commercial' || activeTab === 'overview'),
   });
 
   // Communication Compose State
@@ -707,55 +717,80 @@ export function LeadDetailModal({
               </div>
             </div>
 
-            {/* ACTION BUTTONS (RBAC GOVERNED) */}
-            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-              {canEdit && onStatusTransitionClick && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onStatusTransitionClick(currentLead)}
-                  className="h-8 text-xs gap-1.5 font-medium"
-                >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                  Move Stage
-                </Button>
-              )}
-              {canEdit && onBookTrialClick && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onBookTrialClick(currentLead)}
-                  className="h-8 text-xs gap-1.5 font-medium"
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  Book Trial
-                </Button>
-              )}
-              {canEdit && !isEditing && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setActiveTab('overview');
-                    setIsEditing(true);
-                  }}
-                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  Edit
-                </Button>
-              )}
-              {canConvert && currentLead.current_status !== 'CONVERTED' && (
-                <Button
-                  size="sm"
-                  onClick={() => setConversionWizardOpen(true)}
-                  className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20"
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  Convert to Member
-                </Button>
-              )}
-            </div>
+            {/* ACTION BUTTONS (STATE & RBAC GOVERNED) */}
+            {(() => {
+              const isConverted = currentLead.current_status === 'CONVERTED';
+              const isTerminalLost = currentLead.current_status === 'LOST' || currentLead.current_status === 'NOT_INTERESTED';
+              const isActiveProspect = !isConverted && !isTerminalLost;
+
+              return (
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                  {isActiveProspect && canEdit && onStatusTransitionClick && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onStatusTransitionClick(currentLead)}
+                      className="h-8 text-xs gap-1.5 font-medium"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      Move Stage
+                    </Button>
+                  )}
+                  {isActiveProspect && canEdit && onBookTrialClick && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onBookTrialClick(currentLead)}
+                      className="h-8 text-xs gap-1.5 font-medium"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      Book Trial
+                    </Button>
+                  )}
+                  {canEdit && !isEditing && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setActiveTab('overview');
+                        setIsEditing(true);
+                      }}
+                      className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      Edit
+                    </Button>
+                  )}
+                  {isActiveProspect && canConvert && (
+                    <Button
+                      size="sm"
+                      onClick={() => setConversionWizardOpen(true)}
+                      className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      Convert to Member
+                    </Button>
+                  )}
+                  {isConverted && (
+                    <Badge variant="outline" className="h-8 px-3 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Active Member
+                    </Badge>
+                  )}
+                  {isTerminalLost && canEdit && onStatusTransitionClick && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onStatusTransitionClick(currentLead)}
+                      className="h-8 text-xs gap-1.5 font-medium border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Reopen Lead
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Conversion Wizard */}
@@ -771,15 +806,16 @@ export function LeadDetailModal({
             />
           )}
 
-          {/* TAB BAR (PART E.9) */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pt-1 -mb-1 border-t border-border/40">
+          {/* CONSOLIDATED 6-TAB BAR */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pt-1 -mb-1 border-t border-border/40">
+            {/* 1. OVERVIEW */}
             <button
               type="button"
               onClick={() => {
                 setActiveTab('overview');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'overview'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -787,6 +823,8 @@ export function LeadDetailModal({
             >
               Overview
             </button>
+
+            {/* 2. TIMELINE */}
             <button
               type="button"
               onClick={() => {
@@ -800,88 +838,15 @@ export function LeadDetailModal({
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              Unified Timeline
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('activities');
-                setIsEditing(false);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'activities'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              Activities
-              {activitiesList.length > 0 && (
+              Timeline
+              {(timelineEvents.length > 0 || activitiesList.length > 0 || notesList.length > 0) && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {activitiesList.length}
+                  {timelineEvents.length || (activitiesList.length + notesList.length)}
                 </span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('attribution');
-                setIsEditing(false);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'attribution'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              Attribution Touches
-              {(attributionsList.length > 0 || (currentLead.attributions && currentLead.attributions.length > 0)) && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {attributionsList.length || currentLead.attributions?.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('offers');
-                setIsEditing(false);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'offers'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Tag className="w-3.5 h-3.5" />
-              Offers & Coupons
-              {leadOffersData && ((leadOffersData.available_coupons?.length || 0) > 0 || (leadOffersData.campaigns?.length || 0) > 0) && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {(leadOffersData.available_coupons?.length || 0) + (leadOffersData.campaigns?.length || 0)}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('trial');
-                setIsEditing(false);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'trial'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              Trial Session
-              {leadTrials.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {leadTrials.length}
-                </span>
-              )}
-            </button>
+
+            {/* 3. FOLLOW-UPS */}
             <button
               type="button"
               onClick={() => {
@@ -902,43 +867,71 @@ export function LeadDetailModal({
                 </span>
               )}
             </button>
+
+            {/* 4. TRIAL */}
             <button
               type="button"
               onClick={() => {
-                setActiveTab('communications');
+                setActiveTab('trial');
                 setIsEditing(false);
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'communications'
+                activeTab === 'trial'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
-              <Send className="w-3.5 h-3.5" />
-              Communications
-              {!canViewCommunications && (
-                <Lock className="w-3 h-3 text-muted-foreground ml-0.5" />
-              )}
-              {canViewCommunications && communicationsList.length > 0 && (
+              <Calendar className="w-3.5 h-3.5" />
+              Trial
+              {leadTrials.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {communicationsList.length}
+                  {leadTrials.length}
                 </span>
               )}
             </button>
+
+            {/* 5. COMMERCIAL */}
             <button
               type="button"
               onClick={() => {
-                setActiveTab('notes');
+                setActiveTab('commercial');
                 setIsEditing(false);
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'notes'
+                activeTab === 'commercial'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Staff Notes
+              <Tag className="w-3.5 h-3.5" />
+              Commercial
+              {leadOffersData && ((leadOffersData.available_coupons?.length || 0) > 0 || (leadOffersData.campaigns?.length || 0) > 0) && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
+                  {(leadOffersData.available_coupons?.length || 0) + (leadOffersData.campaigns?.length || 0)}
+                </span>
+              )}
+            </button>
+
+            {/* 6. ATTRIBUTION */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('attribution');
+                setIsEditing(false);
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === 'attribution'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              Attribution
+              {(attributionsList.length > 0 || (currentLead.attributions && currentLead.attributions.length > 0)) && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
+                  {attributionsList.length || currentLead.attributions?.length}
+                </span>
+              )}
             </button>
           </div>
         </DialogHeader>
@@ -1287,80 +1280,635 @@ export function LeadDetailModal({
             </div>
           )}
 
-          {/* TAB 2: UNIFIED TIMELINE (PART H, 10, 11, 12) */}
+          {/* TAB 2: CONSOLIDATED TIMELINE (Timeline, Activities, Communications, Staff Notes) */}
           {activeTab === 'timeline' && (
             <div className="space-y-4">
-              {isTimelineLoading ? (
-                <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-2">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <p className="text-xs">Aggregating CRM events into unified timeline...</p>
+              {/* Header with Title, Actions & Sub-Filters */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-primary" />
+                    Interaction Timeline & History
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Chronological activity log: touchpoints, messages, internal notes, trials, and stage movements.
+                  </p>
                 </div>
-              ) : isTimelineError ? (
-                <div className="py-8 text-center text-destructive text-xs">
-                  Unable to load unified timeline. Please try again.
-                </div>
-              ) : timelineEvents.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No activity recorded for this lead yet.
-                </div>
-              ) : (
-                <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-border/60">
-                  {timelineEvents.map((evt) => {
-                    let IconComponent = Activity;
-                    let iconBg = 'bg-primary/10 text-primary';
 
-                    if (evt.event_type === 'LEAD_CREATED') {
-                      IconComponent = UserPlus;
-                      iconBg = 'bg-blue-500/10 text-blue-500';
-                    } else if (evt.event_type === 'STATUS_CHANGE') {
-                      IconComponent = ArrowRightCircle;
-                      iconBg = 'bg-amber-500/10 text-amber-500';
-                    } else if (evt.event_type === 'ASSIGNMENT') {
-                      IconComponent = UserCheck;
-                      iconBg = 'bg-indigo-500/10 text-indigo-500';
-                    } else if (evt.event_type === 'ATTRIBUTION_CAPTURED') {
-                      IconComponent = Share2;
-                      iconBg = 'bg-purple-500/10 text-purple-500';
-                    } else if (evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE') {
-                      IconComponent = Calendar;
-                      iconBg = 'bg-teal-500/10 text-teal-500';
-                    } else if (evt.event_type === 'LEAD_NOTE') {
-                      IconComponent = MessageSquare;
-                      iconBg = 'bg-emerald-500/10 text-emerald-500';
-                    } else if (evt.event_type === 'FOLLOWUP_TASK') {
-                      IconComponent = CheckSquare;
-                      iconBg = 'bg-cyan-500/10 text-cyan-500';
+                {/* Contextual Action Buttons */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {canEdit && (
+                    <Button
+                      variant={isLoggingActivity ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        setIsLoggingActivity(!isLoggingActivity);
+                        setIsAddingNote(false);
+                      }}
+                      className="h-8 text-xs gap-1.5 font-medium"
+                    >
+                      {isLoggingActivity ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                      {isLoggingActivity ? 'Cancel' : 'Log Activity'}
+                    </Button>
+                  )}
+
+                  {canEdit && (
+                    <Button
+                      variant={isAddingNote ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        setIsAddingNote(!isAddingNote);
+                        setIsLoggingActivity(false);
+                      }}
+                      className="h-8 text-xs gap-1.5 font-medium"
+                    >
+                      {isAddingNote ? <X className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                      {isAddingNote ? 'Cancel' : 'Add Note'}
+                    </Button>
+                  )}
+
+                  {canSendCommunications && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsComposeOpen(true);
+                        setComposeChannel('WHATSAPP');
+                        setComposeRecipient(currentLead?.phone_normalized || '');
+                      }}
+                      className="h-8 text-xs gap-1.5 font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Compose Message
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* ACTION FORM: LOG ACTIVITY */}
+              {isLoggingActivity && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!actOutcome.trim()) {
+                      toast.error('Outcome is required');
+                      return;
                     }
+                    addActivityMutation.mutate({
+                      activity_type: actType,
+                      outcome: actOutcome.trim(),
+                      notes: actNotes.trim() || undefined,
+                      duration_minutes: actDuration ? Number(actDuration) : undefined,
+                    });
+                  }}
+                  className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3"
+                >
+                  <div className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>Record Sales Touchpoint / Interaction</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsLoggingActivity(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Activity Type *</Label>
+                      <select
+                        value={actType}
+                        onChange={(e) => setActType(e.target.value as ActivityType)}
+                        className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+                      >
+                        <option value="CALL">Phone Call</option>
+                        <option value="WHATSAPP">WhatsApp Interaction</option>
+                        <option value="EMAIL">Email</option>
+                        <option value="VISIT">In-Person Visit</option>
+                        <option value="MEETING">Meeting</option>
+                        <option value="TRIAL">Trial Session</option>
+                        <option value="PAYMENT_LINK">Payment Link Sent</option>
+                        <option value="OTHER">Other Interaction</option>
+                      </select>
+                    </div>
 
-                    return (
-                      <div key={evt.id} className="relative group">
-                        {/* Timeline Node Marker */}
-                        <div
-                          className={`absolute -left-6 top-0.5 w-6 h-6 rounded-full ${iconBg} border-2 border-background flex items-center justify-center shrink-0 shadow-xs`}
-                        >
-                          <IconComponent className="w-3 h-3" />
-                        </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Outcome / Result *</Label>
+                      <Input
+                        placeholder="e.g. Interested in morning slot"
+                        value={actOutcome}
+                        onChange={(e) => setActOutcome(e.target.value)}
+                        className="h-8 text-xs"
+                        required
+                      />
+                    </div>
 
-                        {/* Event Card */}
-                        <div className="p-3.5 rounded-xl border border-border/70 bg-card/50 hover:border-border transition-colors space-y-1">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                            <span className="text-xs font-bold text-foreground">{evt.title}</span>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Duration (mins)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 5"
+                        value={actDuration}
+                        onChange={(e) => setActDuration(e.target.value ? Number(e.target.value) : '')}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Notes / Discussion Summary</Label>
+                    <Input
+                      placeholder="Details discussed with customer..."
+                      value={actNotes}
+                      onChange={(e) => setActNotes(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsLoggingActivity(false)}
+                      className="h-8 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={addActivityMutation.isPending}
+                      className="h-8 text-xs font-semibold bg-primary text-primary-foreground"
+                    >
+                      {addActivityMutation.isPending ? 'Logging...' : 'Save Activity'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* ACTION FORM: ADD STAFF NOTE */}
+              {isAddingNote && (
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                  <div className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                      Record Confidential Internal Note
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNote(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <Textarea
+                    placeholder="Record notes on prospect conversation, trial feedback, coaching observations, or special requests..."
+                    value={newNoteContent}
+                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    className="text-xs resize-none bg-background"
+                    rows={3}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsAddingNote(false)}
+                      className="h-8 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!newNoteContent.trim()) {
+                          toast.error('Note content cannot be empty.');
+                          return;
+                        }
+                        addNoteMutation.mutate(newNoteContent.trim(), {
+                          onSuccess: () => setIsAddingNote(false),
+                        });
+                      }}
+                      disabled={addNoteMutation.isPending || !newNoteContent.trim()}
+                      className="h-8 text-xs font-semibold bg-primary text-primary-foreground"
+                    >
+                      {addNoteMutation.isPending ? 'Posting...' : 'Save Note'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* TIMELINE SUB-FILTERS */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                {(
+                  [
+                    { id: 'ALL', label: 'All Events' },
+                    { id: 'ACTIVITIES', label: 'Activities', count: activitiesList.length },
+                    ...(canViewCommunications
+                      ? [{ id: 'COMMUNICATIONS', label: 'Communications', count: communicationsList.length }]
+                      : []),
+                    { id: 'NOTES', label: 'Staff Notes', count: notesList.length },
+                    { id: 'STAGES', label: 'Stage Changes' },
+                    { id: 'TRIALS', label: 'Trials', count: leadTrials.length },
+                    { id: 'FOLLOWUPS', label: 'Follow-ups', count: followupsList.length },
+                  ] as Array<{ id: TimelineSubFilter; label: string; count?: number }>
+                ).map((flt) => (
+                  <button
+                    key={flt.id}
+                    type="button"
+                    onClick={() => setTimelineFilter(flt.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
+                      timelineFilter === flt.id
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <span>{flt.label}</span>
+                    {flt.count !== undefined && flt.count > 0 && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          timelineFilter === flt.id
+                            ? 'bg-primary-foreground/20 text-primary-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {flt.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* SUB-VIEW 1: ACTIVITIES */}
+              {timelineFilter === 'ACTIVITIES' && (
+                <div className="space-y-3 pt-1">
+                  {isActivitiesLoading ? (
+                    <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      Loading activities...
+                    </div>
+                  ) : isActivitiesError ? (
+                    <div className="py-8 text-center text-destructive text-xs">Unable to load activities.</div>
+                  ) : activitiesList.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6">
+                      No activities recorded yet. Click "Log Activity" above to record customer touchpoints.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {activitiesList.map((act) => (
+                        <div key={act.id} className="p-3.5 rounded-xl border border-border/70 bg-card/40 space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs font-semibold">
+                                {act.activity_type.replace('_', ' ')}
+                              </Badge>
+                              <span className="font-semibold text-foreground">{act.outcome}</span>
+                            </div>
                             <span className="text-[11px] text-muted-foreground font-mono">
-                              {new Date(evt.occurred_at).toLocaleString()}
+                              {new Date(act.activity_at).toLocaleString()}
                             </span>
                           </div>
-                          {evt.description && (
-                            <p className="text-xs text-muted-foreground whitespace-pre-line">{evt.description}</p>
+                          {act.notes && (
+                            <p className="text-muted-foreground text-xs whitespace-pre-line pl-1 border-l-2 border-primary/20">
+                              {act.notes}
+                            </p>
                           )}
-                          <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
-                            <span>Actor: <strong className="text-foreground font-medium">{evt.actor}</strong></span>
-                            <span>&bull;</span>
-                            <span>Channel: <strong className="text-foreground font-medium">{evt.channel}</strong></span>
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+                            <span>Logged by: <strong className="text-foreground">{act.performed_by_name || 'Staff'}</strong></span>
+                            {act.duration_minutes ? <span>Duration: <strong className="text-foreground">{act.duration_minutes} min</strong></span> : null}
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-VIEW 2: STAFF NOTES */}
+              {timelineFilter === 'NOTES' && (
+                <div className="space-y-3 pt-1">
+                  {/* Quick Compose Input */}
+                  {canEdit && !isAddingNote && (
+                    <form onSubmit={handleAddNote} className="flex gap-2">
+                      <Input
+                        placeholder="Type an internal note regarding this lead..."
+                        value={newNoteContent}
+                        onChange={(e) => setNewNoteContent(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!newNoteContent.trim() || addNoteMutation.isPending}
+                        className="h-9 text-xs px-4 shrink-0 font-medium"
+                      >
+                        {addNoteMutation.isPending ? 'Posting...' : 'Add Note'}
+                      </Button>
+                    </form>
+                  )}
+
+                  {isNotesLoading ? (
+                    <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      Loading notes...
+                    </div>
+                  ) : notesList.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6">
+                      No internal notes recorded yet. Click "Add Note" above to write confidential observations.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {notesList.map((note) => (
+                        <div key={note.id} className="p-3.5 rounded-xl border border-border/70 bg-card/40 space-y-1 text-xs">
+                          <p className="text-foreground whitespace-pre-line">{note.content}</p>
+                          <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                            <span>By: <strong className="text-foreground">{note.created_by_name || 'Staff'}</strong></span>
+                            <span>{new Date(note.created_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-VIEW 3: COMMUNICATIONS */}
+              {timelineFilter === 'COMMUNICATIONS' && (
+                <div className="space-y-3 pt-1">
+                  {!canViewCommunications ? (
+                    <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6 space-y-2">
+                      <Shield className="w-8 h-8 mx-auto text-muted-foreground/60" />
+                      <div className="font-semibold text-foreground text-sm">Access Restricted</div>
+                      <div>You do not have permission to view lead communications (required: <code>crm.communications.view</code>).</div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* CONSENT PROFILE */}
+                      <div className="p-3 rounded-lg bg-muted/40 border border-border text-xs flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-muted-foreground">Consent Profile:</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className={currentLead?.do_not_contact ? 'bg-rose-500/10 text-rose-500 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'}>
+                            {currentLead?.do_not_contact ? 'DNC Active' : 'Contact Permitted'}
+                          </Badge>
+                          <Badge variant="outline" className={currentLead?.consent_whatsapp ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
+                            WhatsApp: {currentLead?.consent_whatsapp ? 'Opted In' : 'No Consent'}
+                          </Badge>
+                          <Badge variant="outline" className={currentLead?.consent_email ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
+                            Email: {currentLead?.consent_email ? 'Opted In' : 'No Consent'}
+                          </Badge>
+                          <Badge variant="outline" className={currentLead?.consent_sms ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
+                            SMS: {currentLead?.consent_sms ? 'Opted In' : 'No Consent'}
+                          </Badge>
+                        </div>
                       </div>
-                    );
-                  })}
+
+                      {/* CHANNEL FILTERS */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {['ALL', 'WHATSAPP', 'EMAIL', 'SMS', 'INBOUND'].map((filterKey) => (
+                          <button
+                            key={filterKey}
+                            type="button"
+                            onClick={() => setCommChannelFilter(filterKey)}
+                            className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                              commChannelFilter === filterKey
+                                ? 'bg-secondary text-secondary-foreground font-semibold shadow-xs'
+                                : 'text-muted-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            {filterKey === 'ALL' ? 'All Messages' : filterKey}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* MESSAGES LIST */}
+                      {isCommunicationsLoading ? (
+                        <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                          Loading communications...
+                        </div>
+                      ) : communicationsList.length === 0 ? (
+                        <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6">
+                          No communications logged for this lead yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {communicationsList
+                            .filter((msg) => {
+                              if (commChannelFilter === 'ALL') return true;
+                              if (commChannelFilter === 'INBOUND') return msg.direction === 'INBOUND';
+                              return msg.channel === commChannelFilter;
+                            })
+                            .map((msg) => {
+                              const isExpanded = expandedMsgEvents[msg.id];
+                              const isOutbound = msg.direction === 'OUTBOUND';
+                              return (
+                                <div
+                                  key={msg.id}
+                                  className={`p-3.5 rounded-xl border transition-all text-xs ${
+                                    isOutbound
+                                      ? 'bg-card/40 border-border/80 border-l-4 border-l-primary'
+                                      : 'bg-primary/5 border-primary/20 border-l-4 border-l-purple-500'
+                                  }`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <Badge variant="outline" className={isOutbound ? 'bg-primary/10 text-primary border-primary/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/20'}>
+                                        {isOutbound ? 'Outbound' : 'Inbound Reply'}
+                                      </Badge>
+                                      <Badge variant="outline" className="font-mono text-[10px]">
+                                        {msg.channel}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {msg.provider || 'System'}
+                                      </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className={
+                                          msg.status === 'READ' || msg.status === 'DELIVERED'
+                                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                            : msg.status === 'FAILED'
+                                            ? 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                                            : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                        }
+                                      >
+                                        {msg.status}
+                                      </Badge>
+                                    </div>
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {new Date(msg.sent_at || msg.received_at || msg.created_at).toLocaleString()}
+                                    </span>
+                                  </div>
+
+                                  {msg.subject && (
+                                    <div className="font-semibold text-foreground pb-1">
+                                      Subject: {msg.subject}
+                                    </div>
+                                  )}
+
+                                  <div className="text-foreground whitespace-pre-wrap py-1 text-xs leading-relaxed">
+                                    {msg.body_snapshot}
+                                  </div>
+
+                                  {msg.failure_reason && (
+                                    <div className="mt-2 p-2 rounded bg-rose-500/10 text-rose-500 text-[11px] border border-rose-500/20 flex items-center gap-1.5">
+                                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Failure: {msg.failure_reason}</span>
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                                    <span>
+                                      {isOutbound ? `To: ${msg.recipient}` : `From: ${msg.sender}`} &bull; By: {msg.created_by_user_name || 'Staff'}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      {msg.status_events && msg.status_events.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setExpandedMsgEvents((prev) => ({
+                                              ...prev,
+                                              [msg.id]: !prev[msg.id],
+                                            }))
+                                          }
+                                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                                        >
+                                          {isExpanded ? 'Hide Events' : `Events (${msg.status_events.length})`}
+                                        </button>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-[10px] px-2"
+                                        onClick={() => {
+                                          setIsComposeOpen(true);
+                                          setComposeChannel(msg.channel);
+                                          setComposeRecipient(isOutbound ? msg.recipient : msg.sender);
+                                        }}
+                                      >
+                                        Reply
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {isExpanded && msg.status_events && (
+                                    <div className="mt-2.5 p-2.5 rounded-lg bg-muted/40 border border-border/70 space-y-1.5 text-[11px]">
+                                      <div className="font-semibold text-foreground">Delivery Event History:</div>
+                                      {msg.status_events.map((ev) => (
+                                        <div key={ev.id} className="flex items-center justify-between text-muted-foreground border-b border-border/30 pb-1 last:border-b-0">
+                                          <span>
+                                            {ev.from_status || 'INIT'} &rarr; <strong className="text-foreground">{ev.to_status}</strong>
+                                            {ev.provider_event_id && <span className="font-mono text-[9px] ml-1">({ev.provider_event_id})</span>}
+                                          </span>
+                                          <span>{new Date(ev.occurred_at).toLocaleTimeString()}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-VIEW 4: UNIFIED TIMELINE (ALL / STAGES / TRIALS / FOLLOWUPS) */}
+              {(timelineFilter === 'ALL' || timelineFilter === 'STAGES' || timelineFilter === 'TRIALS' || timelineFilter === 'FOLLOWUPS') && (
+                <div className="pt-1">
+                  {isTimelineLoading ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <p className="text-xs">Aggregating CRM events into unified timeline...</p>
+                    </div>
+                  ) : isTimelineError ? (
+                    <div className="py-8 text-center text-destructive text-xs">
+                      Unable to load unified timeline. Please try again.
+                    </div>
+                  ) : (
+                    (() => {
+                      const eventsToShow = timelineEvents.filter((evt) => {
+                        if (timelineFilter === 'ALL') return true;
+                        if (timelineFilter === 'STAGES') return evt.event_type === 'STATUS_CHANGE';
+                        if (timelineFilter === 'TRIALS') return evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE';
+                        if (timelineFilter === 'FOLLOWUPS') return evt.event_type === 'FOLLOWUP_TASK';
+                        return true;
+                      });
+
+                      if (eventsToShow.length === 0) {
+                        return (
+                          <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6">
+                            No {timelineFilter === 'ALL' ? 'timeline' : timelineFilter.toLowerCase()} events recorded for this lead yet.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-border/60">
+                          {eventsToShow.map((evt) => {
+                            let IconComponent = Activity;
+                            let iconBg = 'bg-primary/10 text-primary';
+
+                            if (evt.event_type === 'LEAD_CREATED') {
+                              IconComponent = UserPlus;
+                              iconBg = 'bg-blue-500/10 text-blue-500';
+                            } else if (evt.event_type === 'STATUS_CHANGE') {
+                              IconComponent = ArrowRightCircle;
+                              iconBg = 'bg-amber-500/10 text-amber-500';
+                            } else if (evt.event_type === 'ASSIGNMENT') {
+                              IconComponent = UserCheck;
+                              iconBg = 'bg-indigo-500/10 text-indigo-500';
+                            } else if (evt.event_type === 'ATTRIBUTION_CAPTURED') {
+                              IconComponent = Share2;
+                              iconBg = 'bg-purple-500/10 text-purple-500';
+                            } else if (evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE') {
+                              IconComponent = Calendar;
+                              iconBg = 'bg-teal-500/10 text-teal-500';
+                            } else if (evt.event_type === 'LEAD_NOTE') {
+                              IconComponent = MessageSquare;
+                              iconBg = 'bg-emerald-500/10 text-emerald-500';
+                            } else if (evt.event_type === 'FOLLOWUP_TASK') {
+                              IconComponent = CheckSquare;
+                              iconBg = 'bg-cyan-500/10 text-cyan-500';
+                            } else if (evt.event_type === 'COMMUNICATION') {
+                              IconComponent = Send;
+                              iconBg = 'bg-violet-500/10 text-violet-500';
+                            }
+
+                            return (
+                              <div key={evt.id} className="relative group">
+                                <div
+                                  className={`absolute -left-6 top-0.5 w-6 h-6 rounded-full ${iconBg} border-2 border-background flex items-center justify-center shrink-0 shadow-xs`}
+                                >
+                                  <IconComponent className="w-3 h-3" />
+                                </div>
+
+                                <div className="p-3.5 rounded-xl border border-border/70 bg-card/50 hover:border-border transition-colors space-y-1">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <span className="text-xs font-bold text-foreground">{evt.title}</span>
+                                    <span className="text-[11px] text-muted-foreground font-mono">
+                                      {new Date(evt.occurred_at).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  {evt.description && (
+                                    <p className="text-xs text-muted-foreground whitespace-pre-line">{evt.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
+                                    <span>Actor: <strong className="text-foreground font-medium">{evt.actor}</strong></span>
+                                    <span>&bull;</span>
+                                    <span>Channel: <strong className="text-foreground font-medium">{evt.channel}</strong></span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               )}
             </div>
@@ -1590,227 +2138,6 @@ export function LeadDetailModal({
                       </div>
                     );
                   })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: TRIAL SESSION */}
-          {activeTab === 'trial' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    Trial Bookings & Attendance
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Session bookings, schedules, and attendance verification.
-                  </p>
-                </div>
-                {canEdit && onBookTrialClick && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onBookTrialClick(currentLead)}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    Book Trial Session
-                  </Button>
-                )}
-              </div>
-
-              {isTrialsLoading ? (
-                <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Loading trial sessions...
-                </div>
-              ) : leadTrials.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No trial session booked for this lead yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {leadTrials.map((t) => (
-                    <div key={t.id} className="p-4 rounded-xl border border-border/70 bg-card/50 space-y-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-foreground">Trial: {t.trial_type}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {t.status}
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
-                        <div>Scheduled Start: <strong className="text-foreground">{new Date(t.scheduled_start).toLocaleString()}</strong></div>
-                        <div>Scheduled End: <strong className="text-foreground">{new Date(t.scheduled_end).toLocaleString()}</strong></div>
-                        <div>Branch: <strong className="text-foreground">{t.branch_name || currentLead.branch_name || 'Branch'}</strong></div>
-                        <div>Trainer: <strong className="text-foreground">{t.trainer_name || 'Assigned on arrival'}</strong></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB: ACTIVITIES */}
-          {activeTab === 'activities' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    Sales Activities & Touchpoints
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Logged interactions, outbound calls, visits, and messages with this lead.
-                  </p>
-                </div>
-                {canEdit && (
-                  <Button
-                    variant={isLoggingActivity ? 'secondary' : 'default'}
-                    size="sm"
-                    onClick={() => setIsLoggingActivity(!isLoggingActivity)}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    {isLoggingActivity ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                    {isLoggingActivity ? 'Cancel' : 'Log Activity'}
-                  </Button>
-                )}
-              </div>
-
-              {/* LOG ACTIVITY FORM */}
-              {isLoggingActivity && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!actOutcome.trim()) {
-                      toast.error('Outcome is required');
-                      return;
-                    }
-                    addActivityMutation.mutate({
-                      activity_type: actType,
-                      outcome: actOutcome.trim(),
-                      notes: actNotes.trim() || undefined,
-                      duration_minutes: actDuration ? Number(actDuration) : undefined,
-                    });
-                  }}
-                  className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3"
-                >
-                  <div className="text-xs font-semibold text-foreground">Record Sales Touchpoint</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">Activity Type *</Label>
-                      <select
-                        value={actType}
-                        onChange={(e) => setActType(e.target.value as ActivityType)}
-                        className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
-                      >
-                        <option value="CALL">Phone Call</option>
-                        <option value="WHATSAPP">WhatsApp Interaction</option>
-                        <option value="EMAIL">Email</option>
-                        <option value="VISIT">In-Person Visit</option>
-                        <option value="MEETING">Meeting</option>
-                        <option value="TRIAL">Trial Session</option>
-                        <option value="PAYMENT_LINK">Payment Link Sent</option>
-                        <option value="OTHER">Other Interaction</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">Outcome / Result *</Label>
-                      <Input
-                        placeholder="e.g. Interested in morning slot"
-                        value={actOutcome}
-                        onChange={(e) => setActOutcome(e.target.value)}
-                        className="h-8 text-xs"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">Duration (mins)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="e.g. 5"
-                        value={actDuration}
-                        onChange={(e) => setActDuration(e.target.value ? Number(e.target.value) : '')}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Notes / Discussion Summary</Label>
-                    <Input
-                      placeholder="Details discussed with customer..."
-                      value={actNotes}
-                      onChange={(e) => setActNotes(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsLoggingActivity(false)}
-                      className="h-7 text-xs"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={addActivityMutation.isPending}
-                      className="h-7 text-xs"
-                    >
-                      {addActivityMutation.isPending ? 'Logging...' : 'Save Activity'}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {/* ACTIVITIES LIST */}
-              {isActivitiesLoading ? (
-                <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Loading activities...
-                </div>
-              ) : isActivitiesError ? (
-                <div className="py-8 text-center text-destructive text-xs">
-                  Unable to load activities.
-                </div>
-              ) : activitiesList.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No activities recorded yet. Use the "Log Activity" button above to record sales touchpoints.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {activitiesList.map((act) => (
-                    <div key={act.id} className="p-3.5 rounded-xl border border-border/70 bg-card/40 space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs font-semibold">
-                            {act.activity_type.replace('_', ' ')}
-                          </Badge>
-                          <span className="font-semibold text-foreground">{act.outcome}</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground font-mono">
-                          {new Date(act.activity_at).toLocaleString()}
-                        </span>
-                      </div>
-                      {act.notes && (
-                        <p className="text-muted-foreground text-xs whitespace-pre-line pl-1 border-l-2 border-primary/20">
-                          {act.notes}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
-                        <span>Logged by: <strong className="text-foreground">{act.performed_by_name || 'Staff'}</strong></span>
-                        {act.duration_minutes ? <span>Duration: <strong className="text-foreground">{act.duration_minutes} min</strong></span> : null}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -2307,289 +2634,16 @@ export function LeadDetailModal({
                 </div>
               )}
             </div>
-          )}
-
-          {/* TAB: COMMUNICATIONS */}
-          {activeTab === 'communications' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    Customer Communications
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Omnichannel logs across WhatsApp, Email, and SMS with real delivery verification.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {canSendCommunications && (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5"
-                      onClick={() => {
-                        setIsComposeOpen(true);
-                        setComposeChannel('WHATSAPP');
-                        setComposeRecipient(currentLead?.phone_normalized || '');
-                      }}
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      Compose Message
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {!canViewCommunications ? (
-                <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6 space-y-2">
-                  <Shield className="w-8 h-8 mx-auto text-muted-foreground/60" />
-                  <div className="font-semibold text-foreground text-sm">Access Restricted</div>
-                  <div>You do not have permission to view lead communications (required permission: <code>crm.communications.view</code>).</div>
-                </div>
-              ) : (
-                <>
-
-              {/* CONSENT & DNC STATUS BAR */}
-              <div className="p-3 rounded-lg bg-muted/40 border border-border text-xs flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold text-muted-foreground">Consent Profile:</span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline" className={currentLead?.do_not_contact ? 'bg-rose-500/10 text-rose-500 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'}>
-                    {currentLead?.do_not_contact ? 'DNC Active (Do Not Contact)' : 'Contact Permitted'}
-                  </Badge>
-                  <Badge variant="outline" className={currentLead?.consent_whatsapp ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                    WhatsApp: {currentLead?.consent_whatsapp ? 'Opted In' : 'No Consent'}
-                  </Badge>
-                  <Badge variant="outline" className={currentLead?.consent_email ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                    Email: {currentLead?.consent_email ? 'Opted In' : 'No Consent'}
-                  </Badge>
-                  <Badge variant="outline" className={currentLead?.consent_sms ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                    SMS: {currentLead?.consent_sms ? 'Opted In' : 'No Consent'}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* FILTER BAR */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                {['ALL', 'WHATSAPP', 'EMAIL', 'SMS', 'INBOUND'].map((filterKey) => (
-                  <button
-                    key={filterKey}
-                    type="button"
-                    onClick={() => setCommChannelFilter(filterKey)}
-                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                      commChannelFilter === filterKey
-                        ? 'bg-secondary text-secondary-foreground font-semibold shadow-xs'
-                        : 'text-muted-foreground hover:bg-muted/50'
-                    }`}
-                  >
-                    {filterKey === 'ALL' ? 'All Messages' : filterKey}
-                  </button>
-                ))}
-              </div>
-
-              {/* COMMUNICATIONS THREAD */}
-              {isCommunicationsLoading ? (
-                <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Loading communications...
-                </div>
-              ) : communicationsList.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs border border-dashed border-border rounded-xl p-6">
-                  No communications logged for this lead yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {communicationsList
-                    .filter((msg) => {
-                      if (commChannelFilter === 'ALL') return true;
-                      if (commChannelFilter === 'INBOUND') return msg.direction === 'INBOUND';
-                      return msg.channel === commChannelFilter;
-                    })
-                    .map((msg) => {
-                      const isExpanded = expandedMsgEvents[msg.id];
-                      const isOutbound = msg.direction === 'OUTBOUND';
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`p-3.5 rounded-xl border transition-all text-xs ${
-                            isOutbound
-                              ? 'bg-card/40 border-border/80 border-l-4 border-l-primary'
-                              : 'bg-primary/5 border-primary/20 border-l-4 border-l-purple-500'
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="outline" className={isOutbound ? 'bg-primary/10 text-primary border-primary/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/20'}>
-                                {isOutbound ? 'Outbound' : 'Inbound Reply'}
-                              </Badge>
-                              <Badge variant="outline" className="font-mono text-[10px]">
-                                {msg.channel}
-                              </Badge>
-                              <Badge variant="outline" className="text-[10px]">
-                                {msg.provider || 'System'}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  msg.status === 'READ' || msg.status === 'DELIVERED'
-                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                                    : msg.status === 'FAILED'
-                                    ? 'bg-rose-500/10 text-rose-500 border-rose-500/30'
-                                    : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                                }
-                              >
-                                {msg.status}
-                              </Badge>
-                              <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                                {msg.purpose}
-                              </Badge>
-                            </div>
-                            <span className="text-[11px] text-muted-foreground">
-                              {new Date(msg.sent_at || msg.received_at || msg.created_at).toLocaleString()}
-                            </span>
-                          </div>
-
-                          {msg.subject && (
-                            <div className="font-semibold text-foreground pb-1">
-                              Subject: {msg.subject}
-                            </div>
-                          )}
-
-                          <div className="text-foreground whitespace-pre-wrap py-1 text-xs leading-relaxed">
-                            {msg.body_snapshot}
-                          </div>
-
-                          {msg.failure_reason && (
-                            <div className="mt-2 p-2 rounded bg-rose-500/10 text-rose-500 text-[11px] border border-rose-500/20 flex items-center gap-1.5">
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              <span>Failure: {msg.failure_reason}</span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
-                            <span>
-                              {isOutbound ? `To: ${msg.recipient}` : `From: ${msg.sender}`} &bull; By: {msg.created_by_user_name || 'System'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {msg.status_events && msg.status_events.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setExpandedMsgEvents((prev) => ({
-                                      ...prev,
-                                      [msg.id]: !prev[msg.id],
-                                    }))
-                                  }
-                                  className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
-                                >
-                                  {isExpanded ? 'Hide Delivery Events' : `Events (${msg.status_events.length})`}
-                                </button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-[10px] px-2"
-                                onClick={() => {
-                                  setIsComposeOpen(true);
-                                  setComposeChannel(msg.channel);
-                                  setComposeRecipient(isOutbound ? msg.recipient : msg.sender);
-                                }}
-                              >
-                                Reply
-                              </Button>
-                            </div>
-                          </div>
-
-                          {isExpanded && msg.status_events && (
-                            <div className="mt-2.5 p-2.5 rounded-lg bg-muted/40 border border-border/70 space-y-1.5 text-[11px]">
-                              <div className="font-semibold text-foreground">Delivery Event History (Append-Only):</div>
-                              {msg.status_events.map((ev) => (
-                                <div key={ev.id} className="flex items-center justify-between text-muted-foreground border-b border-border/30 pb-1 last:border-b-0">
-                                  <span>
-                                    {ev.from_status || 'INIT'} &rarr; <strong className="text-foreground">{ev.to_status}</strong>
-                                    {ev.provider_event_id && <span className="font-mono text-[9px] ml-1">({ev.provider_event_id})</span>}
-                                  </span>
-                                  <span>{new Date(ev.occurred_at).toLocaleTimeString()}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* TAB 6: NOTES */}
-          {activeTab === 'notes' && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Internal Staff Notes
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Confidential commentary recorded by sales and operations staff.
-                </p>
-              </div>
-
-              {/* COMPOSE NOTE */}
-              {canEdit && (
-                <form onSubmit={handleAddNote} className="flex gap-2">
-                  <Input
-                    placeholder="Type an internal note regarding this lead..."
-                    value={newNoteContent}
-                    onChange={(e) => setNewNoteContent(e.target.value)}
-                    className="h-9 text-xs"
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!newNoteContent.trim() || addNoteMutation.isPending}
-                    className="h-9 text-xs px-4 shrink-0"
-                  >
-                    {addNoteMutation.isPending ? 'Posting...' : 'Add Note'}
-                  </Button>
-                </form>
-              )}
-
-              {/* NOTES LIST */}
-              {isNotesLoading ? (
-                <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Loading notes...
-                </div>
-              ) : notesList.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No internal notes recorded yet.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {notesList.map((note) => (
-                    <div key={note.id} className="p-3.5 rounded-xl border border-border/70 bg-card/40 space-y-1 text-xs">
-                      <p className="text-foreground whitespace-pre-line">{note.content}</p>
-                      <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
-                        <span>By: <strong className="text-foreground">{note.created_by_name || 'Staff'}</strong></span>
-                        <span>{new Date(note.created_at).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB: OFFERS & COUPONS (Phase 9) */}
-          {activeTab === 'offers' && (
+          )}          {/* TAB 5: COMMERCIAL (Phase 9 & Consolidated) */}
+          {activeTab === 'commercial' && (
             <div className="space-y-6">
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-primary" />
-                  Commercial Offers & Coupons
+                  Commercial Intelligence & Conversion
                 </h4>
                 <p className="text-xs text-muted-foreground">
-                  Promotional campaigns, applicable voucher codes, and historical coupon redemptions for this prospect.
+                  Promotional campaigns, applicable voucher codes, conversion status, and package entitlements.
                 </p>
               </div>
 

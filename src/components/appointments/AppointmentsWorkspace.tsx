@@ -10,7 +10,7 @@ import {
   UserCheck,
   Activity,
 } from 'lucide-react';
-import { appointmentsApi } from '../../services/appointmentsApi';
+import { appointmentsApi } from '@/api/endpoints/appointmentsApi';
 import {
   Appointment,
   AppointmentDeliveryMode,

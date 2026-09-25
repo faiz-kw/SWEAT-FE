@@ -3,7 +3,7 @@
  * Handles JWT Bearer authorization headers and HttpOnly cookie transmission.
  */
 
-import { getAccessToken, refreshAccessToken } from './auth';
+import { getAccessToken, refreshAccessToken } from '../auth/tokenManager';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
 

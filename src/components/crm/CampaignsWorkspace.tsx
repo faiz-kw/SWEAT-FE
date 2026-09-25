@@ -19,8 +19,8 @@ import {
   CreditCard,
   Layers,
 } from 'lucide-react';
-import { crmApi } from '@/services/crmApi';
-import { api } from '@/services/api';
+import { crmApi } from '@/api/endpoints/crmApi';
+import { api } from '@/api/client';
 import type {
   CampaignPerformanceItem,
   CampaignDrilldownConversion,

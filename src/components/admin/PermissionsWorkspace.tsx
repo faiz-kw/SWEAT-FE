@@ -43,7 +43,7 @@ import {
   updateRolePermissionsApi,
   type RoleDefRow,
   type PermissionDefRow,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 import { useAuth } from "@/contexts";
 
 const isUuid = (val?: string | null): boolean => {

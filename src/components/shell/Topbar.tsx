@@ -32,9 +32,10 @@ import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { useRouterState, useRouter, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
-import { exitImpersonateApi } from "@/services/api-platform";
-import { setAccessToken, setUserProfile } from "@/services/auth";
+import { exitImpersonateApi } from "@/api/endpoints/api-platform";
 import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { crmApi, type InAppNotification } from "@/api/endpoints/crmApi";
 
 // ── Helper: derive breadcrumb segments from pathname ──────────────────────────
 function buildBreadcrumbs(pathname: string, navLabel?: string, sectionLabel?: string) {
@@ -92,6 +93,51 @@ export function Topbar() {
   }, [rawLocations]);
 
   const isOrgWide = user?.isOrgWide !== false;
+
+  const queryClient = useQueryClient();
+
+  // In-app notifications
+  const { data: unreadNotifCount = 0 } = useQuery({
+    queryKey: ['in-app-notifications-unread-count'],
+    queryFn: () => crmApi.getUnreadNotificationCount(),
+    refetchInterval: 30000,
+    staleTime: 10000,
+    enabled: !!user,
+  });
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['in-app-notifications'],
+    queryFn: () => crmApi.getNotifications(),
+    refetchInterval: 30000,
+    staleTime: 10000,
+    enabled: !!user,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => crmApi.markNotificationRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications-unread-count'] });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => crmApi.markAllNotificationsRead(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications-unread-count'] });
+      toast.success('All notifications marked as read.');
+    },
+  });
+
+  const handleNotificationClick = (notif: InAppNotification) => {
+    if (!notif.is_read) {
+      markReadMutation.mutate(notif.id);
+    }
+    if (notif.deep_link) {
+      router.navigate({ to: notif.deep_link });
+    }
+  };
 
   // Enforce branch scope: if branch-scoped, user cannot select 'all'
   React.useEffect(() => {
@@ -449,23 +495,88 @@ export function Topbar() {
                 size="icon"
                 className="relative size-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg cursor-pointer transition-colors border border-border bg-card shrink-0"
                 aria-label="Notifications"
+                id="notifications-bell-btn"
               >
                 <Bell className="size-3.5" />
-                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary ring-2 ring-card" />
+                {unreadNotifCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ring-2 ring-background animate-pulse">
+                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                  </span>
+                ) : (
+                  <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-muted-foreground/30 ring-2 ring-card" />
+                )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 p-0 shadow-2xl rounded-2xl border-border bg-popover text-popover-foreground">
+            <DropdownMenuContent align="end" className="w-80 sm:w-96 p-0 shadow-2xl rounded-2xl border-border bg-popover text-popover-foreground">
               <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-muted/40">
                 <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Flame className="size-3.5 text-amber-500" /> Notifications & Alerts
+                  <Flame className="size-3.5 text-amber-500" /> Notifications &amp; Alerts
                 </div>
-                <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.2 text-[10px] font-bold text-primary">
-                  0 New
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    unreadNotifCount > 0
+                      ? 'bg-primary/10 border border-primary/20 text-primary'
+                      : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {unreadNotifCount} Unread
+                  </span>
+                  {unreadNotifCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => markAllReadMutation.mutate()}
+                      disabled={markAllReadMutation.isPending}
+                      className="text-[10px] text-muted-foreground hover:text-foreground hover:underline transition-colors"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="p-6 text-center text-xs text-muted-foreground">
-                <CheckCircle2 className="size-6 text-muted-foreground/40 mx-auto mb-2" />
-                No unread system alerts or notifications.
+
+              <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    <CheckCircle2 className="size-6 text-muted-foreground/40 mx-auto mb-2" />
+                    No system alerts or notifications.
+                  </div>
+                ) : (
+                  notifications.slice(0, 15).map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
+                      className={`p-3 text-left hover:bg-muted/30 transition-colors cursor-pointer flex gap-2.5 items-start ${
+                        !notif.is_read ? 'bg-primary/5' : ''
+                      }`}
+                    >
+                      <div className="pt-0.5 shrink-0">
+                        {!notif.is_read ? (
+                          <span className="size-2 rounded-full bg-primary block" />
+                        ) : (
+                          <span className="size-2 rounded-full bg-muted-foreground/30 block" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="text-xs font-semibold text-foreground truncate">
+                            {notif.title}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+                            {notif.created_at ? new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                          {notif.message}
+                        </p>
+                        {notif.deep_link && (
+                          <div className="mt-1.5 flex items-center gap-1 text-[11px] text-primary font-medium">
+                            <span>Open details</span>
+                            <ArrowUpRight className="size-3" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>

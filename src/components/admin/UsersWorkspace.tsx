@@ -60,7 +60,7 @@ import {
   type AdminUserRow,
   type RoleDefRow,
   type LocationRow,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 import { useAuth } from "@/contexts";
 
 export const isPlatformAccount = (

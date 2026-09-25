@@ -2,7 +2,7 @@
  * src/services/crmApi.ts — API Client for Layer 2 Module B: CRM, Leads & Trials
  */
 
-import { api } from './api';
+import { api } from '../client';
 import type {
   Lead,
   LeadSource,
@@ -52,6 +52,21 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+export interface InAppNotification {
+  id: string;
+  organization: string;
+  user: string;
+  notification_type: string;
+  title: string;
+  message: string;
+  data: Record<string, any>;
+  deep_link?: string;
+  is_read: boolean;
+  read_at?: string;
+  idempotency_key?: string;
+  created_at: string;
+}
+
 export const crmApi = {
   getLeads: async (params?: {
     current_status?: string;
@@ -63,8 +78,16 @@ export const crmApi = {
     sla_status?: string;
     program_id?: string;
     assigned_sales_user_id?: string;
+    assigned_to_me?: boolean;
+    unassigned?: boolean;
   }): Promise<Lead[]> => {
     const query = new URLSearchParams();
+    if (params?.assigned_to_me) {
+      query.append('assigned_to_me', 'true');
+    }
+    if (params?.unassigned) {
+      query.append('unassigned', 'true');
+    }
     if (params?.current_status && params.current_status !== 'ALL') {
       query.append('current_status', params.current_status);
     }
@@ -926,6 +949,30 @@ export const crmApi = {
     const queryStr = sp.toString() ? `?${sp.toString()}` : '';
     const res = await api.get<import('@/types/crm').CRMDashboardResponse>(`/tenant/crm/dashboard/${queryStr}`);
     return res.data;
+  },
+
+  getNotifications: async (params?: { unread?: boolean }): Promise<InAppNotification[]> => {
+    const sp = new URLSearchParams();
+    if (params?.unread) sp.append('unread', 'true');
+    const qStr = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await api.get<PaginatedResponse<InAppNotification> | InAppNotification[]>(`/tenant/in-app-notifications/${qStr}`);
+    if (Array.isArray(res.data)) return res.data;
+    return (res.data as PaginatedResponse<InAppNotification>)?.results || [];
+  },
+
+  getUnreadNotificationCount: async (): Promise<number> => {
+    const res = await api.get<{ unread_count: number }>('/tenant/in-app-notifications/unread-count/');
+    return res.data?.unread_count || 0;
+  },
+
+  markNotificationRead: async (id: string): Promise<InAppNotification> => {
+    const res = await api.post<InAppNotification>(`/tenant/in-app-notifications/${id}/mark-read/`);
+    return res.data;
+  },
+
+  markAllNotificationsRead: async (): Promise<number> => {
+    const res = await api.post<{ marked_read: number }>('/tenant/in-app-notifications/mark-all-read/');
+    return res.data?.marked_read || 0;
   },
 };
 

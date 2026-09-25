@@ -183,7 +183,7 @@ import {
   updatePlanApi,
   updateProgramApi,
   updateTrainerApi,
-} from "./api-modules";
+} from "../api/endpoints/api-modules";
 
 function nextId(key: CollectionKey) {
   const rows = collection(key);

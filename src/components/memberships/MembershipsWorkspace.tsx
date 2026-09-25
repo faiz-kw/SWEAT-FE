@@ -9,7 +9,7 @@ import {
   Search,
   RefreshCw,
 } from 'lucide-react';
-import { membershipsApi } from '../../services/membershipsApi';
+import { membershipsApi } from '@/api/endpoints/membershipsApi';
 import {
   Membership,
   ContractSnapshot,

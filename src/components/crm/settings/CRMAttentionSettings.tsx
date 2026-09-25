@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type { CRMAttentionPolicy } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

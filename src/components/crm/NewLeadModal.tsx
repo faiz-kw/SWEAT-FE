@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type { CreateLeadPayload, ReferrerOption } from '@/types/crm';
 import {
   Dialog,
@@ -175,6 +175,20 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     }
   }, [metadata, country]);
 
+  // When branch changes or agents load, validate selectedAgent
+  React.useEffect(() => {
+    if (selectedAgent && !isAgentsLoading && agents.length > 0) {
+      const isStillEligible = agents.some((a) => a.id === selectedAgent);
+      if (!isStillEligible) {
+        setSelectedAgent('');
+        toast.info('Selected agent is not eligible for this branch. Please choose an agent.');
+      }
+    } else if (selectedAgent && !isAgentsLoading && agents.length === 0) {
+      setSelectedAgent('');
+      toast.warning('No eligible agents for this branch. Please select another branch or assign staff.');
+    }
+  }, [agents, isAgentsLoading, selectedAgent, selectedBranch]);
+
   // Real-time duplicate check with debounce
   React.useEffect(() => {
     const rawDigits = phone.replace(/\D/g, '');
@@ -265,12 +279,14 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     setDuplicateMatches([]);
   };
 
-  // --- Mutation ---
   const createMutation = useMutation({
     mutationFn: (payload: CreateLeadPayload) => crmApi.createLead(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Lead created successfully.');
+      queryClient.invalidateQueries({ queryKey: ['lead-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['in-app-notifications-unread-count'] });
+      toast.success('Lead created and assigned successfully.');
       resetForm();
       onOpenChange(false);
       onSuccess?.();
@@ -782,11 +798,11 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                     required
                   >
                     {isAgentsLoading ? (
-                      <option value="">Loading agents...</option>
+                      <option value="">Loading eligible agents...</option>
                     ) : isAgentsError ? (
                       <option value="">Unable to load agents</option>
                     ) : agents.length === 0 ? (
-                      <option value="">No eligible agents available</option>
+                      <option value="">No eligible agents for this branch</option>
                     ) : (
                       <>
                         <option value="">Select an agent</option>
@@ -800,6 +816,11 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                   </select>
                   {formErrors.agent && (
                     <p className="text-[11px] text-destructive">{formErrors.agent}</p>
+                  )}
+                  {!isAgentsLoading && agents.length === 0 && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      No active agents with CRM permissions assigned to this branch.
+                    </p>
                   )}
                 </div>
 

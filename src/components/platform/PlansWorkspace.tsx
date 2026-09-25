@@ -12,7 +12,7 @@ import {
   updatePlatformPlanApi, 
   deletePlatformPlanApi, 
   type PlatformPlanRow 
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 
 export function PlansWorkspace() {
   const [plans, setPlans] = React.useState<PlatformPlanRow[]>([]);

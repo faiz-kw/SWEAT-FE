@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { toast } from 'sonner';
-import { classesApi } from '../../services/classesApi';
+import { classesApi } from '@/api/endpoints/classesApi';
 import {
   ClassCategory,
   ClassTemplate,
@@ -48,7 +48,7 @@ import {
   ClassTemplateStatus,
   TrainerOccurrenceRole,
 } from '../../types/classes';
-import { useAuth } from '../../contexts/auth-context';
+import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';

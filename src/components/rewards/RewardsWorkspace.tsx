@@ -14,7 +14,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { rewardsApi } from '../../services/rewardsApi';
+import { rewardsApi } from '@/api/endpoints/rewardsApi';
 import {
   RewardAccount,
 } from '../../types/rewards';

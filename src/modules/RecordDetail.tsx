@@ -31,7 +31,7 @@ import { formatCell } from "@/modules/cells";
 import { useModuleNavigate } from "@/modules/navigate";
 import { activityFeed, relatedGroups, timeOf } from "@/modules/related";
 import { inferFields, pickStatusKey, pickTitleKey, type Field } from "@/modules/schema";
-import { checkInMemberApi, fetchMembers, updateLeadApi, logLeadActivityApi } from "@/services/api-modules";
+import { checkInMemberApi, fetchMembers, updateLeadApi, logLeadActivityApi } from "@/api/endpoints/api-modules";
 import { createRecord, setCollectionRows, updateRecord, type CollectionKey, type Row } from "@/services/store";
 
 /**

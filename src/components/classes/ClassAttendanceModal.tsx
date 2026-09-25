@@ -17,7 +17,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { classesApi } from '../../services/classesApi';
+import { classesApi } from '@/api/endpoints/classesApi';
 import { ClassOccurrence } from '../../types/classes';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

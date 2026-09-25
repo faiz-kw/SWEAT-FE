@@ -61,7 +61,7 @@ import {
   setUserProfile,
   type AuthUser,
   type LocationInfo,
-} from '@/services';
+} from '@/api';
 
 // -----------------------------------------------------------------
 // Types

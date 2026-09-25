@@ -34,10 +34,10 @@ import {
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts';
-import { api } from '@/services/api';
-import { workforceApi } from '@/services/workforceApi';
-import { approvalsApi } from '@/services/approvalsApi';
-import { fetchUsersApi } from '@/services/api-admin';
+import { api } from '@/api/client';
+import { workforceApi } from '@/api/endpoints/workforceApi';
+import { approvalsApi } from '@/api/endpoints/approvalsApi';
+import { fetchUsersApi } from '@/api/endpoints/api-admin';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
 import { TrainerScheduleModal } from './TrainerScheduleModal';
 import { TrainerLeaveApplyDialog } from './TrainerLeaveApplyDialog';
@@ -1625,44 +1625,52 @@ export function TrainersWorkspace() {
       </Dialog>
 
       {/* Trainer Schedule & Weekly Roster Modal */}
-      <TrainerScheduleModal
-        isOpen={isScheduleModalOpen}
-        onClose={() => setIsScheduleModalOpen(false)}
-        trainer={isTrainer ? (currentTrainer || selectedTrainer) : (selectedTrainer || trainers[0] || null)}
-        trainers={isTrainer && currentTrainer ? [currentTrainer] : trainers}
-        onSelectTrainer={(t) => setSelectedTrainer(t)}
-        branches={branches}
-        initialBranchId={
-          directoryBranchId !== 'ALL'
-            ? directoryBranchId
-            : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id
-        }
-      />
+      {isScheduleModalOpen && (
+        <TrainerScheduleModal
+          isOpen={isScheduleModalOpen}
+          onClose={() => setIsScheduleModalOpen(false)}
+          trainer={isTrainer ? (currentTrainer || selectedTrainer) : (selectedTrainer || trainers[0] || null)}
+          trainers={isTrainer && currentTrainer ? [currentTrainer] : trainers}
+          onSelectTrainer={(t) => setSelectedTrainer(t)}
+          branches={branches}
+          initialBranchId={
+            directoryBranchId !== 'ALL'
+              ? directoryBranchId
+              : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id
+          }
+        />
+      )}
 
       {/* Trainer Self-Service Leave Application Dialog */}
-      <TrainerLeaveApplyDialog
-        isOpen={isLeaveApplyOpen}
-        onClose={() => setIsLeaveApplyOpen(false)}
-        trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
-        branches={branches}
-      />
+      {isLeaveApplyOpen && (
+        <TrainerLeaveApplyDialog
+          isOpen={isLeaveApplyOpen}
+          onClose={() => setIsLeaveApplyOpen(false)}
+          trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
+          branches={branches}
+        />
+      )}
 
       {/* Admin Leave & Override Approvals Modal */}
-      <TrainerLeaveApprovalsModal
-        isOpen={isApprovalsModalOpen}
-        onClose={() => setIsApprovalsModalOpen(false)}
-      />
+      {isApprovalsModalOpen && (
+        <TrainerLeaveApprovalsModal
+          isOpen={isApprovalsModalOpen}
+          onClose={() => setIsApprovalsModalOpen(false)}
+        />
+      )}
 
       {/* Trainer Allotted Classes & Attendance Modal */}
-      <TrainerAllottedClassesModal
-        trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
-        isOpen={isAllottedClassesOpen}
-        onClose={() => setIsAllottedClassesOpen(false)}
-        onApplyLeave={() => {
-          setIsAllottedClassesOpen(false);
-          setIsLeaveApplyOpen(true);
-        }}
-      />
+      {isAllottedClassesOpen && (
+        <TrainerAllottedClassesModal
+          trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}
+          isOpen={isAllottedClassesOpen}
+          onClose={() => setIsAllottedClassesOpen(false)}
+          onApplyLeave={() => {
+            setIsAllottedClassesOpen(false);
+            setIsLeaveApplyOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }

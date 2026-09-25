@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { approvalsApi } from '@/services/approvalsApi';
+import { approvalsApi } from '@/api/endpoints/approvalsApi';
 import type { ApprovalRequest } from '@/types/approvals';
 import {
   Dialog,

@@ -60,7 +60,7 @@ import {
   type RoleDefRow,
   type PermissionDefRow,
   type AdminUserRow,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 import { useAuth } from "@/contexts";
 import {
   getFriendlyModuleName,

@@ -30,7 +30,7 @@ import { CRMAgentAssignmentSettings } from './CRMAgentAssignmentSettings';
 import { CRMPageHeader } from '@/components/crm/common/CRMPageHeader';
 import { CRMErrorState } from '@/components/crm/common/CRMErrorState';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type {
   LeadSource,
   CRMStageSlaPolicy,

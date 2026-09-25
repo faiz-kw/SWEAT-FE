@@ -6,7 +6,7 @@ import { PageHeader, PageBody } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchSecurityPolicyApi, updateSecurityPolicyApi, revokeAllSessionsApi, type SecurityPolicyData } from "@/services/api-admin";
+import { fetchSecurityPolicyApi, updateSecurityPolicyApi, revokeAllSessionsApi, type SecurityPolicyData } from "@/api/endpoints/api-admin";
 
 export function SecurityWorkspace() {
   const [enforceMfa, setEnforceMfa] = React.useState(false);

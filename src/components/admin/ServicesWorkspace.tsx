@@ -12,7 +12,7 @@ import {
   updateServiceApi,
   deleteServiceApi,
   type ServiceRow,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 
 export function ServicesWorkspace() {
   const [services, setServices] = React.useState<ServiceRow[]>([]);

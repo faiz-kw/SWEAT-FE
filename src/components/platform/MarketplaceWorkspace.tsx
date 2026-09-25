@@ -9,7 +9,7 @@ import {
   fetchMarketplaceAppsApi, 
   toggleMarketplaceAppInstallationApi, 
   type MarketplaceAppRow 
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 
 export function MarketplaceWorkspace() {
   const [apps, setApps] = React.useState<MarketplaceAppRow[]>([]);

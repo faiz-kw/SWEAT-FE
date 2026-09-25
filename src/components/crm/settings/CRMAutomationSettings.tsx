@@ -39,7 +39,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type {
   AutomationWorkflow,
   AutomationWorkflowVersion,

@@ -3,8 +3,8 @@
  * 100% Real REST Backend Architecture with PostgreSQL Persistence
  */
 
-import { api } from "./api";
-import { type Row } from "./store";
+import { api } from '../client';
+import { type Row } from '@/services/store';
 
 export interface TenantRow extends Row {
   name: string;

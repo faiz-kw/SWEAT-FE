@@ -10,7 +10,7 @@ import {
   Link,
   FileText,
 } from 'lucide-react';
-import { commerceApi } from '../../services/commerceApi';
+import { commerceApi } from '@/api/endpoints/commerceApi';
 import {
   Order,
   PaymentTransaction,

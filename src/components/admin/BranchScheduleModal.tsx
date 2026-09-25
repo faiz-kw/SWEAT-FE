@@ -27,7 +27,7 @@ import {
   deleteBranchOperatingExceptionApi,
   type BranchWorkingHoursItem,
   type BranchOperatingExceptionItem,
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 
 const DAYS_OF_WEEK = [
   { day: 1, name: "Monday", short: "Mon" },

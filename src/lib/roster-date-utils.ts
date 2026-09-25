@@ -17,7 +17,7 @@ export interface WeekDayInfo {
 export interface WeekInfo {
   startDate: string; // Monday "YYYY-MM-DD"
   endDate: string; // Sunday "YYYY-MM-DD"
-  formattedRange: string; // "21 Sep – 27 Sep 2026"
+  formattedRange: string; // "21 Sep - 27 Sep 2026"
   isCurrentWeek: boolean;
   days: WeekDayInfo[];
 }
@@ -95,7 +95,7 @@ export function getWeekInfo(refDate?: string | Date): WeekInfo {
   const startObj = parseDateStr(startDate);
   const endObj = parseDateStr(endDate);
 
-  const formattedRange = `${startObj.getDate()} ${MONTH_NAMES_SHORT[startObj.getMonth()]} – ${endObj.getDate()} ${MONTH_NAMES_SHORT[endObj.getMonth()]} ${endObj.getFullYear()}`;
+  const formattedRange = `${startObj.getDate()} ${MONTH_NAMES_SHORT[startObj.getMonth()]} - ${endObj.getDate()} ${MONTH_NAMES_SHORT[endObj.getMonth()]} ${endObj.getFullYear()}`;
   const isCurrentWeek = days.some((d) => d.isToday);
 
   return {

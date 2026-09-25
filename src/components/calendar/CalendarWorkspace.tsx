@@ -20,11 +20,11 @@ import {
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { classesApi } from '../../services/classesApi';
-import { workforceApi } from '../../services/workforceApi';
-import { approvalsApi } from '../../services/approvalsApi';
-import { api } from '../../services/api';
-import { useAuth } from '../../contexts/auth-context';
+import { classesApi } from '@/api/endpoints/classesApi';
+import { workforceApi } from '@/api/endpoints/workforceApi';
+import { approvalsApi } from '@/api/endpoints/approvalsApi';
+import { api } from '@/api/client';
+import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 import { ClassOccurrence } from '../../types/classes';
 import { TrainerProfile, EmployeeWorkSchedule, EmployeeScheduleException } from '../../types/workforce';

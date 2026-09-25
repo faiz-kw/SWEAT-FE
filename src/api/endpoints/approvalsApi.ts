@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api } from '../client';
 import { ApprovalRequest, ApprovalAction } from '../types/approvals';
 
 export const approvalsApi = {

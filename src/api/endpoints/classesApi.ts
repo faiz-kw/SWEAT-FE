@@ -3,7 +3,7 @@
  * Zero mock data fallback — all responses come directly from authenticated tenant APIs.
  */
 
-import { api } from './api';
+import { api } from '../client';
 import {
   ClassCategory,
   ClassTemplate,

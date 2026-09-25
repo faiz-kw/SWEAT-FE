@@ -12,7 +12,7 @@ import {
   DoorOpen,
   Sliders,
 } from 'lucide-react';
-import { attendanceApi } from '../../services/attendanceApi';
+import { attendanceApi } from '@/api/endpoints/attendanceApi';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

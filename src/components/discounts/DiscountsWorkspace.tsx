@@ -13,8 +13,8 @@ import {
   Sliders,
   Award,
 } from 'lucide-react';
-import { discountsApi } from '../../services/discountsApi';
-import { api } from '../../services/api';
+import { discountsApi } from '@/api/endpoints/discountsApi';
+import { api } from '@/api/client';
 import {
   DiscountCampaign,
   CouponValidationResult,

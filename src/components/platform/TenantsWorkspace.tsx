@@ -24,13 +24,13 @@ import {
   updateTenantApi,
   type TenantRow, 
   type PlatformMetrics 
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 import { 
   createLocationApi, 
   updateLocationApi, 
   deleteLocationApi, 
   type LocationRow 
-} from "@/services/api-admin";
+} from "@/api/endpoints/api-admin";
 import { FEATURE_MODULES_CATALOG } from "@/lib/modules-config";
 
 export function TenantsWorkspace() {

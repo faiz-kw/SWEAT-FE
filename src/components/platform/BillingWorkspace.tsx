@@ -14,7 +14,7 @@ import {
   fetchPlatformInvoicesApi, 
   type SubscriptionItem, 
   type InvoiceItem 
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 
 export function BillingWorkspace() {
   const [activeTab, setActiveTab] = React.useState<"subscriptions" | "invoices" | "dunning">("subscriptions");

@@ -35,9 +35,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { api } from '@/services/api';
-import { workforceApi } from '@/services/workforceApi';
-import { approvalsApi } from '@/services/approvalsApi';
+import { api } from '@/api/client';
+import { workforceApi } from '@/api/endpoints/workforceApi';
+import { approvalsApi } from '@/api/endpoints/approvalsApi';
 import type { TrainerProfile, EmployeeWorkSchedule } from '@/types/workforce';
 import { TrainerScheduleModal } from '@/components/trainers/TrainerScheduleModal';
 import { TrainerLeaveApplyDialog } from '@/components/trainers/TrainerLeaveApplyDialog';

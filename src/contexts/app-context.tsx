@@ -32,8 +32,8 @@
 
 import * as React from "react";
 
-import { useAuth } from "./auth-context";
-import { type TenantBrandingProfile } from "@/services/auth";
+import { useAuth } from "../api/auth/AuthProvider";
+import { type TenantBrandingProfile } from "@/api/auth/tokenManager";
 
 type Density = "tight" | "default" | "comfortable";
 

@@ -29,7 +29,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type {
   SalesFollowupTask,
   FollowupTaskType,

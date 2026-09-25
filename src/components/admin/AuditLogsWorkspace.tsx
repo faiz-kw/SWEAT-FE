@@ -3,7 +3,7 @@ import { History, Search, ShieldAlert, Filter, RefreshCw, Eye, Code2 } from "luc
 import { PageHeader, PageBody } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchAuditLogsApi, type AuditLogRow } from "@/services/api-admin";
+import { fetchAuditLogsApi, type AuditLogRow } from "@/api/endpoints/api-admin";
 
 export function AuditLogsWorkspace() {
   const [logs, setLogs] = React.useState<AuditLogRow[]>([]);

@@ -16,7 +16,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-import { crmApi } from '@/services/crmApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, NextBestAction } from '@/types/crm';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

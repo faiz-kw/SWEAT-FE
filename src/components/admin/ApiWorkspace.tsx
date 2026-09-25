@@ -6,7 +6,7 @@ import { PageHeader, PageBody } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchApiKeysApi, createApiKeyApi, deleteApiKeyApi, type ApiKeyRow } from "@/services/api-admin";
+import { fetchApiKeysApi, createApiKeyApi, deleteApiKeyApi, type ApiKeyRow } from "@/api/endpoints/api-admin";
 
 export function ApiWorkspace() {
   const [keys, setKeys] = React.useState<ApiKeyRow[]>([]);

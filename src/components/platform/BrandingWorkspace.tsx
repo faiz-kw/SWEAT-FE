@@ -42,7 +42,7 @@ import {
   type TenantRow,
   type TenantBrandingData,
   type DnsVerificationResult,
-} from "@/services/api-platform";
+} from "@/api/endpoints/api-platform";
 
 // ── Curated Luxury & Athletic Brand Presets ───────────────────────────
 const THEME_PRESETS = [

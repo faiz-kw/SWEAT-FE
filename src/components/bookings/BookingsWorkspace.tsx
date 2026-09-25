@@ -24,9 +24,9 @@ import {
   Shield,
   Layers,
 } from 'lucide-react';
-import { bookingsApi } from '../../services/bookingsApi';
-import { classesApi } from '../../services/classesApi';
-import { membershipsApi } from '../../services/membershipsApi';
+import { bookingsApi } from '@/api/endpoints/bookingsApi';
+import { classesApi } from '@/api/endpoints/classesApi';
+import { membershipsApi } from '@/api/endpoints/membershipsApi';
 import {
   Booking,
   BookingPolicySet,
