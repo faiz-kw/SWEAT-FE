@@ -21,6 +21,7 @@ import {
   Check,
   X,
   Share2,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -67,6 +68,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   // Section 3: Source & Assignment
   const [selectedSource, setSelectedSource] = React.useState('');
   const [selectedAgent, setSelectedAgent] = React.useState('');
+  const [assignmentMode, setAssignmentMode] = React.useState<'MANUAL' | 'AUTO'>('MANUAL');
   const [referredByUserId, setReferredByUserId] = React.useState('');
   const [referredByName, setReferredByName] = React.useState('');
   const [referrerQuery, setReferrerQuery] = React.useState('');
@@ -125,12 +127,37 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   const {
     data: programs = [],
     isLoading: isProgramsLoading,
+    isError: isProgramsError,
   } = useQuery({
     queryKey: ['active-programs', selectedBranch],
     queryFn: () => crmApi.getPrograms(selectedBranch || undefined),
     staleTime: 2 * 60 * 1000,
     enabled: open,
   });
+
+  const uniqueBranches = React.useMemo(() => {
+    const seen = new Set<string>();
+    return branches.filter((b) => {
+      if (!b?.id || seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+  }, [branches]);
+
+  const uniquePrograms = React.useMemo(() => {
+    const seen = new Set<string>();
+    return programs.filter((p) => {
+      if (!p?.id || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [programs]);
+
+  React.useEffect(() => {
+    if (selectedProgram && uniquePrograms.length > 0 && !uniquePrograms.some((p) => p.id === selectedProgram)) {
+      setSelectedProgram('');
+    }
+  }, [selectedProgram, uniquePrograms]);
 
   const {
     data: sources = [],
@@ -143,16 +170,41 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     enabled: open,
   });
 
+  // Tenant Assignment Configuration
+  const { data: assignmentConfig } = useQuery({
+    queryKey: ['crm-agent-assignment-config'],
+    queryFn: () => crmApi.getAgentAssignmentConfig(),
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
+  });
+
   const {
     data: agents = [],
     isLoading: isAgentsLoading,
     isError: isAgentsError,
   } = useQuery({
     queryKey: ['eligible-agents', selectedBranch],
-    queryFn: () => crmApi.getEligibleAgents(selectedBranch || undefined),
+    queryFn: () => crmApi.getEligibleAgents(selectedBranch || undefined, true),
     staleTime: 2 * 60 * 1000,
     enabled: open,
   });
+
+  const availableAgents = React.useMemo(() => agents.filter((a) => a.is_available), [agents]);
+  const unavailableAgents = React.useMemo(() => agents.filter((a) => !a.is_available), [agents]);
+
+  // Sync assignment mode based on tenant configuration
+  React.useEffect(() => {
+    if (assignmentConfig) {
+      const allowed = assignmentConfig.assignment_mode_allowed || 'BOTH';
+      if (allowed === 'AUTO') {
+        setAssignmentMode('AUTO');
+      } else if (allowed === 'MANUAL') {
+        setAssignmentMode('MANUAL');
+      } else if (assignmentConfig.default_assignment_mode) {
+        setAssignmentMode(assignmentConfig.default_assignment_mode);
+      }
+    }
+  }, [assignmentConfig, open]);
 
   // Dynamic Referrer Search
   const { data: searchReferrerResults = [], isFetching: isSearchingReferrers } = useQuery({
@@ -177,17 +229,20 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
   // When branch changes or agents load, validate selectedAgent
   React.useEffect(() => {
-    if (selectedAgent && !isAgentsLoading && agents.length > 0) {
-      const isStillEligible = agents.some((a) => a.id === selectedAgent);
-      if (!isStillEligible) {
+    if (assignmentMode === 'MANUAL' && selectedAgent && !isAgentsLoading && agents.length > 0) {
+      const chosen = agents.find((a) => a.id === selectedAgent);
+      if (!chosen) {
         setSelectedAgent('');
-        toast.info('Selected agent is not eligible for this branch. Please choose an agent.');
+        toast.info('Selected representative is not eligible for this branch. Please choose a representative.');
+      } else if (!chosen.is_available) {
+        setSelectedAgent('');
+        toast.warning(`${chosen.name} is currently unavailable (${chosen.availability_reason || chosen.availability_status || 'On leave'}). Please select an available representative.`);
       }
-    } else if (selectedAgent && !isAgentsLoading && agents.length === 0) {
+    } else if (assignmentMode === 'MANUAL' && selectedAgent && !isAgentsLoading && agents.length === 0) {
       setSelectedAgent('');
-      toast.warning('No eligible agents for this branch. Please select another branch or assign staff.');
+      toast.warning('No representatives found for this branch. You may use Auto-Assignment or assign staff.');
     }
-  }, [agents, isAgentsLoading, selectedAgent, selectedBranch]);
+  }, [agents, isAgentsLoading, selectedAgent, selectedBranch, assignmentMode]);
 
   // Real-time duplicate check with debounce
   React.useEffect(() => {
@@ -327,7 +382,16 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     if (!selectedBranch) errors.branch = 'Branch selection is required.';
     if (!selectedProgram) errors.program = 'Program selection is required.';
     if (!selectedSource) errors.source = 'Lead source is required.';
-    if (!selectedAgent) errors.agent = 'Assigned sales agent is required.';
+    if (assignmentMode === 'MANUAL') {
+      if (!selectedAgent) {
+        errors.agent = 'Assigned representative is required in manual mode.';
+      } else {
+        const chosen = agents.find((a) => a.id === selectedAgent);
+        if (chosen && !chosen.is_available) {
+          errors.agent = `Selected representative is unavailable (${chosen.availability_reason || chosen.availability_status}). Please select an available representative or use Auto-Assignment.`;
+        }
+      }
+    }
 
     // Date of birth validation
     if (dateOfBirth) {
@@ -383,6 +447,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       last_name: lastName.trim(),
       email_normalized: email.trim().toLowerCase(),
       phone_normalized: canonicalPhone,
+      assignment_mode: assignmentMode,
       gender: gender || null,
       date_of_birth: dateOfBirth || null,
       country: country || null,
@@ -391,7 +456,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       interested_program: selectedProgram,
       fitness_goal: fitnessGoal.trim() || null,
       lead_source: selectedSource,
-      assigned_sales_user: selectedAgent,
+      assigned_sales_user: assignmentMode === 'MANUAL' ? selectedAgent : undefined,
       referred_by_user: referredByUserId || null,
       referred_by_name: referredByName.trim() || null,
       billing_name: billingName.trim() || null,
@@ -739,11 +804,18 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
             {/* SECTION 3: SOURCE & ASSIGNMENT */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-                <Tag className="w-4 h-4 text-primary" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Section 3 &mdash; Source & Assignment
-                </h3>
+              <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-primary" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Section 3 &mdash; Source & Representative Assignment
+                  </h3>
+                </div>
+                {assignmentConfig?.auto_assignment_strategy && (
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground font-mono">
+                    Engine: {assignmentConfig.auto_assignment_strategy === 'LEAST_OPEN_LEADS' ? 'Workload' : 'Round-Robin'}
+                  </Badge>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -783,46 +855,155 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                   )}
                 </div>
 
-                {/* Assigned Agent */}
+                {/* Assignment Mode Switcher */}
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium">
-                    Assigned Agent <span className="text-destructive">*</span>
-                  </Label>
-                  <select
-                    value={selectedAgent}
-                    onChange={(e) => setSelectedAgent(e.target.value)}
-                    className={`w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary ${
-                      formErrors.agent ? 'border-destructive' : ''
-                    }`}
-                    disabled={isAgentsLoading}
-                    required
-                  >
-                    {isAgentsLoading ? (
-                      <option value="">Loading eligible agents...</option>
-                    ) : isAgentsError ? (
-                      <option value="">Unable to load agents</option>
-                    ) : agents.length === 0 ? (
-                      <option value="">No eligible agents for this branch</option>
-                    ) : (
-                      <>
-                        <option value="">Select an agent</option>
-                        {agents.map((ag) => (
-                          <option key={ag.id} value={ag.id}>
-                            {ag.name} ({ag.role_name || ag.user_type || 'Agent'})
-                          </option>
-                        ))}
-                      </>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">Assignment Method</Label>
+                    {assignmentConfig?.assignment_mode_allowed && assignmentConfig.assignment_mode_allowed !== 'BOTH' && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {assignmentConfig.assignment_mode_allowed === 'AUTO' ? 'Auto-assign enforced' : 'Manual enforced'}
+                      </span>
                     )}
-                  </select>
-                  {formErrors.agent && (
-                    <p className="text-[11px] text-destructive">{formErrors.agent}</p>
-                  )}
-                  {!isAgentsLoading && agents.length === 0 && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                      No active agents with CRM permissions assigned to this branch.
-                    </p>
-                  )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 p-0.5 bg-muted/40 rounded-lg border border-border/60 h-9">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignmentMode('MANUAL');
+                        setFormErrors((prev) => {
+                          const c = { ...prev };
+                          delete c.agent;
+                          return c;
+                        });
+                      }}
+                      disabled={assignmentConfig?.assignment_mode_allowed === 'AUTO'}
+                      className={`h-full rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                        assignmentMode === 'MANUAL'
+                          ? 'bg-background text-foreground shadow-xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      } ${assignmentConfig?.assignment_mode_allowed === 'AUTO' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      Manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignmentMode('AUTO');
+                        setFormErrors((prev) => {
+                          const c = { ...prev };
+                          delete c.agent;
+                          return c;
+                        });
+                      }}
+                      disabled={assignmentConfig?.assignment_mode_allowed === 'MANUAL'}
+                      className={`h-full rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                        assignmentMode === 'AUTO'
+                          ? 'bg-background text-foreground shadow-xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      } ${assignmentConfig?.assignment_mode_allowed === 'MANUAL' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      Auto-Assign
+                    </button>
+                  </div>
                 </div>
+
+                {/* Conditional Representative Selection / Auto Info Card */}
+                {assignmentMode === 'MANUAL' ? (
+                  <div className="sm:col-span-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-medium">
+                        Assigned Representative <span className="text-destructive">*</span>
+                      </Label>
+                      {availableAgents.length > 0 && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          {availableAgents.length} representative{availableAgents.length === 1 ? '' : 's'} available
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      value={selectedAgent}
+                      onChange={(e) => setSelectedAgent(e.target.value)}
+                      className={`w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary ${
+                        formErrors.agent ? 'border-destructive' : ''
+                      }`}
+                      disabled={isAgentsLoading}
+                      required
+                    >
+                      {isAgentsLoading ? (
+                        <option value="">Loading representatives...</option>
+                      ) : isAgentsError ? (
+                        <option value="">Unable to load representatives</option>
+                      ) : agents.length === 0 ? (
+                        <option value="">No representatives found for this branch</option>
+                      ) : (
+                        <>
+                          <option value="">Select an available representative</option>
+                          {availableAgents.length > 0 && (
+                            <optgroup label="Available Representatives">
+                              {availableAgents.map((ag) => (
+                                <option key={ag.id} value={ag.id}>
+                                  {ag.name} ({ag.role_label || ag.role_name || ag.user_type || 'Representative'})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {unavailableAgents.length > 0 && (
+                            <optgroup label="Unavailable / On Leave">
+                              {unavailableAgents.map((ag) => (
+                                <option key={ag.id} value={ag.id} disabled className="text-muted-foreground bg-muted/40">
+                                  {ag.name} ({ag.role_label || ag.role_name || 'Representative'} &mdash; {ag.availability_reason || ag.availability_status || 'Unavailable'})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      )}
+                    </select>
+                    {formErrors.agent && (
+                      <p className="text-[11px] text-destructive">{formErrors.agent}</p>
+                    )}
+                    {!isAgentsLoading && availableAgents.length === 0 && (
+                      <div className="p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold">No representatives currently available</p>
+                          <p className="text-[11px] opacity-90">
+                            All representatives in this branch are currently on leave or outside branch scope. Switch to <strong>Auto-Assign</strong> to use safe unassigned fallback.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="sm:col-span-2 p-3.5 rounded-lg border border-primary/20 bg-primary/5 text-xs space-y-1.5">
+                    <div className="flex items-center gap-2 font-semibold text-foreground">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span>Dynamic Auto-Assignment Engine</span>
+                      <Badge variant="secondary" className="text-[10px] uppercase font-semibold">
+                        {assignmentConfig?.auto_assignment_strategy === 'LEAST_OPEN_LEADS'
+                          ? 'Workload Balancing'
+                          : 'Round Robin Rotation'}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      {assignmentConfig?.auto_assignment_strategy === 'LEAST_OPEN_LEADS'
+                        ? 'The system will dynamically assign this lead to the available representative with the lowest active pipeline workload at this branch.'
+                        : 'The system will sequentially rotate this lead to the next available representative at this branch using concurrency-safe pointer locking.'}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        Leave-aware (skips staff on time-off)
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        Zero lead loss: Safe unassigned fallback
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Referred By (Searchable Backend Dropdown or Manual) */}
                 <div className="sm:col-span-2 space-y-1 relative">

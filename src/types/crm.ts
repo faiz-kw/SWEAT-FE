@@ -133,14 +133,21 @@ export interface LeadMetadata {
 
 export interface EligibleAgent {
   id: string;
+  user_id?: string;
   name: string;
+  display_name?: string;
   email: string;
   phone?: string | null;
   user_type?: string;
   role_code?: string | null;
   role_name?: string | null;
+  role_label?: string | null;
   home_branch_id?: string | null;
   home_branch_name?: string | null;
+  branch?: string | null;
+  is_available?: boolean;
+  availability_status?: 'AVAILABLE' | 'ON_LEAVE' | 'OUTSIDE_BRANCH' | 'NO_PERMISSION' | 'INACTIVE';
+  availability_reason?: string | null;
 }
 
 export interface CRMAgentAssignmentRoleOption {
@@ -174,6 +181,13 @@ export interface CRMAgentAssignmentConfig {
   excluded_user_ids: string[];
   require_branch_match: boolean;
   allow_all_staff_fallback: boolean;
+  assignment_mode_allowed?: 'MANUAL' | 'AUTO' | 'BOTH';
+  default_assignment_mode?: 'MANUAL' | 'AUTO';
+  auto_assignment_strategy?: 'ROUND_ROBIN' | 'LEAST_OPEN_LEADS' | 'MANUAL_ONLY';
+  allow_unassigned_fallback?: boolean;
+  consider_leave_availability?: boolean;
+  notify_manager_on_unassigned?: boolean;
+  round_robin_state?: Record<string, string>;
   available_roles?: CRMAgentAssignmentRoleOption[];
   available_users?: CRMAgentAssignmentUserOption[];
   created_at?: string;
@@ -205,6 +219,7 @@ export interface CreateLeadPayload {
   last_name: string;
   phone_normalized?: string | null;
   email_normalized?: string | null;
+  assignment_mode?: 'MANUAL' | 'AUTO';
   gender?: string | null;
   date_of_birth?: string | null;
   country?: string | null;

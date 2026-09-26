@@ -149,16 +149,35 @@ export function UsersWorkspace() {
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
   const [inviteError, setInviteError] = React.useState<string | null>(null);
 
-  // Edit User Modal State
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<AdminUserRow | null>(null);
   const [editRole, setEditRole] = React.useState("");
+  const [editUsername, setEditUsername] = React.useState("");
   const [editDepartmentId, setEditDepartmentId] = React.useState("");
   const [editReportsToId, setEditReportsToId] = React.useState("");
   const [editBranchAccess, setEditBranchAccess] = React.useState<Record<string, boolean>>({});
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
+
+  // Canonical deduplication helpers by entity ID
+  const uniqueBranches = React.useMemo(() => {
+    const seen = new Set<string>();
+    return branches.filter((b) => {
+      if (!b?.id || seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+  }, [branches]);
+
+  const uniqueRoles = React.useMemo(() => {
+    const seen = new Set<string>();
+    return roles.filter((r) => {
+      if (!r?.id || seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }, [roles]);
 
   // Open Invite Modal helper with safe default initializations
   const handleOpenInviteModal = React.useCallback(() => {
@@ -351,6 +370,7 @@ export function UsersWorkspace() {
   // Open Edit User Modal
   const handleOpenEdit = (user: AdminUserRow) => {
     setEditingUser(user);
+    setEditUsername(user.username || "");
     const roleId = roles.find((role) => role.name === user.role || role.code === user.role)?.id || user.branch_access?.[0]?.role_id || "";
     setEditRole(roleId);
     setEditReportsToId(user.reports_to_id || "");
@@ -381,8 +401,13 @@ export function UsersWorkspace() {
         editRoleNameLower.includes("tenant admin") ||
         editRoleNameLower.includes("platform");
 
+      const trimmedUsername = editUsername.trim();
+      const originalUsername = (editingUser.username || "").trim();
+      const usernameChanged = trimmedUsername !== originalUsername;
+
       await updateUserApi(editingUser.id, {
         ...(editRole ? { role_id: editRole } : {}),
+        ...(usernameChanged ? { username: trimmedUsername } : {}),
         ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
         is_active: editStatus === "Active",
         department_id: editDepartmentId || undefined,
@@ -393,7 +418,7 @@ export function UsersWorkspace() {
           })),
         } : {}),
       });
-      toast.success(`Updated role and status for ${editingUser.full_name || editingUser.email}`);
+      toast.success(`Updated profile for ${editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
       setEditingUser(null);
       setEditError(null);
@@ -440,6 +465,11 @@ export function UsersWorkspace() {
         const isPlatformUser = isPlatformAccount(u);
         if (scopeFilter === "platform" && !isPlatformUser) return false;
         if (scopeFilter === "tenant" && isPlatformUser) return false;
+      } else {
+        // In tenant mode, strictly exclude customer member accounts from Staff & User Management
+        const rLower = (u.role || u.role_name || "").toLowerCase();
+        const userTypeLower = ((u as any).user_type || "").toLowerCase();
+        if (rLower === "member" || userTypeLower === "member") return false;
       }
 
       // Search matching
@@ -700,7 +730,7 @@ export function UsersWorkspace() {
                 {(currentUser?.isOrgWide !== false || isPlatformAdmin) && (
                   <SelectItem value="all">All Branches</SelectItem>
                 )}
-                {branches.map((b) => (
+                {uniqueBranches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     {b.name}
                   </SelectItem>
@@ -727,12 +757,12 @@ export function UsersWorkspace() {
 
             {/* Role Filter */}
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="h-8 text-xs w-32 bg-background">
+              <SelectTrigger className="h-8 text-xs w-36 bg-background">
                 <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
-                {roles.map((r) => (
+                {uniqueRoles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
                   </SelectItem>
@@ -1445,6 +1475,22 @@ export function UsersWorkspace() {
               </div>
 
               <div className="space-y-1">
+                <Label htmlFor="staff-username" className="text-xs font-semibold">
+                  Username / Login ID
+                </Label>
+                <Input
+                  id="staff-username"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  placeholder="e.g. staff_john or john_uat"
+                  className="h-8 text-xs font-mono bg-background"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Unique login identifier for this staff member (alphanumeric, underscores, hyphens).
+                </p>
+              </div>
+
+              <div className="space-y-1">
                 <Label className="text-xs font-semibold">Assigned Role</Label>
                 <Select value={editRole} onValueChange={(roleId) => {
                   setEditRole(roleId);
@@ -1453,13 +1499,24 @@ export function UsersWorkspace() {
                   <SelectTrigger className="h-8 text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="text-xs max-h-56">
-                    {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        <span className="font-semibold">{r.name}</span>
-                        {r.description ? (
-                          <span className="text-muted-foreground ml-1.5 text-[10px]">— {r.description}</span>
-                        ) : null}
+                  <SelectContent className="text-xs max-h-56 max-w-sm">
+                    {uniqueRoles.map((r) => (
+                      <SelectItem key={r.id} value={r.id} className="cursor-pointer py-1.5">
+                        <div className="flex flex-col gap-0.5 text-left max-w-[320px]">
+                          <div className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+                            <span>{r.name}</span>
+                            {r.scope && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 font-normal">
+                                {r.scope}
+                              </Badge>
+                            )}
+                          </div>
+                          {r.description ? (
+                            <span className="text-muted-foreground text-[10px] line-clamp-2 break-words leading-tight">
+                              {r.description}
+                            </span>
+                          ) : null}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1488,7 +1545,7 @@ export function UsersWorkspace() {
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Branch access for this role</Label>
                   <p className="text-xs text-muted-foreground">Enable any number of branches. Disabling a branch removes access through this role; other roles may still grant access.</p>
-                  {branches.map((branch) => (
+                  {uniqueBranches.map((branch) => (
                     <label key={branch.id} className="flex items-center justify-between gap-3 rounded border p-2 text-xs">
                       <span>{branch.name}</span>
                       <span className="flex items-center gap-2">
@@ -1500,7 +1557,7 @@ export function UsersWorkspace() {
                       </span>
                     </label>
                   ))}
-                  {branches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
+                  {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">Organization-scoped roles apply to all branches. Choose a branch-scoped role to manage individual branch access.</p>

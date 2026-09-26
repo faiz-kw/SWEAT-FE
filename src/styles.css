@@ -207,6 +207,14 @@
   -webkit-overflow-scrolling: touch;
 }
 
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Glassmorphism & Micro-animations */
 @layer utilities {
   .glass-card {

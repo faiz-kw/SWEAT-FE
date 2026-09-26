@@ -121,6 +121,25 @@ export function BookTrialModal({
     enabled: open,
   });
 
+  // Defensive deduplication by canonical entity ID
+  const uniqueBranches = React.useMemo(() => {
+    const seen = new Set<string>();
+    return branches.filter((b) => {
+      if (!b?.id || seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+  }, [branches]);
+
+  const uniquePrograms = React.useMemo(() => {
+    const seen = new Set<string>();
+    return programs.filter((p) => {
+      if (!p?.id || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [programs]);
+
   // Fetch leads for lead search if no initial lead or existing trial is provided
   const { data: leadsData } = useQuery({
     queryKey: ['crm-leads-search', leadSearch],
@@ -443,7 +462,7 @@ export function BookTrialModal({
                   className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs"
                 >
                   <option value="">All Trial Programs</option>
-                  {programs.map((p) => (
+                  {uniquePrograms.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -468,7 +487,7 @@ export function BookTrialModal({
                   required
                 >
                   <option value="" disabled>Select Branch</option>
-                  {branches.map((b) => (
+                  {uniqueBranches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} ({b.city || 'Studio'})
                     </option>

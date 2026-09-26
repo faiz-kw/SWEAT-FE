@@ -159,8 +159,11 @@ export const crmApi = {
     return res.data;
   },
 
-  getEligibleAgents: async (branchId?: string): Promise<EligibleAgent[]> => {
-    const qStr = branchId ? `?branch_id=${branchId}` : '';
+  getEligibleAgents: async (branchId?: string, includeUnavailable: boolean = true): Promise<EligibleAgent[]> => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', branchId);
+    if (includeUnavailable) params.append('include_unavailable', 'true');
+    const qStr = params.toString() ? `?${params.toString()}` : '';
     const res = await api.get<EligibleAgent[]>(`/tenant/leads/eligible-agents/${qStr}`);
     return Array.isArray(res.data) ? res.data : [];
   },

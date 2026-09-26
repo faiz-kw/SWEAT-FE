@@ -9,6 +9,7 @@ import { type Row } from '@/services/store';
 
 export interface AdminUserRow extends Row {
   branch_access?: { role_id: string; branch_id: string; branch_name: string; enabled: boolean }[];
+  username?: string;
   email: string;
   first_name: string;
   last_name: string;

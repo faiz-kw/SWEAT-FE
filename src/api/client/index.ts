@@ -12,8 +12,9 @@ export interface ApiResponse<T> {
   status: number;
 }
 
-interface CustomRequestInit extends RequestInit {
+export interface CustomRequestInit extends RequestInit {
   _retry?: boolean;
+  params?: Record<string, any>;
 }
 
 async function request<T>(
@@ -51,12 +52,29 @@ async function request<T>(
     }
   }
 
-  const url = endpoint.startsWith('http')
-    ? endpoint
-    : `${BASE_URL}${normalizedEndpoint.startsWith('/') ? '' : '/'}${normalizedEndpoint}`;
+  let queryString = '';
+  if (options.params && typeof options.params === 'object') {
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(options.params)) {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.append(key, String(value));
+      }
+    }
+    queryString = searchParams.toString();
+  }
 
+  let finalPath = normalizedEndpoint;
+  if (queryString) {
+    finalPath += (finalPath.includes('?') ? '&' : '?') + queryString;
+  }
+
+  const url = endpoint.startsWith('http')
+    ? (queryString ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}${queryString}` : endpoint)
+    : `${BASE_URL}${finalPath.startsWith('/') ? '' : '/'}${finalPath}`;
+
+  const { params: _params, _retry, ...fetchOptions } = options;
   const res = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
     credentials: 'include',
   });
@@ -105,15 +123,15 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(endpoint: string, options?: RequestInit) =>
+  get: <T>(endpoint: string, options?: CustomRequestInit) =>
     request<T>(endpoint, { ...options, method: 'GET' }),
-  post: <T>(endpoint: string, body?: any, options?: RequestInit) =>
+  post: <T>(endpoint: string, body?: any, options?: CustomRequestInit) =>
     request<T>(endpoint, {
       ...options,
       method: 'POST',
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
-  idempotentPost: <T>(endpoint: string, body?: any, idempotencyKey?: string, options?: RequestInit) => {
+  idempotentPost: <T>(endpoint: string, body?: any, idempotencyKey?: string, options?: CustomRequestInit) => {
     const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2));
     const headers = new Headers(options?.headers || {});
     if (!headers.has('Idempotency-Key')) {
@@ -126,18 +144,18 @@ export const api = {
       body: body instanceof FormData ? body : JSON.stringify(body),
     });
   },
-  patch: <T>(endpoint: string, body?: any, options?: RequestInit) =>
+  patch: <T>(endpoint: string, body?: any, options?: CustomRequestInit) =>
     request<T>(endpoint, {
       ...options,
       method: 'PATCH',
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
-  put: <T>(endpoint: string, body?: any, options?: RequestInit) =>
+  put: <T>(endpoint: string, body?: any, options?: CustomRequestInit) =>
     request<T>(endpoint, {
       ...options,
       method: 'PUT',
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
-  delete: <T>(endpoint: string, options?: RequestInit) =>
+  delete: <T>(endpoint: string, options?: CustomRequestInit) =>
     request<T>(endpoint, { ...options, method: 'DELETE' }),
 };

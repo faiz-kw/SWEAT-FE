@@ -5,6 +5,8 @@ import {
   Save,
   RotateCw,
   Search,
+  Sparkles,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,6 +40,12 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
   const [excludedUserIds, setExcludedUserIds] = React.useState<string[]>([]);
   const [requireBranchMatch, setRequireBranchMatch] = React.useState(true);
   const [allowAllStaffFallback, setAllowAllStaffFallback] = React.useState(true);
+  const [assignmentModeAllowed, setAssignmentModeAllowed] = React.useState<'MANUAL' | 'AUTO' | 'BOTH'>('BOTH');
+  const [defaultAssignmentMode, setDefaultAssignmentMode] = React.useState<'MANUAL' | 'AUTO'>('MANUAL');
+  const [autoAssignmentStrategy, setAutoAssignmentStrategy] = React.useState<'ROUND_ROBIN' | 'LEAST_OPEN_LEADS' | 'MANUAL_ONLY'>('ROUND_ROBIN');
+  const [allowUnassignedFallback, setAllowUnassignedFallback] = React.useState(true);
+  const [considerLeaveAvailability, setConsiderLeaveAvailability] = React.useState(true);
+  const [notifyManagerOnUnassigned, setNotifyManagerOnUnassigned] = React.useState(true);
   const [hasChanges, setHasChanges] = React.useState(false);
   const [userSearch, setUserSearch] = React.useState('');
 
@@ -47,6 +55,12 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
       setExcludedUserIds(config.excluded_user_ids || []);
       setRequireBranchMatch(config.require_branch_match ?? true);
       setAllowAllStaffFallback(config.allow_all_staff_fallback ?? true);
+      setAssignmentModeAllowed(config.assignment_mode_allowed || 'BOTH');
+      setDefaultAssignmentMode(config.default_assignment_mode || 'MANUAL');
+      setAutoAssignmentStrategy(config.auto_assignment_strategy || 'ROUND_ROBIN');
+      setAllowUnassignedFallback(config.allow_unassigned_fallback ?? true);
+      setConsiderLeaveAvailability(config.consider_leave_availability ?? true);
+      setNotifyManagerOnUnassigned(config.notify_manager_on_unassigned ?? true);
       setHasChanges(false);
     }
   }, [config]);
@@ -89,6 +103,12 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
       excluded_user_ids: excludedUserIds,
       require_branch_match: requireBranchMatch,
       allow_all_staff_fallback: allowAllStaffFallback,
+      assignment_mode_allowed: assignmentModeAllowed,
+      default_assignment_mode: defaultAssignmentMode,
+      auto_assignment_strategy: autoAssignmentStrategy,
+      allow_unassigned_fallback: allowUnassignedFallback,
+      consider_leave_availability: considerLeaveAvailability,
+      notify_manager_on_unassigned: notifyManagerOnUnassigned,
     });
   };
 
@@ -156,7 +176,154 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
         </div>
       </div>
 
-      {/* Minimal Scoping Options */}
+      {/* Dynamic Lead Assignment Policy & Strategy Section */}
+      <div className="p-4 rounded-xl bg-card border border-border/70 space-y-4 shadow-2xs">
+        <div className="flex items-center justify-between pb-3 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="w-4 h-4" />
+            </span>
+            <div>
+              <h4 className="text-xs font-semibold text-foreground">Lead Assignment Policy & Engine Strategy</h4>
+              <p className="text-[11px] text-muted-foreground">
+                Configure auto-assignment algorithms, intake modes, leave-awareness, and manager escalation alerts.
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-mono">
+            Backend Authoritative
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Permitted Intake Modes */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground block">Permitted Intake Modes</label>
+            <select
+              value={assignmentModeAllowed}
+              onChange={(e) => {
+                if (!canEdit) return;
+                setAssignmentModeAllowed(e.target.value as any);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+            >
+              <option value="BOTH">Both Manual & Auto-Assign Allowed</option>
+              <option value="AUTO">Auto-Assignment Only (Enforced)</option>
+              <option value="MANUAL">Manual Assignment Only</option>
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              Controls whether reps can manually override assignment in lead intake.
+            </p>
+          </div>
+
+          {/* Default Assignment Mode */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground block">Default Mode on Lead Form</label>
+            <select
+              value={defaultAssignmentMode}
+              onChange={(e) => {
+                if (!canEdit) return;
+                setDefaultAssignmentMode(e.target.value as any);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit || assignmentModeAllowed === 'MANUAL' || assignmentModeAllowed === 'AUTO'}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs disabled:opacity-60"
+            >
+              <option value="MANUAL">Manual Selection (Default)</option>
+              <option value="AUTO">Auto-Assignment (Default)</option>
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              Preselected method when opening Register New Lead modal.
+            </p>
+          </div>
+
+          {/* Auto Assignment Strategy */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground block">Auto-Assignment Strategy</label>
+            <select
+              value={autoAssignmentStrategy}
+              onChange={(e) => {
+                if (!canEdit) return;
+                setAutoAssignmentStrategy(e.target.value as any);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit || assignmentModeAllowed === 'MANUAL'}
+              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs disabled:opacity-60"
+            >
+              <option value="ROUND_ROBIN">Sequential Round-Robin (Pointer-locked)</option>
+              <option value="LEAST_OPEN_LEADS">Workload Balancing (Least Open Leads)</option>
+              <option value="MANUAL_ONLY">Disabled (Manual Only)</option>
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              Algorithm executed dynamically by backend on auto-assign intake.
+            </p>
+          </div>
+        </div>
+
+        {/* Feature Switches */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border/50 text-xs">
+          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+            <Switch
+              checked={considerLeaveAvailability}
+              onCheckedChange={(val) => {
+                if (!canEdit) return;
+                setConsiderLeaveAvailability(val);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit}
+              className="mt-0.5"
+            />
+            <div className="min-w-0">
+              <span className="font-medium text-foreground block">Workforce Leave-Aware</span>
+              <span className="text-[10px] text-muted-foreground block leading-tight">
+                Automatically skip representatives on approved leave or time-off.
+              </span>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+            <Switch
+              checked={allowUnassignedFallback}
+              onCheckedChange={(val) => {
+                if (!canEdit) return;
+                setAllowUnassignedFallback(val);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit}
+              className="mt-0.5"
+            />
+            <div className="min-w-0">
+              <span className="font-medium text-foreground block">Zero Lead Loss Fallback</span>
+              <span className="text-[10px] text-muted-foreground block leading-tight">
+                Safely save lead as UNASSIGNED if no staff are currently available.
+              </span>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+            <Switch
+              checked={notifyManagerOnUnassigned}
+              onCheckedChange={(val) => {
+                if (!canEdit) return;
+                setNotifyManagerOnUnassigned(val);
+                setHasChanges(true);
+              }}
+              disabled={!canEdit}
+              className="mt-0.5"
+            />
+            <div className="min-w-0">
+              <span className="font-medium text-foreground block">Escalate Unassigned Leads</span>
+              <span className="text-[10px] text-muted-foreground block leading-tight">
+                Send in-app notifications to branch managers when lead is unassigned.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      {/* Scoping Options */}
       <div className="flex flex-wrap items-center gap-6 p-3 rounded-lg bg-muted/20 border border-border/60 text-xs">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <Switch

@@ -42,11 +42,13 @@ import {
   Sparkles,
   Lock,
   Shield,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
 import { ConversionWizard } from './ConversionWizard';
+import { BookTrialModal } from './BookTrialModal';
 import type {
   Lead,
   LeadStatus,
@@ -71,6 +73,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -194,6 +197,11 @@ export function LeadDetailModal({
   const [gstNumber, setGstNumber] = React.useState('');
   const [panNumber, setPanNumber] = React.useState('');
 
+  // Trial actions modal state
+  const [isRescheduleOpen, setIsRescheduleOpen] = React.useState(false);
+  const [cancellingTrialId, setCancellingTrialId] = React.useState<string | null>(null);
+  const [cancelReason, setCancelReason] = React.useState('Prospect requested cancellation');
+
   // Synchronize form when lead changes
   React.useEffect(() => {
     if (lead) {
@@ -297,10 +305,19 @@ export function LeadDetailModal({
   const { data: leadTrials = [], isLoading: isTrialsLoading, isError: isTrialsError } = useQuery({
     queryKey: ['lead-trials', currentLead?.id],
     queryFn: () => crmApi.getLeadTrials(currentLead!.id),
-    enabled: open && !!currentLead?.id && (activeTab === 'trial' || activeTab === 'overview'),
+    enabled: open && !!currentLead?.id,
   });
 
   const latestTrial = leadTrials.length > 0 ? leadTrials[0] : null;
+
+  // Active trial check: true if lead has an active booked/confirmed/scheduled trial
+  const hasActiveTrial = React.useMemo(() => {
+    return leadTrials.some(
+      (t) =>
+        ['BOOKED', 'CONFIRMED', 'SCHEDULED'].includes(t.status) &&
+        !['CANCELLED', 'DECLINED'].includes(t.confirmation_status)
+    );
+  }, [leadTrials]);
 
   // Reminder schedule for latest trial
   const { data: latestReminderSchedule = [], isLoading: isLatestReminderLoading } = useQuery({
@@ -393,6 +410,23 @@ export function LeadDetailModal({
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark no-show');
+    },
+  });
+
+  const cancelTrialMutation = useMutation({
+    mutationFn: ({ trialId, reason }: { trialId: string; reason: string }) =>
+      crmApi.cancelTrial(trialId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
+      toast.success('Trial booking cancelled.');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to cancel trial');
     },
   });
 
@@ -736,7 +770,7 @@ export function LeadDetailModal({
                       Move Stage
                     </Button>
                   )}
-                  {isActiveProspect && canEdit && onBookTrialClick && (
+                  {isActiveProspect && canEdit && onBookTrialClick && !hasActiveTrial && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -745,6 +779,17 @@ export function LeadDetailModal({
                     >
                       <Calendar className="w-3.5 h-3.5" />
                       Book Trial
+                    </Button>
+                  )}
+                  {isActiveProspect && canEdit && hasActiveTrial && latestTrial && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsRescheduleOpen(true)}
+                      className="h-8 text-xs gap-1.5 font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      Edit / Reschedule Trial
                     </Button>
                   )}
                   {canEdit && !isEditing && (
@@ -2417,7 +2462,7 @@ export function LeadDetailModal({
                     Authoritative occurrence bookings, attendance tracking, and reminder schedules.
                   </p>
                 </div>
-                {canEdit && onBookTrialClick && (
+                {canEdit && onBookTrialClick && !hasActiveTrial && (
                   <Button
                     size="sm"
                     onClick={() => onBookTrialClick(currentLead)}
@@ -2425,6 +2470,17 @@ export function LeadDetailModal({
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Book Trial Session
+                  </Button>
+                )}
+                {canEdit && hasActiveTrial && latestTrial && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsRescheduleOpen(true)}
+                    className="h-8 text-xs gap-1.5 font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    Reschedule / Edit Session
                   </Button>
                 )}
               </div>
@@ -2560,6 +2616,41 @@ export function LeadDetailModal({
                               Mark No-Show
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsRescheduleOpen(true)}
+                            className="h-7 text-xs gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                          >
+                            <RotateCw className="w-3 h-3" />
+                            Reschedule / Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setCancellingTrialId(latestTrial.id);
+                              setCancelReason('Prospect requested cancellation');
+                            }}
+                            className="h-7 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            Cancel Trial
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* If trial is cancelled or rescheduled, show button to book fresh trial */}
+                      {canEdit && onBookTrialClick && !hasActiveTrial && (
+                        <div className="pt-2 border-t border-border/40">
+                          <Button
+                            size="sm"
+                            onClick={() => onBookTrialClick(currentLead)}
+                            className="h-7 text-xs gap-1 font-medium"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Book New Trial Session
+                          </Button>
                         </div>
                       )}
 
@@ -3199,6 +3290,85 @@ export function LeadDetailModal({
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Reschedule / Edit Trial Modal */}
+      {isRescheduleOpen && latestTrial && (
+        <BookTrialModal
+          open={isRescheduleOpen}
+          onOpenChange={setIsRescheduleOpen}
+          lead={currentLead}
+          mode="reschedule"
+          existingTrial={latestTrial}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
+            queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+            queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
+            queryClient.invalidateQueries({ queryKey: ['leads'] });
+            queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
+            queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
+          }}
+        />
+      )}
+
+      {/* Cancel Trial Dialog */}
+      {cancellingTrialId && (
+        <Dialog open={!!cancellingTrialId} onOpenChange={(open) => !open && setCancellingTrialId(null)}>
+          <DialogContent className="max-w-md w-full bg-background border border-border">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                Cancel Trial Booking
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Cancelling this trial booking will free up the reserved class occurrence slot. Once cancelled, you will have the option to book a new trial session for this lead.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Cancellation Reason</Label>
+                <Input
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Schedule conflict, requested cancellation"
+                  className="text-xs"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCancellingTrialId(null)}
+                disabled={cancelTrialMutation.isPending}
+                className="text-xs"
+              >
+                Keep Booking
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (cancellingTrialId && cancelReason.trim()) {
+                    cancelTrialMutation.mutate(
+                      { trialId: cancellingTrialId, reason: cancelReason.trim() },
+                      {
+                        onSuccess: () => {
+                          setCancellingTrialId(null);
+                        },
+                      }
+                    );
+                  }
+                }}
+                disabled={cancelTrialMutation.isPending || !cancelReason.trim()}
+                className="text-xs gap-1.5"
+              >
+                {cancelTrialMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Confirm Cancellation
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
