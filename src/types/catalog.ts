@@ -21,6 +21,15 @@ export type EntitlementType =
   | 'OPEN_ACCESS'
   | 'OTHER';
 
+export type DeliveryMode =
+  | 'GROUP_CLASS'
+  | 'INDIVIDUAL_SERVICE'
+  | 'OPEN_ACCESS'
+  | 'GROUP'
+  | 'PERSONAL_TRAINING'
+  | 'OPEN_GYM'
+  | 'HYBRID';
+
 export interface ProgramTypeItem {
   id: string;
   organization: string;
@@ -29,6 +38,22 @@ export interface ProgramTypeItem {
   description?: string | null;
   display_order: number;
   status: 'ACTIVE' | 'INACTIVE';
+  programs_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramBranchAvailabilityItem {
+  id: string;
+  program: string;
+  program_name?: string;
+  program_code?: string;
+  branch: string;
+  branch_name?: string;
+  branch_code?: string;
+  is_active: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,8 +83,18 @@ export interface Program {
   program_type_id?: string | null;
   program_type_name?: string | null;
   program_type_code?: string | null;
+  delivery_mode: DeliveryMode;
+  display_order: number;
   trial_allowed: boolean;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  available_branch_ids?: string[];
+  available_branches?: Array<{
+    id: string;
+    branch_id: string;
+    branch_name: string;
+    branch_code: string;
+    is_active: boolean;
+  }>;
   packages_count?: number;
   created_at: string;
   updated_at: string;

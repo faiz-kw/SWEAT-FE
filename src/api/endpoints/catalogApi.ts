@@ -107,7 +107,15 @@ export const catalogApi = {
   },
 
   // Programs
-  async getPrograms(params?: { category_id?: string; status?: string }): Promise<Program[]> {
+  async getPrograms(params?: {
+    category_id?: string;
+    program_type_id?: string;
+    branch_id?: string;
+    delivery_mode?: string;
+    trial_allowed?: boolean | string;
+    status?: string;
+    context?: string;
+  }): Promise<Program[]> {
     const res = await api.get<any>('/tenant/programs/', { params });
     const data = res.data;
     return Array.isArray(data) ? data : data?.results || [];
@@ -121,10 +129,14 @@ export const catalogApi = {
   async createProgram(payload: {
     code?: string;
     name: string;
-    program_type: string;
     category?: string | null;
+    program_type?: string;
     description?: string | null;
     trial_allowed?: boolean;
+    delivery_mode?: string;
+    display_order?: number;
+    available_branch_ids?: string[];
+    status?: string;
   }): Promise<Program> {
     const res = await api.post<Program>('/tenant/programs/', payload);
     return res.data;
@@ -139,6 +151,9 @@ export const catalogApi = {
       category?: string | null;
       description?: string | null;
       trial_allowed?: boolean;
+      delivery_mode?: string;
+      display_order?: number;
+      available_branch_ids?: string[];
       status?: string;
     }>
   ): Promise<Program> {
@@ -146,9 +161,61 @@ export const catalogApi = {
     return res.data;
   },
 
-  // Program Categories
-  async getProgramCategories(): Promise<ProgramCategory[]> {
-    const res = await api.get<any>('/tenant/program-categories/');
+  async deactivateProgram(id: string): Promise<Program> {
+    const res = await api.post<Program>(`/tenant/programs/${id}/deactivate/`);
+    return res.data;
+  },
+
+  async reactivateProgram(id: string): Promise<Program> {
+    const res = await api.post<Program>(`/tenant/programs/${id}/reactivate/`);
+    return res.data;
+  },
+
+  async archiveProgram(id: string): Promise<Program> {
+    const res = await api.post<Program>(`/tenant/programs/${id}/archive/`);
+    return res.data;
+  },
+
+  async restoreProgram(id: string): Promise<Program> {
+    const res = await api.post<Program>(`/tenant/programs/${id}/restore/`);
+    return res.data;
+  },
+
+  async deleteProgram(id: string): Promise<void> {
+    await api.delete(`/tenant/programs/${id}/`);
+  },
+
+  // Program Branch Availability
+  async getProgramBranchAvailabilities(params?: {
+    program_id?: string;
+    branch_id?: string;
+    is_active?: boolean | string;
+  }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/program-branch-availability/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
+
+  async updateProgramBranchAvailability(
+    id: string,
+    payload: { is_active?: boolean; effective_from?: string; effective_to?: string }
+  ): Promise<any> {
+    const res = await api.patch<any>(`/tenant/program-branch-availability/${id}/`, payload);
+    return res.data;
+  },
+
+  async deactivateProgramBranchAvailability(id: string): Promise<any> {
+    const res = await api.post<any>(`/tenant/program-branch-availability/${id}/deactivate/`);
+    return res.data;
+  },
+
+  async reactivateProgramBranchAvailability(id: string): Promise<any> {
+    const res = await api.post<any>(`/tenant/program-branch-availability/${id}/reactivate/`);
+    return res.data;
+  },
+
+  async getProgramCategories(params?: { status?: string }): Promise<ProgramCategory[]> {
+    const res = await api.get<any>('/tenant/program-categories/', { params });
     const data = res.data;
     return Array.isArray(data) ? data : data?.results || [];
   },
@@ -163,7 +230,35 @@ export const catalogApi = {
     return res.data;
   },
 
-  // Program Types
+  async updateProgramCategory(
+    id: string,
+    payload: Partial<{
+      code: string;
+      name: string;
+      description?: string | null;
+      display_order?: number;
+      status?: string;
+    }>
+  ): Promise<ProgramCategory> {
+    const res = await api.patch<ProgramCategory>(`/tenant/program-categories/${id}/`, payload);
+    return res.data;
+  },
+
+  async deactivateProgramCategory(id: string): Promise<ProgramCategory> {
+    const res = await api.post<ProgramCategory>(`/tenant/program-categories/${id}/deactivate/`);
+    return res.data;
+  },
+
+  async reactivateProgramCategory(id: string): Promise<ProgramCategory> {
+    const res = await api.post<ProgramCategory>(`/tenant/program-categories/${id}/reactivate/`);
+    return res.data;
+  },
+
+  async deleteProgramCategory(id: string): Promise<void> {
+    await api.delete(`/tenant/program-categories/${id}/`);
+  },
+
+  // Program Types (Internal / Compatibility)
   async getProgramTypes(params?: { status?: string }): Promise<ProgramTypeItem[]> {
     const res = await api.get<any>('/tenant/program-types/', { params });
     const data = res.data;
@@ -191,6 +286,20 @@ export const catalogApi = {
   ): Promise<ProgramTypeItem> {
     const res = await api.patch<ProgramTypeItem>(`/tenant/program-types/${id}/`, payload);
     return res.data;
+  },
+
+  async deactivateProgramType(id: string): Promise<ProgramTypeItem> {
+    const res = await api.post<ProgramTypeItem>(`/tenant/program-types/${id}/deactivate/`);
+    return res.data;
+  },
+
+  async reactivateProgramType(id: string): Promise<ProgramTypeItem> {
+    const res = await api.post<ProgramTypeItem>(`/tenant/program-types/${id}/reactivate/`);
+    return res.data;
+  },
+
+  async deleteProgramType(id: string): Promise<void> {
+    await api.delete(`/tenant/program-types/${id}/`);
   },
 
   // Terms Documents

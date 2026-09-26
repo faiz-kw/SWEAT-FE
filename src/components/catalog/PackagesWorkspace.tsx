@@ -30,9 +30,17 @@ import {
   DollarSign,
   Activity,
   Info,
+  Building2,
+  Trash2,
+  Filter,
+  CheckSquare,
+  Square,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 import { catalogApi } from '@/api/endpoints/catalogApi';
-import type { Package, PackageVersion, Program, TermsDocument, ProgramTypeItem } from '@/types/catalog';
+import { crmApi } from '@/api/endpoints/crmApi';
+import type { Package, PackageVersion, Program, TermsDocument, ProgramCategory, DeliveryMode } from '@/types/catalog';
 import { useAuth } from '@/contexts';
 import { toast } from 'sonner';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
@@ -48,32 +56,89 @@ import {
 } from '@/components/ui/dialog';
 
 function getErrorMessage(error: any): string {
-  if (!error) return 'An unexpected error occurred.';
+  if (!error) return 'An unexpected error occurred. Please try again.';
   const status = error.status || error?.response?.status;
+  const data = error.data || error?.response?.data;
+
+  // Friendly business messages from backend
+  if (data && typeof data === 'object') {
+    if (typeof data.error === 'string' && data.error && !data.error.includes('40') && !data.error.includes('50')) {
+      return data.error;
+    }
+    if (typeof data.detail === 'string' && data.detail && data.detail !== 'Not found.' && !data.detail.includes('40')) {
+      return data.detail;
+    }
+    if (data.code === 'PROGRAM_CATEGORY_HAS_PROGRAMS') {
+      return 'Cannot delete this program category: Programs are still referencing it. Deactivate it instead, or reassign the programs.';
+    }
+    if (data.code === 'PROGRAM_TYPE_HAS_PROGRAMS') {
+      return 'Cannot delete this program type: Programs are still referencing it. Deactivate it instead, or reassign the programs.';
+    }
+    if (data.code === 'PROGRAM_HAS_HISTORY') {
+      return 'Cannot modify or delete this program: Packages, classes, or lead records are referencing it.';
+    }
+    const errorEntries = Object.entries(data).filter(([k]) => k !== 'code');
+    if (errorEntries.length > 0) {
+      return errorEntries
+        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : v}`)
+        .join('; ');
+    }
+  }
+
   if (status === 401) {
-    return '401 Unauthorized: Your session has expired or authentication token is missing. Please log in again.';
+    return 'Your session has expired. Please log in again.';
   }
   if (status === 403) {
-    return '403 Forbidden: Your tenant role lacks permission to manage catalog resources (requires core.settings permission).';
+    return 'You do not have permission to manage catalog resources.';
   }
   if (status === 404) {
-    return '404 Not Found: The requested catalog endpoint or resource could not be found.';
-  }
-  if (status === 400) {
-    const data = error.data || error?.response?.data;
-    if (typeof data === 'object' && data !== null) {
-      const messages = Object.entries(data)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : v}`)
-        .join(' | ');
-      return `400 Bad Request: ${messages}`;
-    }
-    return error.message || '400 Bad Request: Invalid input data.';
+    return 'The requested record or resource was not found.';
   }
   if (status >= 500) {
-    return '500 Server Error: The tenant database encountered an unexpected server error.';
+    return 'Unable to complete this request right now. Please try again later.';
   }
-  return error.message || 'Failed to communicate with tenant catalog service.';
+
+  if (typeof error.message === 'string' && error.message) {
+    if (error.message.includes('Network Error') || error.message.includes('AxiosError')) {
+      return 'Network connection issue. Please check your connection and try again.';
+    }
+    if (!error.message.includes('40') && !error.message.includes('50') && !error.message.includes('Request failed')) {
+      return error.message;
+    }
+  }
+
+  return 'Unable to process this request. Please try again.';
 }
+
+const DELIVERY_MODES: Array<{ value: DeliveryMode; label: string; description: string }> = [
+  { value: 'GROUP_CLASS', label: 'Group Class', description: 'Group classes and scheduled occurrences' },
+  { value: 'INDIVIDUAL_SERVICE', label: 'Individual Service / PT', description: '1-on-1 dedicated training sessions and appointments' },
+  { value: 'OPEN_ACCESS', label: 'Open Access / Floor', description: 'Self-guided floor or open gym facility access' },
+];
+
+const getDeliveryModeBadge = (mode?: string) => {
+  switch (mode) {
+    case 'INDIVIDUAL_SERVICE':
+    case 'PERSONAL_TRAINING':
+      return {
+        label: 'Individual Service (PT)',
+        className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+      };
+    case 'OPEN_ACCESS':
+    case 'OPEN_GYM':
+      return {
+        label: 'Open Access',
+        className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+      };
+    case 'GROUP_CLASS':
+    case 'GROUP':
+    default:
+      return {
+        label: 'Group Class',
+        className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
+      };
+  }
+};
 
 const formatCurrency = (amount: any, currency: string = 'INR') => {
   if (amount === undefined || amount === null || amount === '') return '—';
@@ -102,12 +167,12 @@ export const PackagesWorkspace: React.FC = () => {
     return true;
   };
 
-  // Top tabs: Program Types | Programs | Legal Policies (Packages is nested inside Programs)
-  const [activeTab, setActiveTab] = useState<'program-types' | 'programs' | 'terms'>('programs');
+  // Top tabs: Program Categories | Programs | Legal Policies (Packages is nested inside Programs)
+  const [activeTab, setActiveTab] = useState<'categories' | 'programs' | 'terms'>('programs');
   
   // Search state
   const [progSearchQuery, setProgSearchQuery] = useState('');
-  const [ptSearchQuery, setPtSearchQuery] = useState('');
+  const [catSearchQuery, setCatSearchQuery] = useState('');
   const [termsSearchQuery, setTermsSearchQuery] = useState('');
 
   // Expandable programs state (Set of program IDs)
@@ -137,7 +202,7 @@ export const PackagesWorkspace: React.FC = () => {
   const [isNewPackageOpen, setIsNewPackageOpen] = useState(false);
   const [isNewVersionOpen, setIsNewVersionOpen] = useState(false);
   const [isNewProgramOpen, setIsNewProgramOpen] = useState(false);
-  const [isNewProgramTypeOpen, setIsNewProgramTypeOpen] = useState(false);
+  const [isNewProgramCategoryOpen, setIsNewProgramCategoryOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
 
   // Edit Modals
@@ -162,23 +227,42 @@ export const PackagesWorkspace: React.FC = () => {
 
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [editProgName, setEditProgName] = useState('');
+  const [editProgCode, setEditProgCode] = useState('');
   const [editProgDesc, setEditProgDesc] = useState('');
-  const [editProgType, setEditProgType] = useState('MEMBERSHIP');
+  const [editProgCategory, setEditProgCategory] = useState('');
+  const [editProgDeliveryMode, setEditProgDeliveryMode] = useState<DeliveryMode>('GROUP_CLASS');
+  const [editProgDisplayOrder, setEditProgDisplayOrder] = useState<number>(0);
   const [editProgTrial, setEditProgTrial] = useState(false);
   const [editProgStatus, setEditProgStatus] = useState<'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
+  const [editProgBranchIds, setEditProgBranchIds] = useState<string[]>([]);
 
-  // Program Type modal state (no Code field)
-  const [newPtName, setNewPtName] = useState('');
-  const [newPtDesc, setNewPtDesc] = useState('');
-  const [newPtOrder, setNewPtOrder] = useState(0);
-  const [ptFormError, setPtFormError] = useState<string | null>(null);
+  // Program Category modal state
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatOrder, setNewCatOrder] = useState(0);
+  const [catFormError, setCatFormError] = useState<string | null>(null);
 
-  const [editingProgramType, setEditingProgramType] = useState<ProgramTypeItem | null>(null);
-  const [editPtName, setEditPtName] = useState('');
-  const [editPtDesc, setEditPtDesc] = useState('');
-  const [editPtOrder, setEditPtOrder] = useState(0);
-  const [editPtStatus, setEditPtStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
-  const [editPtFormError, setEditPtFormError] = useState<string | null>(null);
+  const [editingProgramCategory, setEditingProgramCategory] = useState<ProgramCategory | null>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatCode, setEditCatCode] = useState('');
+  const [editCatDesc, setEditCatDesc] = useState('');
+  const [editCatOrder, setEditCatOrder] = useState(0);
+  const [editCatStatus, setEditCatStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [editCatFormError, setEditCatFormError] = useState<string | null>(null);
+
+  // Archive modal state
+  const [programToArchive, setProgramToArchive] = useState<Program | null>(null);
+  const [archiveProgError, setArchiveProgError] = useState<string | null>(null);
+
+  const [programCategoryToDelete, setProgramCategoryToDelete] = useState<ProgramCategory | null>(null);
+  const [deleteCatError, setDeleteCatError] = useState<string | null>(null);
+
+  // Program Filter bar state
+  const [progFilterCategory, setProgFilterCategory] = useState<string>('ALL');
+  const [progFilterStatus, setProgFilterStatus] = useState<string>('ALL');
+  const [progFilterBranch, setProgFilterBranch] = useState<string>('ALL');
+  const [progFilterDeliveryMode, setProgFilterDeliveryMode] = useState<string>('ALL');
+  const [progFilterTrialOnly, setProgFilterTrialOnly] = useState<boolean>(false);
 
   // Legal Policies modal state (no Code field)
   const [isNewTermsDocOpen, setIsNewTermsDocOpen] = useState(false);
@@ -249,20 +333,29 @@ export const PackagesWorkspace: React.FC = () => {
   const [newVerTaxIncluded, setNewVerTaxIncluded] = useState(true);
   const [newVerPublishNow, setNewVerPublishNow] = useState(false);
 
-  // Program Form state (no Code field)
+  // Program Form state
   const [newProgName, setNewProgName] = useState('');
+  const [newProgCode, setNewProgCode] = useState('');
   const [newProgDesc, setNewProgDesc] = useState('');
-  const [newProgType, setNewProgType] = useState('');
+  const [newProgCategory, setNewProgCategory] = useState('');
+  const [newProgDeliveryMode, setNewProgDeliveryMode] = useState<DeliveryMode>('GROUP_CLASS');
+  const [newProgDisplayOrder, setNewProgDisplayOrder] = useState<number>(0);
   const [newProgTrial, setNewProgTrial] = useState(false);
+  const [newProgBranchIds, setNewProgBranchIds] = useState<string[]>([]);
 
   // Queries
+  const { data: branches = [] } = useQuery({
+    queryKey: ['active-branches'],
+    queryFn: () => crmApi.getBranches(),
+  });
+
   const {
-    data: programTypes = [],
-    isLoading: isProgramTypesLoading,
-    refetch: refetchProgramTypes,
+    data: programCategories = [],
+    isLoading: isProgramCategoriesLoading,
+    refetch: refetchProgramCategories,
   } = useQuery({
-    queryKey: ['program-types'],
-    queryFn: () => catalogApi.getProgramTypes(),
+    queryKey: ['program-categories'],
+    queryFn: () => catalogApi.getProgramCategories(),
   });
 
   const {
@@ -285,7 +378,7 @@ export const PackagesWorkspace: React.FC = () => {
     isFetching: isProgramsFetching,
   } = useQuery({
     queryKey: ['programs'],
-    queryFn: () => catalogApi.getPrograms(),
+    queryFn: () => catalogApi.getPrograms({ context: 'management', status: 'ALL' }),
   });
 
   const {
@@ -501,16 +594,24 @@ export const PackagesWorkspace: React.FC = () => {
       catalogApi.createProgram({
         name: newProgName.trim(),
         description: newProgDesc.trim() || null,
-        program_type: newProgType || (programTypes[0]?.id ?? ''),
+        category: newProgCategory || (programCategories[0]?.id ?? null),
+        delivery_mode: newProgDeliveryMode,
+        display_order: newProgDisplayOrder,
         trial_allowed: newProgTrial,
+        available_branch_ids: newProgBranchIds,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
       setIsNewProgramOpen(false);
       setNewProgName('');
+      setNewProgCode('');
       setNewProgDesc('');
-      setNewProgType('');
+      setNewProgCategory('');
+      setNewProgDeliveryMode('GROUP_CLASS');
+      setNewProgDisplayOrder(0);
       setNewProgTrial(false);
+      setNewProgBranchIds([]);
       setProgFormError(null);
       toast.success('Program created successfully.');
     },
@@ -524,6 +625,7 @@ export const PackagesWorkspace: React.FC = () => {
       catalogApi.updateProgram(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
       setEditingProgram(null);
       setProgFormError(null);
       toast.success('Program updated successfully.');
@@ -533,38 +635,137 @@ export const PackagesWorkspace: React.FC = () => {
     },
   });
 
-  const createProgramTypeMutation = useMutation({
-    mutationFn: () =>
-      catalogApi.createProgramType({
-        name: newPtName.trim(),
-        description: newPtDesc.trim() || null,
-        display_order: newPtOrder,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['program-types'] });
-      setIsNewProgramTypeOpen(false);
-      setNewPtName('');
-      setNewPtDesc('');
-      setNewPtOrder(0);
-      setPtFormError(null);
-      toast.success('Program Type created successfully.');
+  const toggleProgramStatusMutation = useMutation({
+    mutationFn: ({ id, currentStatus }: { id: string; currentStatus: string }) => {
+      if (currentStatus === 'ACTIVE') {
+        return catalogApi.deactivateProgram(id);
+      } else {
+        return catalogApi.reactivateProgram(id);
+      }
     },
-    onError: (err: any) => {
-      setPtFormError(getErrorMessage(err));
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      if (vars.currentStatus === 'ACTIVE') {
+        toast.success('Program deactivated successfully.');
+      } else {
+        toast.success('Program activated successfully.');
+      }
+    },
+    onError: (err: any, vars) => {
+      console.error('[Program Status Error]', err);
+      const friendlyBackend = err?.response?.data?.error || err?.response?.data?.detail;
+      if (friendlyBackend && typeof friendlyBackend === 'string' && !friendlyBackend.toLowerCase().includes('not found')) {
+        toast.error(friendlyBackend);
+      } else if (vars.currentStatus === 'ACTIVE') {
+        toast.error('Unable to deactivate this program. Please try again.');
+      } else {
+        toast.error('Unable to activate this program. Please try again.');
+      }
     },
   });
 
-  const updateProgramTypeMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
-      catalogApi.updateProgramType(id, payload),
+  const archiveProgramMutation = useMutation({
+    mutationFn: (id: string) => catalogApi.archiveProgram(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['program-types'] });
-      setEditingProgramType(null);
-      setEditPtFormError(null);
-      toast.success('Program Type updated successfully.');
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      setProgramToArchive(null);
+      setArchiveProgError(null);
+      toast.success('Program archived successfully.');
     },
     onError: (err: any) => {
-      setEditPtFormError(getErrorMessage(err));
+      console.error('[Archive Program Error]', err);
+      const friendlyBackend = err?.response?.data?.error || err?.response?.data?.detail;
+      const msg = friendlyBackend && typeof friendlyBackend === 'string' && !friendlyBackend.toLowerCase().includes('not found')
+        ? friendlyBackend
+        : 'Unable to archive this program. Please try again.';
+      setArchiveProgError(msg);
+      toast.error(msg);
+    },
+  });
+
+  const restoreProgramMutation = useMutation({
+    mutationFn: (id: string) => catalogApi.restoreProgram(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      toast.success('Program restored successfully.');
+    },
+    onError: (err: any) => {
+      console.error('[Restore Program Error]', err);
+      const friendlyBackend = err?.response?.data?.error || err?.response?.data?.detail;
+      const msg = friendlyBackend && typeof friendlyBackend === 'string' && !friendlyBackend.toLowerCase().includes('not found')
+        ? friendlyBackend
+        : 'Unable to restore this program. Please try again.';
+      toast.error(msg);
+    },
+  });
+
+  const createProgramCategoryMutation = useMutation({
+    mutationFn: () =>
+      catalogApi.createProgramCategory({
+        name: newCatName.trim(),
+        description: newCatDesc.trim() || null,
+        display_order: newCatOrder,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      setIsNewProgramCategoryOpen(false);
+      setNewCatName('');
+      setNewCatDesc('');
+      setNewCatOrder(0);
+      setCatFormError(null);
+      toast.success('Program Category created successfully.');
+    },
+    onError: (err: any) => {
+      setCatFormError(getErrorMessage(err));
+    },
+  });
+
+  const updateProgramCategoryMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      catalogApi.updateProgramCategory(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      setEditingProgramCategory(null);
+      setEditCatFormError(null);
+      toast.success('Program Category updated successfully.');
+    },
+    onError: (err: any) => {
+      setEditCatFormError(getErrorMessage(err));
+    },
+  });
+
+  const toggleProgramCategoryStatusMutation = useMutation({
+    mutationFn: ({ id, currentStatus }: { id: string; currentStatus: string }) => {
+      if (currentStatus === 'ACTIVE') {
+        return catalogApi.deactivateProgramCategory(id);
+      } else {
+        return catalogApi.reactivateProgramCategory(id);
+      }
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      toast.success(`Program Category ${vars.currentStatus === 'ACTIVE' ? 'deactivated' : 'activated'}.`);
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const deleteProgramCategoryMutation = useMutation({
+    mutationFn: (id: string) => catalogApi.deleteProgramCategory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program-categories'] });
+      setProgramCategoryToDelete(null);
+      setDeleteCatError(null);
+      toast.success('Program Category deleted successfully.');
+    },
+    onError: (err: any) => {
+      setDeleteCatError(getErrorMessage(err));
     },
   });
 
@@ -633,43 +834,83 @@ export const PackagesWorkspace: React.FC = () => {
     },
   });
 
-  // Resolve friendly label for Program Type
-  const getProgramTypeLabel = (prog: Program) => {
-    if (prog.program_type_name) return prog.program_type_name;
-    const match = programTypes.find(
-      (pt) => pt.id === prog.program_type || pt.code === prog.program_type
+  // Resolve friendly label for Program Category
+  const getProgramCategoryLabel = (prog: Program) => {
+    if (prog.category_name) return prog.category_name;
+    const match = programCategories.find(
+      (c) => c.id === prog.category || c.code === prog.category
     );
     if (match) return match.name || match.code;
-    if (typeof prog.program_type === 'string' && prog.program_type.length > 20 && prog.program_type.includes('-')) {
-      return 'Program';
-    }
-    return prog.program_type || 'Program';
+    return 'Uncategorized';
   };
 
-  // Filtered program types (search by name or description)
-  const filteredProgramTypes = programTypes.filter((pt) => {
-    const q = ptSearchQuery.toLowerCase().trim();
+  // Filtered program categories (search by name, code, or description)
+  const filteredProgramCategories = programCategories.filter((c) => {
+    const q = catSearchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
-      pt.name?.toLowerCase().includes(q) ||
-      (pt.description && pt.description.toLowerCase().includes(q))
+      c.name?.toLowerCase().includes(q) ||
+      (c.code && c.code.toLowerCase().includes(q)) ||
+      (c.description && c.description.toLowerCase().includes(q))
     );
   });
 
-  // Filtered programs (search by name or type or package name)
-  const filteredPrograms = programs.filter((prog) => {
-    const q = progSearchQuery.toLowerCase().trim();
-    if (!q) return true;
-    const ptLabel = getProgramTypeLabel(prog).toLowerCase();
-    const progPackages = packagesByProgram.get(prog.id) || [];
-    const matchesPackageName = progPackages.some((p) => p.name?.toLowerCase().includes(q));
-    return (
-      prog.name?.toLowerCase().includes(q) ||
-      ptLabel.includes(q) ||
-      (prog.description && prog.description.toLowerCase().includes(q)) ||
-      matchesPackageName
-    );
-  });
+  // Filtered programs (search by name, code, category, description, or package name + filters)
+  const filteredPrograms = useMemo(() => {
+    return programs.filter((prog) => {
+      const q = progSearchQuery.toLowerCase().trim();
+      const catLabel = getProgramCategoryLabel(prog).toLowerCase();
+      const progPackages = packagesByProgram.get(prog.id) || [];
+      const matchesPackageName = progPackages.some((p) => p.name?.toLowerCase().includes(q));
+      const matchesQuery =
+        !q ||
+        prog.name?.toLowerCase().includes(q) ||
+        (prog.code && prog.code.toLowerCase().includes(q)) ||
+        catLabel.includes(q) ||
+        (prog.description && prog.description.toLowerCase().includes(q)) ||
+        matchesPackageName;
+
+      if (!matchesQuery) return false;
+
+      // Category filter
+      if (progFilterCategory !== 'ALL' && prog.category !== progFilterCategory) {
+        return false;
+      }
+
+      // Status filter
+      if (progFilterStatus !== 'ALL' && prog.status !== progFilterStatus) {
+        return false;
+      }
+
+      // Delivery Mode filter
+      if (progFilterDeliveryMode !== 'ALL' && prog.delivery_mode !== progFilterDeliveryMode) {
+        return false;
+      }
+
+      // Trial filter
+      if (progFilterTrialOnly && !prog.trial_allowed) {
+        return false;
+      }
+
+      // Branch filter
+      if (progFilterBranch !== 'ALL') {
+        const branchIds = prog.available_branch_ids || [];
+        if (!branchIds.includes(progFilterBranch)) return false;
+      }
+
+      return true;
+    });
+  }, [
+    programs,
+    progSearchQuery,
+    progFilterCategory,
+    progFilterStatus,
+    progFilterDeliveryMode,
+    progFilterTrialOnly,
+    progFilterBranch,
+    packagesByProgram,
+    programCategories,
+  ]);
 
   // Filtered terms docs (search by name or type)
   const filteredTermsDocs = termsDocs.filter((doc) => {
@@ -728,20 +969,25 @@ export const PackagesWorkspace: React.FC = () => {
   const startEditProgram = (prog: Program) => {
     setEditingProgram(prog);
     setEditProgName(prog.name);
+    setEditProgCode(prog.code || '');
     setEditProgDesc(prog.description || '');
-    setEditProgType(prog.program_type);
-    setEditProgTrial(prog.trial_allowed);
+    setEditProgCategory(prog.category || '');
+    setEditProgDeliveryMode((prog.delivery_mode as DeliveryMode) || 'GROUP_CLASS');
+    setEditProgDisplayOrder(prog.display_order ?? 0);
+    setEditProgTrial(Boolean(prog.trial_allowed));
     setEditProgStatus(prog.status);
+    setEditProgBranchIds(prog.available_branch_ids || []);
     setProgFormError(null);
   };
 
-  const startEditProgramType = (pt: ProgramTypeItem) => {
-    setEditingProgramType(pt);
-    setEditPtName(pt.name);
-    setEditPtDesc(pt.description || '');
-    setEditPtOrder(pt.display_order);
-    setEditPtStatus(pt.status);
-    setEditPtFormError(null);
+  const startEditProgramCategory = (cat: ProgramCategory) => {
+    setEditingProgramCategory(cat);
+    setEditCatName(cat.name);
+    setEditCatCode(cat.code || '');
+    setEditCatDesc(cat.description || '');
+    setEditCatOrder(cat.display_order);
+    setEditCatStatus(cat.status);
+    setEditCatFormError(null);
   };
 
   const openAddPackageForProgram = (programId: string) => {
@@ -773,20 +1019,20 @@ export const PackagesWorkspace: React.FC = () => {
         description="Configure your program catalog, commercial package tiers, immutable pricing versions, and legal policies."
         actions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {activeTab === 'program-types' && hasCatalogPermission && (
+            {activeTab === 'categories' && hasCatalogPermission && (
               <Button
                 onClick={() => {
-                  setPtFormError(null);
-                  setNewPtName('');
-                  setNewPtDesc('');
-                  setNewPtOrder(0);
-                  setIsNewProgramTypeOpen(true);
+                  setCatFormError(null);
+                  setNewCatName('');
+                  setNewCatDesc('');
+                  setNewCatOrder(0);
+                  setIsNewProgramCategoryOpen(true);
                 }}
                 className="gap-2 shadow-xs"
                 size="sm"
               >
                 <Plus className="w-4 h-4" />
-                <span>New Program Type</span>
+                <span>New Category</span>
               </Button>
             )}
             {activeTab === 'programs' && hasCatalogPermission && (
@@ -794,9 +1040,13 @@ export const PackagesWorkspace: React.FC = () => {
                 onClick={() => {
                   setProgFormError(null);
                   setNewProgName('');
+                  setNewProgCode('');
                   setNewProgDesc('');
-                  setNewProgType(programTypes[0]?.id ?? '');
+                  setNewProgCategory(programCategories[0]?.id ?? '');
+                  setNewProgDeliveryMode('GROUP_CLASS');
+                  setNewProgDisplayOrder(0);
                   setNewProgTrial(false);
+                  setNewProgBranchIds([]);
                   setIsNewProgramOpen(true);
                 }}
                 className="gap-2 shadow-xs"
@@ -829,8 +1079,8 @@ export const PackagesWorkspace: React.FC = () => {
         {/* KPI Tiles */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <KpiTile
-            title="Program Types"
-            value={programTypes.length}
+            title="Program Categories"
+            value={programCategories.length}
             icon={<Settings2 className="w-5 h-5 text-indigo-500" />}
             subtitle="Catalog classification tiers"
           />
@@ -858,17 +1108,17 @@ export const PackagesWorkspace: React.FC = () => {
         <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-6 gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/50 text-xs sm:text-sm font-medium overflow-x-auto max-w-full">
             <button
-              onClick={() => setActiveTab('program-types')}
+              onClick={() => setActiveTab('categories')}
               className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg transition-all ${
-                activeTab === 'program-types'
+                activeTab === 'categories'
                   ? 'bg-background text-foreground shadow-xs font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Settings2 className="w-4 h-4" />
-              <span>Program Types</span>
+              <span>Program Categories</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
-                {programTypes.length}
+                {programCategories.length}
               </span>
             </button>
 
@@ -905,9 +1155,9 @@ export const PackagesWorkspace: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 0: PROGRAM TYPES */}
+        {/* TAB 0: PROGRAM CATEGORIES */}
         {/* ========================================================================= */}
-        {activeTab === 'program-types' && (
+        {activeTab === 'categories' && (
           <div className="space-y-4">
             {/* Search */}
             <div className="flex flex-col sm:flex-row gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
@@ -915,16 +1165,16 @@ export const PackagesWorkspace: React.FC = () => {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search program types by name or description..."
-                  value={ptSearchQuery}
-                  onChange={(e) => setPtSearchQuery(e.target.value)}
+                  placeholder="Search program categories by name or description..."
+                  value={catSearchQuery}
+                  onChange={(e) => setCatSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
             </div>
 
             {/* Loading */}
-            {isProgramTypesLoading && (
+            {isProgramCategoriesLoading && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="h-32 bg-muted/40 rounded-2xl border border-border/60 animate-pulse" />
@@ -933,57 +1183,62 @@ export const PackagesWorkspace: React.FC = () => {
             )}
 
             {/* Empty state */}
-            {!isProgramTypesLoading && filteredProgramTypes.length === 0 && (
+            {!isProgramCategoriesLoading && filteredProgramCategories.length === 0 && (
               <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
                 <Settings2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
                 <h3 className="text-base font-semibold text-foreground">
-                  {ptSearchQuery ? 'No matching program types' : 'No program types configured'}
+                  {catSearchQuery ? 'No matching program categories' : 'No program categories configured'}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
-                  {ptSearchQuery
-                    ? `No program type matched "${ptSearchQuery}". Try a different search term.`
-                    : 'Program Types classify your programs (e.g. Membership, Personal Training, Pilates). Create the first one to get started.'}
+                  {catSearchQuery
+                    ? `No program category matched "${catSearchQuery}". Try a different search term.`
+                    : 'Program Categories classify your programs (e.g. Strength & Conditioning, Pilates, Personal Training, Open Gym). Create the first one to get started.'}
                 </p>
-                {!ptSearchQuery && hasCatalogPermission && (
+                {!catSearchQuery && hasCatalogPermission && (
                   <Button
                     onClick={() => {
-                      setPtFormError(null);
-                      setNewPtName('');
-                      setNewPtDesc('');
-                      setNewPtOrder(0);
-                      setIsNewProgramTypeOpen(true);
+                      setCatFormError(null);
+                      setNewCatName('');
+                      setNewCatDesc('');
+                      setNewCatOrder(0);
+                      setIsNewProgramCategoryOpen(true);
                     }}
                     size="sm"
                   >
-                    Create Program Type
+                    Create Program Category
                   </Button>
                 )}
               </div>
             )}
 
             {/* Cards grid */}
-            {!isProgramTypesLoading && filteredProgramTypes.length > 0 && (
+            {!isProgramCategoriesLoading && filteredProgramCategories.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredProgramTypes.map((pt) => (
+                {filteredProgramCategories.map((cat) => (
                   <div
-                    key={pt.id}
+                    key={cat.id}
                     className={`p-4 sm:p-5 bg-card border rounded-2xl space-y-3 shadow-xs transition flex flex-col justify-between ${
-                      pt.status === 'INACTIVE'
+                      cat.status === 'INACTIVE'
                         ? 'border-border/40 opacity-60'
                         : 'border-border/60 hover:border-primary/40'
                     }`}
                   >
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
-                        <h4 className="text-base font-semibold text-foreground truncate" title={pt.name}>
-                          {pt.name}
-                        </h4>
-                        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+                        <div className="space-y-1 min-w-0">
+                          <h4 className="text-base font-semibold text-foreground break-words" title={cat.name}>
+                            {cat.name}
+                          </h4>
+                          <Badge variant="outline" className="text-[11px] font-mono font-semibold uppercase">
+                            {cat.code || 'NO_CODE'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1 flex-wrap justify-end shrink-0">
                           <Badge
-                            variant={pt.status === 'ACTIVE' ? 'default' : 'secondary'}
+                            variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'}
                             className="text-xs shrink-0"
                           >
-                            {pt.status}
+                            {cat.status}
                           </Badge>
                           {hasCatalogPermission && (
                             <>
@@ -991,8 +1246,8 @@ export const PackagesWorkspace: React.FC = () => {
                                 variant="ghost"
                                 size="icon"
                                 className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
-                                onClick={() => startEditProgramType(pt)}
-                                title="Edit program type"
+                                onClick={() => startEditProgramCategory(cat)}
+                                title="Edit program category"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </Button>
@@ -1000,38 +1255,56 @@ export const PackagesWorkspace: React.FC = () => {
                                 variant="ghost"
                                 size="icon"
                                 className={`w-7 h-7 shrink-0 ${
-                                  pt.status === 'ACTIVE'
+                                  cat.status === 'ACTIVE'
                                     ? 'text-amber-500 hover:text-amber-600'
                                     : 'text-emerald-500 hover:text-emerald-600'
                                 }`}
                                 onClick={() => {
-                                  updateProgramTypeMutation.mutate({
-                                    id: pt.id,
-                                    payload: { status: pt.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' },
+                                  toggleProgramCategoryStatusMutation.mutate({
+                                    id: cat.id,
+                                    currentStatus: cat.status,
                                   });
                                 }}
-                                title={pt.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                title={cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                               >
-                                {pt.status === 'ACTIVE' ? (
+                                {cat.status === 'ACTIVE' ? (
                                   <ToggleRight className="w-4 h-4" />
                                 ) : (
                                   <ToggleLeft className="w-4 h-4" />
                                 )}
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="w-7 h-7 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => {
+                                  setProgramCategoryToDelete(cat);
+                                  setDeleteCatError(null);
+                                }}
+                                title="Delete program category"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
                             </>
                           )}
                         </div>
                       </div>
-                      {pt.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 break-words" title={pt.description}>
-                          {pt.description}
+                      {cat.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 break-words" title={cat.description}>
+                          {cat.description}
                         </p>
                       )}
+                      <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1 font-medium text-primary">
+                          <Layers className="w-3.5 h-3.5" />
+                          {cat.programs_count ?? 0} {cat.programs_count === 1 ? 'Program' : 'Programs'}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50 flex-wrap gap-1">
-                      <span>Display order: {pt.display_order}</span>
+                      <span>Display order: {cat.display_order}</span>
                       <span className="text-[10px] text-muted-foreground/60">
-                        Updated {new Date(pt.updated_at).toLocaleDateString()}
+                        Updated {new Date(cat.updated_at).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
@@ -1046,17 +1319,119 @@ export const PackagesWorkspace: React.FC = () => {
         {/* ========================================================================= */}
         {activeTab === 'programs' && (
           <div className="space-y-4">
-            {/* Search bar */}
-            <div className="flex flex-col sm:flex-row gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search programs by name or type..."
-                  value={progSearchQuery}
-                  onChange={(e) => setProgSearchQuery(e.target.value)}
-                  className="pl-9 text-sm"
-                />
+            {/* Search and Filters toolbar */}
+            <div className="flex flex-col gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search programs by name, code, type, description, or package..."
+                    value={progSearchQuery}
+                    onChange={(e) => setProgSearchQuery(e.target.value)}
+                    className="pl-9 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Filter Controls Row */}
+              <div className="flex items-center gap-2.5 flex-wrap pt-1 text-xs">
+                <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Filters:</span>
+                </div>
+
+                {/* Category Filter */}
+                <select
+                  value={progFilterCategory}
+                  onChange={(e) => setProgFilterCategory(e.target.value)}
+                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="ALL">All Categories</option>
+                  {programCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Delivery Mode Filter */}
+                <select
+                  value={progFilterDeliveryMode}
+                  onChange={(e) => setProgFilterDeliveryMode(e.target.value)}
+                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="ALL">All Delivery Modes</option>
+                  {DELIVERY_MODES.map((dm) => (
+                    <option key={dm.value} value={dm.value}>
+                      {dm.label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Branch Filter */}
+                <select
+                  value={progFilterBranch}
+                  onChange={(e) => setProgFilterBranch(e.target.value)}
+                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="ALL">All Branches</option>
+                  {branches.map((b: any) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={progFilterStatus}
+                  onChange={(e) => setProgFilterStatus(e.target.value)}
+                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+
+                {/* Trial Allowed Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setProgFilterTrialOnly((prev) => !prev)}
+                  className={`h-8 px-2.5 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 ${
+                    progFilterTrialOnly
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      : 'bg-background text-muted-foreground border-input hover:text-foreground'
+                  }`}
+                >
+                  {progFilterTrialOnly ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                  <span>Trial Eligible Only</span>
+                </button>
+
+                {/* Reset Filters */}
+                {(progFilterCategory !== 'ALL' ||
+                  progFilterStatus !== 'ALL' ||
+                  progFilterBranch !== 'ALL' ||
+                  progFilterDeliveryMode !== 'ALL' ||
+                  progFilterTrialOnly ||
+                  progSearchQuery) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setProgFilterCategory('ALL');
+                      setProgFilterStatus('ALL');
+                      setProgFilterBranch('ALL');
+                      setProgFilterDeliveryMode('ALL');
+                      setProgFilterTrialOnly(false);
+                      setProgSearchQuery('');
+                    }}
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Reset Filters
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -1094,21 +1469,27 @@ export const PackagesWorkspace: React.FC = () => {
               <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
                 <Layers className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
                 <h3 className="text-base font-semibold text-foreground">
-                  {progSearchQuery ? 'No matching programs found' : 'No programs registered'}
+                  {progSearchQuery || progFilterCategory !== 'ALL' || progFilterBranch !== 'ALL' || progFilterDeliveryMode !== 'ALL' || progFilterStatus !== 'ALL' || progFilterTrialOnly
+                    ? 'No matching programs found'
+                    : 'No programs registered'}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
-                  {progSearchQuery
-                    ? `No program matched "${progSearchQuery}". Try a different search term.`
+                  {progSearchQuery || progFilterCategory !== 'ALL' || progFilterBranch !== 'ALL' || progFilterDeliveryMode !== 'ALL' || progFilterStatus !== 'ALL' || progFilterTrialOnly
+                    ? 'No program matched your active search and filter criteria. Try resetting filters.'
                     : 'Programs group packages and classes (e.g. Strength, Pilates, Personal Training). Create your first Program to begin adding packages.'}
                 </p>
-                {!progSearchQuery && hasCatalogPermission && (
+                {!progSearchQuery && progFilterCategory === 'ALL' && progFilterBranch === 'ALL' && progFilterDeliveryMode === 'ALL' && progFilterStatus === 'ALL' && !progFilterTrialOnly && hasCatalogPermission && (
                   <Button
                     onClick={() => {
                       setProgFormError(null);
                       setNewProgName('');
+                      setNewProgCode('');
                       setNewProgDesc('');
-                      setNewProgType(programTypes[0]?.id ?? '');
+                      setNewProgCategory(programCategories[0]?.id ?? '');
+                      setNewProgDeliveryMode('GROUP_CLASS');
+                      setNewProgDisplayOrder(0);
                       setNewProgTrial(false);
+                      setNewProgBranchIds([]);
                       setIsNewProgramOpen(true);
                     }}
                     size="sm"
@@ -1123,7 +1504,7 @@ export const PackagesWorkspace: React.FC = () => {
             {!isProgramsLoading && !isProgramsError && filteredPrograms.length > 0 && (
               <div className="space-y-4">
                 {filteredPrograms.map((prog) => {
-                  const typeLabel = getProgramTypeLabel(prog);
+                  const catLabel = getProgramCategoryLabel(prog);
                   const progPkgs = packagesByProgram.get(prog.id) || [];
                   const isExpanded = expandedProgramIds.has(prog.id);
 
@@ -1136,102 +1517,184 @@ export const PackagesWorkspace: React.FC = () => {
                           : 'border-border/70 hover:border-primary/40'
                       }`}
                     >
-                      {/* Program Header Row */}
-                      <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card">
-                        <div className="space-y-1.5 flex-1 min-w-0">
+                      {/* Program Header */}
+                      <div className="p-4 sm:p-5 bg-card space-y-3.5">
+                        {/* Top: Title & Badges */}
+                        <div className="space-y-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base sm:text-lg font-bold text-foreground truncate" title={prog.name}>
+                            <h3 className="text-base sm:text-lg font-bold text-foreground break-words" title={prog.name}>
                               {prog.name}
                             </h3>
-                            <Badge variant="outline" className="text-xs font-medium max-w-[160px] truncate" title={typeLabel}>
-                              {typeLabel}
+                            <Badge variant="outline" className="text-xs font-mono font-semibold uppercase shrink-0">
+                              {prog.code || 'NO_CODE'}
                             </Badge>
+                            <Badge variant="outline" className="text-xs font-medium shrink-0" title={catLabel}>
+                              {catLabel}
+                            </Badge>
+                            {(() => {
+                              const dm = getDeliveryModeBadge(prog.delivery_mode);
+                              return (
+                                <Badge variant="outline" className={`text-xs shrink-0 ${dm.className}`}>
+                                  {dm.label}
+                                </Badge>
+                              );
+                            })()}
                             <Badge
                               variant={prog.status === 'ACTIVE' ? 'default' : 'secondary'}
-                              className="text-xs"
+                              className={`text-xs shrink-0 ${
+                                prog.status === 'ARCHIVED'
+                                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 font-semibold'
+                                  : ''
+                              }`}
                             >
                               {prog.status}
                             </Badge>
                             {prog.trial_allowed && (
-                              <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 bg-emerald-500/5">
+                              <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 bg-emerald-500/5 shrink-0">
                                 Trials Allowed
                               </Badge>
                             )}
                           </div>
+
                           {prog.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1 break-words">
+                            <p className="text-xs text-muted-foreground line-clamp-2 break-words">
                               {prog.description}
                             </p>
                           )}
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
-                            <span className="flex items-center gap-1 font-medium">
+                        </div>
+
+                        {/* Middle: Metadata & Branch Availability */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-muted-foreground pt-0.5">
+                          {/* Branch Availability Chips */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 shrink-0">
+                              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span>Branches:</span>
+                            </span>
+                            {prog.available_branches && prog.available_branches.length > 0 ? (
+                              prog.available_branches.map((b) => (
+                                <Badge
+                                  key={b.id}
+                                  variant="secondary"
+                                  className="text-[10px] font-normal py-0.5 px-2 bg-muted/80 text-foreground border border-border/50"
+                                >
+                                  {b.name}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-[10px] text-amber-500/90 italic">
+                                Not assigned to any branch (unavailable)
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick Stats: Packages count & display order */}
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                            <span className="flex items-center gap-1 font-medium text-foreground">
                               <PackageIcon className="w-3.5 h-3.5 text-primary" />
                               {progPkgs.length} {progPkgs.length === 1 ? 'Package' : 'Packages'}
                             </span>
+                            {prog.display_order !== undefined && (
+                              <span className="text-[11px]">Order: {prog.display_order}</span>
+                            )}
                           </div>
                         </div>
 
-                        {/* Program Actions */}
-                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
-                          {hasCatalogPermission && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openAddPackageForProgram(prog.id)}
-                                className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add Package</span>
-                              </Button>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => startEditProgram(prog)}
-                                className="text-xs h-8 text-muted-foreground hover:text-foreground gap-1"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">Edit</span>
-                              </Button>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  updateProgramMutation.mutate({
-                                    id: prog.id,
-                                    payload: { status: prog.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' },
-                                  });
-                                }}
-                                className={`text-xs h-8 gap-1 ${
-                                  prog.status === 'ACTIVE'
-                                    ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
-                                    : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
-                                }`}
-                              >
-                                {prog.status === 'ACTIVE' ? (
-                                  <>
-                                    <ToggleRight className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Deactivate</span>
-                                  </>
+                        {/* Bottom Actions Bar */}
+                        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {hasCatalogPermission && (
+                              <>
+                                {prog.status === 'ARCHIVED' ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => restoreProgramMutation.mutate(prog.id)}
+                                    disabled={restoreProgramMutation.isPending}
+                                    className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>Restore</span>
+                                  </Button>
                                 ) : (
                                   <>
-                                    <ToggleLeft className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Activate</span>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openAddPackageForProgram(prog.id)}
+                                      className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add Package</span>
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => startEditProgram(prog)}
+                                      className="text-xs h-8 text-muted-foreground hover:text-foreground gap-1.5"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                      <span>Edit</span>
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        toggleProgramStatusMutation.mutate({
+                                          id: prog.id,
+                                          currentStatus: prog.status,
+                                        });
+                                      }}
+                                      className={`text-xs h-8 gap-1.5 ${
+                                        prog.status === 'ACTIVE'
+                                          ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
+                                          : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
+                                      }`}
+                                    >
+                                      {prog.status === 'ACTIVE' ? (
+                                        <>
+                                          <ToggleRight className="w-4 h-4" />
+                                          <span>Deactivate</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ToggleLeft className="w-4 h-4" />
+                                          <span>Activate</span>
+                                        </>
+                                      )}
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setProgramToArchive(prog);
+                                        setArchiveProgError(null);
+                                      }}
+                                      className="text-xs h-8 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 gap-1.5 px-2.5"
+                                      title="Archive"
+                                    >
+                                      <Archive className="w-3.5 h-3.5" />
+                                      <span>Archive</span>
+                                    </Button>
                                   </>
                                 )}
-                              </Button>
-                            </>
-                          )}
+                              </>
+                            )}
+                          </div>
 
                           <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => toggleProgramExpanded(prog.id)}
-                            className="text-xs h-8 gap-1 px-3"
+                            className="text-xs h-8 gap-1.5 px-3 ml-auto sm:ml-0"
                           >
                             <span>{isExpanded ? 'Hide Packages' : 'View Packages'}</span>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 ml-0.5 bg-background/60">
+                              {progPkgs.length}
+                            </Badge>
                             {isExpanded ? (
                               <ChevronUp className="w-3.5 h-3.5" />
                             ) : (
@@ -2103,39 +2566,40 @@ export const PackagesWorkspace: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: NEW PROGRAM TYPE (NO CODE FIELD) */}
+      {/* MODAL: NEW PROGRAM CATEGORY */}
       {/* ========================================================================= */}
-      <Dialog open={isNewProgramTypeOpen} onOpenChange={setIsNewProgramTypeOpen}>
+      <Dialog open={isNewProgramCategoryOpen} onOpenChange={setIsNewProgramCategoryOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Create Program Type</DialogTitle>
+            <DialogTitle>Create Program Category</DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Program Types classify your Programs (e.g. Membership, Personal Training, Pilates).
+              Program Categories classify your Programs (e.g. Strength & Conditioning, Pilates, Personal Training, Open Gym).
             </p>
           </DialogHeader>
           <div className="space-y-4 text-sm pt-2">
-            {ptFormError && (
+            {catFormError && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                {ptFormError}
+                {catFormError}
               </div>
             )}
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
               <Input
                 type="text"
-                placeholder="e.g. Membership"
-                value={newPtName}
-                onChange={(e) => setNewPtName(e.target.value)}
+                placeholder="e.g. Strength & Conditioning"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
                 className="text-sm"
               />
+              <span className="text-[10px] text-muted-foreground">Unique system code will be generated automatically.</span>
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Description</label>
               <Input
                 type="text"
                 placeholder="Optional description..."
-                value={newPtDesc}
-                onChange={(e) => setNewPtDesc(e.target.value)}
+                value={newCatDesc}
+                onChange={(e) => setNewCatDesc(e.target.value)}
                 className="text-sm"
               />
             </div>
@@ -2144,43 +2608,43 @@ export const PackagesWorkspace: React.FC = () => {
               <Input
                 type="number"
                 min={0}
-                value={newPtOrder}
-                onChange={(e) => setNewPtOrder(Number(e.target.value))}
+                value={newCatOrder}
+                onChange={(e) => setNewCatOrder(Number(e.target.value))}
                 className="text-sm"
               />
-              <span className="text-[10px] text-muted-foreground">Lower number = shown first in dropdowns</span>
+              <span className="text-[10px] text-muted-foreground">Lower number = shown first in listings</span>
             </div>
           </div>
           <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsNewProgramTypeOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setIsNewProgramCategoryOpen(false)}>
               Cancel
             </Button>
             <Button
-              disabled={!newPtName.trim() || createProgramTypeMutation.isPending}
+              disabled={!newCatName.trim() || createProgramCategoryMutation.isPending}
               onClick={() => {
-                setPtFormError(null);
-                createProgramTypeMutation.mutate();
+                setCatFormError(null);
+                createProgramCategoryMutation.mutate();
               }}
             >
-              {createProgramTypeMutation.isPending ? 'Creating...' : 'Create Program Type'}
+              {createProgramCategoryMutation.isPending ? 'Creating...' : 'Create Program Category'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL: EDIT PROGRAM TYPE (NO CODE FIELD) */}
+      {/* MODAL: EDIT PROGRAM CATEGORY */}
       {/* ========================================================================= */}
-      {editingProgramType && (
-        <Dialog open={Boolean(editingProgramType)} onOpenChange={(open) => !open && setEditingProgramType(null)}>
+      {editingProgramCategory && (
+        <Dialog open={Boolean(editingProgramCategory)} onOpenChange={(open) => !open && setEditingProgramCategory(null)}>
           <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Edit Program Type</DialogTitle>
+              <DialogTitle>Edit Program Category</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 text-sm pt-2">
-              {editPtFormError && (
+              {editCatFormError && (
                 <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
-                  {editPtFormError}
+                  {editCatFormError}
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2188,64 +2652,72 @@ export const PackagesWorkspace: React.FC = () => {
                   <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
                   <Input
                     type="text"
-                    value={editPtName}
-                    onChange={(e) => setEditPtName(e.target.value)}
+                    value={editCatName}
+                    onChange={(e) => setEditCatName(e.target.value)}
                     className="text-sm"
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">System Code (Read-only)</label>
+                  <div className="h-9 px-3 flex items-center rounded-md border border-input/60 bg-muted/40 text-xs font-mono text-muted-foreground select-all">
+                    {editingProgramCategory.code || '—'}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Status</label>
                   <select
-                    value={editPtStatus}
-                    onChange={(e) => setEditPtStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                    value={editCatStatus}
+                    onChange={(e) => setEditCatStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="ACTIVE">Active</option>
                     <option value="INACTIVE">Inactive</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editCatOrder}
+                    onChange={(e) => setNewCatOrder(Number(e.target.value))}
+                    className="text-sm"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Description</label>
                 <Input
                   type="text"
-                  value={editPtDesc}
-                  onChange={(e) => setEditPtDesc(e.target.value)}
+                  value={editCatDesc}
+                  onChange={(e) => setEditCatDesc(e.target.value)}
                   placeholder="Optional description..."
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={editPtOrder}
-                  onChange={(e) => setEditPtOrder(Number(e.target.value))}
                   className="text-sm"
                 />
               </div>
             </div>
             <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditingProgramType(null)}>
+              <Button type="button" variant="outline" onClick={() => setEditingProgramCategory(null)}>
                 Cancel
               </Button>
               <Button
-                disabled={!editPtName.trim() || updateProgramTypeMutation.isPending}
+                disabled={!editCatName.trim() || updateProgramCategoryMutation.isPending}
                 onClick={() => {
-                  setEditPtFormError(null);
-                  updateProgramTypeMutation.mutate({
-                    id: editingProgramType.id,
+                  setEditCatFormError(null);
+                  updateProgramCategoryMutation.mutate({
+                    id: editingProgramCategory.id,
                     payload: {
-                      name: editPtName.trim(),
-                      description: editPtDesc.trim() || null,
-                      display_order: editPtOrder,
-                      status: editPtStatus,
+                      name: editCatName.trim(),
+                      description: editCatDesc.trim() || null,
+                      display_order: editCatOrder,
+                      status: editCatStatus,
                     },
                   });
                 }}
               >
-                {updateProgramTypeMutation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateProgramCategoryMutation.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2253,10 +2725,10 @@ export const PackagesWorkspace: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: NEW PROGRAM (NO CODE FIELD) */}
+      {/* MODAL: NEW PROGRAM */}
       {/* ========================================================================= */}
       <Dialog open={isNewProgramOpen} onOpenChange={setIsNewProgramOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Create New Program</DialogTitle>
           </DialogHeader>
@@ -2275,25 +2747,45 @@ export const PackagesWorkspace: React.FC = () => {
                 onChange={(e) => setNewProgName(e.target.value)}
                 className="text-sm"
               />
+              <span className="text-[10px] text-muted-foreground">Unique system code will be generated automatically.</span>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
-              <select
-                value={newProgType || (programTypes[0]?.id ?? '')}
-                onChange={(e) => setNewProgType(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {programTypes.length === 0 ? (
-                  <option value="">Loading / No program types configured</option>
-                ) : (
-                  programTypes.map((pt) => (
-                    <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
-                      {pt.name}{pt.status === 'INACTIVE' ? ' — Inactive' : ''}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Category *</label>
+                <select
+                  value={newProgCategory || (programCategories[0]?.id ?? '')}
+                  onChange={(e) => setNewProgCategory(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {programCategories.length === 0 ? (
+                    <option value="">No categories configured (create category first)</option>
+                  ) : (
+                    programCategories.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.status === 'INACTIVE'}>
+                        {c.name}{c.status === 'INACTIVE' ? ' — Inactive' : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Service Structure *</label>
+                <select
+                  value={newProgDeliveryMode}
+                  onChange={(e) => setNewProgDeliveryMode(e.target.value as DeliveryMode)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {DELIVERY_MODES.map((dm) => (
+                    <option key={dm.value} value={dm.value}>
+                      {dm.label}
                     </option>
-                  ))
-                )}
-              </select>
+                  ))}
+                </select>
+              </div>
             </div>
+
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Description</label>
               <Input
@@ -2304,17 +2796,95 @@ export const PackagesWorkspace: React.FC = () => {
                 className="text-sm"
               />
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="new_prog_trial"
-                checked={newProgTrial}
-                onChange={(e) => setNewProgTrial(e.target.checked)}
-                className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-              />
-              <label htmlFor="new_prog_trial" className="text-xs text-foreground cursor-pointer select-none">
-                Allow trial bookings for this program
-              </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={newProgDisplayOrder}
+                  onChange={(e) => setNewProgDisplayOrder(Number(e.target.value))}
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 sm:pt-5">
+                <input
+                  type="checkbox"
+                  id="new_prog_trial"
+                  checked={newProgTrial}
+                  onChange={(e) => setNewProgTrial(e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="new_prog_trial" className="text-xs text-foreground cursor-pointer select-none">
+                  Allow trial bookings for this program
+                </label>
+              </div>
+            </div>
+
+            {/* Branch Availability Multi-select */}
+            <div className="space-y-2 pt-3 border-t border-border">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  Branch Availability ({newProgBranchIds.length}/{branches.length})
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewProgBranchIds(branches.map((b: any) => b.id))}
+                    className="text-[11px] text-primary hover:underline font-medium"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-muted-foreground text-xs">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setNewProgBranchIds([])}
+                    className="text-[11px] text-muted-foreground hover:underline font-medium"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Select which studio branches offer this program. Packages and trial bookings will only be valid at these branches.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-44 overflow-y-auto pr-1">
+                {branches.map((branch: any) => {
+                  const isChecked = newProgBranchIds.includes(branch.id);
+                  return (
+                    <label
+                      key={branch.id}
+                      className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition select-none ${
+                        isChecked
+                          ? 'border-primary/50 bg-primary/5 text-foreground'
+                          : 'border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewProgBranchIds((prev) => [...prev, branch.id]);
+                          } else {
+                            setNewProgBranchIds((prev) => prev.filter((id) => id !== branch.id));
+                          }
+                        }}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <span className="truncate font-medium">{branch.name}</span>
+                      {branch.code && (
+                        <span className="text-[10px] text-muted-foreground font-mono ml-auto">
+                          {branch.code}
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -2339,11 +2909,11 @@ export const PackagesWorkspace: React.FC = () => {
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL: EDIT PROGRAM (NO CODE FIELD) */}
+      {/* MODAL: EDIT PROGRAM */}
       {/* ========================================================================= */}
       {editingProgram && (
         <Dialog open={Boolean(editingProgram)} onOpenChange={(open) => !open && setEditingProgram(null)}>
-          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Edit Program</DialogTitle>
             </DialogHeader>
@@ -2364,6 +2934,61 @@ export const PackagesWorkspace: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">System Code (Read-only)</label>
+                  <div className="h-9 px-3 flex items-center rounded-md border border-input/60 bg-muted/40 text-xs font-mono text-muted-foreground select-all">
+                    {editingProgram.code || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Category *</label>
+                  <select
+                    value={editProgCategory}
+                    onChange={(e) => setEditProgCategory(e.target.value)}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {programCategories.length === 0 ? (
+                      <option value="">No categories configured</option>
+                    ) : (
+                      programCategories.map((c) => (
+                        <option key={c.id} value={c.id} disabled={c.status === 'INACTIVE'}>
+                          {c.name}{c.status === 'INACTIVE' ? ' — Inactive' : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Service Structure *</label>
+                  <select
+                    value={editProgDeliveryMode}
+                    onChange={(e) => setEditProgDeliveryMode(e.target.value as DeliveryMode)}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {DELIVERY_MODES.map((dm) => (
+                      <option key={dm.value} value={dm.value}>
+                        {dm.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+                <Input
+                  type="text"
+                  value={editProgDesc}
+                  onChange={(e) => setEditProgDesc(e.target.value)}
+                  placeholder="Optional program description..."
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Status</label>
                   <select
                     value={editProgStatus}
@@ -2375,46 +3000,92 @@ export const PackagesWorkspace: React.FC = () => {
                     <option value="ARCHIVED">Archived</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editProgDisplayOrder}
+                    onChange={(e) => setEditProgDisplayOrder(Number(e.target.value))}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-2 sm:pt-5">
+                  <input
+                    type="checkbox"
+                    id="trial_allowed"
+                    checked={editProgTrial}
+                    onChange={(e) => setEditProgTrial(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="trial_allowed" className="text-xs text-foreground cursor-pointer select-none">
+                    Allow trials
+                  </label>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
-                <Input
-                  type="text"
-                  value={editProgDesc}
-                  onChange={(e) => setEditProgDesc(e.target.value)}
-                  placeholder="Optional program description..."
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Program Type *</label>
-                <select
-                  value={editProgType}
-                  onChange={(e) => setEditProgType(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {programTypes.length === 0 ? (
-                    <option value="">Loading / No program types configured</option>
-                  ) : (
-                    programTypes.map((pt) => (
-                      <option key={pt.id} value={pt.id} disabled={pt.status === 'INACTIVE'}>
-                        {pt.name}{pt.status === 'INACTIVE' ? ' — Inactive' : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="trial_allowed"
-                  checked={editProgTrial}
-                  onChange={(e) => setEditProgTrial(e.target.checked)}
-                  className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                />
-                <label htmlFor="trial_allowed" className="text-xs text-foreground cursor-pointer select-none">
-                  Allow trial bookings for this program
-                </label>
+
+              {/* Branch Availability Multi-select */}
+              <div className="space-y-2 pt-3 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-primary" />
+                    Branch Availability ({editProgBranchIds.length}/{branches.length})
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditProgBranchIds(branches.map((b: any) => b.id))}
+                      className="text-[11px] text-primary hover:underline font-medium"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-muted-foreground text-xs">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditProgBranchIds([])}
+                      className="text-[11px] text-muted-foreground hover:underline font-medium"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Select which studio branches offer this program.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-44 overflow-y-auto pr-1">
+                  {branches.map((branch: any) => {
+                    const isChecked = editProgBranchIds.includes(branch.id);
+                    return (
+                      <label
+                        key={branch.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition select-none ${
+                          isChecked
+                            ? 'border-primary/50 bg-primary/5 text-foreground'
+                            : 'border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditProgBranchIds((prev) => [...prev, branch.id]);
+                            } else {
+                              setEditProgBranchIds((prev) => prev.filter((id) => id !== branch.id));
+                            }
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span className="truncate font-medium">{branch.name}</span>
+                        {branch.code && (
+                          <span className="text-[10px] text-muted-foreground font-mono ml-auto">
+                            {branch.code}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
             <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -2434,14 +3105,106 @@ export const PackagesWorkspace: React.FC = () => {
                     payload: {
                       name: editProgName.trim(),
                       description: editProgDesc.trim() || null,
-                      program_type: editProgType,
+                      category: editProgCategory || null,
+                      delivery_mode: editProgDeliveryMode,
+                      display_order: editProgDisplayOrder,
                       trial_allowed: editProgTrial,
                       status: editProgStatus,
+                      available_branch_ids: editProgBranchIds,
                     },
                   });
                 }}
               >
                 {updateProgramMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: ARCHIVE PROGRAM CONFIRMATION */}
+      {/* ========================================================================= */}
+      {programToArchive && (
+        <Dialog open={Boolean(programToArchive)} onOpenChange={(open) => !open && setProgramToArchive(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-foreground">
+                <Archive className="w-5 h-5 text-amber-500" />
+                Archive {programToArchive.name}?
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm pt-2">
+              {archiveProgError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                  {archiveProgError}
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                This program will be removed from new operational selections, but its history and related records will be preserved.
+              </p>
+            </div>
+            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProgramToArchive(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                disabled={archiveProgramMutation.isPending}
+                onClick={() => archiveProgramMutation.mutate(programToArchive.id)}
+              >
+                {archiveProgramMutation.isPending ? 'Archiving...' : 'Archive Program'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: DELETE PROGRAM CATEGORY CONFIRMATION */}
+      {/* ========================================================================= */}
+      {programCategoryToDelete && (
+        <Dialog open={Boolean(programCategoryToDelete)} onOpenChange={(open) => !open && setProgramCategoryToDelete(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-destructive flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                Delete Program Category
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm pt-2">
+              {deleteCatError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                  {deleteCatError}
+                </div>
+              )}
+              <p className="text-foreground">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-foreground font-semibold">{programCategoryToDelete.name}</strong>?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Program categories referenced by programs cannot be deleted. Deactivate them instead or reassign programs.
+              </p>
+            </div>
+            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProgramCategoryToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteProgramCategoryMutation.isPending}
+                onClick={() => deleteProgramCategoryMutation.mutate(programCategoryToDelete.id)}
+              >
+                {deleteProgramCategoryMutation.isPending ? 'Deleting...' : 'Delete Program Category'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2470,9 +3233,9 @@ export const PackagesWorkspace: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Program *</label>
-                {programs.length === 0 ? (
+                {programs.filter((p) => p.status === 'ACTIVE').length === 0 ? (
                   <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs rounded-lg space-y-1.5">
-                    <p>No programs exist yet. Packages must belong to a Program.</p>
+                    <p>No active programs exist. Packages must belong to an Active Program.</p>
                     <Button
                       type="button"
                       variant="outline"
@@ -2493,11 +3256,13 @@ export const PackagesWorkspace: React.FC = () => {
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="">Select Program (Required)</option>
-                    {programs.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    {programs
+                      .filter((p) => p.status === 'ACTIVE')
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                   </select>
                 )}
               </div>

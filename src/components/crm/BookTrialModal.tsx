@@ -140,6 +140,13 @@ export function BookTrialModal({
     });
   }, [programs]);
 
+  React.useEffect(() => {
+    if (selectedProgramId && uniquePrograms.length > 0 && !uniquePrograms.some((p) => p.id === selectedProgramId)) {
+      setSelectedProgramId('');
+      setSelectedSlot(null);
+    }
+  }, [selectedProgramId, uniquePrograms]);
+
   // Fetch leads for lead search if no initial lead or existing trial is provided
   const { data: leadsData } = useQuery({
     queryKey: ['crm-leads-search', leadSearch],
