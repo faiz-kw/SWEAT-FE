@@ -1,10 +1,11 @@
 import * as React from "react";
 import {
   MapPin, Plus, Phone, Clock, Users, Building, Edit2, Trash2, RefreshCw,
-  ChevronDown, CheckCircle2, AlertCircle, Building2, ShieldCheck, Eye, Search, Filter,
-  CalendarDays
+  ChevronDown, CheckCircle2, AlertCircle, Building2, Eye, Search, Filter,
+  CalendarDays, Globe, Power, Mail, Check
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
@@ -17,17 +18,15 @@ import {
   createLocationApi,
   updateLocationApi,
   deleteLocationApi,
+  deactivateLocationApi,
+  reactivateLocationApi,
+  fetchCompanyEntitiesApi,
   fetchTenantsForDropdownApi,
   type LocationRow,
 } from "@/api/endpoints/api-admin";
-import { useAuth } from "@/contexts";
+import { usePermissions } from "@/lib/permissions";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-/** Enforce strictly 10 digits — returns digits-only string truncated to 10 chars */
-function sanitizePhone(val: string): string {
-  return val.replace(/\D/g, "").slice(0, 10);
-}
 
 function parseOperatingHours(val: string): { openTime: string; closeTime: string } {
   if (!val) return { openTime: "06:00", closeTime: "22:00" };
@@ -38,14 +37,39 @@ function parseOperatingHours(val: string): { openTime: string; closeTime: string
   };
 }
 
+function validateInternationalPhone(val: string): string | null {
+  if (!val || !val.trim()) return null;
+  const cleaned = val.trim();
+  if (!/^\+?[0-9\s\-()]{7,20}$/.test(cleaned)) {
+    return "Please enter a valid phone number (7 to 20 digits, optional country code)";
+  }
+  return null;
+}
+
+const COMMON_TIMEZONES = [
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (IST +05:30)" },
+  { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (GST +04:00)" },
+  { value: "Asia/Singapore", label: "Asia/Singapore (SGT +08:00)" },
+  { value: "Europe/London", label: "Europe/London (GMT/BST)" },
+  { value: "America/New_York", label: "America/New_York (EST/EDT)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (PST/PDT)" },
+  { value: "Australia/Sydney", label: "Australia/Sydney (AEST/AEDT)" },
+];
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function LocationsWorkspace() {
-  const { user } = useAuth();
-  const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
+  const { can, isSuperAdmin } = usePermissions();
+
+  // Centralized RBAC permissions — never hardcoded role names
+  const canCreate = can("core.settings.edit") || isSuperAdmin;
+  const canEdit = can("core.settings.edit") || isSuperAdmin;
+  const canDeactivate = can("core.settings.edit") || isSuperAdmin;
 
   const [locations, setLocations] = React.useState<LocationRow[]>([]);
   const [tenants, setTenants] = React.useState<{ id: string; name: string }[]>([]);
+  const [companyEntities, setCompanyEntities] = React.useState<{ id: string; name: string; code: string }[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingLocation, setEditingLocation] = React.useState<LocationRow | null>(null);
@@ -54,14 +78,21 @@ export function LocationsWorkspace() {
 
   // Filter & Search states
   const [tenantFilter, setTenantFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all");
+  const [passportFilter, setPassportFilter] = React.useState<"all" | "eligible" | "standard">("all");
   const [searchQuery, setSearchQuery] = React.useState("");
 
   // Form state
   const [locName, setLocName] = React.useState("");
+  const [locCode, setLocCode] = React.useState("");
+  const [locCodeTouched, setLocCodeTouched] = React.useState(false);
   const [locCity, setLocCity] = React.useState("Bengaluru");
   const [locAddress, setLocAddress] = React.useState("");
   const [locPhone, setLocPhone] = React.useState("");
-  const [locPhoneError, setLocPhoneError] = React.useState("");
+  const [locEmail, setLocEmail] = React.useState("");
+  const [locTimezone, setLocTimezone] = React.useState("Asia/Kolkata");
+  const [locPassport, setLocPassport] = React.useState(false);
+  const [locCompanyEntity, setLocCompanyEntity] = React.useState("");
   const [locCapacity, setLocCapacity] = React.useState(150);
   const [locTenantId, setLocTenantId] = React.useState("");
   const [locLatitude, setLocLatitude] = React.useState("");
@@ -71,7 +102,9 @@ export function LocationsWorkspace() {
   const [detectingGps, setDetectingGps] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
-  const canEditLocations = isSuperAdmin || user?.userType === "tenant" || (typeof user?.role === "string" && (user.role.includes("Admin") || user.role.includes("admin")));
+  // Field validation and form error states
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [formGeneralError, setFormGeneralError] = React.useState<string | null>(null);
 
   // Clock Picker state
   const [openTime, setOpenTime] = React.useState("06:00");
@@ -95,26 +128,54 @@ export function LocationsWorkspace() {
       const data = await fetchTenantsForDropdownApi();
       setTenants(data);
     } catch {
-      // Non-critical — tenant dropdown will be empty
+      // Non-critical
     }
   }, [isSuperAdmin]);
+
+  const loadCompanyEntities = React.useCallback(async () => {
+    try {
+      const entities = await fetchCompanyEntitiesApi();
+      setCompanyEntities(entities);
+    } catch {
+      // Non-critical
+    }
+  }, []);
 
   React.useEffect(() => {
     loadLocations();
     loadTenants();
-  }, [loadLocations, loadTenants]);
+    loadCompanyEntities();
+  }, [loadLocations, loadTenants, loadCompanyEntities]);
+
+  const handleNameChange = (nameVal: string) => {
+    setLocName(nameVal);
+    // Auto-suggest machine code on new branch creation if untouched
+    if (!editingLocation && !locCodeTouched) {
+      const suggested = nameVal
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "_")
+        .slice(0, 30);
+      setLocCode(suggested);
+    }
+  };
 
   const handleOpenCreate = () => {
-    if (!isSuperAdmin) {
-      toast.error("Only Platform Super Admins can create studio branches.");
+    if (!canCreate) {
+      toast.error("You do not have permission to create studio branches.");
       return;
     }
     setEditingLocation(null);
     setLocName("");
+    setLocCode("");
+    setLocCodeTouched(false);
     setLocCity("Bengaluru");
     setLocAddress("");
     setLocPhone("");
-    setLocPhoneError("");
+    setLocEmail("");
+    setLocTimezone("Asia/Kolkata");
+    setLocPassport(false);
+    setLocCompanyEntity("");
     setLocCapacity(150);
     setLocTenantId(tenants[0]?.id || "");
     setLocLatitude("");
@@ -123,17 +184,23 @@ export function LocationsWorkspace() {
     setLocGeofenceEnforcement("STRICT");
     setOpenTime("06:00");
     setCloseTime("22:00");
+    setFieldErrors({});
+    setFormGeneralError(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (loc: LocationRow) => {
     setEditingLocation(loc);
     setLocName(loc.name);
+    setLocCode(loc.code || "");
+    setLocCodeTouched(true);
     setLocCity(loc.city);
     setLocAddress(loc.address || "");
-    const rawPhone = (loc.phone || "").replace(/\D/g, "").slice(-10);
-    setLocPhone(rawPhone);
-    setLocPhoneError("");
+    setLocPhone(loc.phone || "");
+    setLocEmail(loc.email || "");
+    setLocTimezone(loc.timezone || "Asia/Kolkata");
+    setLocPassport(Boolean(loc.is_passport_eligible));
+    setLocCompanyEntity(loc.company_entity || "");
     setLocCapacity(loc.capacity || 100);
     setLocTenantId(loc.tenant || "");
     setLocLatitude(loc.latitude !== undefined && loc.latitude !== null ? String(loc.latitude) : "");
@@ -143,6 +210,8 @@ export function LocationsWorkspace() {
     const { openTime: op, closeTime: cl } = parseOperatingHours(loc.operating_hours || "06:00 - 22:00");
     setOpenTime(op);
     setCloseTime(cl);
+    setFieldErrors({});
+    setFormGeneralError(null);
     setModalOpen(true);
   };
 
@@ -172,84 +241,187 @@ export function LocationsWorkspace() {
     setScheduleModalOpen(true);
   };
 
-  const handlePhoneChange = (val: string) => {
-    if (!canEditLocations) return;
-    const digits = sanitizePhone(val);
-    setLocPhone(digits);
-    if (digits.length > 0 && digits.length < 10) {
-      setLocPhoneError("Phone must be exactly 10 digits");
-    } else {
-      setLocPhoneError("");
-    }
-  };
-
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!canEditLocations) {
+    if (!canEdit) {
       toast.error("You do not have permission to modify studio branch settings.");
       return;
     }
 
     if (!locName.trim()) { toast.error("Please enter a studio name"); return; }
-    if (locPhone && locPhone.length !== 10) {
-      setLocPhoneError("Phone must be exactly 10 digits");
-      toast.error("Contact phone must be exactly 10 digits");
+    if (!locCode.trim()) { toast.error("Please enter a unique branch code"); return; }
+
+    const phoneError = validateInternationalPhone(locPhone);
+    if (phoneError) {
+      toast.error(phoneError);
       return;
     }
-    if (!locTenantId && isSuperAdmin) {
+
+    if (!locTenantId && isSuperAdmin && tenants.length > 0) {
       toast.error("Please select a tenant organisation for this branch");
       return;
     }
 
     setSaving(true);
+    setFieldErrors({});
+    setFormGeneralError(null);
     try {
       const operatingHours = `${openTime} - ${closeTime}`;
       const payload: Partial<LocationRow> = {
         name: locName.trim(),
+        code: locCode.trim().toUpperCase(),
         city: locCity.trim(),
         address: locAddress.trim(),
-        phone: locPhone || "",
-        capacity: Number(locCapacity) || 100,
+        phone: locPhone.trim(),
+        email: locEmail.trim(),
+        timezone: locTimezone,
+        capacity: Number(locCapacity) || 0,
+        business_open_time: openTime,
+        business_close_time: closeTime,
         operating_hours: operatingHours,
+        is_passport_eligible: locPassport,
+        company_entity: locCompanyEntity ? locCompanyEntity : null,
         latitude: locLatitude ? parseFloat(locLatitude) : null,
         longitude: locLongitude ? parseFloat(locLongitude) : null,
         geofence_radius_meters: Number(locGeofenceRadius) || 200,
         geofence_enforcement: locGeofenceEnforcement,
-        is_active: true,
+        is_active: editingLocation ? editingLocation.is_active : true,
+        status: editingLocation ? (editingLocation.status || "ACTIVE") : "ACTIVE",
         ...(locTenantId ? { tenant: locTenantId } : {}),
       };
 
       if (editingLocation) {
         await updateLocationApi(editingLocation.id, payload);
-        toast.success(`"${locName}" updated successfully`);
+        toast.success(`Branch "${locName}" updated successfully`);
       } else {
         await createLocationApi(payload);
-        toast.success(`Branch "${locName}" created successfully`);
+        toast.success(`Branch "${locName}" (${payload.code}) created successfully`);
       }
 
       setModalOpen(false);
       loadLocations();
     } catch (err: any) {
-      const detail = err?.response?.data?.error || err?.response?.data?.tenant?.[0] || err?.message || "Failed to save location";
-      toast.error(detail);
+      const data = err?.response?.data;
+      const newFieldErrors: Record<string, string> = {};
+      let firstInvalidFieldId: string | null = null;
+      let toastMsg = "";
+
+      if (data && typeof data === "object") {
+        for (const [key, value] of Object.entries(data)) {
+          const msg = Array.isArray(value)
+            ? value.join(" ")
+            : typeof value === "string"
+            ? value
+            : JSON.stringify(value);
+
+          if (
+            [
+              "name",
+              "code",
+              "city",
+              "address",
+              "timezone",
+              "phone",
+              "email",
+              "capacity",
+              "business_open_time",
+              "business_close_time",
+              "latitude",
+              "longitude",
+              "geofence_radius_meters",
+              "company_entity",
+            ].includes(key)
+          ) {
+            newFieldErrors[key] = msg;
+            if (!firstInvalidFieldId) {
+              firstInvalidFieldId = `loc_${key}`;
+            }
+            if (!toastMsg && key === "code") {
+              toastMsg = msg;
+            }
+          } else if (key === "non_field_errors" || key === "detail") {
+            setFormGeneralError(msg);
+            if (!toastMsg) toastMsg = msg;
+          }
+        }
+      }
+
+      setFieldErrors(newFieldErrors);
+      if (!toastMsg) {
+        toastMsg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to save branch. Please check the highlighted errors.";
+      }
+      toast.error(toastMsg);
+
+      if (firstInvalidFieldId) {
+        setTimeout(() => {
+          const el = document.getElementById(firstInvalidFieldId!);
+          if (el) {
+            el.focus();
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 100);
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteLocation = async (loc: LocationRow) => {
-    if (!isSuperAdmin) {
-      toast.error("Only Platform Super Admins can delete studio branches.");
+  const handleToggleStatus = async (loc: LocationRow) => {
+    if (!canDeactivate) {
+      toast.error("You do not have permission to change branch operational status.");
       return;
     }
-    if (!window.confirm(`Delete branch "${loc.name}"? This cannot be undone.`)) return;
+    const isDeactivating = loc.is_active;
+    const actionLabel = isDeactivating ? "Deactivate" : "Reactivate";
+    const confirmMessage = isDeactivating
+      ? `Deactivate branch "${loc.name}"? Historical bookings, classes, and memberships remain intact, but new operations will be disabled.`
+      : `Reactivate branch "${loc.name}" to resume operations?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
     try {
-      await deleteLocationApi(loc.id);
-      toast.success(`Branch "${loc.name}" deleted`);
+      if (isDeactivating) {
+        await deactivateLocationApi(loc.id, "Deactivated from studio administration.");
+        toast.success(`Branch "${loc.name}" deactivated`);
+      } else {
+        await reactivateLocationApi(loc.id);
+        toast.success(`Branch "${loc.name}" reactivated`);
+      }
       loadLocations();
     } catch (err: any) {
-      const detail = err?.response?.data?.error || err?.message || "Failed to delete location";
+      const detail = err?.response?.data?.error || err?.response?.data?.detail || err?.message || `Failed to ${actionLabel.toLowerCase()} branch`;
+      toast.error(detail);
+    }
+  };
+
+  const handleDeleteLocation = async (loc: LocationRow) => {
+    if (!canDeactivate) {
+      toast.error("You do not have permission to delete studio branches.");
+      return;
+    }
+    if (loc.can_delete === false) {
+      toast.error(loc.delete_blocked_reason || "This branch has operational history. Deactivate it instead.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Permanently delete "${loc.name}" (${loc.code})?\n\nThis action is only available because the branch has no operational history.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteLocationApi(loc.id);
+      toast.success(`Branch "${loc.name}" deleted permanently.`);
+      loadLocations();
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "This branch cannot be permanently deleted. Deactivate it instead.";
       toast.error(detail);
     }
   };
@@ -257,24 +429,33 @@ export function LocationsWorkspace() {
   // Filtered locations
   const filteredLocations = React.useMemo(() => {
     return locations.filter((loc) => {
-      // Tenant filter (super admin only)
+      // Tenant filter (platform admin only)
       if (isSuperAdmin && tenantFilter !== "all") {
         if (loc.tenant !== tenantFilter && loc.tenant_name !== tenantFilter) {
           return false;
         }
       }
+      // Status filter
+      if (statusFilter === "active" && !loc.is_active) return false;
+      if (statusFilter === "inactive" && loc.is_active) return false;
+
+      // Passport filter
+      if (passportFilter === "eligible" && !loc.is_passport_eligible) return false;
+      if (passportFilter === "standard" && loc.is_passport_eligible) return false;
+
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesName = loc.name.toLowerCase().includes(q);
+        const matchesCode = (loc.code || "").toLowerCase().includes(q);
         const matchesCity = loc.city.toLowerCase().includes(q);
         const matchesAddress = (loc.address || "").toLowerCase().includes(q);
         const matchesTenant = (loc.tenant_name || "").toLowerCase().includes(q);
-        if (!matchesName && !matchesCity && !matchesAddress && !matchesTenant) return false;
+        if (!matchesName && !matchesCode && !matchesCity && !matchesAddress && !matchesTenant) return false;
       }
       return true;
     });
-  }, [locations, isSuperAdmin, tenantFilter, searchQuery]);
+  }, [locations, isSuperAdmin, tenantFilter, statusFilter, passportFilter, searchQuery]);
 
   const totalCapacity = filteredLocations.reduce((sum, l) => sum + Number(l.capacity || 0), 0);
   const activeCount = filteredLocations.filter((l) => l.is_active).length;
@@ -283,15 +464,14 @@ export function LocationsWorkspace() {
     <div className="flex flex-col min-h-screen bg-background">
       <PageHeader
         title="Studio Locations & Branches"
-        subtitle="Manage physical studio branches, maximum client capacities, operating schedules, and facility allocations."
+        subtitle="Manage physical studio branches, operating schedules, geofences, and multi-location governance."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={loadLocations} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Refresh
+            <Button variant="outline" size="sm" onClick={loadLocations} disabled={loading} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
-            {/* Only Super Admins can create branches */}
-            {isSuperAdmin && (
+            {canCreate && (
               <Button size="sm" onClick={handleOpenCreate} className="gap-2 bg-primary text-primary-foreground shadow-xs">
                 <Plus className="h-4 w-4" />
                 Add Studio Branch
@@ -302,82 +482,93 @@ export function LocationsWorkspace() {
       />
 
       <PageBody>
-        {/* Role notice for Tenant Admins */}
-        {!isSuperAdmin && (
-          <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span>
-              <strong>Platform Policy:</strong> Studio branches and physical facilities are provisioned and configured exclusively by Platform Super Administrators. Tenant Administrators have read-only visibility.
-            </span>
-          </div>
-        )}
+        {/* Filter and Search Bar */}
+        <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
+            {/* Search */}
+            <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, code, city..."
+                className="pl-9 h-8 text-xs bg-background w-full"
+              />
+            </div>
 
-        {/* Super Admin Filter Bar */}
-        {isSuperAdmin && (
-          <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
-              {/* Search */}
-              <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search branch name, city, address..."
-                  className="pl-9 h-8 text-xs bg-background w-full"
-                />
-              </div>
+            {/* Filter by Status */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <Filter className="h-3.5 w-3.5 shrink-0" />
+              <span className="shrink-0 text-[11px] font-medium">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="h-8 rounded-md border border-input bg-background px-2.5 text-xs cursor-pointer focus:ring-1 focus:ring-primary focus:outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+              </select>
+            </div>
 
-              {/* Filter by Tenant */}
+            {/* Filter by Passport */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <span className="shrink-0 text-[11px] font-medium">Cross-Branch:</span>
+              <select
+                value={passportFilter}
+                onChange={(e) => setPassportFilter(e.target.value as any)}
+                className="h-8 rounded-md border border-input bg-background px-2.5 text-xs cursor-pointer focus:ring-1 focus:ring-primary focus:outline-none"
+              >
+                <option value="all">All Facilities</option>
+                <option value="eligible">Passport Allowed</option>
+                <option value="standard">Home Branch Only</option>
+              </select>
+            </div>
+
+            {/* Tenant Filter (Super Admin only) */}
+            {isSuperAdmin && tenants.length > 0 && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                <Filter className="h-3.5 w-3.5 shrink-0" />
-                <span className="shrink-0 text-[11px] font-medium">Tenant:</span>
-                <div className="relative flex-1 sm:flex-initial">
-                  <select
-                    value={tenantFilter}
-                    onChange={(e) => setTenantFilter(e.target.value)}
-                    className="h-8 w-full sm:w-auto max-w-[210px] rounded-md border border-input bg-background px-2.5 pr-7 text-xs appearance-none cursor-pointer focus:ring-1 focus:ring-primary focus:outline-none truncate"
-                  >
-                    <option value="all">All Tenant Brands ({locations.length})</option>
-                    {tenants.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.id})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
-                </div>
+                <span className="shrink-0 text-[11px] font-medium">Brand:</span>
+                <select
+                  value={tenantFilter}
+                  onChange={(e) => setTenantFilter(e.target.value)}
+                  className="h-8 max-w-[180px] rounded-md border border-input bg-background px-2.5 text-xs truncate cursor-pointer focus:ring-1 focus:ring-primary focus:outline-none"
+                >
+                  <option value="all">All Brands ({locations.length})</option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
               </div>
-            </div>
-
-            <div className="text-[11px] sm:text-xs text-muted-foreground shrink-0 sm:border-l sm:border-border/60 sm:pl-3">
-              Showing <span className="font-semibold text-foreground">{filteredLocations.length}</span> of {locations.length} branches
-            </div>
+            )}
           </div>
-        )}
+
+          <div className="text-[11px] sm:text-xs text-muted-foreground shrink-0 md:border-l md:border-border/60 md:pl-3">
+            Showing <span className="font-semibold text-foreground">{filteredLocations.length}</span> of {locations.length} studios
+          </div>
+        </div>
 
         {/* KPI Strip */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <KpiTile label="Active Branches" value={activeCount} delta="Operational" tone="default" />
-          <KpiTile label="Floor Capacity" value={totalCapacity.toLocaleString()} delta="Athletes" tone="positive" />
+          <KpiTile label="Operational Branches" value={activeCount} delta="Active" tone="default" />
+          <KpiTile label="Floor Capacity" value={totalCapacity.toLocaleString()} delta="Athletes Max" tone="positive" />
           <KpiTile label="Metropolitan Hubs" value={new Set(filteredLocations.map((l) => l.city)).size} delta="Cities" tone="default" />
-          <KpiTile label="Governance" value={isSuperAdmin ? "Super Admin" : "Managed"} delta={isSuperAdmin ? "Full Control" : "Read-only"} tone="positive" />
+          <KpiTile label="Passport Hubs" value={filteredLocations.filter((l) => l.is_passport_eligible).length} delta="Cross-Branch" tone="positive" />
         </div>
 
         {/* Locations Grid */}
         {loading ? (
           <div className="py-16 text-center text-muted-foreground border border-border/60 rounded-xl bg-card">
             <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-            Loading studio locations...
+            Loading studio branches...
           </div>
         ) : filteredLocations.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground border border-border/60 rounded-xl bg-card">
             <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No studio branches found</p>
-            {isSuperAdmin && (
-              <p className="text-xs mt-1 text-muted-foreground">
-                {locations.length > 0 ? "Try adjusting your filters or search query." : 'Click "Add Studio Branch" to create your first location.'}
-              </p>
-            )}
+            <p className="text-xs mt-1 text-muted-foreground">
+              {locations.length > 0 ? "Try adjusting your search query or filters." : 'Click "Add Studio Branch" to register your first studio.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
@@ -396,14 +587,21 @@ export function LocationsWorkspace() {
                         <h3 className="font-semibold text-sm leading-snug truncate" title={loc.name}>
                           {loc.name}
                         </h3>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
-                          <MapPin className="h-3 w-3 text-primary shrink-0" /> {loc.city}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {loc.code && (
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40 font-semibold">
+                              {loc.code}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                            <MapPin className="h-3 w-3 text-primary shrink-0" /> {loc.city}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
                     <span
-                      className={`shrink-0 text-[10px] sm:text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
+                      className={`shrink-0 text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
                         loc.is_active
                           ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                           : "bg-muted text-muted-foreground"
@@ -413,15 +611,25 @@ export function LocationsWorkspace() {
                     </span>
                   </div>
 
-                  {/* Tenant badge — super admin can see which org this branch belongs to */}
-                  {isSuperAdmin && loc.tenant_name && (
-                    <div className="mb-2.5 inline-flex items-center gap-1.5 max-w-full rounded-md bg-purple-500/10 border border-purple-500/20 px-2.5 py-1">
-                      <Building2 className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                      <span className="text-[11px] font-medium text-purple-700 dark:text-purple-300 truncate">
-                        Tenant: {loc.tenant_name} {loc.tenant ? `(${loc.tenant})` : ""}
+                  {/* Badges strip: Passport & Legal Entity */}
+                  <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                    {loc.is_passport_eligible ? (
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary bg-primary/10 border border-primary/20 rounded-md px-2 py-0.5">
+                        <Globe className="h-3 w-3 shrink-0" />
+                        Passport Access Allowed
                       </span>
-                    </div>
-                  )}
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-muted-foreground bg-muted/40 border border-border/40 rounded-md px-2 py-0.5">
+                        Home Branch Only
+                      </span>
+                    )}
+                    {loc.company_entity_name && (
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-md px-2 py-0.5 truncate max-w-[200px]" title={loc.company_entity_name}>
+                        <Building2 className="h-3 w-3 shrink-0" />
+                        {loc.company_entity_name}
+                      </span>
+                    )}
+                  </div>
 
                   <p className="text-xs text-muted-foreground line-clamp-2 min-h-[32px]">
                     {loc.address || "Studio address on record."}
@@ -443,7 +651,7 @@ export function LocationsWorkspace() {
                   </div>
 
                   {/* Geofencing & GPS summary pill */}
-                  <div className="mt-3 flex items-center justify-between text-2xs p-2 rounded-lg bg-muted/40 border border-border/60">
+                  <div className="mt-3 flex items-center justify-between text-2xs p-2 rounded-lg bg-muted/40 border border-border/60 flex-wrap gap-1">
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <MapPin className="h-3 w-3 text-primary" />
                       <span>{loc.latitude ? `${Number(loc.latitude).toFixed(3)}, ${Number(loc.longitude).toFixed(3)}` : "GPS Not Set"}</span>
@@ -451,63 +659,65 @@ export function LocationsWorkspace() {
                     <span className="flex items-center gap-1 font-medium">
                       <span className="text-muted-foreground">Radius:</span>
                       <span className="text-foreground">{loc.geofence_radius_meters || 200}m</span>
-                      <span className={`px-1 py-0.2 rounded text-3xs ${loc.geofence_enforcement === 'FLAG_AUDIT' ? 'bg-amber-500/10 text-amber-600' : 'bg-primary/10 text-primary font-bold'}`}>
+                      <span className={`px-1.5 py-0.5 rounded text-3xs font-semibold ${loc.geofence_enforcement === 'FLAG_AUDIT' ? 'bg-amber-500/10 text-amber-600' : 'bg-primary/10 text-primary'}`}>
                         {loc.geofence_enforcement || 'STRICT'}
                       </span>
                     </span>
                   </div>
 
-                  {loc.phone && (
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground font-mono truncate">
-                      <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
-                      <span className="truncate">+91 {loc.phone.slice(0, 5)} {loc.phone.slice(5)}</span>
-                    </div>
-                  )}
+                  {/* Contact details */}
+                  <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
+                    {loc.phone && (
+                      <div className="flex items-center gap-1.5 font-mono truncate">
+                        <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="truncate">{loc.phone}</span>
+                      </div>
+                    )}
+                    {loc.email && (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="truncate">{loc.email}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between gap-2">
+                {/* Card Actions toolbar */}
+                <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between gap-1.5 flex-wrap">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleOpenSchedule(loc)}
-                    className="flex-1 text-xs gap-1.5 h-8 min-w-0 border-primary/30 hover:border-primary text-primary hover:bg-primary/10 font-medium"
+                    className="flex-1 text-xs gap-1.5 h-8 min-w-[130px] border-primary/30 hover:border-primary text-primary hover:bg-primary/10 font-medium"
                     title="Configure recurring weekly schedule, closed days, and festive closures"
                   >
                     <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Schedule & Holidays</span>
+                    <span className="truncate">Schedule & Exceptions</span>
                   </Button>
-                  {canEditLocations ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenEdit(loc)}
-                        className="text-xs gap-1.5 h-8 px-2.5 shrink-0 hover:border-primary text-primary"
-                        title="Configure branch details & geofence threshold"
-                      >
-                        <Edit2 className="h-3.5 w-3.5 shrink-0" />
-                      </Button>
-                      {isSuperAdmin && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteLocation(loc)}
-                          className="text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 h-8 px-2.5 shrink-0"
-                          title="Delete branch (Super Admin only)"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </>
-                  ) : (
+
+                  {canEdit && (
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleOpenEdit(loc)}
-                      className="text-xs gap-1.5 h-8 px-2.5 text-muted-foreground hover:text-foreground shrink-0"
-                      title="View branch details"
+                      className="text-xs gap-1.5 h-8 px-2.5 shrink-0 hover:border-primary text-primary"
+                      title="Edit branch details & geofence"
                     >
-                      <Eye className="h-3.5 w-3.5" />
+                      <Edit2 className="h-3.5 w-3.5 shrink-0" />
+                      <span className="sr-only">Edit</span>
+                    </Button>
+                  )}
+
+                  {canDeactivate && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleToggleStatus(loc)}
+                      className={`text-xs gap-1 h-8 px-2.5 shrink-0 ${loc.is_active ? "text-amber-600 hover:bg-amber-500/10 hover:border-amber-400" : "text-emerald-600 hover:bg-emerald-500/10 hover:border-emerald-400"}`}
+                      title={loc.is_active ? "Deactivate branch (preserve historical data)" : "Reactivate branch"}
+                    >
+                      <Power className="h-3.5 w-3.5 shrink-0" />
+                      <span className="hidden sm:inline">{loc.is_active ? "Deactivate" : "Activate"}</span>
                     </Button>
                   )}
                 </div>
@@ -516,43 +726,39 @@ export function LocationsWorkspace() {
           </div>
         )}
 
-        {/* Create / Edit / View Modal */}
+        {/* Create / Edit Modal */}
         {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-            <div className="w-full max-w-lg rounded-2xl border border-border/80 bg-card p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
+            <div className="w-full max-w-xl rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-border/40 pb-3">
                 <div className="flex items-center gap-2">
-                  <Building className="h-5 w-5 text-primary" />
-                  <div>
-                    <h3 className="font-semibold text-base">
-                      {isSuperAdmin
-                        ? (editingLocation ? `Edit Branch: ${editingLocation.name}` : "Add Studio Branch")
-                        : `Branch Facility: ${editingLocation?.name || ""}`}
-                    </h3>
-                    {!isSuperAdmin && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400">Platform Managed · Read Only</p>
-                    )}
-                  </div>
+                  <Building className="h-5 w-5 text-primary shrink-0" />
+                  <h3 className="font-semibold text-base sm:text-lg">
+                    {editingLocation ? `Edit Branch: ${editingLocation.name}` : "Create Studio Branch"}
+                  </h3>
                 </div>
-                <button onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors text-sm p-1">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="text-muted-foreground hover:text-foreground text-sm p-1 rounded-md"
+                >
                   ✕
                 </button>
               </div>
 
-              {!isSuperAdmin && (
-                <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground border border-border/50">
-                  This studio location is centrally managed by the Platform Super Administrator. Contact platform operations to request capacity, scheduling, or address changes.
-                </div>
-              )}
-
               <form onSubmit={handleSaveLocation} className="space-y-4 text-xs sm:text-sm">
-                {/* Tenant selector — super admin can view/reassign on create or edit */}
-                {isSuperAdmin && (
+                {/* Form General Error Alert */}
+                {formGeneralError && (
+                  <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs flex items-start gap-2 animate-in fade-in duration-200">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span className="font-medium leading-relaxed">{formGeneralError}</span>
+                  </div>
+                )}
+
+                {/* Platform Admin Tenant Selector (if superadmin) */}
+                {isSuperAdmin && tenants.length > 0 && (
                   <div className="space-y-1.5">
-                    <Label htmlFor="loc_tenant">
-                      Tenant Organisation *
-                      <span className="ml-2 text-[10px] text-purple-500 font-normal">(Super Admin Managed)</span>
-                    </Label>
+                    <Label htmlFor="loc_tenant">Tenant Brand *</Label>
                     <div className="relative">
                       <select
                         id="loc_tenant"
@@ -563,119 +769,348 @@ export function LocationsWorkspace() {
                       >
                         <option value="">— Select tenant organisation —</option>
                         {tenants.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} ({t.id})
-                          </option>
+                          <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
                         ))}
                       </select>
                       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Select which tenant brand owns and operates this physical facility.</p>
                   </div>
                 )}
 
-                {/* Studio name */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc_name">Studio Name *</Label>
-                  <Input
-                    id="loc_name"
-                    value={locName}
-                    disabled={!isSuperAdmin}
-                    onChange={(e) => setLocName(e.target.value)}
-                    placeholder="e.g. Indiranagar Flagship Studio"
-                    required
-                  />
+                {/* Name & Stable Code */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_name">Studio Name *</Label>
+                    <Input
+                      id="loc_name"
+                      value={locName}
+                      onChange={(e) => {
+                        handleNameChange(e.target.value);
+                        if (fieldErrors.name) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.name;
+                            return c;
+                          });
+                        }
+                      }}
+                      placeholder="e.g. Andheri West Studio"
+                      required
+                      className={cn(fieldErrors.name && "border-destructive focus-visible:ring-destructive text-destructive")}
+                      aria-invalid={Boolean(fieldErrors.name)}
+                    />
+                    {fieldErrors.name && (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_code">
+                      Branch Code *
+                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">(Stable ID)</span>
+                    </Label>
+                    <Input
+                      id="loc_code"
+                      value={locCode}
+                      onChange={(e) => {
+                        setLocCodeTouched(true);
+                        setLocCode(e.target.value.toUpperCase());
+                        if (fieldErrors.code) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.code;
+                            return c;
+                          });
+                        }
+                      }}
+                      placeholder="e.g. ANDHERI_WEST"
+                      required
+                      className={cn("font-mono uppercase", fieldErrors.code && "border-destructive focus-visible:ring-destructive text-destructive")}
+                      aria-invalid={Boolean(fieldErrors.code)}
+                    />
+                    {fieldErrors.code && (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.code}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                {/* City + Capacity */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* City + Timezone */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="loc_city">City *</Label>
+                    <Label htmlFor="loc_city">City / Area *</Label>
                     <Input
                       id="loc_city"
                       value={locCity}
-                      disabled={!isSuperAdmin}
-                      onChange={(e) => setLocCity(e.target.value)}
-                      placeholder="Bengaluru"
+                      onChange={(e) => {
+                        setLocCity(e.target.value);
+                        if (fieldErrors.city) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.city;
+                            return c;
+                          });
+                        }
+                      }}
+                      placeholder="Mumbai"
                       required
+                      className={cn(fieldErrors.city && "border-destructive focus-visible:ring-destructive text-destructive")}
+                      aria-invalid={Boolean(fieldErrors.city)}
                     />
+                    {fieldErrors.city && (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.city}
+                      </p>
+                    )}
                   </div>
+
                   <div className="space-y-1.5">
-                    <Label htmlFor="loc_capacity">Max Capacity *</Label>
-                    <Input
-                      id="loc_capacity"
-                      type="number"
-                      min={1}
-                      value={locCapacity}
-                      disabled={!isSuperAdmin}
-                      onChange={(e) => setLocCapacity(Number(e.target.value))}
-                      required
-                    />
+                    <Label htmlFor="loc_timezone">Timezone *</Label>
+                    <div className="relative">
+                      <select
+                        id="loc_timezone"
+                        value={locTimezone}
+                        onChange={(e) => {
+                          setLocTimezone(e.target.value);
+                          if (fieldErrors.timezone) {
+                            setFieldErrors((prev) => {
+                              const c = { ...prev };
+                              delete c.timezone;
+                              return c;
+                            });
+                          }
+                        }}
+                        required
+                        className={cn(
+                          "w-full h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer focus:ring-2 focus:ring-primary/30 focus:outline-none",
+                          fieldErrors.timezone && "border-destructive text-destructive"
+                        )}
+                      >
+                        {COMMON_TIMEZONES.map((tz) => (
+                          <option key={tz.value} value={tz.value}>{tz.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    </div>
+                    {fieldErrors.timezone && (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.timezone}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 {/* Address */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="loc_address">Address</Label>
+                  <Label htmlFor="loc_address">Physical Address</Label>
                   <Input
                     id="loc_address"
                     value={locAddress}
-                    disabled={!isSuperAdmin}
                     onChange={(e) => setLocAddress(e.target.value)}
-                    placeholder="Street address / Landmark"
+                    placeholder="Floor, Building, Street, Landmark"
                   />
                 </div>
 
-                {/* Phone — 10-digit only */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc_phone">Contact Phone</Label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                      <span className="text-sm text-muted-foreground font-mono">+91</span>
-                    </div>
+                {/* Contact Phone + Email */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_phone">Contact Phone</Label>
                     <Input
                       id="loc_phone"
                       type="tel"
-                      inputMode="numeric"
                       value={locPhone}
-                      disabled={!isSuperAdmin}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="10-digit number"
-                      maxLength={10}
-                      className={`pl-11 font-mono ${locPhoneError ? "border-rose-500 focus-visible:ring-rose-500/30" : ""}`}
+                      onChange={(e) => {
+                        setLocPhone(e.target.value);
+                        if (fieldErrors.phone) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.phone;
+                            return c;
+                          });
+                        }
+                      }}
+                      placeholder="+91 98765 43210"
+                      className={cn("font-mono", fieldErrors.phone && "border-destructive focus-visible:ring-destructive text-destructive")}
                     />
-                    {locPhone.length === 10 && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-                    )}
-                    {locPhoneError && (
-                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-rose-500" />
+                    {fieldErrors.phone ? (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.phone}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">Standard international or local telephone number.</p>
                     )}
                   </div>
-                  {locPhoneError && (
-                    <p className="text-[10px] text-rose-500 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" /> {locPhoneError}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_email">Contact Email</Label>
+                    <Input
+                      id="loc_email"
+                      type="email"
+                      value={locEmail}
+                      onChange={(e) => {
+                        setLocEmail(e.target.value);
+                        if (fieldErrors.email) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.email;
+                            return c;
+                          });
+                        }
+                      }}
+                      placeholder="studio@sweatfit.com"
+                      className={cn(fieldErrors.email && "border-destructive focus-visible:ring-destructive text-destructive")}
+                    />
+                    {fieldErrors.email && (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.email}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Capacity + Company Entity */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_capacity">Floor / Client Capacity *</Label>
+                    <Input
+                      id="loc_capacity"
+                      type="number"
+                      min={0}
+                      value={locCapacity}
+                      onChange={(e) => {
+                        setLocCapacity(Number(e.target.value));
+                        if (fieldErrors.capacity) {
+                          setFieldErrors((prev) => {
+                            const c = { ...prev };
+                            delete c.capacity;
+                            return c;
+                          });
+                        }
+                      }}
+                      required
+                      className={cn(fieldErrors.capacity && "border-destructive focus-visible:ring-destructive text-destructive")}
+                    />
+                    {fieldErrors.capacity ? (
+                      <p className="text-[11px] font-medium text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {fieldErrors.capacity}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">Maximum simultaneous athletes on floor.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc_entity">
+                      Legal / Company Entity
+                      <span className="text-[10px] text-muted-foreground ml-1 font-normal">(Optional)</span>
+                    </Label>
+                    {companyEntities.length === 0 ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center h-9 px-3 rounded-md border border-input bg-muted/40 text-xs text-foreground font-medium select-none cursor-default">
+                          [ Organization Default ]
+                        </div>
+                        <p className="text-[10.5px] text-muted-foreground leading-normal">
+                          No separate company entities are configured. This branch will use the organization&apos;s default legal entity.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="relative">
+                          <select
+                            id="loc_entity"
+                            value={locCompanyEntity}
+                            onChange={(e) => setLocCompanyEntity(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-background px-3 pr-8 text-xs appearance-none cursor-pointer focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                          >
+                            <option value="">Organization Default</option>
+                            {companyEntities.map((ent) => (
+                              <option key={ent.id} value={ent.id}>{ent.name} ({ent.code})</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        </div>
+                        <p className="text-[10.5px] text-muted-foreground leading-normal">
+                          Select a specific legal entity or leave as Organization Default.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cross-Branch / Passport Eligibility Toggle */}
+                <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 flex items-start justify-between gap-3">
+                  <div className="space-y-0.5 flex-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                      <Globe className="h-3.5 w-3.5 text-primary" />
+                      Allow Cross-Branch / Passport Visits
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Allows eligible memberships from other branches to use this location according to their entitlement policy.
                     </p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground">
-                    Enter exactly 10 digits — stored as {locPhone ? `+91 ${locPhone.slice(0, 5)} ${locPhone.slice(5)}` : "+91 XXXXX XXXXX"}
-                  </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLocPassport(!locPassport)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${locPassport ? "bg-primary" : "bg-muted"}`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${locPassport ? "translate-x-5" : "translate-x-0"}`}
+                    />
+                  </button>
+                </div>
+
+                {/* Operating Hours Pickers */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    Daily Operating Hours
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border border-border/70 bg-muted/20">
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Opens At</span>
+                      <ClockTimePicker
+                        id="loc_open_time"
+                        value={openTime}
+                        placeholder="Select Opening Time"
+                        onChange={(time24) => setOpenTime(time24)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Closes At</span>
+                      <ClockTimePicker
+                        id="loc_close_time"
+                        value={closeTime}
+                        placeholder="Select Closing Time"
+                        onChange={(time24) => setCloseTime(time24)}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Geofence & Location Coordinates Section */}
-                <div className="space-y-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-3 p-3.5 rounded-xl border border-border/70 bg-muted/20">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <Label className="flex items-center gap-1.5 font-semibold text-foreground text-xs">
                       <MapPin className="h-3.5 w-3.5 text-primary" />
-                      Studio GPS & Geofencing Attendance Limit
+                      Attendance Geofence & GPS Verification
                     </Label>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={detectingGps || !canEditLocations}
+                      disabled={detectingGps}
                       onClick={handleDetectGps}
                       className="h-7 text-2xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                      title="Autofill current device GPS latitude and longitude"
                     >
                       <RefreshCw className={`h-3 w-3 ${detectingGps ? "animate-spin" : ""}`} />
                       <span>{detectingGps ? "Detecting GPS..." : "Detect Current GPS"}</span>
@@ -690,9 +1125,8 @@ export function LocationsWorkspace() {
                         type="number"
                         step="0.000001"
                         value={locLatitude}
-                        disabled={!canEditLocations}
                         onChange={(e) => setLocLatitude(e.target.value)}
-                        placeholder="e.g. 12.971598"
+                        placeholder="e.g. 19.136325"
                         className="h-8 text-xs font-mono"
                       />
                     </div>
@@ -703,9 +1137,8 @@ export function LocationsWorkspace() {
                         type="number"
                         step="0.000001"
                         value={locLongitude}
-                        disabled={!canEditLocations}
                         onChange={(e) => setLocLongitude(e.target.value)}
-                        placeholder="e.g. 77.594562"
+                        placeholder="e.g. 72.827660"
                         className="h-8 text-xs font-mono"
                       />
                     </div>
@@ -713,19 +1146,16 @@ export function LocationsWorkspace() {
 
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div className="space-y-1">
-                      <Label htmlFor="loc_geofence" className="text-2xs text-muted-foreground">Max Allowed Distance (Meters)</Label>
+                      <Label htmlFor="loc_geofence" className="text-2xs text-muted-foreground">Radius (Meters)</Label>
                       <Input
                         id="loc_geofence"
                         type="number"
                         min={10}
                         max={5000}
                         value={locGeofenceRadius}
-                        disabled={!canEditLocations}
                         onChange={(e) => setLocGeofenceRadius(Number(e.target.value))}
-                        placeholder="200"
                         className="h-8 text-xs"
                       />
-                      <span className="text-[10px] text-muted-foreground">Max radius for staff & member check-in</span>
                     </div>
 
                     <div className="space-y-1">
@@ -733,90 +1163,27 @@ export function LocationsWorkspace() {
                       <select
                         id="loc_policy"
                         value={locGeofenceEnforcement}
-                        disabled={!canEditLocations}
                         onChange={(e) => setLocGeofenceEnforcement(e.target.value as "STRICT" | "FLAG_AUDIT")}
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none"
                       >
                         <option value="STRICT">Strict Lock (Block Outside Radius)</option>
                         <option value="FLAG_AUDIT">Flag for Audit Only</option>
                       </select>
-                      <span className="text-[10px] text-muted-foreground">Policy applied when attendee is outside radius</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Operating Hours — Analog Radial Clock Pickers (Responsive) */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-[#e06d2d]" />
-                    Operating Hours
-                  </Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 rounded-xl border border-border/70 bg-muted/20">
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                        Opens At
-                      </span>
-                      <ClockTimePicker
-                        id="loc_open_time"
-                        value={openTime}
-                        disabled={!canEditLocations}
-                        placeholder="Select Opening Time"
-                        onChange={(time24) => setOpenTime(time24)}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                        Closes At
-                      </span>
-                      <ClockTimePicker
-                        id="loc_close_time"
-                        value={closeTime}
-                        disabled={!canEditLocations}
-                        placeholder="Select Closing Time"
-                        onChange={(time24) => setCloseTime(time24)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-                    <span>Operating Schedule:</span>
-                    <span className="font-mono font-semibold text-foreground">
-                      {openTime} - {closeTime}
-                    </span>
-                  </div>
-
-                  {editingLocation && (
-                    <div className="pt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const target = editingLocation;
-                          setModalOpen(false);
-                          handleOpenSchedule(target);
-                        }}
-                        className="w-full text-xs gap-2 h-9 border-primary/30 text-primary hover:bg-primary/10 font-medium"
-                      >
-                        <CalendarDays className="h-4 w-4" />
-                        Manage Weekly Closed Days & Festive Holidays →
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-4 border-t border-border/40">
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/40">
                   <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
-                    {canEditLocations ? "Cancel" : "Close"}
+                    Cancel
                   </Button>
-                  {canEditLocations && (
-                    <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground min-w-[120px]">
-                      {saving ? (
-                        <span className="flex items-center gap-2">
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Saving...
-                        </span>
-                      ) : editingLocation ? "Update Branch" : "Create Branch"}
-                    </Button>
-                  )}
+                  <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground min-w-[120px]">
+                    {saving ? (
+                      <span className="flex items-center gap-2">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Saving...
+                      </span>
+                    ) : editingLocation ? "Update Branch" : "Create Branch"}
+                  </Button>
                 </div>
               </form>
             </div>

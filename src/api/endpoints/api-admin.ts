@@ -65,13 +65,24 @@ export interface PermissionDefRow {
 }
 
 export interface LocationRow extends Row {
+  code: string;
   name: string;
   city: string;
   address: string;
   phone: string;
+  email?: string;
+  timezone?: string;
   capacity: number;
+  business_open_time?: string;
+  business_close_time?: string;
   operating_hours: string;
+  is_passport_eligible?: boolean;
+  status?: string;
   is_active: boolean;
+  can_delete?: boolean;
+  delete_blocked_reason?: string | null;
+  company_entity?: string | null;
+  company_entity_name?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   geofence_radius_meters?: number;
@@ -378,13 +389,24 @@ export async function fetchLocationsApi(tenantId?: string): Promise<LocationRow[
     const res = await api.get<any>('/tenant/branches/');
     return toArray<any>(res.data).map((b: any) => ({
       id: b.id,
+      code: b.code || '',
       name: b.name,
-      city: b.city || b.address || 'Studio',
+      city: b.city || b.location_name || 'Studio',
       address: b.address || '',
       phone: b.phone || '',
+      email: b.email || '',
+      timezone: b.timezone || 'Asia/Kolkata',
       capacity: b.capacity || 100,
-      operating_hours: b.operating_hours || '06:00 - 22:00',
+      business_open_time: b.business_open_time || '06:00',
+      business_close_time: b.business_close_time || '22:00',
+      operating_hours: b.operating_hours || `${b.business_open_time || '06:00'} - ${b.business_close_time || '22:00'}`,
+      is_passport_eligible: Boolean(b.is_passport_eligible),
+      status: b.status || (b.is_active ? 'ACTIVE' : 'INACTIVE'),
       is_active: b.is_active ?? (b.status === 'ACTIVE'),
+      can_delete: b.can_delete ?? false,
+      delete_blocked_reason: b.delete_blocked_reason ?? null,
+      company_entity: b.company_entity || null,
+      company_entity_name: b.company_entity_name || null,
       latitude: b.latitude ? Number(b.latitude) : null,
       longitude: b.longitude ? Number(b.longitude) : null,
       geofence_radius_meters: b.geofence_radius_meters || 200,
@@ -426,7 +448,36 @@ export async function updateLocationApi(locationId: string, payload: Partial<Loc
 }
 
 export async function deleteLocationApi(locationId: string): Promise<void> {
+  const currentUser = getCurrentUser();
+  const isTenant = currentUser?.userType === 'tenant';
+  if (isTenant) {
+    await api.delete(`/tenant/branches/${locationId}/`);
+    return;
+  }
   await api.delete(`/platform/locations/${locationId}/`);
+}
+
+export async function deactivateLocationApi(locationId: string, reason?: string): Promise<LocationRow> {
+  const res = await api.post<any>(`/tenant/branches/${locationId}/deactivate/`, { reason });
+  return res.data;
+}
+
+export async function reactivateLocationApi(locationId: string): Promise<LocationRow> {
+  const res = await api.post<any>(`/tenant/branches/${locationId}/reactivate/`);
+  return res.data;
+}
+
+export async function fetchCompanyEntitiesApi(): Promise<{ id: string; name: string; code: string }[]> {
+  try {
+    const res = await api.get<any>('/tenant/company-entities/');
+    return toArray<any>(res.data).map((c: any) => ({
+      id: c.id,
+      name: c.name || c.legal_name || c.code,
+      code: c.code,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 // ── SERVICES ──────────────────────────────────────────────────────────
