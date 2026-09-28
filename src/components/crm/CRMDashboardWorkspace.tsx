@@ -107,17 +107,21 @@ export function CRMDashboardWorkspace() {
       selectedProgram,
       selectedPlatform,
     ],
-    queryFn: () =>
-      crmApi.getDashboardMetrics({
+    queryFn: () => {
+      const filters: Parameters<typeof crmApi.getDashboardMetrics>[0] = {
         preset,
-        date_from: preset === 'CUSTOM' ? customFrom : undefined,
-        date_to: preset === 'CUSTOM' ? customTo : undefined,
         branch_id: selectedBranch,
         agent_id: selectedAgent,
         lead_source_id: selectedSource,
         program_id: selectedProgram,
         platform: selectedPlatform,
-      }),
+      };
+      if (preset === 'CUSTOM') {
+        if (customFrom) filters.date_from = customFrom;
+        if (customTo) filters.date_to = customTo;
+      }
+      return crmApi.getDashboardMetrics(filters);
+    },
     staleTime: 60 * 1000,
   });
 
@@ -339,7 +343,7 @@ export function CRMDashboardWorkspace() {
         </div>
 
         {/* Loading State */}
-        {isLoading && <CRMLoadingState title="Computing CRM analytics..." />}
+        {isLoading && <CRMLoadingState message="Computing CRM analytics..." />}
 
         {/* Error State */}
         {isError && (
@@ -651,7 +655,7 @@ export function CRMDashboardWorkspace() {
                           <tr
                             key={s.source_id || idx}
                             onClick={() =>
-                              handleDrilldown('/crm/leads', { lead_source_id: s.source_id || undefined })
+                              handleDrilldown('/crm/leads', s.source_id ? { lead_source_id: s.source_id } : undefined)
                             }
                             className="hover:bg-muted/40 cursor-pointer transition-colors"
                           >

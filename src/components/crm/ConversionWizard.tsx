@@ -115,13 +115,13 @@ function PackagePickerStep({
 
   const { data: versions = [], isLoading: versionsLoading } = useQuery({
     queryKey: ['catalog-versions', selectedProgram],
-    queryFn: () => crmApi.getCatalogPackageVersions({ program_id: selectedProgram ?? undefined }),
+    queryFn: () => crmApi.getCatalogPackageVersions(selectedProgram ? { program_id: selectedProgram } : {}),
     staleTime: 2 * 60 * 1000,
     enabled: programs.length > 0,
   });
 
   useEffect(() => {
-    if (programs.length > 0 && !selectedProgram) setSelectedProgram(programs[0].id);
+    if (programs.length > 0 && programs[0] && !selectedProgram) setSelectedProgram(programs[0].id);
   }, [programs, selectedProgram]);
 
   return (
@@ -376,7 +376,11 @@ function PaymentStep({
           Payment Amount to Record ({quote.pricing.currency})
         </Label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">&#8377;</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">
+            {new Intl.NumberFormat('en', { style: 'currency', currency: quote.pricing.currency ?? 'INR' })
+              .formatToParts(0)
+              .find((p) => p.type === 'currency')?.value ?? quote.pricing.currency}
+          </span>
           <Input
             type="number"
             step="0.01"
@@ -568,11 +572,12 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
     setError(null);
     setIsFetchingQuote(true);
     try {
-      const q = await crmApi.getConversionQuote(lead.id, {
+      const quotePayload: { package_version_id: string; branch_id: string; coupon_code?: string } = {
         package_version_id: versionId,
         branch_id: branchId,
-        coupon_code: coupon || undefined,
-      });
+      };
+      if (coupon) quotePayload.coupon_code = coupon;
+      const q = await crmApi.getConversionQuote(lead.id, quotePayload);
       setQuote(q);
       setPaymentAmount(q.pricing.total_payable);
       // Backend authoritative: set default provider if none selected
@@ -580,11 +585,10 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
         setPaymentProvider(q.payment_providers[0] as PaymentProvider);
       }
       return q;
-    } catch (err: unknown) {
-      const e = err as Record<string, unknown>;
-      const resp = e?.response as Record<string, unknown> | undefined;
-      const data = resp?.data as Record<string, unknown> | undefined;
-      const msg = (data?.error ?? data?.detail ?? (e as Error)?.message ?? 'Failed to get quote') as string;
+    } catch (err: any) {
+      const resp = err?.response;
+      const data = resp?.data;
+      const msg = (data?.error ?? data?.detail ?? err?.message ?? 'Failed to get quote') as string;
       setError(msg);
       toast.error(msg);
       return null;
@@ -615,12 +619,11 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
       toast.success(`${lead.first_name} is now a member!`);
       onConverted?.();
     },
-    onError: (err: unknown) => {
-      const e = err as Record<string, unknown>;
-      const resp = e?.response as Record<string, unknown> | undefined;
-      const data = resp?.data as Record<string, unknown> | undefined;
+    onError: (err: any) => {
+      const resp = err?.response;
+      const data = resp?.data;
       const code = data?.code as string | undefined;
-      const msg = (data?.error ?? data?.detail ?? (e as Error)?.message ?? 'Conversion failed') as string;
+      const msg = (data?.error ?? data?.detail ?? err?.message ?? 'Conversion failed') as string;
       if (code === 'ALREADY_CONVERTED') {
         setError('This lead is already converted. Refresh the page to see updated status.');
       } else if (code === 'PAYMENT_AUTHORITY_REQUIRED') {
@@ -654,15 +657,16 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
       setStep(4);
     } else if (step === 4) {
       if (!selectedVersionId || !branchId || !paymentProvider || !paymentAmount) return;
-      convertMutation.mutate({
+      const payload: ConversionPayload = {
         package_version_id: selectedVersionId,
         branch_id: branchId,
         payment_provider: paymentProvider,
         payment_amount: paymentAmount,
-        coupon_code: appliedCoupon || undefined,
-        start_date: startDate || undefined,
         idempotency_key: idempotencyKey,
-      });
+      };
+      if (appliedCoupon) payload.coupon_code = appliedCoupon;
+      if (startDate) payload.start_date = startDate;
+      convertMutation.mutate(payload);
     }
   }, [step, selectedVersionId, branchId, fetchQuote, paymentProvider, paymentAmount, quote, appliedCoupon, startDate, idempotencyKey, convertMutation]);
 

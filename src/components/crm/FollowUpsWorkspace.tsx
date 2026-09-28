@@ -112,12 +112,14 @@ export function FollowUpsWorkspace() {
   } = useQuery({
     queryKey: ['sales-followups', activeTab, selectedAgent],
     queryFn: () => {
-      const params: Parameters<typeof crmApi.getFollowupTasks>[0] = {
-        view: activeTab === 'all' ? undefined : activeTab,
-      };
-      if (selectedAgent !== 'ALL') {
-        params.assigned_to = selectedAgent;
-      }
+      // Explicit object — never assign undefined to optional props (exactOptionalPropertyTypes)
+      const params: {
+        view?: string;
+        assigned_to_user_id?: string;
+        search?: string;
+      } = {};
+      if (activeTab !== 'all') params.view = activeTab;
+      if (selectedAgent !== 'ALL') params.assigned_to_user_id = selectedAgent;
       return crmApi.getFollowupTasks(params);
     },
   });
@@ -146,7 +148,7 @@ export function FollowUpsWorkspace() {
     queryFn: () => crmApi.getLeads({ page_size: 100 }),
     staleTime: 60 * 1000,
   });
-  const leadsList = leadsData?.results || [];
+  const leadsList = Array.isArray(leadsData) ? leadsData : (leadsData as any)?.results || [];
 
   // Filter tasks by search query locally
   const filteredTasks = React.useMemo(() => {
@@ -169,7 +171,7 @@ export function FollowUpsWorkspace() {
       priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
       due_at: string;
       outcome?: string;
-      assigned_to?: string;
+      assigned_to_user?: string;
     }) => crmApi.createFollowupTask(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
@@ -190,7 +192,10 @@ export function FollowUpsWorkspace() {
       id: string;
       outcome?: string;
       log_activity?: boolean;
-    }) => crmApi.completeFollowupTask(id, outcome, log_activity),
+    }) => crmApi.completeFollowupTask(id, {
+      ...(outcome !== undefined ? { outcome } : {}),
+      ...(log_activity !== undefined ? { log_activity } : {}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
       queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
@@ -208,7 +213,10 @@ export function FollowUpsWorkspace() {
       id: string;
       due_at: string;
       reason?: string;
-    }) => crmApi.rescheduleFollowupTask(id, due_at, reason),
+    }) => crmApi.rescheduleFollowupTask(id, {
+      due_at,
+      ...(reason !== undefined ? { reason } : {}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
       queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
@@ -236,8 +244,8 @@ export function FollowUpsWorkspace() {
       task_type: newTaskType,
       priority: newPriority,
       due_at: new Date(newDueAt).toISOString(),
-      outcome: newOutcomeNotes.trim() || undefined,
-      assigned_to: newAssignedAgent || undefined,
+      ...(newOutcomeNotes.trim() ? { outcome: newOutcomeNotes.trim() } : {}),
+      ...(newAssignedAgent ? { assigned_to_user: newAssignedAgent } : {}),
     });
   };
 
@@ -246,7 +254,7 @@ export function FollowUpsWorkspace() {
     if (!completeTask) return;
     completeMutation.mutate({
       id: completeTask.id,
-      outcome: completeOutcome.trim() || undefined,
+      ...(completeOutcome.trim() ? { outcome: completeOutcome.trim() } : {}),
       log_activity: logActivityOnComplete,
     });
   };
@@ -257,7 +265,7 @@ export function FollowUpsWorkspace() {
     rescheduleMutation.mutate({
       id: rescheduleTask.id,
       due_at: new Date(rescheduleDueAt).toISOString(),
-      reason: rescheduleReason.trim() || undefined,
+      ...(rescheduleReason.trim() ? { reason: rescheduleReason.trim() } : {}),
     });
   };
 
@@ -431,8 +439,8 @@ export function FollowUpsWorkspace() {
           ) : (
             <div className="divide-y divide-border">
               {filteredTasks.map((task) => {
-                const Icon = TASK_TYPE_ICONS[task.task_type] || Clock;
-                const priorityConf = PRIORITY_BADGES[task.priority] || PRIORITY_BADGES.NORMAL;
+                const Icon = (TASK_TYPE_ICONS as any)[task.task_type] || Clock;
+                const priorityConf = (PRIORITY_BADGES as any)[task.priority] || (PRIORITY_BADGES as any)['NORMAL'];
                 const isCompleted = task.status === 'COMPLETED';
                 const isCancelled = task.status === 'CANCELLED';
 
@@ -479,8 +487,8 @@ export function FollowUpsWorkspace() {
                           </Badge>
                         )}
 
-                        <Badge variant="outline" className={`text-[11px] font-semibold ${priorityConf.className}`}>
-                          {priorityConf.label}
+                        <Badge variant="outline" className={`text-[11px] font-semibold ${priorityConf?.className || ''}`}>
+                          {priorityConf?.label || 'Normal'}
                         </Badge>
 
                         <Badge
@@ -626,7 +634,7 @@ export function FollowUpsWorkspace() {
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="">-- Choose Lead --</option>
-                {leadsList.map((l) => (
+                {leadsList.map((l: any) => (
                   <option key={l.id} value={l.id}>
                     {l.first_name} {l.last_name} ({l.phone_normalized || l.email_normalized || 'No contact'})
                   </option>

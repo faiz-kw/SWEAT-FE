@@ -150,6 +150,7 @@ export function CRMSettingsWorkspace() {
     data: slaPolicies = [],
     isLoading: isSlaLoading,
     isError: isSlaError,
+    refetch: refetchSlas,
   } = useQuery({
     queryKey: ['crm-stage-sla-policies'],
     queryFn: () => crmApi.getSlaPolicies(),
@@ -175,6 +176,7 @@ export function CRMSettingsWorkspace() {
     data: reminderPolicy,
     isLoading: isReminderLoading,
     isError: isReminderError,
+    refetch: refetchReminders,
   } = useQuery({
     queryKey: ['crm-trial-reminder-policy'],
     queryFn: () => crmApi.getTrialReminderPolicy(),
@@ -232,13 +234,13 @@ export function CRMSettingsWorkspace() {
   // ==========================================
   // TAB 4 & 5: CHANNELS & TEMPLATES
   // ==========================================
-  const { data: channels = [], isLoading: isChannelsLoading } = useQuery({
+  const { data: channels = [], isLoading: isChannelsLoading, refetch: refetchChannels } = useQuery({
     queryKey: ['crm-communication-channels'],
     queryFn: () => crmApi.getCommunicationChannels(),
     enabled: activeTab === 'channels',
   });
 
-  const { data: templates = [], isLoading: isTemplatesLoading } = useQuery({
+  const { data: templates = [], isLoading: isTemplatesLoading, refetch: refetchTemplates } = useQuery({
     queryKey: ['crm-notification-templates'],
     queryFn: () => crmApi.getNotificationTemplates(),
     enabled: activeTab === 'templates',
@@ -1019,7 +1021,7 @@ export function CRMSettingsWorkspace() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {channels.map((chan) => (
+              {(channels || []).map((chan) => (
                 <div key={chan.id} className="p-4 rounded-xl border border-border/60 bg-card space-y-3 shadow-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -1053,7 +1055,7 @@ export function CRMSettingsWorkspace() {
                     <div className="space-y-1 pt-1">
                       <span className="text-[11px] font-semibold text-muted-foreground">Active Capabilities:</span>
                       <ul className="space-y-0.5 pl-4 list-disc text-muted-foreground text-[11px]">
-                        {chan.features.map((feat, i) => (
+                        {(chan.features || []).map((feat, i) => (
                           <li key={i}>{feat}</li>
                         ))}
                       </ul>
@@ -1083,13 +1085,13 @@ export function CRMSettingsWorkspace() {
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               <span className="text-xs">Loading templates...</span>
             </div>
-          ) : templates.length === 0 ? (
+          ) : (templates || []).length === 0 ? (
             <div className="p-8 text-center bg-card rounded-xl border border-border/50 text-muted-foreground text-xs">
               No custom CRM notification templates configured yet. System uses standard canonical defaults.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {templates.map((tmpl) => (
+              {(templates || []).map((tmpl) => (
                 <div key={tmpl.id} className="p-4 rounded-xl border border-border/60 bg-card space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>

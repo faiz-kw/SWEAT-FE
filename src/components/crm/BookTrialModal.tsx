@@ -19,7 +19,7 @@ import {
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
-import type { Lead, TrialSlot, BookTrialPayload, TrialBooking } from '@/types/crm';
+import type { Lead, TrialSlot, BookTrialPayload, TrialBooking, RescheduleTrialPayload } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -66,7 +66,7 @@ export function BookTrialModal({
   const [selectedDate, setSelectedDate] = React.useState<string>(() => {
     if (existingTrial?.booking_date) return existingTrial.booking_date;
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    return today.toISOString().split('T')[0] ?? '';
   });
   const [selectedSlot, setSelectedSlot] = React.useState<TrialSlot | null>(null);
   const [notes, setNotes] = React.useState('');
@@ -107,12 +107,21 @@ export function BookTrialModal({
     enabled: open,
   });
 
-  // Automatically select first branch if none selected
+  // Smart branch pre-selection:
+  // 1. Prefer the lead's assigned branch if present in the branches list
+  // 2. Auto-select only when exactly 1 branch exists (unambiguous)
+  // 3. Never silently pick branches[0] when multiple branches exist
   React.useEffect(() => {
-    if (open && !selectedBranchId && branches.length > 0) {
+    if (!open || selectedBranchId) return;
+    const leadBranch = activeLead?.branch;
+    if (leadBranch && branches.some((b) => b.id === leadBranch)) {
+      setSelectedBranchId(leadBranch);
+      return;
+    }
+    if (branches.length === 1 && branches[0]) {
       setSelectedBranchId(branches[0].id);
     }
-  }, [open, selectedBranchId, branches]);
+  }, [open, selectedBranchId, branches, activeLead?.branch]);
 
   // Fetch programs for branch
   const { data: programs = [] } = useQuery({
@@ -153,7 +162,7 @@ export function BookTrialModal({
     queryFn: () => crmApi.getLeads({ search: leadSearch, page_size: 15 }),
     enabled: open && !initialLead && !existingTrial && leadSearch.trim().length > 1,
   });
-  const leadSearchResults = leadsData?.results || [];
+  const leadSearchResults = Array.isArray(leadsData) ? leadsData : (leadsData as any)?.results || [];
 
   // Fetch available slots from backend (canonical ClassOccurrence + BookingPolicySet)
   const {
@@ -169,13 +178,15 @@ export function BookTrialModal({
       selectedProgramId,
       selectedLeadId,
     ],
-    queryFn: () =>
-      crmApi.getAvailableTrialSlots({
+    queryFn: () => {
+      const params: { branch_id: string; date: string; program_id?: string; lead_id?: string } = {
         branch_id: selectedBranchId,
         date: selectedDate,
-        program_id: selectedProgramId || undefined,
-        lead_id: selectedLeadId || undefined,
-      }),
+      };
+      if (selectedProgramId) params.program_id = selectedProgramId;
+      if (selectedLeadId) params.lead_id = selectedLeadId;
+      return crmApi.getAvailableTrialSlots(params);
+    },
     enabled: open && !!selectedBranchId && !!selectedDate && !isConverted,
   });
 
@@ -216,11 +227,13 @@ export function BookTrialModal({
 
   // Reschedule mutation (authoritative in-place atomic update)
   const rescheduleMutation = useMutation({
-    mutationFn: (vars: { id: string; occurrenceId: string; notes?: string }) =>
-      crmApi.rescheduleTrial(vars.id, {
+    mutationFn: (vars: { id: string; occurrenceId: string; notes?: string }) => {
+      const payload: RescheduleTrialPayload = {
         new_class_occurrence_id: vars.occurrenceId,
-        notes: vars.notes,
-      }),
+      };
+      if (vars.notes) payload.notes = vars.notes;
+      return crmApi.rescheduleTrial(vars.id, payload);
+    },
     onSuccess: () => {
       invalidateCrossModuleCaches();
       toast.success('Trial rescheduled successfully! Slot transferred atomically.');
@@ -260,7 +273,7 @@ export function BookTrialModal({
       rescheduleMutation.mutate({
         id: existingTrial.id,
         occurrenceId: selectedSlot.occurrence_id,
-        notes: notes.trim() || undefined,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
     } else {
       if (!selectedLeadId) {
@@ -271,7 +284,7 @@ export function BookTrialModal({
         lead_id: selectedLeadId,
         class_occurrence_id: selectedSlot.occurrence_id,
         branch_id: selectedBranchId,
-        notes: notes.trim() || undefined,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
     }
   };
@@ -414,7 +427,7 @@ export function BookTrialModal({
               </div>
               {leadSearchResults.length > 0 && (
                 <div className="max-h-36 overflow-y-auto border border-border rounded-md divide-y divide-border bg-card text-xs">
-                  {leadSearchResults.map((l) => (
+                  {leadSearchResults.map((l: any) => (
                     <div
                       key={l.id}
                       onClick={() => {
@@ -496,7 +509,7 @@ export function BookTrialModal({
                   <option value="" disabled>Select Branch</option>
                   {uniqueBranches.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name} ({b.city || 'Studio'})
+                      {b.name} {((b as any).city ? `(${(b as any).city})` : '')}
                     </option>
                   ))}
                 </select>

@@ -1,17 +1,18 @@
 import * as React from 'react';
+import { Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CRMEmptyStateProps {
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }> | undefined;
   title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  canAction?: boolean;
+  description?: string | undefined;
+  actionLabel?: string | undefined;
+  onAction?: (() => void) | undefined;
+  canAction?: boolean | undefined;
 }
 
 export function CRMEmptyState({
-  icon: Icon,
+  icon: Icon = Inbox,
   title,
   description,
   actionLabel,

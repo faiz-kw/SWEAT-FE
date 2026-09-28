@@ -193,7 +193,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
             </Badge>
             <Switch
               id="master-switch"
-              checked={formData.is_enabled}
+              checked={!!formData.is_enabled}
               onCheckedChange={(val) => handleChange('is_enabled', val)}
               disabled={!canEdit}
             />
@@ -221,7 +221,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.sla_breach_attention_enabled}
+                checked={!!formData.sla_breach_attention_enabled}
                 onCheckedChange={(val) => handleChange('sla_breach_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -235,7 +235,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.overdue_followup_attention_enabled}
+                checked={!!formData.overdue_followup_attention_enabled}
                 onCheckedChange={(val) => handleChange('overdue_followup_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -249,7 +249,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.no_followup_attention_enabled}
+                checked={!!formData.no_followup_attention_enabled}
                 onCheckedChange={(val) => handleChange('no_followup_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -275,7 +275,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.no_response_attention_enabled}
+                checked={!!formData.no_response_attention_enabled}
                 onCheckedChange={(val) => handleChange('no_response_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -321,7 +321,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.trial_not_booked_attention_enabled}
+                checked={!!formData.trial_not_booked_attention_enabled}
                 onCheckedChange={(val) => handleChange('trial_not_booked_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -335,7 +335,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.trial_confirmation_attention_enabled}
+                checked={!!formData.trial_confirmation_attention_enabled}
                 onCheckedChange={(val) => handleChange('trial_confirmation_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -349,7 +349,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.trial_no_show_attention_enabled}
+                checked={!!formData.trial_no_show_attention_enabled}
                 onCheckedChange={(val) => handleChange('trial_no_show_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -363,7 +363,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.post_trial_followup_attention_enabled}
+                checked={!!formData.post_trial_followup_attention_enabled}
                 onCheckedChange={(val) => handleChange('post_trial_followup_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />
@@ -389,7 +389,7 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                 </p>
               </div>
               <Switch
-                checked={formData.unassigned_lead_attention_enabled}
+                checked={!!formData.unassigned_lead_attention_enabled}
                 onCheckedChange={(val) => handleChange('unassigned_lead_attention_enabled', val)}
                 disabled={!canEdit || !formData.is_enabled}
               />

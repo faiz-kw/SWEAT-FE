@@ -164,17 +164,19 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     refetch,
   } = useQuery({
     queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter],
-    queryFn: () =>
-      crmApi.getLeads({
+    queryFn: () => {
+      const p: Parameters<typeof crmApi.getLeads>[0] = {
         current_status: statusFilter,
-        search: searchQuery || undefined,
-        lead_source_id: sourceFilter !== 'ALL' ? sourceFilter : undefined,
-        campaign: campaignFilter.trim() || undefined,
-        sla_status: slaFilter !== 'ALL' ? slaFilter : undefined,
-        branch_id: branchFilter !== 'ALL' ? branchFilter : undefined,
-        assigned_to_me: scopeFilter === 'MY_LEADS' ? true : undefined,
-        unassigned: scopeFilter === 'UNASSIGNED' ? true : undefined,
-      }),
+      };
+      if (searchQuery) p.search = searchQuery;
+      if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
+      if (campaignFilter.trim()) p.campaign = campaignFilter.trim();
+      if (slaFilter !== 'ALL') p.sla_status = slaFilter;
+      if (branchFilter !== 'ALL') p.branch_id = branchFilter;
+      if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
+      if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      return crmApi.getLeads(p);
+    },
     enabled: canView,
   });
 

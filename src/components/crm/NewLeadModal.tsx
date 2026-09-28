@@ -46,6 +46,20 @@ interface NewLeadModalProps {
   onSuccess?: () => void;
 }
 
+interface LeadFormErrors {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  branch?: string;
+  program?: string;
+  source?: string;
+  agent?: string;
+  gstNumber?: string;
+  panNumber?: string;
+}
+
 export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProps) {
   const queryClient = useQueryClient();
 
@@ -99,7 +113,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   const [attrExternalLeadId, setAttrExternalLeadId] = React.useState('');
 
   // Validation feedback
-  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = React.useState<LeadFormErrors>({});
 
   // Duplicate Lead Detection
   const [duplicateMatches, setDuplicateMatches] = React.useState<any[]>([]);
@@ -216,13 +230,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
   // Set default branch and country on data load
   React.useEffect(() => {
-    if (branches.length > 0 && !selectedBranch) {
+    if (branches.length > 0 && branches[0] && !selectedBranch) {
       setSelectedBranch(branches[0].id);
     }
   }, [branches, selectedBranch]);
 
   React.useEffect(() => {
-    if (metadata?.countries?.length && !country) {
+    if (metadata?.countries?.length && metadata.countries[0] && !country) {
       setCountry(metadata.countries[0]);
     }
   }, [metadata, country]);
@@ -257,10 +271,10 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     const timer = setTimeout(async () => {
       setIsCheckingDuplicate(true);
       try {
-        const res = await crmApi.checkDuplicates({
-          phone: cleanPhone || undefined,
-          email: cleanEmail || undefined,
-        });
+        const dupParams: { phone?: string; email?: string } = {};
+        if (cleanPhone) dupParams.phone = cleanPhone;
+        if (cleanEmail) dupParams.email = cleanEmail;
+        const res = await crmApi.checkDuplicates(dupParams);
         setDuplicateMatches(res.has_duplicate ? res.matches : []);
       } catch (err) {
         // Silently ignore check duplicate network hiccups
@@ -361,15 +375,15 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
   // --- Form Validation ---
   const validateForm = (): boolean => {
-    const errors: Record<string, string> = {};
+    const errors: LeadFormErrors = {};
 
     if (!firstName.trim()) errors.firstName = 'First name is required.';
     if (!lastName.trim()) errors.lastName = 'Last name is required.';
     const cleanEmail = email.trim();
     if (!cleanEmail) {
       errors.email = 'Email address is required.';
-    } else if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(cleanEmail)) {
-      errors.email = 'Please enter a valid Gmail address.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(cleanEmail)) {
+      errors.email = 'Please enter a valid email address.';
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
@@ -456,13 +470,12 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       interested_program: selectedProgram,
       fitness_goal: fitnessGoal.trim() || null,
       lead_source: selectedSource,
-      assigned_sales_user: assignmentMode === 'MANUAL' ? selectedAgent : undefined,
+      assigned_sales_user: assignmentMode === 'MANUAL' && selectedAgent ? selectedAgent : null,
       referred_by_user: referredByUserId || null,
       referred_by_name: referredByName.trim() || null,
       billing_name: billingName.trim() || null,
       gst_number: finalGst || null,
       pan_number: finalPan || null,
-      attribution: undefined, // Section 5 temporarily hidden from UI; do not send empty/fake attribution payload
     };
 
     createMutation.mutate(payload);

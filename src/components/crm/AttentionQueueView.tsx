@@ -62,15 +62,17 @@ export function AttentionQueueView({
     isFetching,
   } = useQuery({
     queryKey: ['crm-attention-queue', page, branchFilter, searchQuery, reasonFilter, severityFilter],
-    queryFn: () =>
-      crmApi.getAttentionQueue({
+    queryFn: () => {
+      const p: Parameters<typeof crmApi.getAttentionQueue>[0] = {
         page,
         page_size: 15,
-        branch: branchFilter !== 'ALL' ? branchFilter : undefined,
-        search: searchQuery || undefined,
-        reason: reasonFilter !== 'ALL' ? reasonFilter : undefined,
-        severity: severityFilter !== 'ALL' ? severityFilter : undefined,
-      }),
+      };
+      if (branchFilter !== 'ALL') p.branch = branchFilter;
+      if (searchQuery) p.search = searchQuery;
+      if (reasonFilter !== 'ALL') p.reason = reasonFilter;
+      if (severityFilter !== 'ALL') p.severity = severityFilter;
+      return crmApi.getAttentionQueue(p);
+    },
   });
 
   const leads = data?.results || [];
@@ -165,7 +167,7 @@ export function AttentionQueueView({
       ) : isError ? (
         <CRMErrorState
           title="Attention Queue Unavailable"
-          description="Failed to load stuck leads and next best actions from backend."
+          message="Failed to load stuck leads and next best actions from backend."
           onRetry={() => refetch()}
         />
       ) : leads.length === 0 ? (

@@ -79,6 +79,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/lib/permissions';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
@@ -165,7 +166,7 @@ export function LeadDetailModal({
   // Follow-up task creation state
   const [isSchedulingFollowup, setIsSchedulingFollowup] = React.useState(false);
   const [fTaskType, setFTaskType] = React.useState<FollowupTaskType>('CALL');
-  const [fPriority, setFPriority] = React.useState<FollowupPriority>('MEDIUM');
+  const [fPriority, setFPriority] = React.useState<FollowupPriority>('NORMAL');
   const [fDueAt, setFDueAt] = React.useState('');
   const [fNotes, setFNotes] = React.useState('');
   const [fAssignedAgent, setFAssignedAgent] = React.useState('');
@@ -542,8 +543,11 @@ export function LeadDetailModal({
 
   // Reschedule Follow-up Task Mutation
   const rescheduleFollowupMutation = useMutation({
-    mutationFn: ({ taskId, due_at, reason }: { taskId: string; due_at: string; reason?: string }) =>
-      crmApi.rescheduleFollowupTask(taskId, { due_at, reason }),
+    mutationFn: ({ taskId, due_at, reason }: { taskId: string; due_at: string; reason?: string }) => {
+      const payload: { due_at: string; reason?: string } = { due_at };
+      if (reason) payload.reason = reason;
+      return crmApi.rescheduleFollowupTask(taskId, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead-followups', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
@@ -829,7 +833,7 @@ export function LeadDetailModal({
                       onClick={() => onStatusTransitionClick(currentLead)}
                       className="h-8 text-xs gap-1.5 font-medium border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RotateCw className="w-3.5 h-3.5" />
                       Reopen Lead
                     </Button>
                   )}
@@ -1398,12 +1402,18 @@ export function LeadDetailModal({
                       toast.error('Outcome is required');
                       return;
                     }
-                    addActivityMutation.mutate({
+                    const actPayload: {
+                      activity_type: ActivityType;
+                      outcome: string;
+                      notes?: string;
+                      duration_minutes?: number;
+                    } = {
                       activity_type: actType,
                       outcome: actOutcome.trim(),
-                      notes: actNotes.trim() || undefined,
-                      duration_minutes: actDuration ? Number(actDuration) : undefined,
-                    });
+                    };
+                    if (actNotes.trim()) actPayload.notes = actNotes.trim();
+                    if (actDuration) actPayload.duration_minutes = Number(actDuration);
+                    addActivityMutation.mutate(actPayload);
                   }}
                   className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3"
                 >
@@ -1511,7 +1521,7 @@ export function LeadDetailModal({
                   <Textarea
                     placeholder="Record notes on prospect conversation, trial feedback, coaching observations, or special requests..."
                     value={newNoteContent}
-                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewNoteContent(e.target.value)}
                     className="text-xs resize-none bg-background"
                     rows={3}
                   />
@@ -1622,7 +1632,7 @@ export function LeadDetailModal({
                           )}
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
                             <span>Logged by: <strong className="text-foreground">{act.performed_by_name || 'Staff'}</strong></span>
-                            {act.duration_minutes ? <span>Duration: <strong className="text-foreground">{act.duration_minutes} min</strong></span> : null}
+                            {(act as any).duration_minutes ? <span>Duration: <strong className="text-foreground">{(act as any).duration_minutes} min</strong></span> : null}
                           </div>
                         </div>
                       ))}
@@ -2226,8 +2236,8 @@ export function LeadDetailModal({
                       task_type: fTaskType,
                       priority: fPriority,
                       due_at: new Date(fDueAt).toISOString(),
-                      notes: fNotes.trim() || undefined,
-                      assigned_to_user: fAssignedAgent || undefined,
+                      ...(fNotes.trim() ? { notes: fNotes.trim() } : {}),
+                      ...(fAssignedAgent ? { assigned_to_user: fAssignedAgent } : {}),
                     });
                   }}
                   className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3"
@@ -3013,7 +3023,7 @@ export function LeadDetailModal({
                 rescheduleFollowupMutation.mutate({
                   taskId: reschedulingTask.id,
                   due_at: new Date(rescheduleDueAt).toISOString(),
-                  reason: rescheduleReason.trim() || undefined,
+                  ...(rescheduleReason.trim() ? { reason: rescheduleReason.trim() } : {}),
                 });
               }}
               className="space-y-4 pt-2"
@@ -3088,16 +3098,17 @@ export function LeadDetailModal({
                   toast.error('Message body is required');
                   return;
                 }
-                sendCommunicationMutation.mutate({
+                const commPayload: SendCommunicationPayload = {
                   channel: composeChannel,
                   recipient: composeRecipient.trim(),
                   lead_id: currentLead?.id,
-                  template_id: composeTemplateId || undefined,
-                  subject: composeSubject.trim() || undefined,
-                  body: composeBody.trim() || undefined,
                   purpose: composePurpose,
                   idempotency_key: `MANUAL_SEND:${currentLead?.id}:${composeChannel}:${Date.now()}`,
-                });
+                };
+                if (composeTemplateId) commPayload.template_id = composeTemplateId;
+                if (composeSubject.trim()) commPayload.subject = composeSubject.trim();
+                if (composeBody.trim()) commPayload.body = composeBody.trim();
+                sendCommunicationMutation.mutate(commPayload);
               }}
               className="space-y-3.5 pt-2"
             >

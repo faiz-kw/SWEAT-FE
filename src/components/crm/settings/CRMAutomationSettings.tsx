@@ -285,7 +285,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
 
   const updateStep = (idx: number, patch: Partial<AutomationStep>) => {
     const updated = [...builderSteps];
-    updated[idx] = { ...updated[idx], ...patch };
+    updated[idx] = { ...updated[idx], ...patch } as AutomationStep;
     setBuilderSteps(updated);
   };
 
@@ -309,7 +309,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
 
   const updateTriggerCondition = (idx: number, patch: Partial<AutomationCondition>) => {
     const updated = [...builderConditions];
-    updated[idx] = { ...updated[idx], ...patch };
+    updated[idx] = { ...updated[idx], ...patch } as AutomationCondition;
     setBuilderConditions(updated);
   };
 
@@ -790,7 +790,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                         <div className="space-y-1">
                           <Label className="text-[11px] font-medium">Channel *</Label>
                           <select
-                            value={step.config?.channel || 'WHATSAPP'}
+                            value={step.config?.['channel'] || 'WHATSAPP'}
                             onChange={(e) =>
                               updateStep(idx, {
                                 config: { ...step.config, channel: e.target.value },
@@ -809,7 +809,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                         <div className="space-y-1">
                           <Label className="text-[11px] font-medium">Template</Label>
                           <select
-                            value={step.config?.template_id || ''}
+                            value={step.config?.['template_id'] || ''}
                             onChange={(e) =>
                               updateStep(idx, {
                                 config: { ...step.config, template_id: e.target.value },
@@ -833,7 +833,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                       <div className="p-2.5 rounded-lg bg-muted/40 border border-border/40 space-y-1">
                         <Label className="text-[11px] font-medium">Target Lead Stage *</Label>
                         <select
-                          value={step.config?.target_stage || ''}
+                          value={step.config?.['target_stage'] || ''}
                           onChange={(e) =>
                             updateStep(idx, {
                               config: { ...step.config, target_stage: e.target.value },
@@ -857,7 +857,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                         <div className="space-y-1">
                           <Label className="text-[11px] font-medium">Task Title *</Label>
                           <Input
-                            value={step.config?.title || ''}
+                            value={step.config?.['title'] || ''}
                             onChange={(e) =>
                               updateStep(idx, {
                                 config: { ...step.config, title: e.target.value },
@@ -872,7 +872,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                           <Input
                             type="number"
                             min="1"
-                            value={step.config?.offset_hours ?? 24}
+                            value={step.config?.['offset_hours'] ?? 24}
                             onChange={(e) =>
                               updateStep(idx, {
                                 config: { ...step.config, offset_hours: parseInt(e.target.value, 10) || 1 },

@@ -4,18 +4,18 @@ import { cn } from '@/lib/utils';
 
 interface CRMKpiTileProps {
   label: string;
-  value?: string | number | null;
-  isLoading?: boolean;
-  isError?: boolean;
-  errorHint?: string;
-  hint?: string;
+  value?: string | number | null | undefined;
+  isLoading?: boolean | undefined;
+  isError?: boolean | undefined;
+  errorHint?: string | undefined;
+  hint?: string | undefined;
   badge?: {
     text: string;
-    variant?: 'neutral' | 'positive' | 'warning' | 'negative' | 'info';
-  };
-  onClick?: () => void;
-  isActive?: boolean;
-  className?: string;
+    variant?: 'neutral' | 'positive' | 'warning' | 'negative' | 'info' | undefined;
+  } | undefined;
+  onClick?: (() => void) | undefined;
+  isActive?: boolean | undefined;
+  className?: string | undefined;
 }
 
 export function CRMKpiTile({

@@ -8,6 +8,7 @@ interface CRMPageHeaderProps {
   badgeText?: string;
   badgeVariant?: 'default' | 'outline' | 'secondary';
   actions?: React.ReactNode;
+  breadcrumbs?: Array<{ label: string; to?: string }>;
 }
 
 export function CRMPageHeader({

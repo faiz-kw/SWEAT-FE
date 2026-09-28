@@ -109,11 +109,13 @@ export function SalesActivitiesWorkspace() {
     refetch,
   } = useQuery({
     queryKey: ['sales-activities', selectedType, dateParams],
-    queryFn: () =>
-      crmApi.getActivities({
-        activity_type: selectedType !== 'ALL' ? (selectedType as ActivityType) : undefined,
-        ...dateParams,
-      }),
+    queryFn: () => {
+      const p: { activity_type?: string; start_date?: string; end_date?: string } = {};
+      if (selectedType !== 'ALL') p.activity_type = selectedType;
+      if (dateParams.start_date) p.start_date = dateParams.start_date;
+      if (dateParams.end_date) p.end_date = dateParams.end_date;
+      return crmApi.getActivities(p);
+    },
   });
 
   // Fetch real leads list for the log activity dropdown
@@ -122,7 +124,7 @@ export function SalesActivitiesWorkspace() {
     queryFn: () => crmApi.getLeads({ page_size: 100 }),
     staleTime: 60 * 1000,
   });
-  const leadsList = leadsData?.results || [];
+  const leadsList = Array.isArray(leadsData) ? leadsData : (leadsData as any)?.results || [];
 
   // Filter activities locally by search term
   const filteredActivities = React.useMemo(() => {
@@ -158,13 +160,20 @@ export function SalesActivitiesWorkspace() {
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!logLeadId) return;
-    logMutation.mutate({
+    const payload: {
+      lead: string;
+      activity_type: ActivityType;
+      outcome?: string;
+      notes?: string;
+      activity_at?: string;
+    } = {
       lead: logLeadId,
       activity_type: logType,
-      outcome: logOutcome.trim() || undefined,
-      notes: logNotes.trim() || undefined,
-      activity_at: logDateTime ? new Date(logDateTime).toISOString() : undefined,
-    });
+    };
+    if (logOutcome.trim()) payload.outcome = logOutcome.trim();
+    if (logNotes.trim()) payload.notes = logNotes.trim();
+    if (logDateTime) payload.activity_at = new Date(logDateTime).toISOString();
+    logMutation.mutate(payload);
   };
 
   const handleOpenLead = async (leadId: string) => {
@@ -515,7 +524,7 @@ export function SalesActivitiesWorkspace() {
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="">-- Choose Lead --</option>
-                {leadsList.map((l) => (
+                {leadsList.map((l: any) => (
                   <option key={l.id} value={l.id}>
                     {l.first_name} {l.last_name} ({l.phone_normalized || l.email_normalized || 'No contact'})
                   </option>

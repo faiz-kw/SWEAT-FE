@@ -292,23 +292,6 @@ export interface LeadNote {
   updated_at: string;
 }
 
-export interface TrialBooking {
-  id: string;
-  lead: string;
-  lead_name?: string;
-  branch: string;
-  branch_name?: string;
-  assigned_trainer_profile?: string | null;
-  trainer_name?: string | null;
-  trial_type: string;
-  scheduled_start: string;
-  scheduled_end: string;
-  status: 'BOOKED' | 'CONFIRMED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED' | 'RESCHEDULED' | 'CONVERTED';
-  booking_source: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export type ActivityType =
   | 'CALL'
   | 'WHATSAPP'
@@ -348,6 +331,8 @@ export type FollowupTaskType =
   | 'REJOIN'
   | 'OTHER';
 
+export type FollowupPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
 export interface SalesFollowupTask {
   id: string;
   lead: string;
@@ -362,9 +347,10 @@ export interface SalesFollowupTask {
   created_by_user?: string;
   created_by_name?: string;
   task_type: FollowupTaskType | string;
-  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  priority: FollowupPriority;
   due_at: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  notes?: string | null;
   outcome?: string | null;
   next_followup_at?: string | null;
   is_overdue?: boolean;
@@ -468,19 +454,24 @@ export type TrialConfirmationChannel =
 
 export interface TrialBooking {
   id: string;
-  organization: string;
+  organization?: string;
   branch: string;
   branch_name?: string;
   lead: string;
   lead_name?: string;
   lead_phone?: string;
   lead_email?: string;
-  class_occurrence: string;
+  class_occurrence?: string;
   class_name?: string;
-  booking_date: string;
-  start_time: string;
-  end_time: string;
-  trainer_name?: string;
+  booking_date?: string;
+  start_time?: string;
+  end_time?: string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  trial_type?: string;
+  booking_source?: string;
+  assigned_trainer_profile?: string | null;
+  trainer_name?: string | null;
   status: TrialBookingStatus;
   confirmation_status: TrialConfirmationStatus;
   confirmation_channel?: TrialConfirmationChannel | null;

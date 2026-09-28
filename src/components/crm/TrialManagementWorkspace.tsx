@@ -36,6 +36,7 @@ import type {
   TrialSlot,
   TrialReminderSchedulePoint,
   Lead,
+  RescheduleTrialPayload,
 } from '@/types/crm';
 import { usePermissions } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
@@ -93,7 +94,7 @@ export function TrialManagementWorkspace() {
   const [rescheduleDate, setRescheduleDate] = React.useState<string>(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    return tomorrow.toISOString().split('T')[0] ?? '';
   });
   const [rescheduleSlot, setRescheduleSlot] = React.useState<TrialSlot | null>(null);
   const [rescheduleNotes, setRescheduleNotes] = React.useState('');
@@ -114,9 +115,9 @@ export function TrialManagementWorkspace() {
   const { data: counts, isLoading: isCountsLoading } = useQuery({
     queryKey: ['trial-summary-counts', selectedBranch],
     queryFn: () =>
-      crmApi.getTrialSummaryCounts({
-        branch_id: selectedBranch || undefined,
-      }),
+      crmApi.getTrialSummaryCounts(
+        selectedBranch ? { branch_id: selectedBranch } : {}
+      ),
   });
 
   // Trial bookings list query
@@ -127,15 +128,18 @@ export function TrialManagementWorkspace() {
     refetch: refetchTrials,
   } = useQuery({
     queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery],
-    queryFn: () =>
-      crmApi.getTrialBookings({
-        branch_id: selectedBranch || undefined,
-        status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
-        confirmation_status: selectedConfStatus !== 'ALL' ? selectedConfStatus : undefined,
-        start_date: dateFilter || undefined,
-        end_date: dateFilter || undefined,
-        search: searchQuery || undefined,
-      }),
+    queryFn: () => {
+      const params: Parameters<typeof crmApi.getTrialBookings>[0] = {};
+      if (selectedBranch) params.branch_id = selectedBranch;
+      if (selectedStatus !== 'ALL') params.status = selectedStatus;
+      if (selectedConfStatus !== 'ALL') params.confirmation_status = selectedConfStatus;
+      if (dateFilter) {
+        params.start_date = dateFilter;
+        params.end_date = dateFilter;
+      }
+      if (searchQuery) params.search = searchQuery;
+      return crmApi.getTrialBookings(params);
+    },
   });
 
   // Available slots query for rescheduling
@@ -202,8 +206,11 @@ export function TrialManagementWorkspace() {
   });
 
   const rescheduleMutation = useMutation({
-    mutationFn: ({ id, newSlotId, notes }: { id: string; newSlotId: string; notes?: string }) =>
-      crmApi.rescheduleTrial(id, { new_class_occurrence_id: newSlotId, notes }),
+    mutationFn: ({ id, newSlotId, notes }: { id: string; newSlotId: string; notes?: string }) => {
+      const payload: RescheduleTrialPayload = { new_class_occurrence_id: newSlotId };
+      if (notes) payload.notes = notes;
+      return crmApi.rescheduleTrial(id, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
@@ -664,7 +671,7 @@ export function TrialManagementWorkspace() {
                                     <DropdownMenuItem
                                       onClick={() => {
                                         setReschedulingTrial(trial);
-                                        setRescheduleDate(trial.booking_date);
+                                        setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
                                       }}
                                     >
                                       <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
@@ -831,7 +838,7 @@ export function TrialManagementWorkspace() {
                           <DropdownMenuItem
                             onClick={() => {
                               setReschedulingTrial(trial);
-                              setRescheduleDate(trial.booking_date);
+                              setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
                             }}
                           >
                             <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
@@ -922,7 +929,7 @@ export function TrialManagementWorkspace() {
                   confirmMutation.mutate({
                     id: confirmingTrial.id,
                     channel: confirmChannel,
-                    notes: confirmNotes.trim() || undefined,
+                    ...(confirmNotes.trim() ? { notes: confirmNotes.trim() } : {}),
                   })
                 }
                 disabled={confirmMutation.isPending}
@@ -1051,7 +1058,7 @@ export function TrialManagementWorkspace() {
                   rescheduleMutation.mutate({
                     id: reschedulingTrial.id,
                     newSlotId: rescheduleSlot!.occurrence_id,
-                    notes: rescheduleNotes.trim() || undefined,
+                    ...(rescheduleNotes.trim() ? { notes: rescheduleNotes.trim() } : {}),
                   })
                 }
                 disabled={!rescheduleSlot || !rescheduleSlot.is_available || rescheduleMutation.isPending}
@@ -1125,7 +1132,7 @@ export function TrialManagementWorkspace() {
                   cancelMutation.mutate({
                     id: cancellingTrial.id,
                     reason: cancelReason,
-                    notes: cancelNotes.trim() || undefined,
+                    ...(cancelNotes.trim() ? { notes: cancelNotes.trim() } : {}),
                   })
                 }
                 disabled={!cancelReason || cancelMutation.isPending}

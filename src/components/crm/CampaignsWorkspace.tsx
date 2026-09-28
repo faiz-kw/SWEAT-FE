@@ -73,44 +73,48 @@ export function CampaignsWorkspace() {
     refetch,
   } = useQuery({
     queryKey: ['crm-campaign-performance', selectedBranch, selectedPlatform, startDate, endDate, searchTerm],
-    queryFn: () =>
-      crmApi.getCampaignPerformance({
-        branch_id: selectedBranch,
-        platform: selectedPlatform,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        search: searchTerm || undefined,
-      }),
+    queryFn: () => {
+      const p: Parameters<typeof crmApi.getCampaignPerformance>[0] = {};
+      if (selectedBranch) p.branch_id = selectedBranch;
+      if (selectedPlatform) p.platform = selectedPlatform;
+      if (startDate) p.start_date = startDate;
+      if (endDate) p.end_date = endDate;
+      if (searchTerm) p.search = searchTerm;
+      return crmApi.getCampaignPerformance(p);
+    },
   });
 
   // Drilldown queries
   const { data: drilldownLeads = [], isLoading: loadingDrillLeads } = useQuery({
     queryKey: ['crm-drilldown-leads', selectedCampaign?.campaign_name, selectedCampaign?.platform],
-    queryFn: () =>
-      crmApi.getCampaignDrilldownLeads({
-        campaign_name: selectedCampaign?.campaign_name,
-        platform: selectedCampaign?.platform,
-      }),
+    queryFn: () => {
+      const p: { campaign_name?: string; platform?: string } = {};
+      if (selectedCampaign?.campaign_name) p.campaign_name = selectedCampaign.campaign_name;
+      if (selectedCampaign?.platform) p.platform = selectedCampaign.platform;
+      return crmApi.getCampaignDrilldownLeads(p);
+    },
     enabled: drilldownType === 'leads' && !!selectedCampaign,
   });
 
   const { data: drilldownConversions = [], isLoading: loadingDrillConversions } = useQuery({
     queryKey: ['crm-drilldown-conversions', selectedCampaign?.campaign_name, selectedCampaign?.platform],
-    queryFn: () =>
-      crmApi.getCampaignDrilldownConversions({
-        campaign_name: selectedCampaign?.campaign_name,
-        platform: selectedCampaign?.platform,
-      }),
+    queryFn: () => {
+      const params: { campaign_name?: string; platform?: string } = {};
+      if (selectedCampaign?.campaign_name) params.campaign_name = selectedCampaign.campaign_name;
+      if (selectedCampaign?.platform) params.platform = selectedCampaign.platform;
+      return crmApi.getCampaignDrilldownConversions(params);
+    },
     enabled: drilldownType === 'conversions' && !!selectedCampaign,
   });
 
   const { data: drilldownRevenue = [], isLoading: loadingDrillRevenue } = useQuery({
     queryKey: ['crm-drilldown-revenue', selectedCampaign?.campaign_name, selectedCampaign?.platform],
-    queryFn: () =>
-      crmApi.getCampaignDrilldownRevenue({
-        campaign_name: selectedCampaign?.campaign_name,
-        platform: selectedCampaign?.platform,
-      }),
+    queryFn: () => {
+      const params: { campaign_name?: string; platform?: string } = {};
+      if (selectedCampaign?.campaign_name) params.campaign_name = selectedCampaign.campaign_name;
+      if (selectedCampaign?.platform) params.platform = selectedCampaign.platform;
+      return crmApi.getCampaignDrilldownRevenue(params);
+    },
     enabled: drilldownType === 'revenue' && !!selectedCampaign,
   });
 

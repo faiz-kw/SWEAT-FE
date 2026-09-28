@@ -45,7 +45,7 @@ import type {
   CRMAgentAssignmentConfig,
 } from '@/types/crm';
 
-export interface PaginatedResponse<T> {
+interface PaginatedResponse<T> {
   count: number;
   next: string | null;
   previous: string | null;
@@ -80,6 +80,8 @@ export const crmApi = {
     assigned_sales_user_id?: string;
     assigned_to_me?: boolean;
     unassigned?: boolean;
+    page_size?: number;
+    page?: number;
   }): Promise<Lead[]> => {
     const query = new URLSearchParams();
     if (params?.assigned_to_me) {
@@ -111,6 +113,12 @@ export const crmApi = {
     }
     if (params?.program_id) {
       query.append('program_id', params.program_id);
+    }
+    if (params?.page_size) {
+      query.append('page_size', String(params.page_size));
+    }
+    if (params?.page) {
+      query.append('page', String(params.page));
     }
     if (params?.assigned_sales_user_id) {
       query.append('assigned_sales_user_id', params.assigned_sales_user_id);
@@ -200,19 +208,6 @@ export const crmApi = {
     return res.data;
   },
 
-  bookTrial: async (
-    leadId: string,
-    payload: {
-      branch_id: string;
-      scheduled_start: string;
-      scheduled_end: string;
-      assigned_trainer_profile_id?: string;
-      trial_type?: string;
-    }
-  ): Promise<TrialBooking> => {
-    const res = await api.post<TrialBooking>(`/tenant/leads/${leadId}/book-trial/`, payload);
-    return res.data;
-  },
 
   getLeadSources: async (params?: { active_only?: boolean; status?: string }): Promise<LeadSource[]> => {
     const query = new URLSearchParams();
@@ -266,36 +261,33 @@ export const crmApi = {
     return Array.isArray(res.data) ? res.data : [];
   },
 
-  getNotificationTemplates: async (): Promise<NotificationTemplateItem[]> => {
-    const res = await api.get<PaginatedResponse<NotificationTemplateItem> | NotificationTemplateItem[]>('/tenant/notification-templates/');
-    if (Array.isArray(res.data)) {
-      return res.data;
-    }
-    return res.data.results ?? [];
+  getNotificationTemplates: async (channel?: string): Promise<NotificationTemplateItem[]> => {
+    const query = channel ? `?channel=${channel}` : '';
+    const res = await api.get<NotificationTemplateItem[] | PaginatedResponse<NotificationTemplateItem>>(`/tenant/notification-templates/${query}`);
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data && Array.isArray((res.data as any).results)) return (res.data as any).results;
+    return [];
   },
 
-  getTrialBookings: async (params?: { status?: string; branch_id?: string }): Promise<TrialBooking[]> => {
-    const query = new URLSearchParams();
-    if (params?.status) query.append('status', params.status);
-    if (params?.branch_id) query.append('branch_id', params.branch_id);
-    const qStr = query.toString();
-    const res = await api.get<PaginatedResponse<TrialBooking> | TrialBooking[]>(
-      `/tenant/trial-bookings/${qStr ? `?${qStr}` : ''}`
-    );
-    if (Array.isArray(res.data)) {
-      return res.data;
-    }
-    return res.data.results ?? [];
-  },
+  // NOTE: canonical getTrialBookings is defined in PHASE 4 block below (full signature with confirmation_status etc.)
 
+  // =========================================================================
+  // Follow-up Tasks & Work Queue — canonical merged implementation
+  // =========================================================================
   getFollowupTasks: async (params?: {
+    // Lead-scoped filter
     lead_id?: string;
+    // Status / type filters
     status?: string;
     priority?: string;
     task_type?: string;
+    // Scope filters
     branch_id?: string;
     assigned_to_user_id?: string;
+    // Due-date views (backend param: due_filter)
     due_filter?: 'overdue' | 'today' | 'upcoming' | 'high_priority' | 'completed' | string;
+    /** Alias for due_filter used by FollowUpsWorkspace tab names */
+    view?: string;
     is_overdue?: boolean;
     search?: string;
   } | string): Promise<SalesFollowupTask[]> => {
@@ -310,20 +302,20 @@ export const crmApi = {
       if (params.task_type) sp.append('task_type', params.task_type);
       if (params.branch_id) sp.append('branch_id', params.branch_id);
       if (params.assigned_to_user_id) sp.append('assigned_to_user_id', params.assigned_to_user_id);
-      if (params.due_filter) sp.append('due_filter', params.due_filter);
+      // Support both due_filter and view (view is alias from FollowUpsWorkspace)
+      const dueFilterValue = params.due_filter || (params.view && params.view !== 'all' ? params.view : undefined);
+      if (dueFilterValue) sp.append('due_filter', dueFilterValue);
       if (params.is_overdue !== undefined) sp.append('is_overdue', String(params.is_overdue));
       if (params.search) sp.append('search', params.search);
       const s = sp.toString();
       if (s) qStr = `?${s}`;
     }
-
     const res = await api.get<PaginatedResponse<SalesFollowupTask> | SalesFollowupTask[]>(
       `/tenant/sales-followup-tasks/${qStr}`
     );
-    if (Array.isArray(res.data)) {
-      return res.data;
-    }
-    return res.data.results ?? [];
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data && Array.isArray((res.data as any).results)) return (res.data as any).results;
+    return [];
   },
 
   createFollowupTask: async (payload: CreateFollowupPayload): Promise<SalesFollowupTask> => {
@@ -392,6 +384,10 @@ export const crmApi = {
   createActivity: async (payload: CreateActivityPayload): Promise<LeadActivity> => {
     const res = await api.post<LeadActivity>('/tenant/lead-activities/', payload);
     return res.data;
+  },
+
+  logActivity: async (payload: CreateActivityPayload): Promise<LeadActivity> => {
+    return crmApi.createActivity(payload);
   },
 
   getLeadActivities: async (leadId: string): Promise<LeadActivity[]> => {
@@ -571,76 +567,24 @@ export const crmApi = {
     return res.data;
   },
 
-  getCommunicationChannels: async (): Promise<CRMCommunicationChannel[]> => {
-    const res = await api.get<CRMCommunicationChannel[]>('/tenant/crm/channels/');
-    return Array.isArray(res.data) ? res.data : [];
-  },
-
-  getNotificationTemplates: async (channel?: string): Promise<NotificationTemplateItem[]> => {
-    const query = channel ? `?channel=${channel}` : '';
-    const res = await api.get<NotificationTemplateItem[] | PaginatedResponse<NotificationTemplateItem>>(`/tenant/notification-templates/${query}`);
-    if (Array.isArray(res.data)) return res.data;
-    if (res.data && Array.isArray((res.data as any).results)) return (res.data as any).results;
-    return [];
-  },
-
   // =========================================================================
-  // Follow-up Tasks & Work Queue (Phase 3)
+  // Work Queue Counts — canonical implementation
   // =========================================================================
-  getFollowupTasks: async (params?: {
-    view?: string;
+  getFollowupWorkQueueCounts: async (params?: {
+    assigned_to_user_id?: string;
+    /** Alias used by FollowUpsWorkspace (maps to assigned_to_user_id) */
     assigned_to?: string;
     branch_id?: string;
-    search?: string;
-  }): Promise<SalesFollowupTask[]> => {
+  }): Promise<WorkQueueCounts> => {
     const query = new URLSearchParams();
-    if (params?.view && params.view !== 'all') query.append('due_filter', params.view);
-    if (params?.assigned_to && params.assigned_to !== 'ALL') query.append('assigned_to', params.assigned_to);
-    if (params?.branch_id) query.append('branch_id', params.branch_id);
-    if (params?.search) query.append('search', params.search);
-    const endpoint = `/tenant/sales-followup-tasks/${query.toString() ? `?${query.toString()}` : ''}`;
-    const res = await api.get<SalesFollowupTask[] | PaginatedResponse<SalesFollowupTask>>(endpoint);
-    if (Array.isArray(res.data)) return res.data;
-    if (res.data && Array.isArray((res.data as any).results)) return (res.data as any).results;
-    return [];
-  },
-
-  getFollowupWorkQueueCounts: async (params?: { assigned_to?: string; branch_id?: string }): Promise<WorkQueueCounts['counts']> => {
-    const query = new URLSearchParams();
-    if (params?.assigned_to && params.assigned_to !== 'ALL') query.append('assigned_to', params.assigned_to);
+    const assigneeId = params?.assigned_to_user_id || params?.assigned_to;
+    if (assigneeId && assigneeId !== 'ALL') query.append('assigned_to_user_id', assigneeId);
     if (params?.branch_id) query.append('branch_id', params.branch_id);
     const endpoint = `/tenant/sales-followup-tasks/work-queue/${query.toString() ? `?${query.toString()}` : ''}`;
-    const res = await api.get<{ counts: WorkQueueCounts['counts'] }>(endpoint);
+    const res = await api.get<{ counts: WorkQueueCounts }>(endpoint);
     return res.data.counts;
   },
 
-  createFollowupTask: async (payload: {
-    lead: string;
-    task_type: string;
-    priority?: string;
-    due_at: string;
-    outcome?: string;
-    assigned_to?: string;
-  }): Promise<SalesFollowupTask> => {
-    const res = await api.post<SalesFollowupTask>('/tenant/sales-followup-tasks/', payload);
-    return res.data;
-  },
-
-  completeFollowupTask: async (id: string, outcome?: string, log_activity?: boolean): Promise<SalesFollowupTask> => {
-    const res = await api.post<SalesFollowupTask>(`/tenant/sales-followup-tasks/${id}/complete/`, {
-      outcome,
-      log_activity,
-    });
-    return res.data;
-  },
-
-  rescheduleFollowupTask: async (id: string, due_at: string, reason?: string): Promise<SalesFollowupTask> => {
-    const res = await api.post<SalesFollowupTask>(`/tenant/sales-followup-tasks/${id}/reschedule/`, {
-      due_at,
-      reason,
-    });
-    return res.data;
-  },
 
   // =========================================================================
   // Automation Engine (Phase 6)
@@ -788,7 +732,8 @@ export const crmApi = {
     let list: CRMAttentionPolicy[] = [];
     if (Array.isArray(res.data)) list = res.data;
     else if (res.data && Array.isArray((res.data as any).results)) list = (res.data as any).results;
-    if (list.length > 0) return list[0];
+    const first = list[0];
+    if (first) return first;
     throw new Error('Attention policy not found');
   },
 

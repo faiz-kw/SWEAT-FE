@@ -119,7 +119,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   });
 
   React.useEffect(() => {
-    if (!simUserProfileId && userProfiles.length > 0) {
+    if (!simUserProfileId && userProfiles.length > 0 && userProfiles[0]) {
       setSimUserProfileId(userProfiles[0].id);
     }
   }, [userProfiles, simUserProfileId]);
@@ -163,8 +163,11 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   });
 
   const generateCodeMutation = useMutation({
-    mutationFn: ({ campaignId, code }: { campaignId: string; code?: string }) =>
-      discountsApi.generateCouponCode(campaignId, code),
+    mutationFn: ({ campaignId, code }: { campaignId: string; code?: string }) => {
+      const payload: { code?: string } = {};
+      if (code) payload.code = code;
+      return discountsApi.generateCode(campaignId, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['discount-campaigns'] });
       setIsGenerateCodeOpen(false);
@@ -242,7 +245,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     (c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.codes?.some((code) => code.code.toLowerCase().includes(searchTerm.toLowerCase()))
+      c.codes?.some((code: any) => code.code.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const activeCampaignsCount = campaigns.filter((c) => c.status === 'ACTIVE').length;
@@ -465,7 +468,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         </span>
                         <div className="flex flex-wrap gap-1.5">
                           {camp.codes && camp.codes.length > 0 ? (
-                            camp.codes.map((c) => (
+                            camp.codes.map((c: any) => (
                               <span
                                 key={c.id}
                                 className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary/10 border border-primary/20 rounded-md text-xs font-mono text-primary font-semibold"
@@ -545,7 +548,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                       <div className="p-3 bg-muted/40 rounded-xl text-xs border border-border/40">
                         <span className="font-medium text-muted-foreground block mb-1">Evaluation Conditions:</span>
                         {r.conditions && r.conditions.length > 0 ? (
-                          r.conditions.map((c) => (
+                          r.conditions.map((c: any) => (
                             <div key={c.id} className="text-foreground font-mono text-[11px]">
                               • {c.condition_type} {c.operator} {c.numeric_value || c.text_value || 'true'}
                             </div>
@@ -560,7 +563,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           Produced Offer Action:
                         </span>
                         {r.actions && r.actions.length > 0 ? (
-                          r.actions.map((a) => (
+                          r.actions.map((a: any) => (
                             <div key={a.id} className="text-emerald-700 dark:text-emerald-300">
                               <strong>{a.action_type}</strong>: {a.message || `${a.discount_percentage}% discount`}
                             </div>
@@ -977,7 +980,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   if (selectedCampaign) {
                     generateCodeMutation.mutate({
                       campaignId: selectedCampaign.id,
-                      code: customCode.trim() || undefined,
+                      ...(customCode.trim() ? { code: customCode.trim() } : {}),
                     });
                   }
                 }}
