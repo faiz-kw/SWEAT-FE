@@ -30,7 +30,7 @@ export const membersApi = {
    * Fetch paginated and filtered member directory.
    */
   async getMembers(params?: MemberFilterParams): Promise<MemberDirectoryResponse> {
-    const res = await api.get<any>('/tenant/members/', { params });
+    const res = await api.get<any>('/tenant/members/', params ? { params } : {});
     if (Array.isArray(res.data)) {
       return {
         count: res.data.length,

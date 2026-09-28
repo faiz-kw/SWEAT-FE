@@ -37,6 +37,7 @@ import {
   Tag,
   Dumbbell,
   ArrowUpRight,
+  ArrowRight,
   Sliders,
   ChevronRight,
   Download,
@@ -49,6 +50,7 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
@@ -1713,32 +1715,50 @@ const MemberHealthFormsSection: React.FC<{
                 </div>
               </div>
 
-              {/* Dynamic Q&A List */}
-              <div className="space-y-3">
-                {sub.answers.map((ans, idx) => (
-                  <div key={idx} className="p-3 bg-muted/20 border border-border rounded-lg text-xs space-y-1">
-                    <div className="text-muted-foreground font-medium">
-                      Q{idx + 1}: {ans.question_text}
+              {/* If sensitive data is restricted for non-health staff */}
+              {sub.sensitive_data_restricted ? (
+                <div className="p-4 bg-muted/20 border border-border/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      Intake Form Completed · PAR-Q Submitted
                     </div>
-                    <div className="pt-0.5">
-                      {ans.question_type === 'BOOLEAN' ? (
-                        <Badge
-                          variant="outline"
-                          className={
-                            ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true'
-                              ? 'text-amber-400 border-amber-500/30'
-                              : 'text-emerald-400 border-emerald-500/30'
-                          }
-                        >
-                          {ans.answer?.toUpperCase()}
-                        </Badge>
-                      ) : (
-                        <span className="font-semibold text-foreground">{ans.answer || '—'}</span>
-                      )}
-                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Sensitive medical and questionnaire answers are restricted to authorized health & compliance staff (<code className="text-primary font-mono text-[10px]">cs.member-health.view</code>).
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground border-border shrink-0 self-start sm:self-auto">
+                    CONFIDENTIAL
+                  </Badge>
+                </div>
+              ) : (
+                /* Dynamic Q&A List */
+                <div className="space-y-3">
+                  {sub.answers.map((ans, idx) => (
+                    <div key={idx} className="p-3 bg-muted/20 border border-border rounded-lg text-xs space-y-1">
+                      <div className="text-muted-foreground font-medium">
+                        Q{idx + 1}: {ans.question_text}
+                      </div>
+                      <div className="pt-0.5">
+                        {ans.question_type === 'BOOLEAN' ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true'
+                                ? 'text-amber-400 border-amber-500/30'
+                                : 'text-emerald-400 border-emerald-500/30'
+                            }
+                          >
+                            {ans.answer?.toUpperCase()}
+                          </Badge>
+                        ) : (
+                          <span className="font-semibold text-foreground">{ans.answer || '—'}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))
         ) : (

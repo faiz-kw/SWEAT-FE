@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 
 import { MemberDirectoryWorkspace } from "@/components/members/MemberDirectoryWorkspace";
 
@@ -11,6 +11,13 @@ export const Route = createFileRoute("/_shell/members")({
       { property: "og:description", content: "Authoritative Member Directory in the PerformanceOS fitness business operating system." },
     ],
   }),
-  component: () => <MemberDirectoryWorkspace />,
+  component: MembersLayout,
 });
+
+function MembersLayout() {
+  const location = useLocation();
+  const isExactMembers = location.pathname === "/members" || location.pathname === "/members/";
+
+  return isExactMembers ? <MemberDirectoryWorkspace /> : <Outlet />;
+}
 

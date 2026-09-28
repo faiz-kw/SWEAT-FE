@@ -12,7 +12,7 @@ import {
 import { membershipsApi } from '@/api/endpoints/membershipsApi';
 import {
   Membership,
-  ContractSnapshot,
+  MembershipContractSnapshot,
 } from '../../types/memberships';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -27,17 +27,21 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 
-export const MembershipsWorkspace: React.FC = () => {
+export interface MembershipsWorkspaceProps {
+  initialTab?: 'memberships' | 'entitlements' | 'freezes' | 'policies' | undefined;
+}
+
+export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ initialTab = 'memberships' }) => {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canEdit = can('members.memberships.edit');
-  const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>('memberships');
+  const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Modal states
   const [selectedMembership, setSelectedMembership] = useState<Membership | null>(null);
-  const [contractSnapshot, setContractSnapshot] = useState<ContractSnapshot | null>(null);
+  const [contractSnapshot, setContractSnapshot] = useState<MembershipContractSnapshot | null>(null);
   const [isContractOpen, setIsContractOpen] = useState(false);
   const [isFreezeOpen, setIsFreezeOpen] = useState(false);
   const [isConsumeOpen, setIsConsumeOpen] = useState(false);
@@ -124,8 +128,8 @@ export const MembershipsWorkspace: React.FC = () => {
 
   const handleOpenFreeze = (mem: Membership) => {
     setSelectedMembership(mem);
-    const today = new Date().toISOString().split('T')[0];
-    const nextWeek = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0] ?? '';
+    const nextWeek = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0] ?? '';
     setFreezeFrom(today);
     setFreezeUntil(nextWeek);
     setIsFreezeOpen(true);
@@ -570,7 +574,7 @@ export const MembershipsWorkspace: React.FC = () => {
                   Snapshotted Entitlements
                 </span>
                 <div className="space-y-1.5">
-                  {contractSnapshot.entitlements_snapshot?.map((es, idx) => (
+                  {contractSnapshot.entitlements_snapshot?.map((es: any, idx: number) => (
                     <div
                       key={idx}
                       className="p-2.5 bg-muted/40 rounded-lg text-xs flex justify-between font-mono border border-border/60"

@@ -234,6 +234,8 @@ export interface MemberIntakeSubmission {
   id: string;
   form_title: string;
   submitted_at: string;
+  status?: string;
+  sensitive_data_restricted?: boolean;
   answers: Array<{
     question_id: string;
     question_text: string;

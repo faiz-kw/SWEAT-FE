@@ -34,7 +34,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi, type MemberFilterParams } from '@/api/endpoints/membersApi';
+import { crmApi } from '@/api/endpoints/crmApi';
+import { catalogApi } from '@/api/endpoints/catalogApi';
 import type { Member } from '@/types/members';
+import type { Package } from '@/types/catalog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -62,8 +65,23 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [quickView, setQuickView] = useState<QuickViewTab>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedProgram, setSelectedProgram] = useState<string>('all');
+  const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Dynamic filter options
+  const { data: programs = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['member-filter-programs', locationId],
+    queryFn: () => crmApi.getPrograms(locationId && locationId !== 'all' ? locationId : undefined),
+    staleTime: 60000,
+  });
+
+  const { data: packages = [] } = useQuery<Package[]>({
+    queryKey: ['member-filter-packages', selectedProgram],
+    queryFn: () => catalogApi.getPackages(selectedProgram && selectedProgram !== 'all' ? { program_id: selectedProgram } : {}),
+    staleTime: 60000,
+  });
 
   // Debounce search input by 300ms to eliminate duplicate or runaway requests
   useEffect(() => {
@@ -93,11 +111,13 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   const queryParams: MemberFilterParams = {
     page,
     page_size: pageSize,
-    search: debouncedSearch || undefined,
-    location: (locationId && locationId !== 'all') ? locationId : undefined,
-    status: selectedStatus !== 'all' ? selectedStatus : undefined,
-    quick_view: quickView !== 'all' ? quickView : undefined,
   };
+  if (debouncedSearch) queryParams.search = debouncedSearch;
+  if (locationId && locationId !== 'all') queryParams.location = locationId;
+  if (selectedStatus !== 'all') queryParams.status = selectedStatus;
+  if (selectedProgram !== 'all') queryParams.program_id = selectedProgram;
+  if (selectedPackage !== 'all') queryParams.package_id = selectedPackage;
+  if (quickView !== 'all') queryParams.quick_view = quickView;
 
   const {
     data,
@@ -141,13 +161,24 @@ export const MemberDirectoryWorkspace: React.FC = () => {
 
   // New Member Mutation
   const createMemberMutation = useMutation({
-    mutationFn: () =>
-      membersApi.createMember({
+    mutationFn: () => {
+      const payload: {
+        name: string;
+        phone?: string;
+        email?: string;
+        gender?: string;
+        status?: string;
+        locationId?: string;
+        emergencyContact?: string;
+        fromLeadId?: string;
+      } = {
         name: newMemberName,
-        email: newMemberEmail || undefined,
-        phone: newMemberPhone || undefined,
         gender: newMemberGender,
-      }),
+      };
+      if (newMemberEmail) payload.email = newMemberEmail;
+      if (newMemberPhone) payload.phone = newMemberPhone;
+      return membersApi.createMember(payload);
+    },
     onSuccess: (newMem) => {
       toast.success(`Member ${newMem.name} created successfully`);
       queryClient.invalidateQueries({ queryKey: ['members'] });
@@ -303,7 +334,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
@@ -315,6 +346,39 @@ export const MemberDirectoryWorkspace: React.FC = () => {
               <option value="EXPIRED">Expired</option>
               <option value="CANCELLED">Cancelled</option>
               <option value="INACTIVE">Inactive</option>
+            </select>
+
+            <select
+              value={selectedProgram}
+              onChange={(e) => {
+                setSelectedProgram(e.target.value);
+                setSelectedPackage('all');
+                setPage(1);
+              }}
+              className="h-9 px-3 text-xs rounded-md border border-input bg-background text-foreground max-w-[160px] truncate"
+            >
+              <option value="all">All Programs</option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedPackage}
+              onChange={(e) => {
+                setSelectedPackage(e.target.value);
+                setPage(1);
+              }}
+              className="h-9 px-3 text-xs rounded-md border border-input bg-background text-foreground max-w-[160px] truncate"
+            >
+              <option value="all">All Packages</option>
+              {packages.map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>
+                  {pkg.name}
+                </option>
+              ))}
             </select>
 
             <select
@@ -427,7 +491,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                               <div className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
                                 <span>{member.name}</span>
                                 <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                  {member.membership_number}
+                                  {member.member_number}
                                 </span>
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
@@ -537,7 +601,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                         <div>
                           <div className="font-semibold text-foreground">{member.name}</div>
                           <div className="text-xs text-muted-foreground font-mono">
-                            {member.membership_number} · {member.home_branch}
+                            {member.member_number} · {member.home_branch}
                           </div>
                         </div>
                       </div>

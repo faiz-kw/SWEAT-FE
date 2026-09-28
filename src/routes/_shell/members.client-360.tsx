@@ -3,13 +3,13 @@ import { useEffect } from "react";
 import { Member360Workspace } from "@/components/members/Member360Workspace";
 
 type Member360Search = {
-  memberId?: string;
+  memberId?: string | undefined;
 };
 
 export const Route = createFileRoute("/_shell/members/client-360")({
   validateSearch: (search: Record<string, unknown>): Member360Search => {
     return {
-      memberId: typeof search.memberId === "string" ? search.memberId : undefined,
+      memberId: typeof search["memberId"] === "string" ? (search["memberId"] as string) : undefined,
     };
   },
   head: () => ({

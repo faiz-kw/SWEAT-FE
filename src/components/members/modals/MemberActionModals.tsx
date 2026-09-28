@@ -3,7 +3,7 @@
  * Supports: Renew, Upgrade, Extend, Freeze, Transfer, Cancel, Adjust Entitlements, and Collect Payment.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
+  UserCheck,
+  Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
@@ -410,8 +412,8 @@ export const TransferModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-  branches: Array<{ id: string; name: string }>;
-}> = ({ isOpen, onClose, member, branches }) => {
+  branches?: Array<{ id: string; name: string }>;
+}> = ({ isOpen, onClose, member, branches = [] }) => {
   const queryClient = useQueryClient();
   const [branchId, setBranchId] = useState('');
   const [reason, setReason] = useState('Member relocation request');
@@ -702,14 +704,22 @@ export const CollectPaymentModal: React.FC<{
   ];
 
   const mutation = useMutation({
-    mutationFn: () =>
-      membersApi.collectOutstanding(member.id, {
-        order_id: defaultOrderId,
+    mutationFn: () => {
+      const payload: {
+        order_id?: string;
+        amount?: string | number;
+        provider?: string;
+        payment_method?: string;
+        idempotency_key?: string;
+      } = {
         amount: parseFloat(amount),
         provider,
         payment_method: paymentMethod,
         idempotency_key: idempotencyKey,
-      }),
+      };
+      if (defaultOrderId) payload.order_id = defaultOrderId;
+      return membersApi.collectOutstanding(member.id, payload);
+    },
     onSuccess: (res) => {
       toast.success(res.message || 'Payment recorded successfully');
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
@@ -822,15 +832,25 @@ export const RejoinModal: React.FC<{
   const selectedPlan = plans.find((p: any) => p.package_id === selectedPlanId || p.id === selectedPlanId);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      membersApi.rejoinMember(member.id, {
+    mutationFn: () => {
+      const payload: {
+        package_id: string;
+        package_version_id?: string;
+        branch_id?: string;
+        payment_amount?: number;
+        payment_provider?: string;
+        payment_method?: string;
+        reason?: string;
+      } = {
         package_id: selectedPlan?.package_id || selectedPlan?.id || selectedPlanId,
-        package_version_id: selectedPlan?.package_version_id,
-        payment_amount: paymentAmount ? parseFloat(paymentAmount) : undefined,
         payment_provider: paymentProvider,
         payment_method: paymentMethod,
         reason,
-      }),
+      };
+      if (selectedPlan?.package_version_id) payload.package_version_id = selectedPlan.package_version_id;
+      if (paymentAmount) payload.payment_amount = parseFloat(paymentAmount);
+      return membersApi.rejoinMember(member.id, payload);
+    },
     onSuccess: (res) => {
       toast.success(res.message || 'Member successfully rejoined!');
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
