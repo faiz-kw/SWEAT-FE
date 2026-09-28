@@ -125,6 +125,7 @@ export interface PackageEntitlementDefinition {
   entitlement_type: EntitlementType;
   allocated_units?: string | null;
   is_unlimited: boolean;
+  extra_unit_price?: string | null;
   validity_days?: number | null;
   reference_type?: string | null;
   reference_id?: string | null;
@@ -179,6 +180,12 @@ export interface Package {
   code: string;
   name: string;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  available_branch_ids?: string[];
+  available_branches?: Array<{
+    id: string;
+    code: string;
+    name: string;
+  }>;
   versions?: PackageVersion[];
   versions_count?: number;
   latest_version?: {
@@ -201,7 +208,9 @@ export interface Package {
     show_on_app?: boolean;
     status?: PackageVersionStatus;
     prices: Array<{
+      id?: string;
       branch_id?: string | null;
+      branch_name?: string | null;
       currency: string;
       base_price: string;
       sale_price?: string;
@@ -212,8 +221,10 @@ export interface Package {
       total_price: string;
     }>;
     entitlements?: Array<{
+      id?: string;
       entitlement_type: string;
       allocated_units?: string | null;
+      is_unlimited?: boolean;
       extra_unit_price?: string | null;
     }>;
   } | null;

@@ -12,7 +12,7 @@ import type {
 
 export const catalogApi = {
   // Packages
-  async getPackages(params?: { program_id?: string; status?: string }): Promise<Package[]> {
+  async getPackages(params?: { program_id?: string; branch_id?: string; status?: string }): Promise<Package[]> {
     const res = await api.get<any>('/tenant/packages/', { params });
     const data = res.data;
     return Array.isArray(data) ? data : data?.results || [];
@@ -26,7 +26,8 @@ export const catalogApi = {
   async createPackage(payload: {
     code?: string;
     name: string;
-    program?: string | null;
+    program: string;
+    available_branch_ids?: string[];
     status?: string;
   }): Promise<Package> {
     const res = await api.post<Package>('/tenant/packages/', payload);
@@ -39,11 +40,36 @@ export const catalogApi = {
       code: string;
       name: string;
       program?: string | null;
+      available_branch_ids?: string[];
       status?: string;
     }>
   ): Promise<Package> {
     const res = await api.patch<Package>(`/tenant/packages/${id}/`, payload);
     return res.data;
+  },
+
+  async deactivatePackage(id: string): Promise<Package> {
+    const res = await api.post<Package>(`/tenant/packages/${id}/deactivate/`);
+    return res.data;
+  },
+
+  async reactivatePackage(id: string): Promise<Package> {
+    const res = await api.post<Package>(`/tenant/packages/${id}/reactivate/`);
+    return res.data;
+  },
+
+  async archivePackage(id: string): Promise<Package> {
+    const res = await api.post<Package>(`/tenant/packages/${id}/archive/`);
+    return res.data;
+  },
+
+  async restorePackage(id: string): Promise<Package> {
+    const res = await api.post<Package>(`/tenant/packages/${id}/restore/`);
+    return res.data;
+  },
+
+  async deletePackage(id: string): Promise<void> {
+    await api.delete(`/tenant/packages/${id}/`);
   },
 
   async createPackageVersion(
@@ -70,6 +96,7 @@ export const catalogApi = {
       passport_sessions?: number | string;
       passport_cost?: number | string;
       publish_immediately?: boolean;
+      branch_id?: string | null;
       [key: string]: any;
     }
   ): Promise<PackageVersion> {
@@ -91,6 +118,25 @@ export const catalogApi = {
     return res.data;
   },
 
+  async publishPackageVersionDirect(versionId: string): Promise<PackageVersion> {
+    const res = await api.post<PackageVersion>(`/tenant/package-versions/${versionId}/publish/`);
+    return res.data;
+  },
+
+  async retirePackageVersion(versionId: string): Promise<PackageVersion> {
+    const res = await api.post<PackageVersion>(`/tenant/package-versions/${versionId}/retire/`);
+    return res.data;
+  },
+
+  async reusePackageVersion(versionId: string): Promise<PackageVersion> {
+    const res = await api.post<PackageVersion>(`/tenant/package-versions/${versionId}/reuse/`);
+    return res.data;
+  },
+
+  async deletePackageVersion(versionId: string): Promise<void> {
+    await api.delete(`/tenant/package-versions/${versionId}/`);
+  },
+
   async cloneModifyPackageVersion(
     packageId: string,
     packageVersionId: string,
@@ -103,6 +149,109 @@ export const catalogApi = {
         modifications,
       }
     );
+    return res.data;
+  },
+
+  async getPackageVersions(params?: { package_id?: string; status?: string }): Promise<PackageVersion[]> {
+    const res = await api.get<any>('/tenant/package-versions/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
+
+  // Package Prices
+  async getPackagePrices(params?: { package_version_id?: string }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/package-prices/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
+
+  async createPackagePrice(payload: {
+    package_version: string;
+    branch?: string | null;
+    currency?: string;
+    base_price: number | string;
+    display_price?: number | string | null;
+    prices_include_tax?: boolean;
+    tax_percent?: number | string;
+    effective_from?: string;
+    effective_until?: string | null;
+    status?: string;
+  }): Promise<any> {
+    const res = await api.post<any>('/tenant/package-prices/', payload);
+    return res.data;
+  },
+
+  async updatePackagePrice(
+    id: string,
+    payload: Partial<{
+      branch?: string | null;
+      currency?: string;
+      base_price: number | string;
+      display_price?: number | string | null;
+      prices_include_tax?: boolean;
+      tax_percent?: number | string;
+      effective_from?: string;
+      effective_until?: string | null;
+      status?: string;
+    }>
+  ): Promise<any> {
+    const res = await api.patch<any>(`/tenant/package-prices/${id}/`, payload);
+    return res.data;
+  },
+
+  async deletePackagePrice(id: string): Promise<void> {
+    await api.delete(`/tenant/package-prices/${id}/`);
+  },
+
+  // Package Branch Availability
+  async getPackageBranchAvailabilities(params?: { package_id?: string; branch_id?: string }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/package-branch-availability/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
+
+  async updatePackageBranchAvailability(
+    id: string,
+    payload: { status?: 'ENABLED' | 'DISABLED'; available_from?: string; available_until?: string }
+  ): Promise<any> {
+    const res = await api.patch<any>(`/tenant/package-branch-availability/${id}/`, payload);
+    return res.data;
+  },
+
+  // Package Entitlement Definitions
+  async getPackageEntitlementDefinitions(params?: { package_version_id?: string }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/package-entitlement-definitions/', { params });
+    const data = res.data;
+    return Array.isArray(data) ? data : data?.results || [];
+  },
+
+  async createPackageEntitlementDefinition(payload: {
+    package_version: string;
+    entitlement_type: string;
+    allocated_units?: number | string | null;
+    is_unlimited?: boolean;
+    extra_unit_price?: number | string | null;
+    validity_days?: number | null;
+    reference_type?: string | null;
+    reference_id?: string | null;
+    status?: string;
+  }): Promise<any> {
+    const res = await api.post<any>('/tenant/package-entitlement-definitions/', payload);
+    return res.data;
+  },
+
+  async updatePackageEntitlementDefinition(
+    id: string,
+    payload: Partial<{
+      entitlement_type?: string;
+      allocated_units?: number | string | null;
+      is_unlimited?: boolean;
+      extra_unit_price?: number | string | null;
+      validity_days?: number | null;
+      status?: string;
+    }>
+  ): Promise<any> {
+    const res = await api.patch<any>(`/tenant/package-entitlement-definitions/${id}/`, payload);
     return res.data;
   },
 

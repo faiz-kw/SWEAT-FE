@@ -32,8 +32,10 @@ import {
   LayoutGrid,
   MapPin,
   Filter,
+  ChevronDown,
 } from 'lucide-react';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
+import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
 import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import {
@@ -50,7 +52,9 @@ import {
 } from '../../types/classes';
 import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
-import { PageHeader, PageBody } from '@/components/enterprise/Page';
+import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useApp } from '@/contexts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +73,7 @@ import { ClassAttendanceModal } from './ClassAttendanceModal';
 export const ClassesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { locationId } = useApp();
   const { can } = usePermissions();
   const canCreate = can('ops.classes.create');
   const canEdit = can('ops.classes.edit');
@@ -78,9 +83,18 @@ export const ClassesWorkspace: React.FC = () => {
   const isAuthorized = !isTrainer && (isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
   const isTrainerRole = !isAuthorized;
 
-  const [activeTab, setActiveTab] = useState<'occurrences' | 'allotted_classes' | 'categories' | 'templates' | 'rules' | 'content'>(
-    isTrainerRole ? 'allotted_classes' : 'occurrences'
-  );
+  // Global Branch Scope
+  const globalBranchId = locationId && locationId !== 'all' ? locationId : undefined;
+
+  type PrimaryTab = 'sessions' | 'setup' | 'schedules';
+  type SetupSubTab = 'templates' | 'categories';
+  type SchedulesSubTab = 'rules' | 'calendar';
+
+  const [primaryTab, setPrimaryTab] = useState<PrimaryTab>('sessions');
+  const [setupSubTab, setSetupSubTab] = useState<SetupSubTab>('templates');
+  const [schedulesSubTab, setSchedulesSubTab] = useState<SchedulesSubTab>('rules');
+  const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
+  const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
   const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom'>('today');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
@@ -95,6 +109,13 @@ export const ClassesWorkspace: React.FC = () => {
     return `${year}-${month}-${day}`;
   });
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
+
+  // Reset local branch filter when global location changes
+  React.useEffect(() => {
+    setSelectedBranchFilter('');
+  }, [locationId]);
+
+  const effectiveBranchFilter = selectedBranchFilter || globalBranchId || undefined;
 
   const todayStr = React.useMemo(() => {
     const d = new Date();
@@ -252,19 +273,78 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   const { data: rules = [], isLoading: loadingRules, refetch: refetchRules } = useQuery({
-    queryKey: ['class-schedule-rules', selectedBranchFilter],
-    queryFn: () => classesApi.getScheduleRules(selectedBranchFilter || undefined),
+    queryKey: ['class-schedule-rules', effectiveBranchFilter],
+    queryFn: () => classesApi.getScheduleRules(effectiveBranchFilter),
   });
 
   const { data: occurrences = [], isLoading: loadingOccurrences, refetch: refetchOccurrences } = useQuery({
-    queryKey: ['class-occurrences', dateFilterMode, selectedDate, selectedBranchFilter],
+    queryKey: ['class-occurrences', dateFilterMode, selectedDate, effectiveBranchFilter],
     queryFn: () => classesApi.getOccurrences({
       occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
       from_date: dateFilterMode === 'week' ? todayStr : undefined,
       to_date: dateFilterMode === 'week' ? weekEndStr : undefined,
-      branch_id: selectedBranchFilter || undefined,
+      branch_id: effectiveBranchFilter,
     }),
   });
+
+  // KPI Specific Queries (Branch-Aware via global Studio Branch selection)
+  const {
+    data: todayOccurrences = [],
+    isLoading: loadingTodayOccurrences,
+    refetch: refetchTodayOccurrences,
+  } = useQuery({
+    queryKey: ['class-occurrences-today', globalBranchId, todayStr],
+    queryFn: () =>
+      classesApi.getOccurrences({
+        occurrence_date: todayStr,
+        branch_id: globalBranchId,
+      }),
+  });
+
+  const {
+    data: allRulesForBranch = [],
+    isLoading: loadingAllRulesForBranch,
+    refetch: refetchRulesForBranch,
+  } = useQuery({
+    queryKey: ['class-schedule-rules-kpi', globalBranchId],
+    queryFn: () => classesApi.getScheduleRules(globalBranchId),
+  });
+
+  const {
+    data: allBranchAvailabilities = [],
+    isLoading: loadingAllBranchAvailabilities,
+    refetch: refetchAllBranchAvailabilities,
+  } = useQuery({
+    queryKey: ['all-class-branch-availabilities'],
+    queryFn: () => classesApi.getBranchAvailabilities(),
+  });
+
+  // KPI Calculations
+  const todaySessionsCount = todayOccurrences.length;
+
+  const activeTemplatesCount = React.useMemo(() => {
+    const active = templates.filter((t) => t.status === 'ACTIVE');
+    if (!globalBranchId) {
+      return active.length;
+    }
+    return active.filter((t) => {
+      const avails = allBranchAvailabilities.filter((ba: any) => ba.class_template === t.id);
+      if (avails.length === 0) return true;
+      return avails.some((ba: any) => ba.branch === globalBranchId && (ba.status === 'ENABLED' || ba.status === 'ACTIVE'));
+    }).length;
+  }, [templates, globalBranchId, allBranchAvailabilities]);
+
+  const activeRecurringRulesCount = React.useMemo(() => {
+    return allRulesForBranch.filter((r) => r.status === 'ACTIVE').length;
+  }, [allRulesForBranch]);
+
+  const todayConfirmedBookings = React.useMemo(() => {
+    return todayOccurrences.reduce((acc, occ) => acc + (occ.booking_count ?? 0), 0);
+  }, [todayOccurrences]);
+
+  const todayWaitlistBookings = React.useMemo(() => {
+    return todayOccurrences.reduce((acc, occ) => acc + (occ.waitlist_count ?? 0), 0);
+  }, [todayOccurrences]);
 
   const { data: contentItems = [], isLoading: loadingContent, refetch: refetchContent } = useQuery({
     queryKey: ['class-content-items'],
@@ -605,6 +685,9 @@ export const ClassesWorkspace: React.FC = () => {
     refetchRules();
     refetchOccurrences();
     refetchContent();
+    refetchTodayOccurrences();
+    refetchRulesForBranch();
+    refetchAllBranchAvailabilities();
   };
 
   // Mutations
@@ -905,6 +988,7 @@ export const ClassesWorkspace: React.FC = () => {
     },
     onSuccess: () => {
       refetchAvailabilities();
+      queryClient.invalidateQueries({ queryKey: ['all-class-branch-availabilities'] });
       setBranchAvailForm({ branch: '', status: 'ENABLED', capacity_override: '', trial_capacity_override: '', waitlist_capacity_override: '' });
     },
   });
@@ -967,16 +1051,20 @@ export const ClassesWorkspace: React.FC = () => {
   // Filter helpers
   const filteredCategories = categories.filter((c) => {
     const term = searchTerm.toLowerCase();
-    return c.name.toLowerCase().includes(term);
+    const matchesSearch = !term || c.name.toLowerCase().includes(term) || (c.description || '').toLowerCase().includes(term);
+    const matchesStatus = selectedStatusFilter === 'ALL' || c.status === selectedStatusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   const filteredTemplates = templates.filter((tpl) => {
     const term = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
+      !term ||
       tpl.name.toLowerCase().includes(term) ||
       (tpl.category_name || '').toLowerCase().includes(term) ||
-      (tpl.program_name || '').toLowerCase().includes(term)
-    );
+      (tpl.program_name || '').toLowerCase().includes(term);
+    const matchesStatus = selectedStatusFilter === 'ALL' || tpl.status === selectedStatusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   const filteredOccurrences = occurrences.filter((occ) => {
@@ -1008,9 +1096,12 @@ export const ClassesWorkspace: React.FC = () => {
 
   const filteredRules = rules.filter((r) => {
     const term = searchTerm.toLowerCase();
-    const name = r.template_name || '';
+    const name = r.template_name || r.class_name || '';
     const branch = r.branch_name || '';
-    return name.toLowerCase().includes(term) || branch.toLowerCase().includes(term);
+    const matchesSearch = !term || name.toLowerCase().includes(term) || branch.toLowerCase().includes(term);
+    const matchesBranch = !selectedBranchFilter || r.branch === selectedBranchFilter;
+    const matchesStatus = selectedStatusFilter === 'ALL' || r.status === selectedStatusFilter;
+    return matchesSearch && matchesBranch && matchesStatus;
   });
 
   const filteredContent = contentItems.filter((item) => {
@@ -1025,12 +1116,6 @@ export const ClassesWorkspace: React.FC = () => {
         <PageHeader
           title="Assigned Classes & Attendance"
           subtitle="View your scheduled sessions, check in booked members, and record class attendance."
-          actions={
-            <Button variant="outline" size="sm" onClick={refetchAll} title="Refresh" className="gap-1.5">
-              <RefreshCw className="size-3.5" />
-              <span>Refresh</span>
-            </Button>
-          }
         />
         <PageBody>
           <TrainerAllottedClassesView />
@@ -1044,179 +1129,328 @@ export const ClassesWorkspace: React.FC = () => {
       {/* Platform Header */}
       <PageHeader
         title="Group Classes Command Center"
-        subtitle="Class Categories, Templates, Recurring Rules, Daily Sessions & Content Studio"
+        subtitle="Manage class setup, schedules, sessions and trainer operations."
         meta={
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
-              Layer 2 Module E
+              Operations · Classes
             </span>
             <span className="text-muted-foreground text-xs">
-              {activeTab === 'categories' && `${categories.length} Categories`}
-              {activeTab === 'templates' && `${templates.length} Class Templates`}
-              {activeTab === 'rules' && `${rules.length} Recurring Rules`}
-              {activeTab === 'occurrences' && `${occurrences.length} Sessions on ${selectedDate}`}
-              {activeTab === 'content' && `${contentItems.length} Content Items`}
+              {primaryTab === 'sessions' && `${occurrences.length} Session${occurrences.length === 1 ? '' : 's'} Scheduled`}
+              {primaryTab === 'setup' && `${templates.length} Templates · ${categories.length} Categories`}
+              {primaryTab === 'schedules' && `${rules.length} Recurring Rules · ${occurrences.length} Generated Session${occurrences.length === 1 ? '' : 's'}`}
             </span>
           </div>
         }
         actions={
           <div className="flex items-center gap-2">
-            {canCreate && activeTab === 'categories' && (
-              <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: categories.length + 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }} className="gap-1.5">
+            {primaryTab === 'sessions' && canCreate && (
+              <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
-                <span>New Category</span>
+                <span>Schedule One-Off Session</span>
               </Button>
             )}
-            {canCreate && activeTab === 'templates' && (
-              <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }} className="gap-1.5">
+
+            {primaryTab === 'setup' && setupSubTab === 'templates' && canCreate && (
+              <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
                 <span>New Class Template</span>
               </Button>
             )}
-            {canCreate && activeTab === 'rules' && (
-              <Button size="sm" onClick={openNewRuleModal} className="gap-1.5">
+
+            {primaryTab === 'setup' && setupSubTab === 'categories' && canCreate && (
+              <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: categories.length + 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }} className="gap-1.5 h-8 text-xs font-semibold">
+                <Plus className="size-3.5" />
+                <span>New Class Category</span>
+              </Button>
+            )}
+
+            {primaryTab === 'schedules' && schedulesSubTab === 'rules' && canCreate && (
+              <Button size="sm" onClick={openNewRuleModal} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
                 <span>New Recurring Rule</span>
               </Button>
             )}
-            {canCreate && activeTab === 'occurrences' && (
-              <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5">
+
+            {primaryTab === 'schedules' && schedulesSubTab === 'calendar' && canCreate && (
+              <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
-                <span>Schedule Session</span>
+                <span>Schedule One-Off Session</span>
               </Button>
             )}
-            {canCreate && activeTab === 'content' && (
-              <div className="flex items-center gap-1.5">
-                <Button size="sm" variant="outline" onClick={() => setIsCreateMappingOpen(true)} className="gap-1.5 text-xs">
-                  <Sparkles className="size-3.5" />
-                  <span>Map Content</span>
-                </Button>
-                <Button size="sm" onClick={() => setIsCreateContentOpen(true)} className="gap-1.5">
-                  <Plus className="size-3.5" />
-                  <span>New Content</span>
-                </Button>
-              </div>
-            )}
-            <Button variant="outline" size="sm" onClick={refetchAll} title="Refresh" className="gap-1.5">
-              <RefreshCw className="size-3.5" />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
           </div>
         }
       />
 
       <PageBody>
-        {/* Navigation Tabs - Classes List & Schedule first for Admin */}
+        {/* KPI Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+          <KpiTile
+            title="TODAY'S SESSIONS"
+            value={
+              loadingTodayOccurrences ? (
+                <Skeleton className="h-7 w-12 my-0.5 rounded-md" />
+              ) : (
+                todaySessionsCount
+              )
+            }
+          />
+          <KpiTile
+            title="ACTIVE CLASS TEMPLATES"
+            value={
+              loadingTemplates || loadingAllBranchAvailabilities ? (
+                <Skeleton className="h-7 w-12 my-0.5 rounded-md" />
+              ) : (
+                activeTemplatesCount
+              )
+            }
+          />
+          <KpiTile
+            title="ACTIVE RECURRING RULES"
+            value={
+              loadingAllRulesForBranch ? (
+                <Skeleton className="h-7 w-12 my-0.5 rounded-md" />
+              ) : (
+                activeRecurringRulesCount
+              )
+            }
+          />
+          <KpiTile
+            title="TODAY'S BOOKINGS"
+            value={
+              loadingTodayOccurrences ? (
+                <Skeleton className="h-7 w-12 my-0.5 rounded-md" />
+              ) : (
+                todayConfirmedBookings
+              )
+            }
+            delta={
+              !loadingTodayOccurrences
+                ? `${todayConfirmedBookings} Confirmed · ${todayWaitlistBookings} Waitlisted`
+                : undefined
+            }
+          />
+        </div>
+
+        {/* Quick Access Area */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4 pb-3 border-b border-border/50">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground shrink-0 mr-1">
+            Quick Access
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              title="View trainer attendance and session check-in status."
+              onClick={() => {
+                setShowTrainerCheckins((prev) => !prev);
+                setShowContentStudio(false);
+                setPrimaryTab('sessions');
+              }}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                showTrainerCheckins && primaryTab === 'sessions'
+                  ? 'bg-primary/10 border-primary/40 text-primary shadow-2xs'
+                  : 'bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs'
+              }`}
+            >
+              <Award className="size-3.5 text-primary shrink-0" />
+              <span>Trainer Check-ins</span>
+            </button>
+
+            <button
+              type="button"
+              title="Manage trainer reference videos, documents and class content."
+              onClick={() => {
+                setShowContentStudio((prev) => !prev);
+                setShowTrainerCheckins(false);
+                setPrimaryTab('sessions');
+              }}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                showContentStudio && primaryTab === 'sessions'
+                  ? 'bg-primary/10 border-primary/40 text-primary shadow-2xs'
+                  : 'bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs'
+              }`}
+            >
+              <Sparkles className="size-3.5 text-primary shrink-0" />
+              <span>Content Studio</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Primary Navigation Tabs */}
         <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scrollbar-none">
           <button
-            onClick={() => { setActiveTab('occurrences'); setSearchTerm(''); }}
+            type="button"
+            onClick={() => {
+              setPrimaryTab('sessions');
+              setShowTrainerCheckins(false);
+              setShowContentStudio(false);
+              setSearchTerm('');
+              setSelectedStatusFilter('ALL');
+              setSelectedBranchFilter('');
+            }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'occurrences'
+              primaryTab === 'sessions' && !showTrainerCheckins && !showContentStudio
                 ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             <Calendar className="size-3.5" />
-            <span>Classes List & Schedule ({occurrences.length})</span>
+            <span>Sessions ({occurrences.length})</span>
           </button>
+
           <button
-            onClick={() => { setActiveTab('allotted_classes'); setSearchTerm(''); }}
+            type="button"
+            onClick={() => {
+              setPrimaryTab('setup');
+              setShowTrainerCheckins(false);
+              setShowContentStudio(false);
+              setSearchTerm('');
+              setSelectedStatusFilter('ALL');
+              setSelectedBranchFilter('');
+            }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'allotted_classes'
+              primaryTab === 'setup'
                 ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Award className="size-3.5" />
-            <span>{isTrainerRole ? 'My Allotted Classes' : 'Trainer Attendance View'}</span>
+            <LayoutGrid className="size-3.5" />
+            <span>Class Setup</span>
           </button>
+
           <button
-            onClick={() => { setActiveTab('templates'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'templates'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
+            type="button"
+            onClick={() => {
+              setPrimaryTab('schedules');
+              setShowTrainerCheckins(false);
+              setShowContentStudio(false);
+              setSearchTerm('');
+              setSelectedStatusFilter('ALL');
+              setSelectedBranchFilter('');
+            }}
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              primaryTab === 'schedules'
+                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            Class Templates ({templates.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('categories'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'categories'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-            }`}
-          >
-            Class Categories ({categories.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('rules'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'rules'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-            }`}
-          >
-            Recurring Rules ({rules.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('content'); setSearchTerm(''); }}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'content'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-            }`}
-          >
-            Content Studio ({contentItems.length})
+            <RotateCw className="size-3.5" />
+            <span>Schedules</span>
           </button>
         </div>
 
-        {/* TAB 0: ALLOTTED CLASSES & ATTENDANCE */}
-        {activeTab === 'allotted_classes' && (
+        {/* VIEW: TRAINER ATTENDANCE & CHECK-INS (Exposed from Sessions) */}
+        {primaryTab === 'sessions' && showTrainerCheckins && (
           <div className="space-y-4 mt-4">
+            <div className="flex items-center justify-between p-3.5 bg-muted/40 border border-border rounded-xl shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <Award className="size-4 text-primary" />
+                <div>
+                  <h4 className="font-semibold text-sm text-foreground">Trainer Attendance View</h4>
+                  <p className="text-xs text-muted-foreground">Session-level trainer assignments, biometric verification, and check-in compliance.</p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowTrainerCheckins(false)} className="text-xs">
+                Back to Sessions
+              </Button>
+            </div>
             <TrainerAllottedClassesView />
           </div>
         )}
 
-        {/* TAB 1: CLASS CATEGORIES */}
-        {activeTab === 'categories' && (
+        {/* TAB: CLASS SETUP (Templates & Categories) */}
+        {primaryTab === 'setup' && (
           <div className="space-y-4 mt-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search categories by name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
-                />
-              </div>
+            {/* Secondary Navigation */}
+            <div className="flex items-center gap-2 border-b border-border pb-3 overflow-x-auto scrollbar-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setSetupSubTab('templates');
+                  setSearchTerm('');
+                  setSelectedStatusFilter('ALL');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  setupSubTab === 'templates'
+                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Class Templates ({templates.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSetupSubTab('categories');
+                  setSearchTerm('');
+                  setSelectedStatusFilter('ALL');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  setupSubTab === 'categories'
+                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Class Categories ({categories.length})
+              </button>
             </div>
 
-            {loadingCategories ? (
-              <div className="p-12 text-center text-muted-foreground text-sm">
-                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                Loading categories from tenant database...
-              </div>
-            ) : filteredCategories.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
-                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
-                  <Tag className="size-6" />
+            {/* Helper Info below sub-tabs */}
+            <p className="text-xs text-muted-foreground">
+              {setupSubTab === 'templates'
+                ? 'Define reusable class types such as Reformer Fundamentals.'
+                : 'Group classes into categories such as Pilates or Strength.'}
+            </p>
+
+            {/* Sub-tab: Categories */}
+            {setupSubTab === 'categories' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search categories by name..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedStatusFilter}
+                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </div>
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No Class Categories Found</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  Create categories like HIIT, Mobility, Strength, or Recovery to organize class templates.
-                </p>
-                {canCreate && (
-                  <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }}>
-                    <Plus className="size-3.5 mr-1" /> Add Category
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                {loadingCategories ? (
+                  <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
+                    <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                    Loading categories from tenant database...
+                  </div>
+                ) : filteredCategories.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                    <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                      <Tag className="size-6" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground">No Class Categories Found</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                      Create categories like HIIT, Mobility, Strength, or Recovery to organize class templates.
+                    </p>
+                    {canCreate && (
+                      <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }}>
+                        <Plus className="size-3.5 mr-1" /> Add Category
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredCategories.map((cat) => (
                   <div key={cat.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
                     <div>
@@ -1275,46 +1509,57 @@ export const ClassesWorkspace: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {/* TAB 2: CLASS TEMPLATES */}
-        {activeTab === 'templates' && (
-          <div className="space-y-4 mt-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search class templates by name or category..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
-                />
               </div>
-            </div>
+            )}
 
-            {loadingTemplates ? (
-              <div className="p-12 text-center text-muted-foreground text-sm">
-                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                Loading class templates...
-              </div>
-            ) : filteredTemplates.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
-                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
-                  <Award className="size-6" />
+            {/* Sub-tab: Templates */}
+            {setupSubTab === 'templates' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search class templates by name..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedStatusFilter}
+                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </div>
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No Class Templates Found</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  Create high-intensity, mobility, or strength workout templates to schedule group classes.
-                </p>
-                {canCreate && (
-                  <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }}>
-                    <Plus className="size-3.5 mr-1" /> New Template
-                  </Button>
-                )}
-              </div>
-            ) : (
+
+                {loadingTemplates ? (
+                  <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
+                    <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                    Loading class templates...
+                  </div>
+                ) : filteredTemplates.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                    <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                      <Award className="size-6" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground">No Class Templates Found</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                      Create high-intensity, mobility, or strength workout templates to schedule group classes.
+                    </p>
+                    {canCreate && (
+                      <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }}>
+                        <Plus className="size-3.5 mr-1" /> New Template
+                      </Button>
+                    )}
+                  </div>
+                ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredTemplates.map((tpl) => (
                   <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
@@ -1437,58 +1682,114 @@ export const ClassesWorkspace: React.FC = () => {
                 ))}
               </div>
             )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 3: RECURRING RULES */}
-        {activeTab === 'rules' && (
+        {/* TAB: SCHEDULES (Recurring Rules & Generated Sessions) */}
+        {primaryTab === 'schedules' && (
           <div className="space-y-4 mt-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search rules by class, branch, or schedule..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedBranchFilter}
-                  onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
-                >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Secondary Navigation */}
+            <div className="flex items-center gap-2 border-b border-border pb-3 overflow-x-auto scrollbar-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setSchedulesSubTab('rules');
+                  setSearchTerm('');
+                  setSelectedStatusFilter('ALL');
+                  setSelectedBranchFilter('');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  schedulesSubTab === 'rules'
+                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Recurring Rules ({rules.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSchedulesSubTab('calendar');
+                  setSearchTerm('');
+                  setSelectedStatusFilter('ALL');
+                  setSelectedBranchFilter('');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  schedulesSubTab === 'calendar'
+                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Calendar / Generated Sessions ({occurrences.length})
+              </button>
             </div>
 
-            {loadingRules ? (
-              <div className="p-12 text-center text-muted-foreground text-sm">
-                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                Loading recurring schedule rules...
-              </div>
-            ) : filteredRules.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 sm:p-12 text-center shadow-xs">
-                <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
-                  <RotateCw className="size-6" />
+            {/* Helper Info below sub-tabs */}
+            <p className="text-xs text-muted-foreground">
+              {schedulesSubTab === 'rules'
+                ? 'Create repeating schedules that generate dated class sessions.'
+                : 'View the actual sessions generated from recurring rules.'}
+            </p>
+
+            {schedulesSubTab === 'rules' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search rules by class or branch..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedBranchFilter}
+                      onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="">All Branches</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedStatusFilter}
+                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </div>
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No Recurring Schedule Rules</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  Configure recurring weekly timetable patterns to automatically populate occurrence slots.
-                </p>
-                {canCreate && (
-                  <Button size="sm" onClick={openNewRuleModal}>
-                    <Plus className="size-3.5 mr-1" /> New Recurring Rule
-                  </Button>
-                )}
-              </div>
-            ) : (
+
+                {loadingRules ? (
+                  <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
+                    <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                    Loading recurring schedule rules...
+                  </div>
+                ) : filteredRules.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                    <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                      <RotateCw className="size-6" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground">No Recurring Schedule Rules</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                      Configure recurring weekly timetable patterns to automatically populate occurrence slots.
+                    </p>
+                    {canCreate && (
+                      <Button size="sm" onClick={openNewRuleModal}>
+                        <Plus className="size-3.5 mr-1" /> New Recurring Rule
+                      </Button>
+                    )}
+                  </div>
+                ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredRules.map((rule) => {
                   const className = rule.class_name || rule.template_name || (templates.find((t) => t.id === rule.class_template)?.name) || 'Class Schedule';
@@ -1639,11 +1940,65 @@ export const ClassesWorkspace: React.FC = () => {
                 })}
               </div>
             )}
+              </div>
+            )}
+
+            {schedulesSubTab === 'calendar' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search generated sessions..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedBranchFilter}
+                      onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="">All Branches</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-5 bg-card border border-border rounded-xl shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h4 className="font-semibold text-sm text-foreground">Generated Class Sessions Calendar</h4>
+                      <p className="text-xs text-muted-foreground">View dated sessions generated from active recurrence rules for {selectedDate}.</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setPrimaryTab('sessions');
+                        setSearchTerm('');
+                      }}
+                      className="text-xs gap-1.5 h-8 font-medium"
+                    >
+                      <Calendar className="size-3.5" />
+                      <span>Manage All Dated Sessions</span>
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Active date: <strong className="text-foreground">{selectedDate}</strong> ({occurrences.length} sessions generated/scheduled). Switch to the Sessions tab for complete session roster and trainer assignments.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB: CLASSES LIST & SCHEDULE SESSIONS */}
-        {activeTab === 'occurrences' && (
+        {/* TAB: SESSIONS (Class Occurrences) */}
+        {primaryTab === 'sessions' && !showTrainerCheckins && !showContentStudio && (
           <div className="space-y-4 mt-4">
             {/* Filter & Control Bar */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
@@ -1714,7 +2069,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                 >
                   <option value="">All Branches</option>
                   {branches.map((b) => (
@@ -1737,7 +2092,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedStatusFilter}
                   onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="SCHEDULED">Scheduled</option>
@@ -1748,7 +2103,7 @@ export const ClassesWorkspace: React.FC = () => {
                 </select>
               </div>
 
-              {/* View Mode Toggle & Actions */}
+              {/* View Mode Toggle Only */}
               <div className="flex items-center gap-2 self-end lg:self-center">
                 <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
                   <Button
@@ -1774,13 +2129,6 @@ export const ClassesWorkspace: React.FC = () => {
                     <span className="hidden sm:inline">Cards</span>
                   </Button>
                 </div>
-
-                {canCreate && (
-                  <Button size="sm" onClick={openNewOccurrenceModal} className="h-8 text-xs font-semibold gap-1.5 shadow-2xs">
-                    <Plus className="size-3.5" />
-                    <span>Schedule Session</span>
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -1887,7 +2235,7 @@ export const ClassesWorkspace: React.FC = () => {
                             <td className="py-3 px-4 whitespace-nowrap">
                               <div className="font-semibold text-foreground text-xs flex items-center gap-1">
                                 <Calendar className="size-3 text-muted-foreground shrink-0" />
-                                {occ.occurrence_date}
+                                {formatOccurrenceDate(occ.occurrence_date, occ.start_at)}
                               </div>
                               <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
                                 <Clock className="size-2.5 shrink-0" />
@@ -1999,10 +2347,10 @@ export const ClassesWorkspace: React.FC = () => {
                                   size="sm"
                                   onClick={() => setAttendanceModalOccurrence(occ)}
                                   className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
-                                  title="Record or inspect attendance and member bookings"
+                                  title="View confirmed and waitlisted member roster"
                                 >
                                   <Users className="size-3" />
-                                  <span>Attendance & Bookings</span>
+                                  <span>View Roster</span>
                                 </Button>
 
                                 {canEdit && (
@@ -2113,7 +2461,7 @@ export const ClassesWorkspace: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <Clock className="size-3.5 text-primary shrink-0" />
                             <span className="font-semibold text-foreground">
-                              {occ.occurrence_date} · {startTimeFormatted} - {endTimeFormatted}
+                              {formatOccurrenceDate(occ.occurrence_date, occ.start_at)} · {startTimeFormatted} – {endTimeFormatted}
                             </span>
                           </div>
                           <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50">
@@ -2155,7 +2503,7 @@ export const ClassesWorkspace: React.FC = () => {
                           className="flex-1 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                         >
                           <Users className="size-3.5" />
-                          <span>Attendance & Bookings</span>
+                          <span>View Roster</span>
                         </Button>
                         {canEdit && (
                           <Button
@@ -2189,9 +2537,21 @@ export const ClassesWorkspace: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 5: CONTENT STUDIO */}
-        {activeTab === 'content' && (
+        {/* VIEW: CONTENT STUDIO (Exposed from Sessions) */}
+        {primaryTab === 'sessions' && showContentStudio && (
           <div className="space-y-4 mt-4">
+            <div className="flex items-center justify-between p-3.5 bg-muted/40 border border-border rounded-xl shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="size-4 text-primary" />
+                <div>
+                  <h4 className="font-semibold text-sm text-foreground">Content Studio</h4>
+                  <p className="text-xs text-muted-foreground">Workout instructional media, rotation engines, and class mapping.</p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowContentStudio(false)} className="text-xs">
+                Back to Sessions
+              </Button>
+            </div>
             <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
               <Sparkles className="size-5 text-primary shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground">

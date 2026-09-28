@@ -124,9 +124,9 @@ function ShellLayout() {
     <AppProvider>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
           <Topbar />
-          <main className="scrollbar-thin flex-1 overflow-y-auto">
+          <main className="scrollbar-thin flex-1 min-h-0 overflow-y-auto">
             <Outlet />
           </main>
         </div>

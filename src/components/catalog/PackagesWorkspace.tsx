@@ -37,6 +37,8 @@ import {
   Square,
   Archive,
   RotateCcw,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 import { catalogApi } from '@/api/endpoints/catalogApi';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -148,6 +150,13 @@ const formatCurrency = (amount: any, currency: string = 'INR') => {
   return `${sym}${num.toLocaleString('en-IN')}`;
 };
 
+const formatSessionCount = (val: any) => {
+  if (val === null || val === undefined || val === '') return '0';
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  return num % 1 === 0 ? num.toFixed(0) : String(num);
+};
+
 export const PackagesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -205,25 +214,17 @@ export const PackagesWorkspace: React.FC = () => {
   const [isNewProgramCategoryOpen, setIsNewProgramCategoryOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
 
-  // Edit Modals
+  // Edit Package Modals (Stable Package Identity Fields Only)
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
   const [editPkgName, setEditPkgName] = useState('');
   const [editPkgStatus, setEditPkgStatus] = useState<'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [editPkgProgram, setEditPkgProgram] = useState('');
-  const [editPkgDurationVal, setEditPkgDurationVal] = useState(6);
-  const [editPkgDurationUnit, setEditPkgDurationUnit] = useState('MONTH');
-  const [editPkgTotalDays, setEditPkgTotalDays] = useState(180);
-  const [editPkgValidity, setEditPkgValidity] = useState(180);
-  const [editPkgSalePrice, setEditPkgSalePrice] = useState('');
-  const [editPkgDisplayPrice, setEditPkgDisplayPrice] = useState('');
-  const [editPkgTaxPercentage, setEditPkgTaxPercentage] = useState('18');
-  const [editPkgTaxIncluded, setEditPkgTaxIncluded] = useState(true);
-  const [editPkgMaxSessions, setEditPkgMaxSessions] = useState('');
-  const [editPkgPassportSessions, setEditPkgPassportSessions] = useState('');
-  const [editPkgPassportCost, setEditPkgPassportCost] = useState('');
-  const [editPkgShowWeb, setEditPkgShowWeb] = useState(true);
-  const [editPkgShowApp, setEditPkgShowApp] = useState(true);
-  const [editPkgPublishNow, setEditPkgPublishNow] = useState(true);
+  const [editPkgBranchIds, setEditPkgBranchIds] = useState<string[]>([]);
+
+  // Package Version Lifecycle Confirmation Dialog States
+  const [versionToPublish, setVersionToPublish] = useState<{ pkgId: string; verId: string; versionNum: number; pkgName: string } | null>(null);
+  const [versionToRetire, setVersionToRetire] = useState<{ pkgId: string; verId: string; versionNum: number; pkgName: string } | null>(null);
+  const [draftToDiscard, setDraftToDiscard] = useState<{ pkgId: string; verId: string; versionNum: number; pkgName: string } | null>(null);
 
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [editProgName, setEditProgName] = useState('');
@@ -314,7 +315,14 @@ export const PackagesWorkspace: React.FC = () => {
   const [newPkgPassportCost, setNewPkgPassportCost] = useState('');
   const [newPkgShowWeb, setNewPkgShowWeb] = useState(true);
   const [newPkgShowApp, setNewPkgShowApp] = useState(true);
-  const [newPkgPublishNow, setNewPkgPublishNow] = useState(true);
+  const [newPkgPublishNow, setNewPkgPublishNow] = useState(false);
+  const [newPkgBranchIds, setNewPkgBranchIds] = useState<string[]>([]);
+  const [newPkgHomeUnlimited, setNewPkgHomeUnlimited] = useState(false);
+  const [newPkgCrossUnlimited, setNewPkgCrossUnlimited] = useState(false);
+
+  // Archive package modal state
+  const [packageToArchive, setPackageToArchive] = useState<Package | null>(null);
+  const [archivePkgError, setArchivePkgError] = useState<string | null>(null);
 
   // New Version Form state
   const [newVerName, setNewVerName] = useState('');
@@ -324,7 +332,9 @@ export const PackagesWorkspace: React.FC = () => {
   const [newVerTotalDays, setNewVerTotalDays] = useState(180);
   const [newVerShowWeb, setNewVerShowWeb] = useState(true);
   const [newVerShowApp, setNewVerShowApp] = useState(true);
+  const [newVerHomeUnlimited, setNewVerHomeUnlimited] = useState(false);
   const [newVerMaxSessions, setNewVerMaxSessions] = useState('');
+  const [newVerCrossUnlimited, setNewVerCrossUnlimited] = useState(false);
   const [newVerPassportSessions, setNewVerPassportSessions] = useState('');
   const [newVerPassportCost, setNewVerPassportCost] = useState('');
   const [newVerSalePrice, setNewVerSalePrice] = useState('');
@@ -446,6 +456,7 @@ export const PackagesWorkspace: React.FC = () => {
         name: newPkgName.trim(),
         program: newPkgProgram,
         status: 'ACTIVE',
+        available_branch_ids: newPkgBranchIds,
       });
       // Create initial version if duration provided
       if (newPkgTotalDays > 0) {
@@ -461,8 +472,10 @@ export const PackagesWorkspace: React.FC = () => {
           display_price: newPkgDisplayPrice ? Number(newPkgDisplayPrice) : undefined,
           tax_percentage: newPkgTaxPercentage ? Number(newPkgTaxPercentage) : undefined,
           prices_include_tax: newPkgTaxIncluded,
-          max_sessions: newPkgMaxSessions ? Number(newPkgMaxSessions) : undefined,
-          passport_sessions: newPkgPassportSessions ? Number(newPkgPassportSessions) : undefined,
+          is_unlimited_home: newPkgHomeUnlimited,
+          max_sessions: newPkgHomeUnlimited ? undefined : (newPkgMaxSessions ? Number(newPkgMaxSessions) : undefined),
+          is_unlimited_cross: newPkgCrossUnlimited,
+          passport_sessions: newPkgCrossUnlimited ? undefined : (newPkgPassportSessions ? Number(newPkgPassportSessions) : undefined),
           passport_cost: newPkgPassportCost ? Number(newPkgPassportCost) : undefined,
           publish_immediately: newPkgPublishNow,
           status: newPkgPublishNow ? 'ACTIVE' : 'DRAFT',
@@ -480,9 +493,12 @@ export const PackagesWorkspace: React.FC = () => {
       }
       setNewPkgName('');
       setNewPkgProgram('');
+      setNewPkgBranchIds([]);
       setNewPkgSalePrice('');
       setNewPkgDisplayPrice('');
+      setNewPkgHomeUnlimited(false);
       setNewPkgMaxSessions('');
+      setNewPkgCrossUnlimited(false);
       setNewPkgPassportSessions('');
       setNewPkgPassportCost('');
       setPkgFormError(null);
@@ -496,60 +512,13 @@ export const PackagesWorkspace: React.FC = () => {
   const updatePackageMutation = useMutation({
     mutationFn: async () => {
       if (!editingPackage) return;
-      // 1. Update package identity metadata (preserve code automatically in backend)
+      // Update package identity metadata & branch availability only
       const updatedPkg = await catalogApi.updatePackage(editingPackage.id, {
         name: editPkgName.trim(),
         status: editPkgStatus,
         program: editPkgProgram,
+        available_branch_ids: editPkgBranchIds,
       });
-
-      // 2. Check if commercial version terms modified
-      const activeVer = editingPackage.active_version || (editingPackage as any).latest_version;
-      const firstPrice = activeVer?.prices?.[0];
-      const homeSessionEnt = activeVer?.entitlements?.find(
-        (e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION'
-      );
-      const crossSessionEnt = activeVer?.entitlements?.find(
-        (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
-      );
-
-      const hasVersionChanges =
-        !activeVer ||
-        Number(activeVer.duration_value) !== Number(editPkgDurationVal) ||
-        activeVer.duration_unit !== editPkgDurationUnit ||
-        Number(activeVer.total_days) !== Number(editPkgTotalDays) ||
-        Boolean(activeVer.show_on_web) !== Boolean(editPkgShowWeb) ||
-        Boolean(activeVer.show_on_app) !== Boolean(editPkgShowApp) ||
-        String(firstPrice?.sale_price ?? firstPrice?.base_price ?? '') !== String(editPkgSalePrice) ||
-        String(firstPrice?.display_price ?? '') !== String(editPkgDisplayPrice) ||
-        String(firstPrice?.tax_percent ?? firstPrice?.tax_percentage ?? '18') !== String(editPkgTaxPercentage) ||
-        Boolean(firstPrice?.prices_include_tax ?? true) !== Boolean(editPkgTaxIncluded) ||
-        String(homeSessionEnt?.allocated_units ?? '') !== String(editPkgMaxSessions) ||
-        String(crossSessionEnt?.allocated_units ?? '') !== String(editPkgPassportSessions) ||
-        String(crossSessionEnt?.extra_unit_price ?? '') !== String(editPkgPassportCost);
-
-      if (hasVersionChanges && editPkgTotalDays > 0) {
-        const nextVerNum = (activeVer?.version_number ?? 1) + 1;
-        await catalogApi.createPackageVersion(editingPackage.id, {
-          name_snapshot: `${editPkgName.trim()} v${nextVerNum}`,
-          duration_value: editPkgDurationVal,
-          duration_unit: editPkgDurationUnit,
-          total_days: editPkgTotalDays,
-          validity_days: editPkgValidity,
-          show_on_web: editPkgShowWeb,
-          show_on_app: editPkgShowApp,
-          sale_price: editPkgSalePrice ? Number(editPkgSalePrice) : undefined,
-          display_price: editPkgDisplayPrice ? Number(editPkgDisplayPrice) : undefined,
-          tax_percentage: editPkgTaxPercentage ? Number(editPkgTaxPercentage) : undefined,
-          prices_include_tax: editPkgTaxIncluded,
-          max_sessions: editPkgMaxSessions ? Number(editPkgMaxSessions) : undefined,
-          passport_sessions: editPkgPassportSessions ? Number(editPkgPassportSessions) : undefined,
-          passport_cost: editPkgPassportCost ? Number(editPkgPassportCost) : undefined,
-          publish_immediately: editPkgPublishNow,
-          status: editPkgPublishNow ? 'ACTIVE' : 'DRAFT',
-        });
-      }
-
       return updatedPkg;
     },
     onSuccess: () => {
@@ -569,6 +538,90 @@ export const PackagesWorkspace: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       toast.success('Package status updated.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const archivePackageMutation = useMutation({
+    mutationFn: (id: string) => catalogApi.archivePackage(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      setPackageToArchive(null);
+      setArchivePkgError(null);
+      toast.success('Package archived successfully.');
+    },
+    onError: (err: any) => {
+      const msg = getErrorMessage(err);
+      setArchivePkgError(msg);
+      toast.error(msg);
+    },
+  });
+
+  const restorePackageMutation = useMutation({
+    mutationFn: (id: string) => catalogApi.restorePackage(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      toast.success('Package restored successfully.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const publishVersionDirectMutation = useMutation({
+    mutationFn: ({ verId }: { pkgId: string; verId: string }) =>
+      catalogApi.publishPackageVersionDirect(verId),
+    onSuccess: (data: any, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setVersionToPublish(null);
+      toast.success(
+        data?.detail ||
+          'Package version published successfully. Previous active version has been retired.'
+      );
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const retireVersionDirectMutation = useMutation({
+    mutationFn: ({ verId }: { pkgId: string; verId: string }) =>
+      catalogApi.retirePackageVersion(verId),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setVersionToRetire(null);
+      toast.success(data?.detail || 'Package version retired.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const reuseVersionMutation = useMutation({
+    mutationFn: ({ verId }: { verId: string; fromVerNum: number }) =>
+      catalogApi.reusePackageVersion(verId),
+    onSuccess: (data: any, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      toast.success(
+        data?.detail ||
+          `Version ${data?.version_number ?? 'new'} draft created from Version ${vars.fromVerNum}. Review it before publishing.`
+      );
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+
+  const deleteDraftVersionMutation = useMutation({
+    mutationFn: (verId: string) => catalogApi.deletePackageVersion(verId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      setDraftToDiscard(null);
+      toast.success('Draft version discarded.');
     },
     onError: (err: any) => {
       toast.error(getErrorMessage(err));
@@ -927,43 +980,8 @@ export const PackagesWorkspace: React.FC = () => {
     setEditPkgName(pkg.name);
     setEditPkgStatus((pkg.status as any) || 'ACTIVE');
     setEditPkgProgram(pkg.program || '');
+    setEditPkgBranchIds(pkg.available_branch_ids || []);
     setPkgFormError(null);
-
-    const activeVer = pkg.active_version || (pkg as any).latest_version;
-    const durationVal = activeVer?.duration_value ?? 6;
-    const durationUnit = activeVer?.duration_unit ?? 'MONTH';
-    const totalDays = activeVer?.total_days ?? calcDays(durationVal, durationUnit);
-    const validityDays = activeVer?.validity_days ?? totalDays;
-
-    setEditPkgDurationVal(durationVal);
-    setEditPkgDurationUnit(durationUnit);
-    setEditPkgTotalDays(totalDays);
-    setEditPkgValidity(validityDays);
-
-    const firstPrice = activeVer?.prices?.[0];
-    setEditPkgSalePrice(firstPrice ? String(firstPrice.sale_price ?? firstPrice.base_price ?? '') : '');
-    setEditPkgDisplayPrice(firstPrice?.display_price ? String(firstPrice.display_price) : '');
-    setEditPkgTaxPercentage(
-      firstPrice?.tax_percent || firstPrice?.tax_percentage
-        ? String(firstPrice.tax_percent || firstPrice.tax_percentage)
-        : '18'
-    );
-    setEditPkgTaxIncluded(firstPrice?.prices_include_tax ?? true);
-
-    const homeSessionEnt = activeVer?.entitlements?.find(
-      (e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION'
-    );
-    const crossSessionEnt = activeVer?.entitlements?.find(
-      (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
-    );
-
-    setEditPkgMaxSessions(homeSessionEnt?.allocated_units ? String(homeSessionEnt.allocated_units) : '');
-    setEditPkgPassportSessions(crossSessionEnt?.allocated_units ? String(crossSessionEnt.allocated_units) : '');
-    setEditPkgPassportCost(crossSessionEnt?.extra_unit_price ? String(crossSessionEnt.extra_unit_price) : '');
-
-    setEditPkgShowWeb(activeVer?.show_on_web ?? true);
-    setEditPkgShowApp(activeVer?.show_on_app ?? true);
-    setEditPkgPublishNow(true);
   };
 
   const startEditProgram = (prog: Program) => {
@@ -992,7 +1010,9 @@ export const PackagesWorkspace: React.FC = () => {
 
   const openAddPackageForProgram = (programId: string) => {
     if (!requirePermission('create Packages')) return;
+    const prog = programs.find((p) => p.id === programId);
     setNewPkgProgram(programId);
+    setNewPkgBranchIds(prog?.available_branch_ids || []);
     setNewPkgName('');
     setNewPkgDurationVal(6);
     setNewPkgDurationUnit('MONTH');
@@ -1002,18 +1022,20 @@ export const PackagesWorkspace: React.FC = () => {
     setNewPkgDisplayPrice('');
     setNewPkgTaxPercentage('18');
     setNewPkgTaxIncluded(true);
+    setNewPkgHomeUnlimited(false);
     setNewPkgMaxSessions('');
+    setNewPkgCrossUnlimited(false);
     setNewPkgPassportSessions('');
     setNewPkgPassportCost('');
     setNewPkgShowWeb(true);
     setNewPkgShowApp(true);
-    setNewPkgPublishNow(true);
+    setNewPkgPublishNow(false);
     setPkgFormError(null);
     setIsNewPackageOpen(true);
   };
 
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto px-2 sm:px-4 lg:px-6">
+    <div className="space-y-6 max-w-[1440px] mx-auto px-2 sm:px-4 lg:px-6 pb-32">
       <PageHeader
         title="Programs & Packages"
         description="Configure your program catalog, commercial package tiers, immutable pricing versions, and legal policies."
@@ -1075,7 +1097,7 @@ export const PackagesWorkspace: React.FC = () => {
         }
       />
 
-      <PageBody>
+      <PageBody className="pb-28">
         {/* KPI Tiles */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <KpiTile
@@ -1735,91 +1757,164 @@ export const PackagesWorkspace: React.FC = () => {
                                 const homeEnt = activeVer?.entitlements?.find(
                                   (e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION'
                                 );
+                                const crossEnt = activeVer?.entitlements?.find(
+                                  (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
+                                );
 
                                 return (
                                   <div
                                     key={pkg.id}
-                                    className="bg-card border border-border/70 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs transition"
+                                    className="bg-card hover:bg-card/95 border border-border/80 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between shadow-xs transition-all space-y-3"
                                   >
-                                    <div className="space-y-2.5">
+                                    <div className="space-y-3">
                                       {/* Package Header */}
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                          <h4 className="text-sm font-semibold text-foreground truncate" title={pkg.name}>
-                                            {pkg.name}
-                                          </h4>
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="min-w-0 flex-1">
+                                            <h4 className="text-sm font-bold text-foreground truncate" title={pkg.name}>
+                                              {pkg.name}
+                                            </h4>
+                                            {pkg.code && (
+                                              <span className="inline-block mt-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border/50" title="Backend-managed system code">
+                                                {pkg.code}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <Badge
+                                            variant={pkg.status === 'ACTIVE' ? 'default' : pkg.status === 'ARCHIVED' ? 'destructive' : 'secondary'}
+                                            className={`text-[10px] font-semibold tracking-wider shrink-0 ${
+                                              pkg.status === 'ACTIVE'
+                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                                : pkg.status === 'ARCHIVED'
+                                                ? 'bg-destructive/15 text-destructive border-destructive/30'
+                                                : 'bg-muted text-muted-foreground border-border/60'
+                                            }`}
+                                          >
+                                            {pkg.status}
+                                          </Badge>
                                         </div>
-                                        <Badge
-                                          variant={pkg.status === 'ACTIVE' ? 'default' : 'secondary'}
-                                          className="text-[10px] shrink-0"
-                                        >
-                                          {pkg.status}
-                                        </Badge>
+
+                                        {/* Branch Availability Chips */}
+                                        {pkg.available_branches && pkg.available_branches.length > 0 && (
+                                          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                            <Building2 className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                                            <span className="text-[10px] text-muted-foreground font-medium">Branches:</span>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              {pkg.available_branches.map((b) => (
+                                                <span
+                                                  key={b.id}
+                                                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-foreground/90 border border-border/40 font-medium"
+                                                >
+                                                  {b.name}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Active Version & Commercial Details */}
                                       {activeVer ? (
-                                        <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 space-y-1.5 text-xs">
-                                          <div className="flex items-center justify-between text-muted-foreground">
-                                            <span className="flex items-center gap-1 font-medium text-foreground">
-                                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                                              v{activeVer.version_number} Current
-                                            </span>
-                                            <span className="font-mono text-[11px]">
-                                              {activeVer.duration_value} {activeVer.duration_unit?.toLowerCase()}(s)
+                                        <div className="p-3 bg-muted/30 dark:bg-muted/15 rounded-xl border border-border/60 space-y-2.5">
+                                          {/* Version Indicator & Duration */}
+                                          <div className="flex items-center justify-between text-xs pb-2 border-b border-border/40">
+                                            <div className="flex items-center gap-1.5 font-medium text-foreground">
+                                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                              <span className="font-semibold text-[11px]">v{activeVer.version_number}</span>
+                                              <span className="text-[10px] text-muted-foreground">Current</span>
+                                            </div>
+                                            <span className="text-[10px] font-semibold text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border/50">
+                                              {activeVer.duration_value} {activeVer.duration_unit ? activeVer.duration_unit.charAt(0).toUpperCase() + activeVer.duration_unit.slice(1).toLowerCase() : 'Month'}{Number(activeVer.duration_value) > 1 ? 's' : ''}
                                             </span>
                                           </div>
+
+                                          {/* Primary Price */}
                                           {firstPrice && (
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                {formatCurrency(firstPrice.total_price || firstPrice.sale_price, firstPrice.currency || 'INR')}
-                                              </span>
-                                              {homeEnt?.allocated_units && (
-                                                <span className="text-[11px] text-muted-foreground font-mono">
-                                                  {homeEnt.allocated_units} sessions
+                                            <div className="flex items-baseline justify-between gap-2">
+                                              <div className="flex items-baseline gap-1.5">
+                                                <span className="text-lg font-bold text-foreground tracking-tight">
+                                                  {formatCurrency(firstPrice.total_price || firstPrice.sale_price, firstPrice.currency || 'INR')}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground font-medium">
+                                                  {firstPrice.prices_include_tax ? 'Tax incl.' : '+ Tax'}
+                                                </span>
+                                              </div>
+                                              {firstPrice.display_price && Number(firstPrice.display_price) > Number(firstPrice.sale_price) && (
+                                                <span className="text-[11px] text-muted-foreground/60 line-through">
+                                                  {formatCurrency(firstPrice.display_price, firstPrice.currency || 'INR')}
                                                 </span>
                                               )}
                                             </div>
                                           )}
+
+                                          {/* Entitlements Grid */}
+                                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/40">
+                                            <div className="bg-background/80 dark:bg-background/40 rounded-lg p-2 border border-border/40 flex flex-col justify-between">
+                                              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                                Home Studio
+                                              </span>
+                                              <span className="text-xs font-semibold text-foreground mt-0.5">
+                                                {homeEnt?.is_unlimited ? 'Unlimited' : `${formatSessionCount(homeEnt?.allocated_units)} sessions`}
+                                              </span>
+                                            </div>
+
+                                            <div className="bg-background/80 dark:bg-background/40 rounded-lg p-2 border border-border/40 flex flex-col justify-between">
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                                  Cross Branch
+                                                </span>
+                                              </div>
+                                              <div className="flex items-baseline justify-between mt-0.5">
+                                                <span className="text-xs font-semibold text-foreground">
+                                                  {crossEnt ? (crossEnt.is_unlimited ? 'Unlimited' : `${formatSessionCount(crossEnt.allocated_units)} sessions`) : 'None'}
+                                                </span>
+                                                {crossEnt?.extra_unit_price && Number(crossEnt.extra_unit_price) > 0 && (
+                                                  <span className="text-[10px] text-muted-foreground font-medium ml-1">
+                                                    +{formatCurrency(crossEnt.extra_unit_price, 'INR')}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
                                         </div>
                                       ) : (
-                                        <div className="p-2.5 bg-amber-500/10 rounded-lg border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                                          <Clock className="w-3.5 h-3.5 shrink-0" />
-                                          <span>Draft state (no active version)</span>
+                                        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                                          <Clock className="w-4 h-4 shrink-0" />
+                                          <span className="font-medium">Draft state (no active version)</span>
                                         </div>
                                       )}
                                     </div>
 
                                     {/* Package Actions Bar */}
-                                    <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1 flex-wrap">
-                                      <div className="flex items-center gap-1">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => setHistoryPackage(pkg)}
-                                          className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
-                                          title="View immutable version history"
-                                        >
-                                          <History className="w-3 h-3" />
-                                          <span>Versions</span>
-                                        </Button>
-
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => setAuditPackage(pkg)}
-                                          className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
-                                          title="View audit logs"
-                                        >
-                                          <Activity className="w-3 h-3" />
-                                          <span>Audit</span>
-                                        </Button>
-                                      </div>
-
-                                      {hasCatalogPermission && (
+                                    <div className="pt-2.5 border-t border-border/50 flex flex-col gap-2">
+                                      <div className="flex items-center justify-between gap-1">
                                         <div className="flex items-center gap-1">
                                           <Button
                                             variant="ghost"
+                                            size="sm"
+                                            onClick={() => setHistoryPackage(pkg)}
+                                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1.5 font-medium"
+                                            title="View immutable version history"
+                                          >
+                                            <History className="w-3.5 h-3.5" />
+                                            <span>Versions</span>
+                                          </Button>
+
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setAuditPackage(pkg)}
+                                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1.5 font-medium"
+                                            title="View audit logs"
+                                          >
+                                            <Activity className="w-3.5 h-3.5" />
+                                            <span>Audit</span>
+                                          </Button>
+                                        </div>
+
+                                        {hasCatalogPermission && (
+                                          <Button
+                                            variant="outline"
                                             size="sm"
                                             onClick={() => {
                                               setSelectedPackage(pkg);
@@ -1832,51 +1927,95 @@ export const PackagesWorkspace: React.FC = () => {
                                               setNewVerDisplayPrice(firstPrice?.display_price ? String(firstPrice.display_price) : '');
                                               setNewVerTaxPercentage(firstPrice?.tax_percent ? String(firstPrice.tax_percent) : '18');
                                               setNewVerTaxIncluded(firstPrice?.prices_include_tax ?? true);
+                                              setNewVerHomeUnlimited(Boolean(homeEnt?.is_unlimited));
                                               setNewVerMaxSessions(homeEnt?.allocated_units ? String(homeEnt.allocated_units) : '');
+                                              setNewVerCrossUnlimited(Boolean(crossEnt?.is_unlimited));
+                                              setNewVerPassportSessions(crossEnt?.allocated_units ? String(crossEnt.allocated_units) : '');
+                                              setNewVerPassportCost(crossEnt?.extra_unit_price ? String(crossEnt.extra_unit_price) : '');
                                               setNewVerShowWeb(activeVer?.show_on_web ?? true);
                                               setNewVerShowApp(activeVer?.show_on_app ?? true);
                                               setNewVerPublishNow(false);
                                               setIsNewVersionOpen(true);
                                             }}
-                                            className="h-6 text-[11px] px-2 text-primary hover:text-primary/80 gap-1 font-medium"
+                                            className="h-7 text-xs px-2 text-primary border-primary/25 hover:bg-primary/5 hover:border-primary/40 gap-1 font-medium"
                                             title="Create new version snapshot"
                                           >
-                                            <Plus className="w-3 h-3" />
+                                            <Plus className="w-3.5 h-3.5" />
                                             <span>New Version</span>
                                           </Button>
+                                        )}
+                                      </div>
 
+                                      {hasCatalogPermission && (
+                                        <div className="flex items-center justify-between pt-1 border-t border-border/30 text-xs">
                                           <Button
                                             variant="ghost"
-                                            size="icon"
+                                            size="sm"
                                             onClick={() => startEditPackage(pkg)}
-                                            className="w-6 h-6 text-muted-foreground hover:text-foreground"
-                                            title="Edit package"
+                                            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
+                                            title="Edit package settings"
                                           >
                                             <Pencil className="w-3 h-3" />
+                                            <span>Edit</span>
                                           </Button>
 
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => {
-                                              togglePackageStatusMutation.mutate({
-                                                id: pkg.id,
-                                                newStatus: pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                                              });
-                                            }}
-                                            className={`w-6 h-6 ${
-                                              pkg.status === 'ACTIVE'
-                                                ? 'text-amber-500 hover:text-amber-600'
-                                                : 'text-emerald-500 hover:text-emerald-600'
-                                            }`}
-                                            title={pkg.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                          >
-                                            {pkg.status === 'ACTIVE' ? (
-                                              <ToggleRight className="w-3.5 h-3.5" />
+                                          <div className="flex items-center gap-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                togglePackageStatusMutation.mutate({
+                                                  id: pkg.id,
+                                                  newStatus: pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                                });
+                                              }}
+                                              className={`h-6 text-[11px] px-2 gap-1 ${
+                                                pkg.status === 'ACTIVE'
+                                                  ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
+                                                  : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
+                                              }`}
+                                              title={pkg.status === 'ACTIVE' ? 'Deactivate package' : 'Activate package'}
+                                            >
+                                              {pkg.status === 'ACTIVE' ? (
+                                                <>
+                                                  <ToggleRight className="w-3.5 h-3.5" />
+                                                  <span>Deactivate</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <ToggleLeft className="w-3.5 h-3.5" />
+                                                  <span>Activate</span>
+                                                </>
+                                              )}
+                                            </Button>
+
+                                            {pkg.status !== 'ARCHIVED' ? (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                  setPackageToArchive(pkg);
+                                                  setArchivePkgError(null);
+                                                }}
+                                                className="h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive gap-1"
+                                                title="Archive package"
+                                              >
+                                                <Archive className="w-3 h-3" />
+                                                <span>Archive</span>
+                                              </Button>
                                             ) : (
-                                              <ToggleLeft className="w-3.5 h-3.5" />
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => restorePackageMutation.mutate(pkg.id)}
+                                                className="h-6 text-[11px] px-2 text-emerald-600 hover:text-emerald-700 gap-1"
+                                                title="Restore archived package"
+                                              >
+                                                <RotateCcw className="w-3 h-3" />
+                                                <span>Restore</span>
+                                              </Button>
                                             )}
-                                          </Button>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -2187,16 +2326,143 @@ export const PackagesWorkspace: React.FC = () => {
                               <span className="font-semibold text-sm text-foreground">
                                 Version {ver.version_number}
                               </span>
-                              <Badge
-                                variant={isCurrent ? 'default' : 'secondary'}
-                                className={`text-[10px] shrink-0 ${
-                                  isCurrent
-                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                    : ''
-                                }`}
-                              >
-                                {isCurrent ? 'CURRENT' : 'RETIRED'}
-                              </Badge>
+                              {/* Status badge & actions */}
+                              <div className="flex items-center gap-1.5 ml-auto shrink-0 flex-wrap">
+                                {ver.status === 'ACTIVE' && (
+                                  <>
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/30">
+                                      CURRENT / ACTIVE
+                                    </span>
+                                    {hasCatalogPermission && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedPackage(historyPackage);
+                                            setNewVerName(`${historyPackage.name} v${(ver.version_number ?? 0) + 1}`);
+                                            setNewVerDurationVal(ver.duration_value ?? 6);
+                                            setNewVerDurationUnit(ver.duration_unit ?? 'MONTH');
+                                            setNewVerTotalDays(ver.total_days ?? 180);
+                                            setNewVerValidity(ver.validity_days ?? 180);
+                                            const fp = ver.prices?.[0];
+                                            setNewVerSalePrice(fp?.sale_price ? String(fp.sale_price) : '');
+                                            setNewVerDisplayPrice(fp?.display_price ? String(fp.display_price) : '');
+                                            setNewVerTaxPercentage(fp?.tax_percent ? String(fp.tax_percent) : '18');
+                                            setNewVerTaxIncluded(fp?.prices_include_tax ?? true);
+                                            const he = ver.entitlement_definitions?.find(e => e.entitlement_type === 'HOME_BRANCH_SESSION');
+                                            const ce = ver.entitlement_definitions?.find(e => e.entitlement_type === 'CROSS_BRANCH_SESSION');
+                                            setNewVerHomeUnlimited(Boolean(he?.is_unlimited));
+                                            setNewVerMaxSessions(he?.allocated_units ? String(he.allocated_units) : '');
+                                            setNewVerCrossUnlimited(Boolean(ce?.is_unlimited));
+                                            setNewVerPassportSessions(ce?.allocated_units ? String(ce.allocated_units) : '');
+                                            setNewVerPassportCost(ce?.extra_unit_price ? String(ce.extra_unit_price) : '');
+                                            setNewVerShowWeb(ver.show_on_web ?? true);
+                                            setNewVerShowApp(ver.show_on_app ?? true);
+                                            setNewVerPublishNow(false);
+                                            setIsNewVersionOpen(true);
+                                          }}
+                                          className="h-6 text-[11px] px-2 text-primary border-primary/30 hover:bg-primary/5 gap-1"
+                                          title="Clone terms into a new Draft version"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                          <span>New Version</span>
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setVersionToRetire({
+                                              pkgId: historyPackage.id,
+                                              verId: ver.id,
+                                              versionNum: ver.version_number,
+                                              pkgName: historyPackage.name,
+                                            });
+                                          }}
+                                          className="h-6 text-[11px] px-2 text-muted-foreground hover:text-amber-600"
+                                          title="Retire this version"
+                                        >
+                                          Retire
+                                        </Button>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+
+                                {ver.status === 'DRAFT' && (
+                                  <>
+                                    <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                      DRAFT
+                                    </Badge>
+                                    {hasCatalogPermission && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setVersionToPublish({
+                                              pkgId: historyPackage.id,
+                                              verId: ver.id,
+                                              versionNum: ver.version_number,
+                                              pkgName: historyPackage.name,
+                                            });
+                                          }}
+                                          className="h-6 text-[11px] px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                                          title="Publish this version to make it active"
+                                        >
+                                          <Send className="w-3 h-3" />
+                                          <span>Publish</span>
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDraftToDiscard({
+                                              pkgId: historyPackage.id,
+                                              verId: ver.id,
+                                              versionNum: ver.version_number,
+                                              pkgName: historyPackage.name,
+                                            });
+                                          }}
+                                          className="h-6 text-[11px] px-2 text-destructive hover:bg-destructive/10 gap-1"
+                                          title="Discard this draft version"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          <span>Discard</span>
+                                        </Button>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+
+                                {ver.status === 'RETIRED' && (
+                                  <>
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      RETIRED
+                                    </Badge>
+                                    {hasCatalogPermission && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          reuseVersionMutation.mutate({ verId: ver.id, fromVerNum: ver.version_number });
+                                        }}
+                                        disabled={reuseVersionMutation.isPending}
+                                        className="h-6 text-[11px] px-2 text-primary border-primary/30 hover:bg-primary/5 gap-1 font-medium"
+                                        title="Clone selected retired terms into the next version as a new Draft"
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Make Current Again</span>
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                             {/* Quick-glance summary row */}
                             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5 items-center">
@@ -2224,6 +2490,22 @@ export const PackagesWorkspace: React.FC = () => {
                         {/* Expanded detail panel */}
                         {isExpanded && (
                           <div className="border-t border-border/40 px-4 pb-4 pt-3 space-y-4 text-xs">
+                            {/* Immutability guidance banner */}
+                            {ver.status === 'ACTIVE' ? (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40">
+                                <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <span className="flex-1">
+                                  This version is currently published and cannot be changed. Create a new version to update commercial terms.
+                                </span>
+                              </div>
+                            ) : ver.status === 'RETIRED' ? (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40">
+                                <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <span className="flex-1">
+                                  This version is retired and immutable. Click &ldquo;Make Current Again&rdquo; to clone these terms into a new Draft version.
+                                </span>
+                              </div>
+                            ) : null}
 
                             {/* — Duration & Validity — */}
                             <div>
@@ -3166,6 +3448,53 @@ export const PackagesWorkspace: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* MODAL: ARCHIVE PACKAGE CONFIRMATION */}
+      {/* ========================================================================= */}
+      {packageToArchive && (
+        <Dialog open={Boolean(packageToArchive)} onOpenChange={(open) => !open && setPackageToArchive(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-foreground">
+                <Archive className="w-5 h-5 text-amber-500" />
+                Archive {packageToArchive.name}?
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm pt-2">
+              {archivePkgError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                  {archivePkgError}
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Archiving deactivates this commercial package from new sales and catalog browsing.
+                Existing memberships, contracts, and purchase records will remain intact and valid.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                You can restore an archived package at any time.
+              </p>
+            </div>
+            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPackageToArchive(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                disabled={archivePackageMutation.isPending}
+                onClick={() => archivePackageMutation.mutate(packageToArchive.id)}
+              >
+                {archivePackageMutation.isPending ? 'Archiving...' : 'Archive Package'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL: DELETE PROGRAM CATEGORY CONFIRMATION */}
       {/* ========================================================================= */}
       {programCategoryToDelete && (
@@ -3276,6 +3605,73 @@ export const PackagesWorkspace: React.FC = () => {
                   className="text-sm"
                 />
               </div>
+            </div>
+
+            {/* Branch Availability Section */}
+            <div className="pt-3 border-t border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">
+                  Available Branches
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Select which branches offer this package
+                </span>
+              </div>
+              {!newPkgProgram ? (
+                <p className="text-xs text-muted-foreground italic">Select a program first to configure branch availability.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
+                  {branches.map((b) => {
+                    const prog = programs.find((p) => p.id === newPkgProgram);
+                    const progBranchIds = prog?.available_branch_ids || [];
+                    const isProgramAvailable = progBranchIds.includes(b.id);
+                    const isChecked = newPkgBranchIds.includes(b.id);
+
+                    return (
+                      <div
+                        key={b.id}
+                        className={`p-2 rounded-lg border text-xs flex items-start gap-2.5 transition-colors ${
+                          !isProgramAvailable
+                            ? 'opacity-50 bg-muted/20 border-border/40 cursor-not-allowed'
+                            : isChecked
+                            ? 'bg-primary/5 border-primary/40'
+                            : 'bg-card border-border/60 hover:border-border'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          id={`new_pkg_branch_${b.id}`}
+                          disabled={!isProgramAvailable}
+                          checked={isChecked && isProgramAvailable}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewPkgBranchIds([...newPkgBranchIds, b.id]);
+                            } else {
+                              setNewPkgBranchIds(newPkgBranchIds.filter((id) => id !== b.id));
+                            }
+                          }}
+                          className="mt-0.5 rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <label
+                            htmlFor={`new_pkg_branch_${b.id}`}
+                            className={`font-medium block leading-snug ${
+                              isProgramAvailable ? 'cursor-pointer text-foreground' : 'cursor-not-allowed text-muted-foreground'
+                            }`}
+                          >
+                            {b.name}
+                          </label>
+                          {!isProgramAvailable && (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-0.5">
+                              This Program is not available at this Branch.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Section 2: Initial Version & Duration */}
@@ -3389,32 +3785,62 @@ export const PackagesWorkspace: React.FC = () => {
 
             {/* Section 4: Sessions & Passport Entitlements */}
             <div className="pt-3 border-t border-border space-y-3">
-              <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Sessions & Passport Entitlements</span>
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Sessions &amp; Entitlements</span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-medium text-foreground mb-1">Max Sessions</label>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-foreground">Home Sessions</label>
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={newPkgHomeUnlimited}
+                        onChange={(e) => {
+                          setNewPkgHomeUnlimited(e.target.checked);
+                          if (e.target.checked) setNewPkgMaxSessions('');
+                        }}
+                        className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                      />
+                      Unlimited
+                    </label>
+                  </div>
                   <Input
                     type="number"
-                    placeholder="e.g. 72"
+                    placeholder={newPkgHomeUnlimited ? 'Unlimited' : 'e.g. 72'}
+                    disabled={newPkgHomeUnlimited}
                     value={newPkgMaxSessions}
                     onChange={(e) => setNewPkgMaxSessions(e.target.value)}
-                    className="text-sm"
+                    className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
                   />
                   <span className="text-[10px] text-muted-foreground">Home Branch</span>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-foreground mb-1">Passport Sessions</label>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-foreground">Cross-Branch Sessions</label>
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={newPkgCrossUnlimited}
+                        onChange={(e) => {
+                          setNewPkgCrossUnlimited(e.target.checked);
+                          if (e.target.checked) setNewPkgPassportSessions('');
+                        }}
+                        className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                      />
+                      Unlimited
+                    </label>
+                  </div>
                   <Input
                     type="number"
-                    placeholder="e.g. 10"
+                    placeholder={newPkgCrossUnlimited ? 'Unlimited' : 'e.g. 10'}
+                    disabled={newPkgCrossUnlimited}
                     value={newPkgPassportSessions}
                     onChange={(e) => setNewPkgPassportSessions(e.target.value)}
-                    className="text-sm"
+                    className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
                   />
                   <span className="text-[10px] text-muted-foreground">Cross-Branch</span>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-foreground mb-1">Passport Cost (₹)</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-foreground">Passport Cost (₹)</label>
                   <Input
                     type="number"
                     placeholder="e.g. 500"
@@ -3461,6 +3887,14 @@ export const PackagesWorkspace: React.FC = () => {
                   Publish immediately (Activate Version 1)
                 </label>
               </div>
+              {newPkgPublishNow && (
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                  <span>
+                    <strong>Immediate Publication:</strong> Version 1 will be activated upon creation and become live for all sales.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -3498,11 +3932,11 @@ export const PackagesWorkspace: React.FC = () => {
       {/* ========================================================================= */}
       {editingPackage && (
         <Dialog open={Boolean(editingPackage)} onOpenChange={(open) => !open && setEditingPackage(null)}>
-          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Edit Package</DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Update package commercial identity, active version terms, pricing, and session allocations.
+                Update package identity and branch availability. Commercial terms are managed via Package Versions.
               </p>
             </DialogHeader>
             <div className="space-y-4 text-sm pt-2">
@@ -3553,188 +3987,93 @@ export const PackagesWorkspace: React.FC = () => {
                     </select>
                   </div>
                 </div>
+                {editingPackage.code && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1.5 rounded-md border border-border/50">
+                    <span className="font-semibold text-foreground">System Code:</span>
+                    <code className="font-mono text-primary font-bold">{editingPackage.code}</code>
+                    <span className="text-[10px] text-muted-foreground ml-auto">(backend-managed · read only)</span>
+                  </div>
+                )}
               </div>
 
-              {/* Section 2: Duration */}
-              <div className="pt-3 border-t border-border space-y-3">
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">
-                  Active Version & Duration
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  {/* Duration Value */}
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Duration Value *</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={editPkgDurationVal}
-                      onChange={(e) => {
-                        const v = Math.max(1, Number(e.target.value));
-                        setEditPkgDurationVal(v);
-                        setEditPkgTotalDays(calcDays(v, editPkgDurationUnit));
-                      }}
-                      className="text-sm"
-                    />
-                  </div>
-                  {/* Duration Unit */}
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Duration Unit *</label>
-                    <select
-                      value={editPkgDurationUnit}
-                      onChange={(e) => {
-                        const u = e.target.value;
-                        setEditPkgDurationUnit(u);
-                        setEditPkgTotalDays(calcDays(editPkgDurationVal, u));
-                      }}
-                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value="DAY">Day(s)</option>
-                      <option value="WEEK">Week(s)</option>
-                      <option value="MONTH">Month(s)</option>
-                      <option value="YEAR">Year(s)</option>
-                    </select>
-                  </div>
-                  {/* Total Days */}
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
-                      Total Days
-                      <span className="text-[9px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">auto</span>
-                    </label>
-                    <Input
-                      type="number"
-                      readOnly
-                      value={editPkgTotalDays}
-                      className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
-                      tabIndex={-1}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Pricing */}
-              <div className="pt-3 border-t border-border space-y-3">
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Commercial Pricing</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Sale Price (₹)</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 24285"
-                      value={editPkgSalePrice}
-                      onChange={(e) => setEditPkgSalePrice(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Display / MRP Price (₹)</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 29999"
-                      value={editPkgDisplayPrice}
-                      onChange={(e) => setEditPkgDisplayPrice(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Tax Percentage (%)</label>
-                    <Input
-                      type="number"
-                      placeholder="18"
-                      value={editPkgTaxPercentage}
-                      onChange={(e) => setEditPkgTaxPercentage(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 pt-1 sm:pt-5">
-                    <input
-                      type="checkbox"
-                      id="edit_pkg_tax_inc"
-                      checked={editPkgTaxIncluded}
-                      onChange={(e) => setEditPkgTaxIncluded(e.target.checked)}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                    />
-                    <label htmlFor="edit_pkg_tax_inc" className="text-xs text-foreground cursor-pointer select-none">
-                      Prices include tax
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 4: Sessions & Passport Entitlements */}
-              <div className="pt-3 border-t border-border space-y-3">
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Sessions & Passport Entitlements</span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Max Sessions</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 72"
-                      value={editPkgMaxSessions}
-                      onChange={(e) => setEditPkgMaxSessions(e.target.value)}
-                      className="text-sm"
-                    />
-                    <span className="text-[10px] text-muted-foreground">Home Branch</span>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Passport Sessions</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 10"
-                      value={editPkgPassportSessions}
-                      onChange={(e) => setEditPkgPassportSessions(e.target.value)}
-                      className="text-sm"
-                    />
-                    <span className="text-[10px] text-muted-foreground">Cross-Branch</span>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Passport Cost (₹)</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 500"
-                      value={editPkgPassportCost}
-                      onChange={(e) => setEditPkgPassportCost(e.target.value)}
-                      className="text-sm"
-                    />
-                    <span className="text-[10px] text-muted-foreground">Extra per session</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 5: Channels & Publishing */}
+              {/* Branch Availability Section */}
               <div className="pt-3 border-t border-border space-y-2">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={editPkgShowWeb}
-                      onChange={(e) => setEditPkgShowWeb(e.target.checked)}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                    />
-                    Show on Web
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={editPkgShowApp}
-                      onChange={(e) => setEditPkgShowApp(e.target.checked)}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                    />
-                    Show on App
-                  </label>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">
+                    Available Branches
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Select which branches offer this package
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="edit_pkg_publish_now"
-                    checked={editPkgPublishNow}
-                    onChange={(e) => setEditPkgPublishNow(e.target.checked)}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                  />
-                  <label htmlFor="edit_pkg_publish_now" className="text-xs font-semibold text-primary cursor-pointer select-none">
-                    Publish immediately (Activate Version)
-                  </label>
+                {!editPkgProgram ? (
+                  <p className="text-xs text-muted-foreground italic">Select a program first to configure branch availability.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
+                    {branches.map((b) => {
+                      const prog = programs.find((p) => p.id === editPkgProgram);
+                      const progBranchIds = prog?.available_branch_ids || [];
+                      const isProgramAvailable = progBranchIds.includes(b.id);
+                      const isChecked = editPkgBranchIds.includes(b.id);
+
+                      return (
+                        <div
+                          key={b.id}
+                          className={`p-2 rounded-lg border text-xs flex items-start gap-2.5 transition-colors ${
+                            !isProgramAvailable
+                              ? 'opacity-50 bg-muted/20 border-border/40 cursor-not-allowed'
+                              : isChecked
+                              ? 'bg-primary/5 border-primary/40'
+                              : 'bg-card border-border/60 hover:border-border'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            id={`edit_pkg_branch_${b.id}`}
+                            disabled={!isProgramAvailable}
+                            checked={isChecked && isProgramAvailable}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditPkgBranchIds([...editPkgBranchIds, b.id]);
+                              } else {
+                                setEditPkgBranchIds(editPkgBranchIds.filter((id) => id !== b.id));
+                              }
+                            }}
+                            className="mt-0.5 rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <label
+                              htmlFor={`edit_pkg_branch_${b.id}`}
+                              className={`font-medium block leading-snug ${
+                                isProgramAvailable ? 'cursor-pointer text-foreground' : 'cursor-not-allowed text-muted-foreground'
+                              }`}
+                            >
+                              {b.name}
+                            </label>
+                            {!isProgramAvailable && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-0.5">
+                                This Program is not available at this Branch.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Informational Guidance on Version Terms */}
+              <div className="pt-3 border-t border-border">
+                <div className="p-3 bg-muted/40 rounded-lg border border-border/60 flex items-start gap-2.5 text-xs text-muted-foreground">
+                  <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-foreground block mb-0.5">Package Identity Settings Only</span>
+                    <span>
+                      Duration, validity, pricing, and session allocations are version-controlled and immutable on published packages.
+                      To modify commercial terms, close this dialog and click <strong className="text-foreground">New Version</strong> or manage versions from <strong className="text-foreground">Versions</strong>.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3750,7 +4089,6 @@ export const PackagesWorkspace: React.FC = () => {
                 disabled={
                   !editPkgName.trim() ||
                   !editPkgProgram ||
-                  editPkgTotalDays <= 0 ||
                   updatePackageMutation.isPending
                 }
                 onClick={() => {
@@ -3903,30 +4241,62 @@ export const PackagesWorkspace: React.FC = () => {
 
               {/* Passport & Sessions Entitlements Section */}
               <div className="pt-2 border-t border-border">
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Sessions & Passport</span>
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Sessions &amp; Entitlements</span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Max Sessions</label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-medium text-foreground">Max Sessions</label>
+                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={newVerHomeUnlimited}
+                          onChange={(e) => {
+                            setNewVerHomeUnlimited(e.target.checked);
+                            if (e.target.checked) setNewVerMaxSessions('');
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                        />
+                        Unlimited
+                      </label>
+                    </div>
                     <Input
                       type="number"
-                      placeholder="e.g. 72"
+                      placeholder={newVerHomeUnlimited ? 'Unlimited' : 'e.g. 72'}
+                      disabled={newVerHomeUnlimited}
                       value={newVerMaxSessions}
                       onChange={(e) => setNewVerMaxSessions(e.target.value)}
-                      className="text-sm"
+                      className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
                     />
+                    <span className="text-[10px] text-muted-foreground">Home Branch</span>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Passport Sessions</label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-medium text-foreground">Passport Sessions</label>
+                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={newVerCrossUnlimited}
+                          onChange={(e) => {
+                            setNewVerCrossUnlimited(e.target.checked);
+                            if (e.target.checked) setNewVerPassportSessions('');
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                        />
+                        Unlimited
+                      </label>
+                    </div>
                     <Input
                       type="number"
-                      placeholder="e.g. 10"
+                      placeholder={newVerCrossUnlimited ? 'Unlimited' : 'e.g. 10'}
+                      disabled={newVerCrossUnlimited}
                       value={newVerPassportSessions}
                       onChange={(e) => setNewVerPassportSessions(e.target.value)}
-                      className="text-sm"
+                      className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
                     />
+                    <span className="text-[10px] text-muted-foreground">Cross-Branch</span>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-foreground mb-1">Passport Cost (₹)</label>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-medium text-foreground">Passport Cost (₹)</label>
                     <Input
                       type="number"
                       placeholder="e.g. 500"
@@ -3934,6 +4304,7 @@ export const PackagesWorkspace: React.FC = () => {
                       onChange={(e) => setNewVerPassportCost(e.target.value)}
                       className="text-sm"
                     />
+                    <span className="text-[10px] text-muted-foreground">Extra per session</span>
                   </div>
                 </div>
               </div>
@@ -3972,6 +4343,14 @@ export const PackagesWorkspace: React.FC = () => {
                     Publish immediately (Activate Version)
                   </label>
                 </div>
+                {newVerPublishNow && (
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                    <span>
+                      <strong>Immediate Publication:</strong> Activating this version will automatically retire any currently active version of this package upon creation.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -4002,8 +4381,10 @@ export const PackagesWorkspace: React.FC = () => {
                       display_price: newVerDisplayPrice ? Number(newVerDisplayPrice) : undefined,
                       tax_percentage: newVerTaxPercentage ? Number(newVerTaxPercentage) : 18,
                       prices_include_tax: newVerTaxIncluded,
-                      max_sessions: newVerMaxSessions ? Number(newVerMaxSessions) : undefined,
-                      passport_sessions: newVerPassportSessions ? Number(newVerPassportSessions) : undefined,
+                      is_unlimited_home: newVerHomeUnlimited,
+                      max_sessions: newVerHomeUnlimited ? undefined : (newVerMaxSessions ? Number(newVerMaxSessions) : undefined),
+                      is_unlimited_cross: newVerCrossUnlimited,
+                      passport_sessions: newVerCrossUnlimited ? undefined : (newVerPassportSessions ? Number(newVerPassportSessions) : undefined),
                       passport_cost: newVerPassportCost ? Number(newVerPassportCost) : undefined,
                       publish_immediately: newVerPublishNow,
                       status: newVerPublishNow ? 'ACTIVE' : 'DRAFT',
@@ -4183,6 +4564,132 @@ export const PackagesWorkspace: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* ========================================================================= */}
+      {/* MODAL: PUBLISH PACKAGE VERSION CONFIRMATION */}
+      {/* ========================================================================= */}
+      {versionToPublish && (
+        <Dialog open={Boolean(versionToPublish)} onOpenChange={(open) => !open && setVersionToPublish(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-emerald-500 shrink-0" />
+                Publish Version v{versionToPublish.versionNum}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm py-2">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Publishing makes <strong>Version v{versionToPublish.versionNum}</strong> live and active for all new purchases of <strong>{versionToPublish.pkgName}</strong>.
+              </p>
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-lg text-xs text-amber-700 dark:text-amber-400">
+                Any currently active version of this package will be <strong className="font-semibold">automatically retired</strong>.
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Published versions are <strong className="text-foreground">immutable</strong> — commercial terms cannot be edited once published.
+              </p>
+            </div>
+            <DialogFooter className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setVersionToPublish(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={publishVersionDirectMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  publishVersionDirectMutation.mutate({
+                    pkgId: versionToPublish.pkgId,
+                    verId: versionToPublish.verId,
+                  });
+                }}
+              >
+                {publishVersionDirectMutation.isPending ? 'Publishing...' : 'Confirm & Publish'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: RETIRE PACKAGE VERSION CONFIRMATION */}
+      {/* ========================================================================= */}
+      {versionToRetire && (
+        <Dialog open={Boolean(versionToRetire)} onOpenChange={(open) => !open && setVersionToRetire(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                Retire Version v{versionToRetire.versionNum}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm py-2">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Are you sure you want to retire <strong>Version v{versionToRetire.versionNum}</strong> of <strong>{versionToRetire.pkgName}</strong>?
+              </p>
+              <div className="p-2.5 bg-muted/50 border border-border/60 rounded-lg text-xs text-muted-foreground">
+                This package will have no active version for new purchases until a new version is published. Existing member subscriptions remain completely unaffected.
+              </div>
+            </div>
+            <DialogFooter className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setVersionToRetire(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={retireVersionDirectMutation.isPending}
+                className="text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
+                onClick={() => {
+                  retireVersionDirectMutation.mutate({
+                    pkgId: versionToRetire.pkgId,
+                    verId: versionToRetire.verId,
+                  });
+                }}
+              >
+                {retireVersionDirectMutation.isPending ? 'Retiring...' : 'Confirm Retire'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: DISCARD DRAFT VERSION CONFIRMATION */}
+      {/* ========================================================================= */}
+      {draftToDiscard && (
+        <Dialog open={Boolean(draftToDiscard)} onOpenChange={(open) => !open && setDraftToDiscard(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="w-4 h-4 text-destructive shrink-0" />
+                Discard Draft Version v{draftToDiscard.versionNum}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm py-2">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Are you sure you want to discard this draft version of <strong>{draftToDiscard.pkgName}</strong>?
+              </p>
+              <p className="text-xs text-destructive font-medium">
+                This action is permanent and cannot be undone.
+              </p>
+            </div>
+            <DialogFooter className="pt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setDraftToDiscard(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={deleteDraftVersionMutation.isPending}
+                onClick={() => {
+                  deleteDraftVersionMutation.mutate(draftToDiscard.verId);
+                }}
+              >
+                {deleteDraftVersionMutation.isPending ? 'Discarding...' : 'Discard Draft'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

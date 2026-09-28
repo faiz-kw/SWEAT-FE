@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { ClassOccurrence } from '../../types/classes';
+import { formatOccurrenceDate, formatTime12h } from '@/utils/dateTimeUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -187,15 +188,18 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
                   {occurrence?.status || 'SCHEDULED'}
                 </Badge>
+                <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Session Roster
+                </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1 font-medium text-foreground">
                   <Calendar className="size-3.5 text-muted-foreground" />
-                  {occurrence?.occurrence_date}
+                  {formatOccurrenceDate(occurrence?.occurrence_date, occurrence?.start_at)}
                 </span>
                 <span className="flex items-center gap-1 font-medium text-foreground">
                   <Clock className="size-3.5 text-muted-foreground" />
-                  {formatTime(occurrence?.start_at || occurrence?.start_time)} - {formatTime(occurrence?.end_at || occurrence?.end_time)}
+                  {formatTime12h(occurrence?.start_at || occurrence?.start_time)} – {formatTime12h(occurrence?.end_at || occurrence?.end_time)}
                 </span>
                 <span className="flex items-center gap-1 font-medium text-foreground">
                   <MapPin className="size-3.5 text-muted-foreground" />
@@ -308,16 +312,38 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                         {(booking.member_name || booking.user_profile?.full_name || 'M').substring(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-2">
+                        <div className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-2 flex-wrap">
                           <span>{booking.member_name || booking.user_profile?.full_name || 'Member'}</span>
                           <span className="text-2xs font-mono text-muted-foreground uppercase px-1.5 py-0.5 rounded bg-muted">
                             {booking.booking_type || 'MEMBER'}
                           </span>
+                          {booking.package_name && (
+                            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
+                              {booking.package_name}
+                            </span>
+                          )}
+                          {booking.parq_status === 'CLEARED' ? (
+                            <Badge variant="outline" className="text-3xs py-0 h-4 px-1.5 gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium">
+                              <ShieldCheck className="size-2.5" /> PAR-Q Cleared
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-3xs py-0 h-4 px-1.5 gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20 font-medium">
+                              <AlertCircle className="size-2.5" /> PAR-Q Pending
+                            </Badge>
+                          )}
                         </div>
-                        <div className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                        <div className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                           <span>{booking.member_email || booking.user_profile?.email}</span>
                           <span>•</span>
                           <span>Ref: {booking.booking_number || booking.id.slice(0, 8)}</span>
+                          {booking.attendance_record?.check_in_at && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                Checked In: {new Date(booking.attendance_record.check_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

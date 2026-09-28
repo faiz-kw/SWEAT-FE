@@ -24,6 +24,8 @@ import {
   Shield,
   Layers,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { formatOccurrenceDateTime, formatTime12h, formatOccurrenceDate } from '@/utils/dateTimeUtils';
 import { bookingsApi } from '@/api/endpoints/bookingsApi';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { membershipsApi } from '@/api/endpoints/membershipsApi';
@@ -121,6 +123,10 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     require_parq: false,
     status: 'ACTIVE',
   });
+  const [bookingOpenValue, setBookingOpenValue] = useState<number>(7);
+  const [bookingOpenUnit, setBookingOpenUnit] = useState<'MINUTES' | 'HOURS' | 'DAYS'>('DAYS');
+  const [bookingCloseValue, setBookingCloseValue] = useState<number>(30);
+  const [bookingCloseUnit, setBookingCloseUnit] = useState<'MINUTES' | 'HOURS'>('MINUTES');
   const [policyError, setPolicyError] = useState<string | null>(null);
 
   // Queries
@@ -152,10 +158,15 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     enabled: isCreateModalOpen,
   });
 
-  // Query scheduled occurrences when Create or Reschedule modal is open
+  // Query scheduled occurrences when Create or Reschedule modal is open (eligibility-aware when member & membership are selected)
   const { data: scheduledOccurrences = [], isLoading: loadingOccurrences } = useQuery({
-    queryKey: ['scheduled-occurrences'],
-    queryFn: () => classesApi.getOccurrences({ status: 'SCHEDULED' }),
+    queryKey: ['scheduled-occurrences', selectedMembershipId, selectedMember?.id],
+    queryFn: () =>
+      classesApi.getOccurrences({
+        status: 'SCHEDULED',
+        membership_id: selectedMembershipId || undefined,
+        user_profile_id: selectedMember?.id || undefined,
+      }),
     enabled: isCreateModalOpen || isRescheduleModalOpen,
   });
 
@@ -181,6 +192,21 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     }) => bookingsApi.createBooking(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['scheduled-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['member-memberships'] });
+
+      const memberName = selectedMember
+        ? `${selectedMember.first_name_snapshot || ''} ${selectedMember.last_name_snapshot || ''}`.trim()
+        : 'Member';
+      const className = selectedOccurrence?.template_name || selectedOccurrence?.class_template_name || 'Class Session';
+      const branchName = selectedOccurrence?.branch_name || 'Studio';
+      const dateFormatted = selectedOccurrence ? formatOccurrenceDateTime(selectedOccurrence) : '';
+
+      toast.success('Booking confirmed successfully.', {
+        description: `${className} at ${branchName} · ${dateFormatted} for ${memberName}`,
+      });
+
       setIsCreateModalOpen(false);
       setSelectedMember(null);
       setSelectedOccurrence(null);
@@ -188,7 +214,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
       setCreateError(null);
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to create booking.';
+      const msg = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Failed to create booking.';
       setCreateError(typeof msg === 'object' ? JSON.stringify(msg) : String(msg));
     },
   });
@@ -595,13 +621,12 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               {booking.occurrence_title || 'Class Session'}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              {booking.occurrence_date} ·{' '}
-                              {booking.occurrence_start_at
-                                ? new Date(booking.occurrence_start_at).toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })
-                                : ''}
+                              {formatOccurrenceDateTime({
+                                occurrence_date: booking.occurrence_date,
+                                start_at: booking.occurrence_start_at,
+                                start_time: (booking as any).occurrence_start_time,
+                                end_time: (booking as any).occurrence_end_time,
+                              })}
                             </div>
                           </td>
                           <td className="px-4 py-3.5 text-xs text-muted-foreground">
@@ -1023,7 +1048,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     <div className="text-xs text-muted-foreground">
                       {selectedMember.user?.email || selectedMember.email_snapshot} ·{' '}
                       {selectedMember.user?.phone || selectedMember.phone_snapshot || 'No phone'} · Member #{' '}
-                      {selectedMember.membership_number || selectedMember.id?.slice(0, 8)}
+                      {selectedMember.member_number || selectedMember.membership_number || selectedMember.id?.slice(0, 8)}
                     </div>
                   </div>
                   <Button
@@ -1032,6 +1057,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     onClick={() => {
                       setSelectedMember(null);
                       setSelectedMembershipId('');
+                      setSelectedOccurrence(null);
                     }}
                     className="text-xs text-muted-foreground hover:text-foreground"
                   >
@@ -1046,7 +1072,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       type="text"
                       value={memberSearchTerm}
                       onChange={(e) => setMemberSearchTerm(e.target.value)}
-                      placeholder="Search member by name, email, phone, or membership #..."
+                      placeholder="Search member by name, email, phone, or member #..."
                       className="pl-8 text-xs bg-background"
                     />
                   </div>
@@ -1063,7 +1089,10 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       bookableMembers.map((m: any) => (
                         <div
                           key={m.id}
-                          onClick={() => setSelectedMember(m)}
+                          onClick={() => {
+                            setSelectedMember(m);
+                            setSelectedOccurrence(null);
+                          }}
                           className="p-2.5 hover:bg-muted/50 cursor-pointer flex items-center justify-between text-xs transition-colors"
                         >
                           <div>
@@ -1072,7 +1101,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                             </span>
                             <div className="text-[11px] text-muted-foreground">
                               {m.user?.email || m.email_snapshot} ·{' '}
-                              {m.membership_number ? `#${m.membership_number}` : ''}
+                              Member #{m.member_number || m.membership_number || m.id?.slice(0, 8)}
                             </div>
                           </div>
                           <ChevronRight className="size-4 text-muted-foreground" />
@@ -1084,10 +1113,10 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
               )}
             </div>
 
-            {/* Step 2: Active Membership (if member selected) */}
+            {/* Step 2: Active Membership & Entitlements Summary */}
             {selectedMember && (
-              <div>
-                <Label className="mb-1 block font-semibold">2. Member Package / Membership</Label>
+              <div className="space-y-2">
+                <Label className="block font-semibold">2. Member Package / Membership</Label>
                 {loadingMemberships ? (
                   <div className="text-xs text-muted-foreground">Loading active packages...</div>
                 ) : memberMemberships.length === 0 ? (
@@ -1095,23 +1124,92 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     Member has no active membership package. May proceed as Walk-In / Trial if permitted by policy.
                   </div>
                 ) : (
-                  <select
-                    value={selectedMembershipId}
-                    onChange={(e) => setSelectedMembershipId(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">-- Use Active Membership Entitlement --</option>
-                    {memberMemberships.map((mem: Membership) => (
-                      <option key={mem.id} value={mem.id}>
-                        {mem.membership_number} — {mem.package_name || 'Membership'} (Status: {mem.status})
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={selectedMembershipId}
+                      onChange={(e) => {
+                        setSelectedMembershipId(e.target.value);
+                        setSelectedOccurrence(null);
+                      }}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="">-- Select Active Membership Entitlement --</option>
+                      {memberMemberships.map((mem: Membership) => (
+                        <option key={mem.id} value={mem.id}>
+                          {mem.membership_number} — {mem.package_name || 'Membership'} ({mem.home_branch_name || 'Home Studio'})
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Selected Membership Summary Card */}
+                    {(() => {
+                      const activeMembership = memberMemberships.find((m: any) => m.id === selectedMembershipId);
+                      if (!activeMembership) return null;
+
+                      const sessionEnt = activeMembership.entitlements?.find(
+                        (e: any) => e.entitlement_type === 'SESSION' || e.entitlement_type === 'UNLIMITED_SESSIONS'
+                      );
+                      const crossEnt = activeMembership.entitlements?.find(
+                        (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION' || e.entitlement_type === 'UNLIMITED_CROSS_BRANCH'
+                      );
+
+                      const homeSessions = sessionEnt?.is_unlimited
+                        ? 'Unlimited'
+                        : sessionEnt?.remaining_units != null
+                        ? String(sessionEnt.remaining_units)
+                        : '0';
+
+                      const crossSessions = crossEnt?.is_unlimited
+                        ? 'Unlimited'
+                        : crossEnt?.remaining_units != null
+                        ? String(crossEnt.remaining_units)
+                        : '0';
+
+                      return (
+                        <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg text-xs space-y-1.5 mt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-foreground">
+                              Package: {activeMembership.package_name || 'Membership'}
+                            </span>
+                            <span className="text-[11px] font-mono text-primary font-bold">
+                              {activeMembership.membership_number}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground pt-1.5 border-t border-primary/10">
+                            <div>
+                              <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Home Branch</span>
+                              <span className="text-foreground font-medium">
+                                {activeMembership.home_branch_name || 'Home Studio'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Sessions Available</span>
+                              <span className="text-foreground font-semibold">
+                                {homeSessions}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Cross-Branch Sessions</span>
+                              <span className="text-foreground font-semibold">
+                                {crossSessions}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Status</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                {activeMembership.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}
 
-            {/* Step 3: Class Occurrence Selector */}
+            {/* Step 3: Class Occurrence Selector (Eligibility-Aware) */}
             <div>
               <Label className="mb-1 block font-semibold">3. Select Class Session (Occurrence)</Label>
               {selectedOccurrence ? (
@@ -1121,17 +1219,8 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       {selectedOccurrence.template_name || selectedOccurrence.class_template_name || 'Session'}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {selectedOccurrence.occurrence_date} ·{' '}
-                      {new Date(selectedOccurrence.start_time).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      -{' '}
-                      {new Date(selectedOccurrence.end_time).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      · Branch: {selectedOccurrence.branch_name || 'Main Studio'}
+                      {formatOccurrenceDateTime(selectedOccurrence)} · Branch: {selectedOccurrence.branch_name || 'Main Studio'}
+                      {selectedOccurrence.trainer_name ? ` · Trainer: ${selectedOccurrence.trainer_name}` : ''}
                     </div>
                   </div>
                   <Button
@@ -1144,7 +1233,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   </Button>
                 </div>
               ) : (
-                <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/60 bg-card">
+                <div className="max-h-56 overflow-y-auto border border-border rounded-lg divide-y divide-border/60 bg-card">
                   {loadingOccurrences ? (
                     <div className="p-3 text-center text-xs text-muted-foreground">
                       Loading scheduled class sessions...
@@ -1154,27 +1243,57 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       No scheduled occurrences available.
                     </div>
                   ) : (
-                    scheduledOccurrences.map((occ: ClassOccurrence) => (
-                      <div
-                        key={occ.id}
-                        onClick={() => setSelectedOccurrence(occ)}
-                        className="p-2.5 hover:bg-muted/50 cursor-pointer flex items-center justify-between text-xs transition-colors"
-                      >
-                        <div>
-                          <div className="font-semibold text-foreground">
-                            {occ.template_name || occ.class_template_name || 'Class Occurrence'}
+                    scheduledOccurrences.map((occ: ClassOccurrence) => {
+                      const isEligible = occ.is_eligible !== false;
+                      if (!isEligible) {
+                        return (
+                          <div
+                            key={occ.id}
+                            className="p-3 bg-muted/20 opacity-60 cursor-not-allowed select-none space-y-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-muted-foreground">
+                                {occ.template_name || occ.class_template_name || 'Class Session'}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-medium">
+                                Ineligible
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatOccurrenceDateTime(occ)} · Branch: {occ.branch_name || 'Studio'}
+                            </div>
+                            <div className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                              Unavailable — {occ.ineligibility_reason || 'Package does not permit access to this branch or class.'}
+                            </div>
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {occ.occurrence_date} ({new Date(occ.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) · {occ.branch_name || 'Branch'}
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={occ.id}
+                          onClick={() => setSelectedOccurrence(occ)}
+                          className={`p-3 hover:bg-muted/50 cursor-pointer flex items-center justify-between text-xs transition-colors ${
+                            selectedOccurrence?.id === occ.id ? 'bg-primary/10 border-l-2 border-l-primary' : ''
+                          }`}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-foreground">
+                              {occ.template_name || occ.class_template_name || 'Class Occurrence'}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {formatOccurrenceDateTime(occ)} · Branch: {occ.branch_name || 'Branch'}
+                              {occ.trainer_name ? ` · Trainer: ${occ.trainer_name}` : ''}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                              Cap: {occ.booked_count ?? 0}/{occ.capacity_snapshot || occ.capacity || 20}
+                            </span>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground font-mono">
-                            Cap: {occ.capacity_snapshot || 20}
-                          </span>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -1289,8 +1408,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     .filter((o) => o.id !== selectedBooking.occurrence)
                     .map((occ: ClassOccurrence) => (
                       <option key={occ.id} value={occ.id}>
-                        {occ.template_name || occ.class_template_name} · {occ.occurrence_date} (
-                        {new Date(occ.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) —{' '}
+                        {occ.template_name || occ.class_template_name} · {formatOccurrenceDateTime(occ)} —{' '}
                         {occ.branch_name || 'Studio'}
                       </option>
                     ))}
@@ -1633,19 +1751,34 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 <Input
                   type="text"
                   value={policyForm.name || ''}
-                  onChange={(e) => setPolicyForm({ ...policyForm, name: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const autoCode = val
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, '_')
+                      .replace(/_+/g, '_')
+                      .slice(0, 30);
+                    setPolicyForm({
+                      ...policyForm,
+                      name: val,
+                      code: policyForm.code && !policyForm.code.startsWith('POL_') ? policyForm.code : `POL_${autoCode}`,
+                    });
+                  }}
                   placeholder="e.g. Standard Member Policy"
                   className="text-xs"
                 />
               </div>
               <div>
-                <Label className="mb-1 block font-semibold">Policy Code</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="font-semibold">Policy Code</Label>
+                  <span className="text-[10px] text-muted-foreground">Backend-managed</span>
+                </div>
                 <Input
                   type="text"
                   value={policyForm.code || ''}
                   onChange={(e) => setPolicyForm({ ...policyForm, code: e.target.value })}
                   placeholder="e.g. POL_STD_01"
-                  className="text-xs"
+                  className="text-xs font-mono bg-muted/20"
                 />
               </div>
             </div>
@@ -1678,34 +1811,54 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
               </div>
             </div>
 
+            {/* Friendly Booking Windows with Units */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="mb-1 block font-semibold">Booking Open (Mins Before)</Label>
-                <Input
-                  type="number"
-                  value={policyForm.booking_open_minutes_before || 10080}
-                  onChange={(e) =>
-                    setPolicyForm({
-                      ...policyForm,
-                      booking_open_minutes_before: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="text-xs"
-                />
+                <Label className="mb-1 block font-semibold">Booking Opens</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={bookingOpenValue}
+                    onChange={(e) => setBookingOpenValue(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="text-xs w-24"
+                  />
+                  <select
+                    value={bookingOpenUnit}
+                    onChange={(e) => setBookingOpenUnit(e.target.value as 'MINUTES' | 'HOURS' | 'DAYS')}
+                    className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="DAYS">Days before session</option>
+                    <option value="HOURS">Hours before session</option>
+                    <option value="MINUTES">Minutes before session</option>
+                  </select>
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                  ({bookingOpenUnit === 'DAYS' ? bookingOpenValue * 1440 : bookingOpenUnit === 'HOURS' ? bookingOpenValue * 60 : bookingOpenValue} minutes)
+                </span>
               </div>
               <div>
-                <Label className="mb-1 block font-semibold">Booking Close (Mins Before)</Label>
-                <Input
-                  type="number"
-                  value={policyForm.booking_close_minutes_before || 30}
-                  onChange={(e) =>
-                    setPolicyForm({
-                      ...policyForm,
-                      booking_close_minutes_before: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="text-xs"
-                />
+                <Label className="mb-1 block font-semibold">Booking Closes</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={bookingCloseValue}
+                    onChange={(e) => setBookingCloseValue(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="text-xs w-24"
+                  />
+                  <select
+                    value={bookingCloseUnit}
+                    onChange={(e) => setBookingCloseUnit(e.target.value as 'MINUTES' | 'HOURS')}
+                    className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="MINUTES">Minutes before session</option>
+                    <option value="HOURS">Hours before session</option>
+                  </select>
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                  ({bookingCloseUnit === 'HOURS' ? bookingCloseValue * 60 : bookingCloseValue} minutes)
+                </span>
               </div>
             </div>
 
@@ -1795,11 +1948,19 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
             </Button>
             <Button
               onClick={() => {
-                if (!policyForm.name || !policyForm.code) {
-                  setPolicyError('Policy Name and Code are required.');
+                if (!policyForm.name) {
+                  setPolicyError('Policy Name is required.');
                   return;
                 }
-                createPolicyMutation.mutate(policyForm);
+                const openMinutes = bookingOpenUnit === 'DAYS' ? bookingOpenValue * 1440 : bookingOpenUnit === 'HOURS' ? bookingOpenValue * 60 : bookingOpenValue;
+                const closeMinutes = bookingCloseUnit === 'HOURS' ? bookingCloseValue * 60 : bookingCloseValue;
+                const finalCode = policyForm.code || `POL_${(policyForm.name || 'STD').toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 20)}`;
+                createPolicyMutation.mutate({
+                  ...policyForm,
+                  code: finalCode,
+                  booking_open_minutes_before: openMinutes,
+                  booking_close_minutes_before: closeMinutes,
+                });
               }}
               disabled={createPolicyMutation.isPending}
             >

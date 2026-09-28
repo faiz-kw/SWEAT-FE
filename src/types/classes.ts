@@ -102,6 +102,9 @@ export interface ClassOccurrence {
   booking_count?: number;
   waitlist_count?: number;
   attendance_count?: number;
+  is_eligible?: boolean;
+  ineligibility_reason?: string;
+  ineligibility_code?: string;
   created_at?: string;
 }
 

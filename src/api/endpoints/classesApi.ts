@@ -100,6 +100,8 @@ export const classesApi = {
     trainer_id?: string;
     from_date?: string;
     to_date?: string;
+    membership_id?: string;
+    user_profile_id?: string;
   }): Promise<ClassOccurrence[]> {
     const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
     return res.data?.results || res.data || [];
