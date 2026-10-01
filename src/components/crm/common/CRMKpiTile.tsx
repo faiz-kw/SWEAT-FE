@@ -47,9 +47,9 @@ export function CRMKpiTile({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-1 min-w-0 w-full">
+      <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1 min-w-0 w-full">
         <span
-          className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground leading-tight line-clamp-2 min-w-0 flex-1 break-words"
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground leading-tight line-clamp-2 min-w-0 flex-1 break-normal"
           title={label}
         >
           {label}
@@ -57,7 +57,7 @@ export function CRMKpiTile({
         {badge && (
           <span
             className={cn(
-              'text-[9px] font-semibold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ml-1',
+              'text-[9px] font-semibold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap',
               badgeVariant === 'positive' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
               badgeVariant === 'warning' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
               badgeVariant === 'negative' && 'bg-rose-500/10 text-rose-600 dark:text-rose-400',

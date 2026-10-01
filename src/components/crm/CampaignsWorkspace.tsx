@@ -18,6 +18,7 @@ import {
   Filter,
   CreditCard,
   Layers,
+  X,
 } from 'lucide-react';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { api } from '@/api/client';
@@ -152,7 +153,7 @@ export function CampaignsWorkspace() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+    <div className="flex flex-col min-w-0 w-full min-h-full bg-background text-foreground">
       {/* HEADER */}
       <CRMPageHeader
         title="Marketing Campaigns"
@@ -175,9 +176,9 @@ export function CampaignsWorkspace() {
         }
       />
 
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+      <main className="w-full min-w-0 max-w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
         {/* KPI Metrics Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3">
           <CRMKpiTile
             label="Campaigns"
             value={summary.total_campaigns}
@@ -223,31 +224,58 @@ export function CampaignsWorkspace() {
         </div>
 
         {/* Filter Controls */}
-        <div className="bg-card border border-border rounded-xl p-3 sm:p-4 shadow-xs space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
+        <div className="bg-card border border-border rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground tracking-wide">
+                Filter Campaigns
+              </span>
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal">
+                  Active
+                </Badge>
+              )}
+            </div>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+              >
+                <X className="w-3 h-3" />
+                Reset Filters
+              </Button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 gap-3 items-end min-w-0">
+            {/* Search */}
+            <div className="xl:col-span-3 min-w-0">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                 Search
               </label>
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+              <div className="relative min-w-0">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
                 <Input
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Campaign name, UTM..."
-                  className="pl-9 h-9 text-xs"
+                  className="pl-9 h-9 text-xs w-full min-w-0"
                 />
               </div>
             </div>
 
-            <div>
+            {/* Platform */}
+            <div className="xl:col-span-2 min-w-0">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                 Platform
               </label>
               <select
                 value={selectedPlatform}
                 onChange={(e) => setSelectedPlatform(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full min-w-0 h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="ALL">All Platforms</option>
                 {platforms.map((p) => (
@@ -258,14 +286,15 @@ export function CampaignsWorkspace() {
               </select>
             </div>
 
-            <div>
+            {/* Branch Scope */}
+            <div className="xl:col-span-3 min-w-0">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                 Branch Scope
               </label>
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full min-w-0 h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="ALL">All Branches (Global)</option>
                 {branches.map((b) => (
@@ -276,37 +305,31 @@ export function CampaignsWorkspace() {
               </select>
             </div>
 
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                  Date Range
-                </label>
-                <div className="flex items-center gap-1.5">
+            {/* Date Range */}
+            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 min-w-0">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                Date Range
+              </label>
+              <div className="grid grid-cols-2 gap-2 w-full min-w-0">
+                <div className="min-w-0">
                   <Input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="h-9 text-xs px-2"
+                    className="h-9 text-xs px-2 w-full min-w-0"
+                    aria-label="Start Date"
                   />
-                  <span className="text-muted-foreground text-xs">–</span>
+                </div>
+                <div className="min-w-0">
                   <Input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="h-9 text-xs px-2"
+                    className="h-9 text-xs px-2 w-full min-w-0"
+                    aria-label="End Date"
                   />
                 </div>
               </div>
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={resetFilters}
-                  className="h-9 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Reset
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -323,21 +346,21 @@ export function CampaignsWorkspace() {
             onAction={resetFilters}
           />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card border border-border rounded-xl shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+            <div className="hidden md:block bg-card border border-border rounded-xl shadow-xs overflow-hidden min-w-0">
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                      <th className="py-3 px-4">Campaign Name</th>
-                      <th className="py-3 px-4">Platform</th>
-                      <th className="py-3 px-4 text-center">Leads</th>
-                      <th className="py-3 px-4 text-center">Trials</th>
-                      <th className="py-3 px-4 text-center">Conversions</th>
-                      <th className="py-3 px-4 text-center">Conversion Rate</th>
-                      <th className="py-3 px-4 text-right">Paid Revenue</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Campaign Name</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Platform</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap">Leads</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap">Trials</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap">Conversions</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap">Conversion Rate</th>
+                      <th className="py-3 px-4 text-right whitespace-nowrap">Paid Revenue</th>
+                      <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -449,14 +472,16 @@ export function CampaignsWorkspace() {
                   key={c.id}
                   className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">{c.campaign_name}</h4>
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-semibold text-foreground truncate" title={c.campaign_name}>
+                        {c.campaign_name}
+                      </h4>
                       <Badge variant="secondary" className="text-[10px] mt-1">
                         {c.platform}
                       </Badge>
                     </div>
-                    <div className="text-right font-mono">
+                    <div className="text-right font-mono shrink-0">
                       <span className="text-xs font-bold text-foreground block">
                         ₹{parseFloat(c.paid_revenue).toLocaleString('en-IN')}
                       </span>
