@@ -67,6 +67,8 @@ export type MetaMetadata = {
   simulator_enabled: boolean;
   simulator_requirement: string;
   destination_fields: Choice[];
+  allowed_default_fields?: Choice[];
+  disallowed_default_fields?: string[];
   branch_modes: Choice[];
   unmatched_branch_policies?: Choice[];
   repeat_policies: Choice[];

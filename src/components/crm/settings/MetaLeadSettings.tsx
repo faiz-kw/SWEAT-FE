@@ -29,9 +29,25 @@ import {
   X,
   Layers,
   HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 import { CRMErrorState } from '../common/CRMErrorState';
 import { CRMLoadingState } from '../common/CRMLoadingState';
+
+const DISALLOWED_DEFAULT_FIELDS = [
+  'full_name',
+  'first_name',
+  'last_name',
+  'email',
+  'phone',
+  'consent_whatsapp',
+  'consent_email',
+  'consent_sms',
+];
 
 const controlClass =
   'w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/20';
@@ -883,6 +899,33 @@ function MappingEditor({
   const [defaults, setDefaults] = React.useState(
     Object.entries(mapping?.field_defaults || {}).map(([destination, value]) => ({ destination, value }))
   );
+  const [showDefaults, setShowDefaults] = React.useState<boolean>(
+    Boolean(mapping?.field_defaults && Object.keys(mapping.field_defaults).length > 0)
+  );
+
+  const hasNameMapping = fields.some(
+    (f) => (f.destination === 'full_name' || f.destination === 'first_name') && f.question.trim().length > 0
+  );
+  const hasContactMapping = fields.some(
+    (f) => (f.destination === 'email' || f.destination === 'phone') && f.question.trim().length > 0
+  );
+
+  const incompatibleDefaults = defaults.filter((d) => DISALLOWED_DEFAULT_FIELDS.includes(d.destination));
+
+  const allowedDefaultFields = React.useMemo(() => {
+    if (metadata.allowed_default_fields && metadata.allowed_default_fields.length > 0) {
+      return metadata.allowed_default_fields;
+    }
+    return metadata.destination_fields.filter((f) => !DISALLOWED_DEFAULT_FIELDS.includes(f.value));
+  }, [metadata]);
+
+  const handleUseBasicTestFields = () => {
+    setFields([
+      { destination: 'full_name', question: 'full_name' },
+      { destination: 'email', question: 'email' },
+    ]);
+    toast.info('Added basic simulator fields: Full name and Email.');
+  };
 
   // Follow-up task automation states
   const [createFollowup, setCreateFollowup] = React.useState(mapping?.create_followup_task ?? false);
@@ -914,9 +957,39 @@ function MappingEditor({
     event.preventDefault();
     setVersionConflict(null);
 
+    // Validate field mappings presence
+    if (fields.length === 0) {
+      toast.error('Please configure at least one field mapping.');
+      return;
+    }
+
+    // Validate that each mapping has a question key and destination
+    if (fields.some((f) => !f.question.trim() || !f.destination)) {
+      toast.error('Please enter the question in your form and choose the CRM field for all mapping rows.');
+      return;
+    }
+
     // Validate duplicate destination mappings
     if (new Set(fields.map((f) => f.destination)).size !== fields.length) {
       toast.error('Each CRM destination field may only be mapped once.');
+      return;
+    }
+
+    // Validate required fields (name and contact)
+    if (!hasNameMapping) {
+      toast.error('A name mapping (Full name or First name) is required so the lead can be identified.');
+      return;
+    }
+
+    if (!hasContactMapping) {
+      toast.error('At least one contact method (Email or Phone) is required to reach the lead.');
+      return;
+    }
+
+    // Validate disallowed default fields
+    if (incompatibleDefaults.length > 0) {
+      toast.error('Default values are not permitted for contact, identity, or consent fields. Please remove or update them before saving.');
+      setShowDefaults(true);
       return;
     }
 
@@ -1048,138 +1121,347 @@ function MappingEditor({
           )}
         </div>
 
-        {/* ── Section 2: Form Question -> CRM Field Mapping ───────────────── */}
-        <div className="space-y-3 pt-2 border-t">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-semibold flex items-center gap-1.5">
+        {/* ── Section 2: Match Form Answers to CRM Fields ───────────────── */}
+        <div className="space-y-4 pt-2 border-t">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h4 className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
                 <Layers className="h-4 w-4 text-primary" />
-                2. Field Mappings & Default Values
+                2. Match form answers to CRM fields
               </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Map form question keys to supported CRM fields. At least Full Name (or First Name) and one contact method (Email or Phone) are required.
+              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                Tell us where to save each answer. For example, the form’s Full name answer goes into the CRM’s Full name field. Enter customer details later when testing.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={fields.length >= metadata.destination_fields.length}
-              onClick={() => setFields([...fields, { destination: '', question: '' }])}
+
+            {fields.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseBasicTestFields}
+                  className="text-xs h-8 gap-1.5 border-dashed"
+                  title="Populate standard name and email simulator test fields"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Use basic test fields
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={fields.length >= metadata.destination_fields.length}
+                  onClick={() => setFields([...fields, { destination: '', question: '' }])}
+                  className="text-xs h-8"
+                >
+                  + Add field mapping
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Inline Requirements Status */}
+          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-muted/20 border text-xs">
+            <span className="text-muted-foreground font-medium text-[11px] uppercase tracking-wider">Required for CRM:</span>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors',
+                hasNameMapping
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20'
+              )}
             >
-              + Add Field
-            </Button>
+              {hasNameMapping ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+              Name mapping (Full name or First name)
+            </span>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors',
+                hasContactMapping
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20'
+              )}
+            >
+              {hasContactMapping ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+              Contact mapping (Email or Phone)
+            </span>
           </div>
 
-          <div className="space-y-2">
-            {fields.map((field, index) => (
-              <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end bg-muted/20 p-2.5 rounded-lg border">
-                <label className={labelClass}>
-                  <span className="text-xs">Form Question Key</span>
-                  <Input
-                    required
-                    maxLength={100}
-                    value={field.question}
-                    onChange={(e) =>
-                      setFields(fields.map((f, i) => (i === index ? { ...f, question: e.target.value } : f)))
-                    }
-                    placeholder="e.g. full_name or what_is_your_email"
-                    className="font-mono text-xs"
-                  />
-                </label>
-
-                <label className={labelClass}>
-                  <span className="text-xs">CRM Field Destination</span>
-                  <select
-                    required
-                    className={controlClass}
-                    value={field.destination}
-                    onChange={(e) =>
-                      setFields(fields.map((f, i) => (i === index ? { ...f, destination: e.target.value } : f)))
-                    }
-                  >
-                    <option value="">Select CRM field</option>
-                    {metadata.destination_fields.map((dest) => (
-                      <option key={dest.value} value={dest.value}>
-                        {dest.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => setFields(fields.filter((_, i) => i !== index))}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          {/* Configurable Default Values */}
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Fallback Default Values (Applied when form answer is empty)
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setDefaults([...defaults, { destination: '', value: '' }])}
-                className="text-xs h-7"
-              >
-                + Add Default
-              </Button>
+          {/* Live Meta vs Manual Question Entry Guidance */}
+          <div className="rounded-lg bg-muted/40 border border-border/70 p-3 text-xs text-muted-foreground space-y-1.5">
+            <div className="flex items-center gap-1.5 font-medium text-foreground">
+              <Info className="h-4 w-4 text-primary shrink-0" />
+              <span>Manual question-key entry (Development mode)</span>
             </div>
-            {defaults.map((def, index) => (
-              <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end bg-muted/10 p-2 rounded border border-dashed">
-                <label className={labelClass}>
-                  <span className="text-xs">CRM Field</span>
-                  <select
-                    required
-                    className={controlClass}
-                    value={def.destination}
-                    onChange={(e) =>
-                      setDefaults(defaults.map((d, i) => (i === index ? { ...d, destination: e.target.value } : d)))
-                    }
-                  >
-                    <option value="">Select field</option>
-                    {metadata.destination_fields.map((f) => (
-                      <option key={f.value} value={f.value}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <p className="leading-relaxed">
+              Type the exact question key used in your Meta Instant Form or simulator payload (for example: <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">full_name</code>, <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">email</code>, or <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">phone</code>).
+            </p>
+            <p className="text-[11px] text-muted-foreground/80">
+              When an authorised live Meta connection is connected, form questions will automatically populate from your selected form.
+            </p>
+          </div>
 
-                <label className={labelClass}>
-                  <span className="text-xs">Default Value</span>
-                  <Input
-                    required
-                    maxLength={200}
-                    value={def.value}
-                    onChange={(e) =>
-                      setDefaults(defaults.map((d, i) => (i === index ? { ...d, value: e.target.value } : d)))
-                    }
-                    placeholder="e.g. India or General Fitness"
-                  />
-                </label>
-
+          {/* Empty State when no mappings configured */}
+          {fields.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/10">
+              <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <Layers className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h5 className="text-sm font-semibold text-foreground">No form answers are mapped yet</h5>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                  Tell us where to save each answer. For example, the form’s Full name answer goes into the CRM’s Full name field. Enter customer details later when testing.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                 <Button
                   type="button"
-                  variant="ghost"
                   size="sm"
-                  onClick={() => setDefaults(defaults.filter((_, i) => i !== index))}
+                  onClick={() => setFields([{ destination: '', question: '' }])}
+                  className="text-xs gap-1.5"
                 >
-                  <X className="h-4 w-4" />
+                  + Add field mapping
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseBasicTestFields}
+                  className="text-xs gap-1.5 border-dashed"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Use basic test fields
                 </Button>
               </div>
-            ))}
+              <p className="text-[11px] text-muted-foreground">
+                These are editable simulator examples, not live Meta form fields.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="hidden sm:grid grid-cols-[1fr_auto_1fr_auto] gap-3 px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <span>Question in your form</span>
+                <span className="w-6 text-center"></span>
+                <span>Save answer into</span>
+                <span className="w-8"></span>
+              </div>
+
+              {fields.map((field, index) => (
+                <div
+                  key={index}
+                  className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto] items-center bg-card p-3 rounded-lg border shadow-xs"
+                >
+                  <div className="w-full min-w-0">
+                    <label className="text-xs font-medium sm:hidden block mb-1">
+                      Question in your form
+                    </label>
+                    <Input
+                      required
+                      maxLength={100}
+                      value={field.question}
+                      onChange={(e) =>
+                        setFields(fields.map((f, i) => (i === index ? { ...f, question: e.target.value } : f)))
+                      }
+                      placeholder="e.g. full_name or email"
+                      className="font-mono text-xs w-full"
+                    />
+                  </div>
+
+                  <div className="hidden sm:flex items-center justify-center text-muted-foreground px-1">
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+
+                  <div className="w-full min-w-0">
+                    <label className="text-xs font-medium sm:hidden block mb-1">
+                      Save answer into
+                    </label>
+                    <select
+                      required
+                      className={controlClass}
+                      value={field.destination}
+                      onChange={(e) =>
+                        setFields(fields.map((f, i) => (i === index ? { ...f, destination: e.target.value } : f)))
+                      }
+                    >
+                      <option value="">Select CRM field</option>
+                      {metadata.destination_fields.map((dest) => (
+                        <option key={dest.value} value={dest.value}>
+                          {dest.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex sm:justify-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive h-9 px-2"
+                      onClick={() => setFields(fields.filter((_, i) => i !== index))}
+                      title="Remove mapping"
+                      aria-label="Remove mapping"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Collapsible Optional Defaults Section ── */}
+          <div className="rounded-xl border bg-card/60 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setShowDefaults(!showDefaults)}
+              className="w-full flex items-center justify-between p-3.5 text-left hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-xs text-foreground">
+                  Use a value when an answer is missing (Optional)
+                </span>
+                {defaults.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal">
+                    {defaults.length} {defaults.length === 1 ? 'default' : 'defaults'}
+                  </Badge>
+                )}
+                {incompatibleDefaults.length > 0 && (
+                  <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-medium gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Needs correction
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-muted-foreground text-xs shrink-0">
+                <span>{showDefaults ? 'Hide' : 'Show'}</span>
+                {showDefaults ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
+
+            {showDefaults && (
+              <div className="p-3.5 sm:p-4 pt-1 space-y-3 border-t border-border/50">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  If an incoming lead does not provide an answer for an optional question, the CRM will save this fallback value instead. Defaults only apply when the form answer is empty or missing.
+                </p>
+
+                {incompatibleDefaults.length > 0 && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 space-y-1 text-xs text-destructive">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>Incompatible Default Detected</span>
+                    </div>
+                    <p>
+                      Shared names, phone numbers, email addresses, and automated consent cannot be defaulted across leads. Please remove the flagged defaults below before saving.
+                    </p>
+                  </div>
+                )}
+
+                {defaults.length === 0 ? (
+                  <div className="text-center py-4 border border-dashed rounded-lg bg-muted/10 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      No fallback default values configured. Form answers will only be saved when provided by the customer.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDefaults([...defaults, { destination: '', value: '' }])}
+                      className="text-xs h-7"
+                    >
+                      + Add default value
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {defaults.map((def, index) => {
+                      const isIncompatible = DISALLOWED_DEFAULT_FIELDS.includes(def.destination);
+                      return (
+                        <div
+                          key={index}
+                          className={cn(
+                            'grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end p-2.5 rounded-lg border transition-colors',
+                            isIncompatible
+                              ? 'bg-destructive/5 border-destructive/40'
+                              : 'bg-muted/10 border-border/60'
+                          )}
+                        >
+                          <label className={labelClass}>
+                            <span className="text-xs flex items-center justify-between">
+                              <span>CRM Field</span>
+                              {isIncompatible && (
+                                <span className="text-[10px] text-destructive font-semibold">Not allowed for defaults</span>
+                              )}
+                            </span>
+                            <select
+                              required
+                              className={cn(controlClass, isIncompatible && 'border-destructive text-destructive')}
+                              value={def.destination}
+                              onChange={(e) =>
+                                setDefaults(defaults.map((d, i) => (i === index ? { ...d, destination: e.target.value } : d)))
+                              }
+                            >
+                              <option value="">Select supported field</option>
+                              {allowedDefaultFields.map((f) => (
+                                <option key={f.value} value={f.value}>
+                                  {f.label}
+                                </option>
+                              ))}
+                              {isIncompatible && (
+                                <option value={def.destination}>
+                                  ⚠️ {metadata.destination_fields.find((f) => f.value === def.destination)?.label || def.destination} (Incompatible)
+                                </option>
+                              )}
+                            </select>
+                          </label>
+
+                          <label className={labelClass}>
+                            <span className="text-xs">Default Value</span>
+                            <Input
+                              required
+                              maxLength={200}
+                              value={def.value}
+                              onChange={(e) =>
+                                setDefaults(defaults.map((d, i) => (i === index ? { ...d, value: e.target.value } : d)))
+                              }
+                              placeholder="e.g. General Fitness or Local Area"
+                              className={cn('text-xs', isIncompatible && 'border-destructive')}
+                            />
+                          </label>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive h-9 px-2"
+                            onClick={() => setDefaults(defaults.filter((_, i) => i !== index))}
+                            title="Remove default"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                      <p className="text-[11px] text-muted-foreground">
+                        Defaults are restricted to profile attributes (such as Fitness Goal, Area, or Country). Contact details and consent cannot be defaulted.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDefaults([...defaults, { destination: '', value: '' }])}
+                        className="text-xs h-7 shrink-0"
+                      >
+                        + Add default value
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
