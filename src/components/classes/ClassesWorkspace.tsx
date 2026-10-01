@@ -86,13 +86,11 @@ export const ClassesWorkspace: React.FC = () => {
   // Global Branch Scope
   const globalBranchId = locationId && locationId !== 'all' ? locationId : undefined;
 
-  type PrimaryTab = 'sessions' | 'setup' | 'schedules';
+  type PrimaryTab = 'sessions' | 'setup' | 'rules';
   type SetupSubTab = 'templates' | 'categories';
-  type SchedulesSubTab = 'rules' | 'calendar';
 
   const [primaryTab, setPrimaryTab] = useState<PrimaryTab>('sessions');
   const [setupSubTab, setSetupSubTab] = useState<SetupSubTab>('templates');
-  const [schedulesSubTab, setSchedulesSubTab] = useState<SchedulesSubTab>('rules');
   const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
   const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
@@ -1138,7 +1136,7 @@ export const ClassesWorkspace: React.FC = () => {
             <span className="text-muted-foreground text-xs">
               {primaryTab === 'sessions' && `${occurrences.length} Session${occurrences.length === 1 ? '' : 's'} Scheduled`}
               {primaryTab === 'setup' && `${templates.length} Templates · ${categories.length} Categories`}
-              {primaryTab === 'schedules' && `${rules.length} Recurring Rules · ${occurrences.length} Generated Session${occurrences.length === 1 ? '' : 's'}`}
+              {primaryTab === 'rules' && `${rules.length} Recurring Rule${rules.length === 1 ? '' : 's'}`}
             </span>
           </div>
         }
@@ -1165,17 +1163,10 @@ export const ClassesWorkspace: React.FC = () => {
               </Button>
             )}
 
-            {primaryTab === 'schedules' && schedulesSubTab === 'rules' && canCreate && (
+            {primaryTab === 'rules' && canCreate && (
               <Button size="sm" onClick={openNewRuleModal} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
                 <span>New Recurring Rule</span>
-              </Button>
-            )}
-
-            {primaryTab === 'schedules' && schedulesSubTab === 'calendar' && canCreate && (
-              <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
-                <Plus className="size-3.5" />
-                <span>Schedule One-Off Session</span>
               </Button>
             )}
           </div>
@@ -1321,7 +1312,7 @@ export const ClassesWorkspace: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setPrimaryTab('schedules');
+              setPrimaryTab('rules');
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
               setSearchTerm('');
@@ -1329,13 +1320,13 @@ export const ClassesWorkspace: React.FC = () => {
               setSelectedBranchFilter('');
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              primaryTab === 'schedules'
+              primaryTab === 'rules'
                 ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
             <RotateCw className="size-3.5" />
-            <span>Schedules</span>
+            <span>Recurring Rules ({rules.length})</span>
           </button>
         </div>
 
@@ -1602,7 +1593,7 @@ export const ClassesWorkspace: React.FC = () => {
                         <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
                           <span className="text-muted-foreground block text-[11px]">Capacity</span>
                           <span className="font-semibold text-foreground">
-                            {tpl.default_capacity} (WL: {tpl.default_waitlist_capacity})
+                            {tpl.default_capacity} (WL: {tpl.default_waitlist_capacity ?? 0} · Trial: {tpl.default_trial_capacity ?? 0})
                           </span>
                         </div>
                       </div>
@@ -1687,54 +1678,10 @@ export const ClassesWorkspace: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: SCHEDULES (Recurring Rules & Generated Sessions) */}
-        {primaryTab === 'schedules' && (
+        {/* TAB: RECURRING RULES */}
+        {primaryTab === 'rules' && (
           <div className="space-y-4 mt-4">
-            {/* Secondary Navigation */}
-            <div className="flex items-center gap-2 border-b border-border pb-3 overflow-x-auto scrollbar-none">
-              <button
-                type="button"
-                onClick={() => {
-                  setSchedulesSubTab('rules');
-                  setSearchTerm('');
-                  setSelectedStatusFilter('ALL');
-                  setSelectedBranchFilter('');
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  schedulesSubTab === 'rules'
-                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                Recurring Rules ({rules.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSchedulesSubTab('calendar');
-                  setSearchTerm('');
-                  setSelectedStatusFilter('ALL');
-                  setSelectedBranchFilter('');
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  schedulesSubTab === 'calendar'
-                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                Calendar / Generated Sessions ({occurrences.length})
-              </button>
-            </div>
-
-            {/* Helper Info below sub-tabs */}
-            <p className="text-xs text-muted-foreground">
-              {schedulesSubTab === 'rules'
-                ? 'Create repeating schedules that generate dated class sessions.'
-                : 'View the actual sessions generated from recurring rules.'}
-            </p>
-
-            {schedulesSubTab === 'rules' && (
-              <div className="space-y-4">
+            <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
                   <div className="relative min-w-[200px] flex-1 max-w-xs">
                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1862,6 +1809,14 @@ export const ClassesWorkspace: React.FC = () => {
                               <span className="font-mono flex items-center gap-1 shrink-0">
                                 <Users className="w-3 h-3" />
                                 {rule.capacity_override} Cap
+                                {(rule.waitlist_capacity_override != null || rule.trial_capacity_override != null) && (
+                                  <span className="text-[10px] text-muted-foreground font-normal">
+                                    ({[
+                                      rule.waitlist_capacity_override != null ? `WL: ${rule.waitlist_capacity_override}` : null,
+                                      rule.trial_capacity_override != null ? `Trial: ${rule.trial_capacity_override}` : null,
+                                    ].filter(Boolean).join(' · ')})
+                                  </span>
+                                )}
                               </span>
                             ) : null}
                           </div>
@@ -1940,60 +1895,7 @@ export const ClassesWorkspace: React.FC = () => {
                 })}
               </div>
             )}
-              </div>
-            )}
-
-            {schedulesSubTab === 'calendar' && (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-                  <div className="relative min-w-[200px] flex-1 max-w-xs">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      placeholder="Search generated sessions..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-8 pl-8 text-xs bg-background"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedBranchFilter}
-                      onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                    >
-                      <option value="">All Branches</option>
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="p-5 bg-card border border-border rounded-xl shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                    <div>
-                      <h4 className="font-semibold text-sm text-foreground">Generated Class Sessions Calendar</h4>
-                      <p className="text-xs text-muted-foreground">View dated sessions generated from active recurrence rules for {selectedDate}.</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setPrimaryTab('sessions');
-                        setSearchTerm('');
-                      }}
-                      className="text-xs gap-1.5 h-8 font-medium"
-                    >
-                      <Calendar className="size-3.5" />
-                      <span>Manage All Dated Sessions</span>
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Active date: <strong className="text-foreground">{selectedDate}</strong> ({occurrences.length} sessions generated/scheduled). Switch to the Sessions tab for complete session roster and trainer assignments.
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -2765,12 +2667,12 @@ export const ClassesWorkspace: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <Label className="mb-1 block">Booking Cap</Label>
+                  <Label className="mb-1 block">Booking Cap (Total Capacity)</Label>
                   <Input
                     type="number"
                     value={templateForm.default_capacity}
                     onChange={(e) => setTemplateForm({ ...templateForm, default_capacity: e.target.value })}
-                    placeholder="e.g. 20"
+                    placeholder="e.g. 20 (Total studio capacity)"
                   />
                 </div>
                 <div>
@@ -2779,7 +2681,7 @@ export const ClassesWorkspace: React.FC = () => {
                     type="number"
                     value={templateForm.default_trial_capacity}
                     onChange={(e) => setTemplateForm({ ...templateForm, default_trial_capacity: e.target.value })}
-                    placeholder="e.g. 0"
+                    placeholder="e.g. 4 (Max trial spots)"
                   />
                 </div>
                 <div>
@@ -2788,7 +2690,7 @@ export const ClassesWorkspace: React.FC = () => {
                     type="number"
                     value={templateForm.default_waitlist_capacity}
                     onChange={(e) => setTemplateForm({ ...templateForm, default_waitlist_capacity: e.target.value })}
-                    placeholder="e.g. 0"
+                    placeholder="e.g. 5"
                   />
                 </div>
               </div>
@@ -3751,7 +3653,7 @@ export const ClassesWorkspace: React.FC = () => {
                     classPrices.map((cp) => (
                       <tr key={cp.id}>
                         <td className="p-2.5">{cp.branch_name || 'All Branches'}</td>
-                        <td className="p-2.5 font-semibold">{cp.currency} {cp.price} (+{cp.tax_percent}%)</td>
+                        <td className="p-2.5 font-semibold">{cp.currency} {cp.price} (+{Math.round(parseFloat(String(cp.tax_percent || 0)))}%)</td>
                         <td className="p-2.5">{cp.effective_from}</td>
                         <td className="p-2.5">{cp.status}</td>
                       </tr>

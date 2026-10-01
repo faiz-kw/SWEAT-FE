@@ -1,15 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ModuleView } from "@/components/shell/ModuleView";
+import { FormsWorkspace } from "@/components/admin/FormsWorkspace";
 
 export const Route = createFileRoute("/_shell/admin/forms")({
   head: () => ({
     meta: [
-      { title: "Forms · PerformanceOS Admin" },
-      { name: "description", content: "Forms workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Forms · PerformanceOS Admin" },
-      { property: "og:description", content: "Forms workspace in the PerformanceOS fitness business operating system." },
+      { title: "Forms & Assessments · PerformanceOS Admin" },
+      { name: "description", content: "Forms and dynamic questionnaires workspace in PerformanceOS." },
+      { property: "og:title", content: "Forms & Assessments · PerformanceOS Admin" },
+      { property: "og:description", content: "Forms and dynamic questionnaires workspace in PerformanceOS." },
     ],
   }),
-  component: () => <ModuleView path="/admin/forms" />,
+  component: () => <FormsWorkspace />,
 });

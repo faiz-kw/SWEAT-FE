@@ -233,7 +233,7 @@ export function SalesActivitiesWorkspace() {
         }
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* METRICS ROW */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <CRMKpiTile

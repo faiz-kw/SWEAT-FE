@@ -22,6 +22,7 @@ import type {
   DuplicateCheckResult,
   CreateLeadPayload,
   CRMStageSlaPolicy,
+  CRMStageAutomationRule,
   CRMTrialReminderPolicy,
   CRMCommunicationChannel,
   NotificationTemplateItem,
@@ -187,7 +188,18 @@ export const crmApi = {
     return res.data;
   },
 
-  getBranches: async (): Promise<Array<{ id: string; name: string; code?: string }>> => {
+  getBranches: async (): Promise<Array<{
+    id: string;
+    name: string;
+    code?: string;
+    city?: string;
+    location_name?: string;
+    address?: string;
+    address_line_1?: string;
+    address_line_2?: string;
+    status?: string;
+    is_active?: boolean;
+  }>> => {
     const res = await api.get<any>('/tenant/branches/');
     return res.data?.results || res.data || [];
   },
@@ -205,6 +217,14 @@ export const crmApi = {
     payload: { new_status: LeadStatus; reason_code?: string; reason_text?: string }
   ): Promise<Lead> => {
     const res = await api.post<Lead>(`/tenant/leads/${leadId}/transition-status/`, payload);
+    return res.data;
+  },
+
+  assignLead: async (
+    leadId: string,
+    payload: { assigned_to_user_id?: string; claim?: boolean; takeover?: boolean; notes?: string }
+  ): Promise<any> => {
+    const res = await api.post(`/tenant/leads/${leadId}/assign/`, payload);
     return res.data;
   },
 
@@ -244,6 +264,28 @@ export const crmApi = {
   updateSlaPolicy: async (id: string, payload: Partial<CRMStageSlaPolicy>): Promise<CRMStageSlaPolicy> => {
     const res = await api.patch<CRMStageSlaPolicy>(`/tenant/crm/sla-policies/${id}/`, payload);
     return res.data;
+  },
+
+  getStageAutomationRules: async (): Promise<CRMStageAutomationRule[]> => {
+    const res = await api.get<PaginatedResponse<CRMStageAutomationRule> | CRMStageAutomationRule[]>('/tenant/crm/stage-automation-rules/');
+    if (Array.isArray(res.data)) {
+      return res.data;
+    }
+    return (res.data as any)?.results ?? [];
+  },
+
+  createStageAutomationRule: async (payload: Partial<CRMStageAutomationRule>): Promise<CRMStageAutomationRule> => {
+    const res = await api.post<CRMStageAutomationRule>('/tenant/crm/stage-automation-rules/', payload);
+    return res.data;
+  },
+
+  updateStageAutomationRule: async (id: string, payload: Partial<CRMStageAutomationRule>): Promise<CRMStageAutomationRule> => {
+    const res = await api.patch<CRMStageAutomationRule>(`/tenant/crm/stage-automation-rules/${id}/`, payload);
+    return res.data;
+  },
+
+  deleteStageAutomationRule: async (id: string): Promise<void> => {
+    await api.delete(`/tenant/crm/stage-automation-rules/${id}/`);
   },
 
   getTrialReminderPolicy: async (): Promise<CRMTrialReminderPolicy> => {
@@ -469,6 +511,7 @@ export const crmApi = {
     date_from?: string;
     date_to?: string;
     program_id?: string;
+    class_template_id?: string;
     class_category?: string;
     lead_id?: string;
   }): Promise<TrialSlot[]> => {
@@ -478,6 +521,7 @@ export const crmApi = {
     if (params.date_from) sp.append('date_from', params.date_from);
     if (params.date_to) sp.append('date_to', params.date_to);
     if (params.program_id) sp.append('program_id', params.program_id);
+    if (params.class_template_id) sp.append('class_template_id', params.class_template_id);
     if (params.class_category) sp.append('class_category', params.class_category);
     if (params.lead_id) sp.append('lead_id', params.lead_id);
     const res = await api.get<{ slots: TrialSlot[] }>(`/tenant/trial-bookings/available_slots/?${sp.toString()}`);
@@ -790,23 +834,56 @@ export const crmApi = {
   },
 
   // Catalog browsing for the conversion wizard package picker
-  getCatalogPrograms: async (): Promise<import('@/types/crm').CatalogProgram[]> => {
-    const res = await api.get<any>('/tenant/programs/?status=ACTIVE&page_size=200');
-    if (Array.isArray(res.data)) return res.data;
-    return res.data?.results ?? [];
+  getCatalogPrograms: async (params?: { branch_id?: string; context?: string }): Promise<import('@/types/crm').CatalogProgram[]> => {
+    const query = new URLSearchParams();
+    query.append('status', 'ACTIVE');
+    query.append('page_size', '200');
+    if (params?.branch_id) query.append('branch_id', params.branch_id);
+    if (params?.context) query.append('context', params.context);
+
+    let nextUrl: string | null = `/tenant/programs/?${query.toString()}`;
+    const allResults: import('@/types/crm').CatalogProgram[] = [];
+
+    while (nextUrl) {
+      const res = await api.get<any>(nextUrl);
+      if (Array.isArray(res.data)) {
+        return res.data;
+      }
+      if (res.data?.results && Array.isArray(res.data.results)) {
+        allResults.push(...res.data.results);
+      }
+      nextUrl = res.data?.next ? res.data.next : null;
+    }
+    return allResults;
   },
 
   getCatalogPackageVersions: async (params?: {
     program_id?: string;
+    branch_id?: string;
     status?: string;
+    sellable_only?: boolean;
   }): Promise<import('@/types/crm').CatalogPackageVersion[]> => {
     const query = new URLSearchParams();
     if (params?.program_id) query.append('program_id', params.program_id);
+    if (params?.branch_id) query.append('branch_id', params.branch_id);
+    if (params?.sellable_only !== undefined) query.append('sellable_only', String(params.sellable_only));
     query.append('status', params?.status ?? 'ACTIVE');
     query.append('page_size', '200');
-    const res = await api.get<any>(`/tenant/package-versions/?${query.toString()}`);
-    if (Array.isArray(res.data)) return res.data;
-    return res.data?.results ?? [];
+
+    let nextUrl: string | null = `/tenant/package-versions/?${query.toString()}`;
+    const allResults: import('@/types/crm').CatalogPackageVersion[] = [];
+
+    while (nextUrl) {
+      const res = await api.get<any>(nextUrl);
+      if (Array.isArray(res.data)) {
+        return res.data;
+      }
+      if (res.data?.results && Array.isArray(res.data.results)) {
+        allResults.push(...res.data.results);
+      }
+      nextUrl = res.data?.next ? res.data.next : null;
+    }
+    return allResults;
   },
 
   // ==========================================

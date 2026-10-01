@@ -248,6 +248,9 @@ export interface Membership {
   id: string;
   user_profile: string;
   member_name?: string;
+  member_number?: string;
+  member_phone?: string;
+  member_email?: string;
   program?: string | null;
   package: string;
   package_name?: string;

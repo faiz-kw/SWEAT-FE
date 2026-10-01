@@ -39,6 +39,7 @@ import type {
   RescheduleTrialPayload,
 } from '@/types/crm';
 import { usePermissions } from '@/lib/permissions';
+import { formatBranchOptionLabel } from '@/lib/crmLabels';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -257,7 +258,10 @@ export function TrialManagementWorkspace() {
   });
 
   // Helpers for badges
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, isRescheduled?: boolean, isActiveTrial?: boolean) => {
+    if (status === 'CANCELLED' && (isRescheduled || isActiveTrial === false)) {
+      return <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground bg-muted/20">Cancelled / Replaced</Badge>;
+    }
     switch (status) {
       case 'BOOKED':
         return <Badge variant="outline" className="border-blue-500/30 text-blue-500 bg-blue-500/10">Booked</Badge>;
@@ -350,7 +354,7 @@ export function TrialManagementWorkspace() {
         }
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* METRIC KPI CARDS */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <CRMKpiTile
@@ -420,7 +424,7 @@ export function TrialManagementWorkspace() {
                 <option value="">All Branches</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {formatBranchOptionLabel(b)}
                   </option>
                 ))}
               </select>
@@ -560,20 +564,39 @@ export function TrialManagementWorkspace() {
                         {/* Class & Schedule */}
                         <td className="px-4 py-3">
                           <div className="font-medium text-foreground">{formatCrmLabel(trial.class_name || 'Class Session')}</div>
-                          {trial.booking_date ? (
-                            <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <Clock className="w-3 h-3 text-primary" />
-                              <span>{trial.booking_date}</span>
-                              {trial.start_time && (
-                                <>
-                                  <span>&bull;</span>
-                                  <span>{trial.start_time}{trial.end_time ? ` - ${trial.end_time}` : ''}</span>
-                                </>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-[11px] text-muted-foreground mt-0.5">Schedule unavailable</div>
-                          )}
+                          {(() => {
+                            const dateStr = trial.booking_date || (trial.scheduled_start ? new Date(trial.scheduled_start).toISOString().split('T')[0] : '');
+                            let displayDate = dateStr;
+                            try {
+                              if (dateStr) {
+                                const d = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
+                                if (!isNaN(d.getTime())) {
+                                  displayDate = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+                                }
+                              }
+                            } catch {
+                              displayDate = dateStr;
+                            }
+                            const startTime = trial.start_time || (trial.scheduled_start ? new Date(trial.scheduled_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+                            const endTime = trial.end_time || (trial.scheduled_end ? new Date(trial.scheduled_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                            if (!displayDate && !startTime) {
+                              return <div className="text-[11px] text-muted-foreground mt-0.5">Schedule unavailable</div>;
+                            }
+
+                            return (
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Clock className="w-3 h-3 text-primary" />
+                                <span>{displayDate}</span>
+                                {startTime && (
+                                  <>
+                                    <span>&bull;</span>
+                                    <span>{startTime}{endTime ? ` - ${endTime}` : ''}</span>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Branch & Trainer */}
@@ -587,7 +610,7 @@ export function TrialManagementWorkspace() {
 
                         {/* Lifecycle Status */}
                         <td className="px-4 py-3">
-                          {getStatusBadge(trial.status)}
+                          {getStatusBadge(trial.status, trial.is_rescheduled, trial.is_active_trial)}
                         </td>
 
                         {/* Confirmation */}
@@ -606,7 +629,7 @@ export function TrialManagementWorkspace() {
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Primary contextual action */}
-                            {canEdit && trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
+                            {canEdit && trial.is_active_trial !== false && trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -618,12 +641,12 @@ export function TrialManagementWorkspace() {
                               </Button>
                             )}
 
-                            {canEdit && trial.status === 'CONFIRMED' && (
+                            {canEdit && trial.is_active_trial !== false && trial.status === 'CONFIRMED' && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => markAttendedMutation.mutate(trial.id)}
-                                disabled={markAttendedMutation.isPending}
+                                disabled={markAttendedMutation.isPending || (trial.available_actions && !trial.available_actions.can_mark_attended)}
                                 className="h-7 px-2.5 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/10 font-semibold"
                               >
                                 <UserCheck className="w-3 h-3" />
@@ -659,31 +682,33 @@ export function TrialManagementWorkspace() {
                                   Reminder Schedule
                                 </DropdownMenuItem>
 
-                                {canEdit && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && (
+                                {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && trial.status !== 'ATTENDED' && (
                                   <>
                                     <DropdownMenuSeparator />
-                                    {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (
+                                    {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (trial.available_actions ? trial.available_actions.can_request_reschedule : true) && (
                                       <DropdownMenuItem onClick={() => requestRescheduleMutation.mutate(trial.id)}>
                                         <HelpCircle className="w-3.5 h-3.5 mr-2 text-amber-500" />
                                         Req Reschedule
                                       </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setReschedulingTrial(trial);
-                                        setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
-                                      }}
-                                    >
-                                      <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
-                                      Reschedule Slot
-                                    </DropdownMenuItem>
-                                    {trial.status !== 'NO_SHOW' && trial.status !== 'ATTENDED' && (
+                                    {(trial.available_actions ? trial.available_actions.can_reschedule : (trial.status !== 'ATTENDED' && trial.status !== 'CANCELLED')) && (
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setReschedulingTrial(trial);
+                                          setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
+                                        }}
+                                      >
+                                        <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
+                                        Reschedule Slot
+                                      </DropdownMenuItem>
+                                    )}
+                                    {(trial.available_actions ? trial.available_actions.can_mark_no_show : (trial.status !== 'NO_SHOW' && trial.status !== 'ATTENDED')) && (
                                       <DropdownMenuItem onClick={() => markNoShowMutation.mutate(trial.id)}>
                                         <UserX className="w-3.5 h-3.5 mr-2 text-destructive" />
                                         Mark No-Show
                                       </DropdownMenuItem>
                                     )}
-                                    {trial.status !== 'ATTENDED' && (
+                                    {(trial.available_actions ? trial.available_actions.can_cancel : trial.status !== 'ATTENDED') && (
                                       <DropdownMenuItem
                                         onClick={() => setCancellingTrial(trial)}
                                         className="text-destructive focus:text-destructive"
@@ -737,7 +762,7 @@ export function TrialManagementWorkspace() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {getStatusBadge(trial.status)}
+                      {getStatusBadge(trial.status, trial.is_rescheduled, trial.is_active_trial)}
                     </div>
                   </div>
 
@@ -793,7 +818,7 @@ export function TrialManagementWorkspace() {
                             size="sm"
                             variant="outline"
                             onClick={() => markAttendedMutation.mutate(trial.id)}
-                            disabled={markAttendedMutation.isPending}
+                            disabled={markAttendedMutation.isPending || (trial.available_actions && !trial.available_actions.can_mark_attended)}
                             className="h-7 text-xs gap-1 text-primary border-primary/30 font-semibold"
                           >
                             <UserCheck className="w-3 h-3" />
@@ -828,36 +853,42 @@ export function TrialManagementWorkspace() {
                             <Bell className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                             Reminders
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (
-                            <DropdownMenuItem onClick={() => requestRescheduleMutation.mutate(trial.id)}>
-                              <HelpCircle className="w-3.5 h-3.5 mr-2 text-amber-500" />
-                              Req Reschedule
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setReschedulingTrial(trial);
-                              setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
-                            }}
-                          >
-                            <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
-                            Reschedule Slot
-                          </DropdownMenuItem>
-                          {trial.status !== 'NO_SHOW' && trial.status !== 'ATTENDED' && (
-                            <DropdownMenuItem onClick={() => markNoShowMutation.mutate(trial.id)}>
-                              <UserX className="w-3.5 h-3.5 mr-2 text-destructive" />
-                              Mark No-Show
-                            </DropdownMenuItem>
-                          )}
-                          {trial.status !== 'ATTENDED' && (
-                            <DropdownMenuItem
-                              onClick={() => setCancellingTrial(trial)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <X className="w-3.5 h-3.5 mr-2" />
-                              Cancel Booking
-                            </DropdownMenuItem>
+                          {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && trial.status !== 'ATTENDED' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (trial.available_actions ? trial.available_actions.can_request_reschedule : true) && (
+                                <DropdownMenuItem onClick={() => requestRescheduleMutation.mutate(trial.id)}>
+                                  <HelpCircle className="w-3.5 h-3.5 mr-2 text-amber-500" />
+                                  Req Reschedule
+                                </DropdownMenuItem>
+                              )}
+                              {(trial.available_actions ? trial.available_actions.can_reschedule : (trial.status !== 'ATTENDED' && trial.status !== 'CANCELLED')) && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setReschedulingTrial(trial);
+                                    setRescheduleDate(trial.booking_date || trial.scheduled_start?.split('T')[0] || '');
+                                  }}
+                                >
+                                  <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
+                                  Reschedule Slot
+                                </DropdownMenuItem>
+                              )}
+                              {(trial.available_actions ? trial.available_actions.can_mark_no_show : (trial.status !== 'NO_SHOW' && trial.status !== 'ATTENDED')) && (
+                                <DropdownMenuItem onClick={() => markNoShowMutation.mutate(trial.id)}>
+                                  <UserX className="w-3.5 h-3.5 mr-2 text-destructive" />
+                                  Mark No-Show
+                                </DropdownMenuItem>
+                              )}
+                              {(trial.available_actions ? trial.available_actions.can_cancel : trial.status !== 'ATTENDED') && (
+                                <DropdownMenuItem
+                                  onClick={() => setCancellingTrial(trial)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <X className="w-3.5 h-3.5 mr-2" />
+                                  Cancel Booking
+                                </DropdownMenuItem>
+                              )}
+                            </>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>

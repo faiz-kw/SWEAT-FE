@@ -38,7 +38,7 @@ export function CRMUnconfiguredView({
         badgeText={badgeText}
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-12 flex items-center justify-center">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-12 flex items-center justify-center">
         <div className="max-w-lg w-full p-6 sm:p-8 rounded-2xl border border-border/80 bg-card/60 shadow-xs text-center space-y-4">
           <div className="w-12 h-12 mx-auto rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
             <Icon className="w-6 h-6" />

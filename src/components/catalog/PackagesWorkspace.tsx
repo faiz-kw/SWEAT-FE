@@ -43,7 +43,7 @@ import {
 import { catalogApi } from '@/api/endpoints/catalogApi';
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { Package, PackageVersion, Program, TermsDocument, ProgramCategory, DeliveryMode } from '@/types/catalog';
-import { useAuth } from '@/contexts';
+import { useAuth, useApp } from '@/contexts';
 import { toast } from 'sonner';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -160,6 +160,7 @@ const formatSessionCount = (val: any) => {
 export const PackagesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user, isLoading: isAuthLoading } = useAuth();
+  const { locationId } = useApp();
 
   const hasCatalogPermission = useMemo(() => {
     if (isAuthLoading || !user) return false;
@@ -261,9 +262,18 @@ export const PackagesWorkspace: React.FC = () => {
   // Program Filter bar state
   const [progFilterCategory, setProgFilterCategory] = useState<string>('ALL');
   const [progFilterStatus, setProgFilterStatus] = useState<string>('ALL');
-  const [progFilterBranch, setProgFilterBranch] = useState<string>('ALL');
+  const [progFilterBranch, setProgFilterBranch] = useState<string>(() => (locationId && locationId !== 'all' ? locationId : 'ALL'));
   const [progFilterDeliveryMode, setProgFilterDeliveryMode] = useState<string>('ALL');
   const [progFilterTrialOnly, setProgFilterTrialOnly] = useState<boolean>(false);
+
+  // Sync global topbar branch selector to local branch filter
+  React.useEffect(() => {
+    if (locationId && locationId !== 'all') {
+      setProgFilterBranch(locationId);
+    } else if (locationId === 'all') {
+      setProgFilterBranch('ALL');
+    }
+  }, [locationId]);
 
   // Legal Policies modal state (no Code field)
   const [isNewTermsDocOpen, setIsNewTermsDocOpen] = useState(false);
@@ -1035,7 +1045,7 @@ export const PackagesWorkspace: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto px-2 sm:px-4 lg:px-6 pb-32">
+    <div className="flex flex-col min-h-screen bg-background text-foreground w-full pb-32">
       <PageHeader
         title="Programs & Packages"
         description="Configure your program catalog, commercial package tiers, immutable pricing versions, and legal policies."
@@ -1235,7 +1245,7 @@ export const PackagesWorkspace: React.FC = () => {
 
             {/* Cards grid */}
             {!isProgramCategoriesLoading && filteredProgramCategories.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredProgramCategories.map((cat) => (
                   <div
                     key={cat.id}
@@ -1400,7 +1410,7 @@ export const PackagesWorkspace: React.FC = () => {
                   <option value="ALL">All Branches</option>
                   {branches.map((b: any) => (
                     <option key={b.id} value={b.id}>
-                      {b.name}
+                      {b.city ? `${b.city} · ${b.name}` : b.name}
                     </option>
                   ))}
                 </select>
@@ -1750,7 +1760,7 @@ export const PackagesWorkspace: React.FC = () => {
                               )}
                             </div>
                           ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
                               {progPkgs.map((pkg) => {
                                 const activeVer = pkg.active_version || (pkg as any).latest_version;
                                 const firstPrice = activeVer?.prices?.[0];
@@ -1921,17 +1931,18 @@ export const PackagesWorkspace: React.FC = () => {
                                               setNewVerName(`${pkg.name} v${(activeVer?.version_number ?? 0) + 1}`);
                                               setNewVerDurationVal(activeVer?.duration_value ?? 6);
                                               setNewVerDurationUnit(activeVer?.duration_unit ?? 'MONTH');
-                                              setNewVerTotalDays(activeVer?.total_days ?? 180);
-                                              setNewVerValidity(activeVer?.validity_days ?? 180);
-                                              setNewVerSalePrice(firstPrice?.sale_price ? String(firstPrice.sale_price) : '');
-                                              setNewVerDisplayPrice(firstPrice?.display_price ? String(firstPrice.display_price) : '');
-                                              setNewVerTaxPercentage(firstPrice?.tax_percent ? String(firstPrice.tax_percent) : '18');
+                                              const td = activeVer?.total_days ?? 180;
+                                              setNewVerTotalDays(td);
+                                              setNewVerValidity(td);
+                                              setNewVerSalePrice(firstPrice?.sale_price ? String(Math.round(Number(firstPrice.sale_price))) : '');
+                                              setNewVerDisplayPrice(firstPrice?.display_price ? String(Math.round(Number(firstPrice.display_price))) : '');
+                                              setNewVerTaxPercentage(firstPrice?.tax_percent ? String(Math.round(parseFloat(String(firstPrice.tax_percent)))) : '18');
                                               setNewVerTaxIncluded(firstPrice?.prices_include_tax ?? true);
                                               setNewVerHomeUnlimited(Boolean(homeEnt?.is_unlimited));
-                                              setNewVerMaxSessions(homeEnt?.allocated_units ? String(homeEnt.allocated_units) : '');
+                                              setNewVerMaxSessions(homeEnt?.allocated_units ? String(Math.round(Number(homeEnt.allocated_units))) : '');
                                               setNewVerCrossUnlimited(Boolean(crossEnt?.is_unlimited));
-                                              setNewVerPassportSessions(crossEnt?.allocated_units ? String(crossEnt.allocated_units) : '');
-                                              setNewVerPassportCost(crossEnt?.extra_unit_price ? String(crossEnt.extra_unit_price) : '');
+                                              setNewVerPassportSessions(crossEnt?.allocated_units ? String(Math.round(Number(crossEnt.allocated_units))) : '');
+                                              setNewVerPassportCost(crossEnt?.extra_unit_price ? String(Math.round(Number(crossEnt.extra_unit_price))) : '');
                                               setNewVerShowWeb(activeVer?.show_on_web ?? true);
                                               setNewVerShowApp(activeVer?.show_on_app ?? true);
                                               setNewVerPublishNow(false);
@@ -2107,7 +2118,7 @@ export const PackagesWorkspace: React.FC = () => {
 
             {/* Cards Grid */}
             {!isTermsLoading && !isTermsError && filteredTermsDocs.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredTermsDocs.map((doc) => {
                   const isExpanded = expandedTermsDocId === doc.id;
                   const activeVer = doc.active_version;
@@ -2344,20 +2355,21 @@ export const PackagesWorkspace: React.FC = () => {
                                             setNewVerName(`${historyPackage.name} v${(ver.version_number ?? 0) + 1}`);
                                             setNewVerDurationVal(ver.duration_value ?? 6);
                                             setNewVerDurationUnit(ver.duration_unit ?? 'MONTH');
-                                            setNewVerTotalDays(ver.total_days ?? 180);
-                                            setNewVerValidity(ver.validity_days ?? 180);
+                                            const td = ver.total_days ?? 180;
+                                            setNewVerTotalDays(td);
+                                            setNewVerValidity(td);
                                             const fp = ver.prices?.[0];
-                                            setNewVerSalePrice(fp?.sale_price ? String(fp.sale_price) : '');
-                                            setNewVerDisplayPrice(fp?.display_price ? String(fp.display_price) : '');
-                                            setNewVerTaxPercentage(fp?.tax_percent ? String(fp.tax_percent) : '18');
+                                            setNewVerSalePrice(fp?.sale_price ? String(Math.round(Number(fp.sale_price))) : '');
+                                            setNewVerDisplayPrice(fp?.display_price ? String(Math.round(Number(fp.display_price))) : '');
+                                            setNewVerTaxPercentage(fp?.tax_percent ? String(Math.round(parseFloat(String(fp.tax_percent)))) : '18');
                                             setNewVerTaxIncluded(fp?.prices_include_tax ?? true);
                                             const he = ver.entitlement_definitions?.find(e => e.entitlement_type === 'HOME_BRANCH_SESSION');
                                             const ce = ver.entitlement_definitions?.find(e => e.entitlement_type === 'CROSS_BRANCH_SESSION');
                                             setNewVerHomeUnlimited(Boolean(he?.is_unlimited));
-                                            setNewVerMaxSessions(he?.allocated_units ? String(he.allocated_units) : '');
+                                            setNewVerMaxSessions(he?.allocated_units ? String(Math.round(Number(he.allocated_units))) : '');
                                             setNewVerCrossUnlimited(Boolean(ce?.is_unlimited));
-                                            setNewVerPassportSessions(ce?.allocated_units ? String(ce.allocated_units) : '');
-                                            setNewVerPassportCost(ce?.extra_unit_price ? String(ce.extra_unit_price) : '');
+                                            setNewVerPassportSessions(ce?.allocated_units ? String(Math.round(Number(ce.allocated_units))) : '');
+                                            setNewVerPassportCost(ce?.extra_unit_price ? String(Math.round(Number(ce.extra_unit_price))) : '');
                                             setNewVerShowWeb(ver.show_on_web ?? true);
                                             setNewVerShowApp(ver.show_on_app ?? true);
                                             setNewVerPublishNow(false);
@@ -2542,7 +2554,7 @@ export const PackagesWorkspace: React.FC = () => {
                                         <p className="font-semibold text-foreground">{price.currency || 'INR'} {price.base_price}</p>
                                       </div>
                                       <div>
-                                        <p className="text-[10px] text-muted-foreground mb-0.5">Tax ({price.tax_percent || price.tax_percentage || 0}%)</p>
+                                        <p className="text-[10px] text-muted-foreground mb-0.5">Tax ({Math.round(parseFloat(String(price.tax_percent || price.tax_percentage || 0)))}%)</p>
                                         <p className="font-semibold text-foreground">{price.prices_include_tax ? 'Included' : 'Exclusive'}</p>
                                       </div>
                                       <div>
@@ -3762,9 +3774,13 @@ export const PackagesWorkspace: React.FC = () => {
                   <label className="block text-xs font-medium text-foreground mb-1">Tax Percentage (%)</label>
                   <Input
                     type="number"
+                    step="1"
                     placeholder="18"
                     value={newPkgTaxPercentage}
-                    onChange={(e) => setNewPkgTaxPercentage(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewPkgTaxPercentage(val ? String(Math.round(Number(val))) : '');
+                    }}
                     className="text-sm"
                   />
                 </div>
@@ -3786,11 +3802,11 @@ export const PackagesWorkspace: React.FC = () => {
             {/* Section 4: Sessions & Passport Entitlements */}
             <div className="pt-3 border-t border-border space-y-3">
               <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Sessions &amp; Entitlements</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-medium text-foreground">Home Sessions</label>
-                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                  <div className="flex items-center justify-between h-5 mb-1.5">
+                    <label className="text-xs font-medium text-foreground">Home Sessions</label>
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={newPkgHomeUnlimited}
@@ -3798,7 +3814,7 @@ export const PackagesWorkspace: React.FC = () => {
                           setNewPkgHomeUnlimited(e.target.checked);
                           if (e.target.checked) setNewPkgMaxSessions('');
                         }}
-                        className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                        className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
                       />
                       Unlimited
                     </label>
@@ -3808,15 +3824,18 @@ export const PackagesWorkspace: React.FC = () => {
                     placeholder={newPkgHomeUnlimited ? 'Unlimited' : 'e.g. 72'}
                     disabled={newPkgHomeUnlimited}
                     value={newPkgMaxSessions}
-                    onChange={(e) => setNewPkgMaxSessions(e.target.value)}
-                    className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewPkgMaxSessions(v ? String(Math.round(Number(v))) : '');
+                    }}
+                    className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                   />
-                  <span className="text-[10px] text-muted-foreground">Home Branch</span>
+                  <span className="text-[10px] text-muted-foreground block">Home Branch</span>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-medium text-foreground">Cross-Branch Sessions</label>
-                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                  <div className="flex items-center justify-between h-5 mb-1.5">
+                    <label className="text-xs font-medium text-foreground">Cross-Branch Sessions</label>
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={newPkgCrossUnlimited}
@@ -3824,7 +3843,7 @@ export const PackagesWorkspace: React.FC = () => {
                           setNewPkgCrossUnlimited(e.target.checked);
                           if (e.target.checked) setNewPkgPassportSessions('');
                         }}
-                        className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                        className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
                       />
                       Unlimited
                     </label>
@@ -3834,21 +3853,27 @@ export const PackagesWorkspace: React.FC = () => {
                     placeholder={newPkgCrossUnlimited ? 'Unlimited' : 'e.g. 10'}
                     disabled={newPkgCrossUnlimited}
                     value={newPkgPassportSessions}
-                    onChange={(e) => setNewPkgPassportSessions(e.target.value)}
-                    className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewPkgPassportSessions(v ? String(Math.round(Number(v))) : '');
+                    }}
+                    className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                   />
-                  <span className="text-[10px] text-muted-foreground">Cross-Branch</span>
+                  <span className="text-[10px] text-muted-foreground block">Cross-Branch</span>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-[11px] font-medium text-foreground">Passport Cost (₹)</label>
+                  <div className="flex items-center justify-between h-5 mb-1.5">
+                    <label className="text-xs font-medium text-foreground">Passport Cost (₹)</label>
+                    <span className="text-[10px] text-muted-foreground">Optional</span>
+                  </div>
                   <Input
                     type="number"
                     placeholder="e.g. 500"
                     value={newPkgPassportCost}
                     onChange={(e) => setNewPkgPassportCost(e.target.value)}
-                    className="text-sm"
+                    className="text-sm h-9"
                   />
-                  <span className="text-[10px] text-muted-foreground">Extra per session</span>
+                  <span className="text-[10px] text-muted-foreground block">Extra per session</span>
                 </div>
               </div>
             </div>
@@ -4108,7 +4133,7 @@ export const PackagesWorkspace: React.FC = () => {
       {/* ========================================================================= */}
       {selectedPackage && (
         <Dialog open={isNewVersionOpen} onOpenChange={setIsNewVersionOpen}>
-          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Create New Package Version</DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -4126,7 +4151,9 @@ export const PackagesWorkspace: React.FC = () => {
                   className="text-sm"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Version Duration - Harmonized 3-column row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Duration Value */}
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Duration Value *</label>
@@ -4137,7 +4164,9 @@ export const PackagesWorkspace: React.FC = () => {
                     onChange={(e) => {
                       const v = Math.max(1, Number(e.target.value));
                       setNewVerDurationVal(v);
-                      setNewVerTotalDays(calcDays(v, newVerDurationUnit));
+                      const d = calcDays(v, newVerDurationUnit);
+                      setNewVerTotalDays(d);
+                      setNewVerValidity(d);
                     }}
                     className="text-sm"
                   />
@@ -4150,7 +4179,9 @@ export const PackagesWorkspace: React.FC = () => {
                     onChange={(e) => {
                       const u = e.target.value;
                       setNewVerDurationUnit(u);
-                      setNewVerTotalDays(calcDays(newVerDurationVal, u));
+                      const d = calcDays(newVerDurationVal, u);
+                      setNewVerTotalDays(d);
+                      setNewVerValidity(d);
                     }}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
@@ -4160,8 +4191,6 @@ export const PackagesWorkspace: React.FC = () => {
                     <option value="YEAR">Year(s)</option>
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Total Days */}
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
@@ -4174,16 +4203,6 @@ export const PackagesWorkspace: React.FC = () => {
                     value={newVerTotalDays}
                     className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
                     tabIndex={-1}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Validity (Days)</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={newVerValidity}
-                    onChange={(e) => setNewVerValidity(Number(e.target.value))}
-                    className="text-sm"
                   />
                 </div>
               </div>
@@ -4203,7 +4222,7 @@ export const PackagesWorkspace: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Display / MRP (₹)</label>
+                    <label className="block text-xs font-medium text-foreground mb-1">Display / MRP Price (₹)</label>
                     <Input
                       type="number"
                       placeholder="e.g. 29999"
@@ -4213,18 +4232,22 @@ export const PackagesWorkspace: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                   <div>
-                    <label className="block text-xs font-medium text-foreground mb-1">Tax %</label>
+                    <label className="block text-xs font-medium text-foreground mb-1">Tax Percentage (%)</label>
                     <Input
                       type="number"
+                      step="1"
                       placeholder="18"
                       value={newVerTaxPercentage}
-                      onChange={(e) => setNewVerTaxPercentage(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewVerTaxPercentage(val ? String(Math.round(Number(val))) : '');
+                      }}
                       className="text-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-2 pt-1 sm:pt-6">
+                  <div className="flex items-center gap-2 pt-1 sm:pt-5">
                     <input
                       type="checkbox"
                       id="price_inc_tax"
@@ -4233,20 +4256,20 @@ export const PackagesWorkspace: React.FC = () => {
                       className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                     />
                     <label htmlFor="price_inc_tax" className="text-xs text-foreground cursor-pointer select-none">
-                      Includes Tax
+                      Prices include tax
                     </label>
                   </div>
                 </div>
               </div>
 
-              {/* Passport & Sessions Entitlements Section */}
+              {/* Sessions & Entitlements Section */}
               <div className="pt-2 border-t border-border">
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Sessions &amp; Entitlements</span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-medium text-foreground">Max Sessions</label>
-                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Home Sessions</label>
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={newVerHomeUnlimited}
@@ -4254,7 +4277,7 @@ export const PackagesWorkspace: React.FC = () => {
                             setNewVerHomeUnlimited(e.target.checked);
                             if (e.target.checked) setNewVerMaxSessions('');
                           }}
-                          className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                          className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
                         />
                         Unlimited
                       </label>
@@ -4264,15 +4287,18 @@ export const PackagesWorkspace: React.FC = () => {
                       placeholder={newVerHomeUnlimited ? 'Unlimited' : 'e.g. 72'}
                       disabled={newVerHomeUnlimited}
                       value={newVerMaxSessions}
-                      onChange={(e) => setNewVerMaxSessions(e.target.value)}
-                      className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setNewVerMaxSessions(v ? String(Math.round(Number(v))) : '');
+                      }}
+                      className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                     />
-                    <span className="text-[10px] text-muted-foreground">Home Branch</span>
+                    <span className="text-[10px] text-muted-foreground block">Home Branch</span>
                   </div>
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-medium text-foreground">Passport Sessions</label>
-                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Cross-Branch Sessions</label>
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={newVerCrossUnlimited}
@@ -4280,7 +4306,7 @@ export const PackagesWorkspace: React.FC = () => {
                             setNewVerCrossUnlimited(e.target.checked);
                             if (e.target.checked) setNewVerPassportSessions('');
                           }}
-                          className="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                          className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
                         />
                         Unlimited
                       </label>
@@ -4290,21 +4316,27 @@ export const PackagesWorkspace: React.FC = () => {
                       placeholder={newVerCrossUnlimited ? 'Unlimited' : 'e.g. 10'}
                       disabled={newVerCrossUnlimited}
                       value={newVerPassportSessions}
-                      onChange={(e) => setNewVerPassportSessions(e.target.value)}
-                      className="text-sm disabled:bg-muted/50 disabled:text-muted-foreground"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setNewVerPassportSessions(v ? String(Math.round(Number(v))) : '');
+                      }}
+                      className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                     />
-                    <span className="text-[10px] text-muted-foreground">Cross-Branch</span>
+                    <span className="text-[10px] text-muted-foreground block">Cross-Branch</span>
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-medium text-foreground">Passport Cost (₹)</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Passport Cost (₹)</label>
+                      <span className="text-[10px] text-muted-foreground">Optional</span>
+                    </div>
                     <Input
                       type="number"
                       placeholder="e.g. 500"
                       value={newVerPassportCost}
                       onChange={(e) => setNewVerPassportCost(e.target.value)}
-                      className="text-sm"
+                      className="text-sm h-9"
                     />
-                    <span className="text-[10px] text-muted-foreground">Extra per session</span>
+                    <span className="text-[10px] text-muted-foreground block">Extra per session</span>
                   </div>
                 </div>
               </div>
@@ -4374,12 +4406,12 @@ export const PackagesWorkspace: React.FC = () => {
                       duration_value: newVerDurationVal,
                       duration_unit: newVerDurationUnit,
                       total_days: newVerTotalDays,
-                      validity_days: newVerValidity,
+                      validity_days: newVerTotalDays,
                       show_on_web: newVerShowWeb,
                       show_on_app: newVerShowApp,
                       sale_price: newVerSalePrice ? Number(newVerSalePrice) : undefined,
                       display_price: newVerDisplayPrice ? Number(newVerDisplayPrice) : undefined,
-                      tax_percentage: newVerTaxPercentage ? Number(newVerTaxPercentage) : 18,
+                      tax_percentage: newVerTaxPercentage ? Math.round(Number(newVerTaxPercentage)) : 18,
                       prices_include_tax: newVerTaxIncluded,
                       is_unlimited_home: newVerHomeUnlimited,
                       max_sessions: newVerHomeUnlimited ? undefined : (newVerMaxSessions ? Number(newVerMaxSessions) : undefined),

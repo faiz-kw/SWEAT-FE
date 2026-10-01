@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { CreateLeadPayload, ReferrerOption } from '@/types/crm';
+import { formatBranchOptionLabel, formatBranchAddressOnly } from '@/lib/crmLabels';
 import {
   Dialog,
   DialogContent,
@@ -157,6 +158,10 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       return true;
     });
   }, [branches]);
+
+  const selectedBranchObj = React.useMemo(() => {
+    return uniqueBranches.find((b) => b.id === selectedBranch) || null;
+  }, [uniqueBranches, selectedBranch]);
 
   const uniquePrograms = React.useMemo(() => {
     const seen = new Set<string>();
@@ -398,11 +403,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     if (!selectedSource) errors.source = 'Lead source is required.';
     if (assignmentMode === 'MANUAL') {
       if (!selectedAgent) {
-        errors.agent = 'Assigned representative is required in manual mode.';
+        if (assignmentConfig?.assignment_mode_allowed === 'MANUAL' && !assignmentConfig?.allow_unassigned_fallback) {
+          errors.agent = 'Assigned representative is required by manual assignment policy.';
+        }
       } else {
         const chosen = agents.find((a) => a.id === selectedAgent);
         if (chosen && !chosen.is_available) {
-          errors.agent = `Selected representative is unavailable (${chosen.availability_reason || chosen.availability_status}). Please select an available representative or use Auto-Assignment.`;
+          errors.agent = `Selected representative is unavailable (${chosen.availability_reason || chosen.availability_status}). Please select an available representative or leave blank for Auto-Assignment.`;
         }
       }
     }
@@ -456,12 +463,17 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     const cleanPhoneDigits = phone.replace(/\D/g, '');
     const canonicalPhone = `+91${cleanPhoneDigits}`;
 
+    const effectiveAssignmentMode =
+      assignmentMode === 'AUTO' || (!selectedAgent && assignmentConfig?.assignment_mode_allowed !== 'MANUAL')
+        ? 'AUTO'
+        : 'MANUAL';
+
     const payload: CreateLeadPayload = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email_normalized: email.trim().toLowerCase(),
       phone_normalized: canonicalPhone,
-      assignment_mode: assignmentMode,
+      assignment_mode: effectiveAssignmentMode,
       gender: gender || null,
       date_of_birth: dateOfBirth || null,
       country: country || null,
@@ -470,7 +482,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       interested_program: selectedProgram,
       fitness_goal: fitnessGoal.trim() || null,
       lead_source: selectedSource,
-      assigned_sales_user: assignmentMode === 'MANUAL' && selectedAgent ? selectedAgent : null,
+      assigned_sales_user: effectiveAssignmentMode === 'MANUAL' && selectedAgent ? selectedAgent : null,
       referred_by_user: referredByUserId || null,
       referred_by_name: referredByName.trim() || null,
       billing_name: billingName.trim() || null,
@@ -700,14 +712,14 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                       <option value="">Loading branches...</option>
                     ) : isBranchesError ? (
                       <option value="">Unable to load branches</option>
-                    ) : branches.length === 0 ? (
+                    ) : uniqueBranches.length === 0 ? (
                       <option value="">No branches available</option>
                     ) : (
                       <>
                         <option value="">Select branch</option>
-                        {branches.map((b) => (
+                        {uniqueBranches.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.name}
+                            {formatBranchOptionLabel(b)}
                           </option>
                         ))}
                       </>
@@ -927,7 +939,9 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                   <div className="sm:col-span-2 space-y-1">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-medium">
-                        Assigned Representative <span className="text-destructive">*</span>
+                        Assigned Representative {assignmentConfig?.assignment_mode_allowed === 'MANUAL' && !assignmentConfig?.allow_unassigned_fallback && (
+                          <span className="text-destructive">*</span>
+                        )}
                       </Label>
                       {availableAgents.length > 0 && (
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -942,7 +956,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                         formErrors.agent ? 'border-destructive' : ''
                       }`}
                       disabled={isAgentsLoading}
-                      required
+                      required={assignmentConfig?.assignment_mode_allowed === 'MANUAL' && !assignmentConfig?.allow_unassigned_fallback}
                     >
                       {isAgentsLoading ? (
                         <option value="">Loading representatives...</option>
@@ -952,7 +966,11 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                         <option value="">No representatives found for this branch</option>
                       ) : (
                         <>
-                          <option value="">Select an available representative</option>
+                          <option value="">
+                            {assignmentConfig?.assignment_mode_allowed !== 'MANUAL'
+                              ? '✨ Auto-Assign (Sequential Round-Robin)'
+                              : 'Select an available representative'}
+                          </option>
                           {availableAgents.length > 0 && (
                             <optgroup label="Available Representatives">
                               {availableAgents.map((ag) => (

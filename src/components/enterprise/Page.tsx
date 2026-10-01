@@ -7,18 +7,20 @@ export function PageHeader({
   description,
   actions,
   meta,
+  className,
 }: {
   title: string;
   subtitle?: string;
   description?: string;
   actions?: React.ReactNode;
   meta?: React.ReactNode;
+  className?: string;
 }) {
   const effectiveSubtitle = subtitle || description;
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-surface/60 backdrop-blur-md px-5 py-4">
+    <div className={cn("flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-surface/60 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4 sm:py-5 w-full", className)}>
       <div className="min-w-0">
-        <h1 className="truncate text-base sm:text-lg font-bold tracking-tight text-foreground">{title}</h1>
+        <h1 className="truncate text-base sm:text-lg lg:text-xl font-bold tracking-tight text-foreground">{title}</h1>
         {effectiveSubtitle && <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{effectiveSubtitle}</p>}
         {meta && <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">{meta}</div>}
       </div>
@@ -28,7 +30,7 @@ export function PageHeader({
 }
 
 export function PageBody({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("flex-1 space-y-5 p-4 sm:p-5", className)}>{children}</div>;
+  return <div className={cn("flex-1 space-y-6 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 w-full", className)}>{children}</div>;
 }
 
 export function Section({
@@ -69,6 +71,8 @@ export function KpiTile({
   delta,
   change,
   hint,
+  subtitle,
+  icon,
   badge,
   tone = "neutral",
   variant,
@@ -79,12 +83,15 @@ export function KpiTile({
   delta?: string;
   change?: string;
   hint?: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
   badge?: { text: string; variant?: string };
   tone?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
   variant?: "neutral" | "positive" | "negative" | "warning" | "default" | "warn";
 }) {
   const effectiveLabel = label || title || "";
   const effectiveDelta = delta || change || (badge ? badge.text : undefined);
+  const effectiveHint = hint || subtitle;
   const effectiveTone = variant || tone;
 
   const isPos = effectiveTone === "positive" || badge?.variant === "success";
@@ -94,8 +101,15 @@ export function KpiTile({
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-3.5 sm:p-4 shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between min-w-0">
-      <div className="text-[10.5px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate" title={effectiveLabel}>
-        {effectiveLabel}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="text-[10.5px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate" title={effectiveLabel}>
+          {effectiveLabel}
+        </div>
+        {icon && (
+          <div className="shrink-0 p-1.5 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground flex items-center justify-center">
+            {icon}
+          </div>
+        )}
       </div>
       <div className="mt-1.5 sm:mt-2 flex flex-wrap items-baseline gap-1.5 sm:gap-2 min-w-0">
         <span className="num text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
@@ -117,7 +131,7 @@ export function KpiTile({
           </span>
         )}
       </div>
-      {hint && <div className="mt-1 truncate text-[10.5px] text-muted-foreground">{hint}</div>}
+      {effectiveHint && <div className="mt-1 truncate text-[10.5px] text-muted-foreground">{effectiveHint}</div>}
     </div>
   );
 }

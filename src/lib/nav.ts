@@ -255,7 +255,6 @@ export const NAV: NavSection[] = [
     icon: "Users",
     items: [
       { label: "All Members", to: "/members", permission: "members.client-360.view" },
-      { label: "Client 360", to: "/members/client-360", permission: "members.client-360.view" },
       { label: "Memberships", to: "/members/memberships", permission: "members.memberships.view" },
       { label: "Renewals", to: "/members/renewals", permission: "members.renewals.view" },
       { label: "Freeze / Pause", to: "/members/freeze", permission: "members.freeze.view" },
@@ -420,7 +419,7 @@ export const NAV: NavSection[] = [
       { label: "Locations", to: "/admin/locations", permission: "core.settings.view" },
       { label: "Services", to: "/admin/services", visibility: "superadmin_only" },
       { label: "Configuration", to: "/admin/configuration", visibility: "superadmin_only" },
-      { label: "Forms", to: "/admin/forms", visibility: "superadmin_only" },
+      { label: "Forms & Assessments", to: "/admin/forms", permission: "core.settings.view" },
       { label: "Integrations", to: "/admin/integrations", visibility: "superadmin_only" },
       { label: "API", to: "/admin/api", visibility: "superadmin_only" },
       { label: "Audit Logs", to: "/admin/audit-logs", permission: "core.audit.view" },

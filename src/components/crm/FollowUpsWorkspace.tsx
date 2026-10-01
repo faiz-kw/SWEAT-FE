@@ -70,9 +70,58 @@ export function FollowUpsWorkspace() {
   const canEdit = can('crm.leads.edit') || can('crm.leads.create');
 
   // Filters & Tabs state
-  const [activeTab, setActiveTab] = React.useState<
-    'all' | 'overdue' | 'today' | 'upcoming' | 'high_priority' | 'completed'
-  >('today');
+  type FollowUpTab = 'all' | 'today' | 'overdue' | 'high_priority' | 'upcoming' | 'completed';
+
+  const [activeTab, setActiveTabState] = React.useState<FollowUpTab>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const t = (sp.get('tab') || '').toLowerCase();
+        if (['all', 'today', 'overdue', 'high_priority', 'upcoming', 'completed'].includes(t)) {
+          return t as FollowUpTab;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return 'all';
+  });
+
+  const handleTabChange = React.useCallback((tabId: FollowUpTab) => {
+    setActiveTabState(tabId);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        if (tabId === 'all') {
+          url.searchParams.delete('tab');
+        } else {
+          url.searchParams.set('tab', tabId);
+        }
+        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const t = (sp.get('tab') || '').toLowerCase();
+        if (['all', 'today', 'overdue', 'high_priority', 'upcoming', 'completed'].includes(t)) {
+          setActiveTabState(t as FollowUpTab);
+        } else {
+          setActiveTabState('all');
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [search, setSearch] = React.useState('');
   const [selectedAgent, setSelectedAgent] = React.useState<string>('ALL');
 
@@ -308,7 +357,7 @@ export function FollowUpsWorkspace() {
         }
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* AGENT WORK QUEUE SUMMARY CARDS */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <CRMKpiTile
@@ -318,7 +367,7 @@ export function FollowUpsWorkspace() {
             isError={isCountsError}
             badge={{ text: 'Urgent', variant: 'negative' }}
             hint="Require immediate call"
-            onClick={() => setActiveTab('overdue')}
+            onClick={() => handleTabChange('overdue')}
           />
           <CRMKpiTile
             label="Due Today"
@@ -327,7 +376,7 @@ export function FollowUpsWorkspace() {
             isError={isCountsError}
             badge={{ text: 'Today', variant: 'info' }}
             hint="Today's scheduled agenda"
-            onClick={() => setActiveTab('today')}
+            onClick={() => handleTabChange('today')}
           />
           <CRMKpiTile
             label="Due Later"
@@ -336,7 +385,7 @@ export function FollowUpsWorkspace() {
             isError={isCountsError}
             badge={{ text: 'Upcoming', variant: 'neutral' }}
             hint="Upcoming client touchpoints"
-            onClick={() => setActiveTab('upcoming')}
+            onClick={() => handleTabChange('upcoming')}
           />
           <CRMKpiTile
             label="High Priority"
@@ -345,7 +394,7 @@ export function FollowUpsWorkspace() {
             isError={isCountsError}
             badge={{ text: 'Priority', variant: 'warning' }}
             hint="Urgent & High attention"
-            onClick={() => setActiveTab('high_priority')}
+            onClick={() => handleTabChange('high_priority')}
           />
           <CRMKpiTile
             label="Completed Today"
@@ -354,7 +403,7 @@ export function FollowUpsWorkspace() {
             isError={isCountsError}
             badge={{ text: 'Done', variant: 'positive' }}
             hint="Closed interactions"
-            onClick={() => setActiveTab('completed')}
+            onClick={() => handleTabChange('completed')}
             className="col-span-2 sm:col-span-1 lg:col-span-1"
           />
         </div>
@@ -362,17 +411,17 @@ export function FollowUpsWorkspace() {
         {/* VIEW TABS */}
         <div className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border">
           {[
+            { id: 'all', label: 'All Tasks' },
             { id: 'today', label: "Due Today" },
             { id: 'overdue', label: 'Overdue' },
             { id: 'high_priority', label: 'High Priority' },
             { id: 'upcoming', label: 'Upcoming' },
             { id: 'completed', label: 'Completed' },
-            { id: 'all', label: 'All Tasks' },
           ].map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => setActiveTab(t.id as any)}
+              onClick={() => handleTabChange(t.id as FollowUpTab)}
               className={cn(
                 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all',
                 activeTab === t.id

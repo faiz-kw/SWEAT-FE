@@ -20,8 +20,8 @@ export function CRMPageHeader({
   actions,
 }: CRMPageHeaderProps) {
   return (
-    <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 py-4 sticky top-0 z-10">
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4 sticky top-0 z-10 w-full">
+      <div className="w-full flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             {Icon && (

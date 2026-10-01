@@ -135,7 +135,13 @@ export function Topbar() {
       markReadMutation.mutate(notif.id);
     }
     if (notif.deep_link) {
-      router.navigate({ to: notif.deep_link });
+      if (notif.deep_link.includes('?')) {
+        const [path, searchStr] = notif.deep_link.split('?');
+        const searchParams = Object.fromEntries(new URLSearchParams(searchStr));
+        void router.navigate({ to: path as any, search: searchParams as any });
+      } else {
+        void router.navigate({ to: notif.deep_link as any });
+      }
     }
   };
 

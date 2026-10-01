@@ -16,9 +16,17 @@ export const membershipsApi = {
     user_profile_id?: string;
     branch_id?: string;
     status?: string;
-  }): Promise<Membership[]> => {
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{ count: number; total_pages: number; next: string | null; previous: string | null; results: Membership[] }> => {
     const res = await api.get('/tenant/memberships/', { params });
-    return res.data.results || res.data;
+    // Handle both paginated response and legacy flat array
+    if (res.data && typeof res.data === 'object' && 'results' in res.data) {
+      return res.data;
+    }
+    const arr: Membership[] = Array.isArray(res.data) ? res.data : [];
+    return { count: arr.length, total_pages: 1, next: null, previous: null, results: arr };
   },
 
   getMembership: async (id: string): Promise<Membership> => {

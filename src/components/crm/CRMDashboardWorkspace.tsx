@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { formatBranchOptionLabel } from '@/lib/crmLabels';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -84,6 +85,12 @@ export function CRMDashboardWorkspace() {
       const list = Array.isArray(res.data) ? res.data : res.data?.results || [];
       return list as Array<{ id: string; name: string }>;
     },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: agents = [] } = useQuery({
+    queryKey: ['eligible-agents-list', selectedBranch],
+    queryFn: () => crmApi.getEligibleAgents(selectedBranch !== 'ALL' ? selectedBranch : undefined),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -174,7 +181,7 @@ export function CRMDashboardWorkspace() {
         }
       />
 
-      <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] w-full mx-auto">
+      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 w-full">
         {/* Filter Controls Bar */}
         <div className="bg-card border border-border rounded-xl p-4 shadow-2xs space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -242,7 +249,7 @@ export function CRMDashboardWorkspace() {
           )}
 
           {/* Granular Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-2 border-t border-border/50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-2 border-t border-border/50">
             {/* Branch */}
             <div>
               <label className="text-[11px] font-medium text-muted-foreground block mb-1">
@@ -256,7 +263,7 @@ export function CRMDashboardWorkspace() {
                 <option value="ALL">All Permitted Branches</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {formatBranchOptionLabel(b)}
                   </option>
                 ))}
               </select>
@@ -295,6 +302,25 @@ export function CRMDashboardWorkspace() {
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Agent */}
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                Sales Agent
+              </label>
+              <select
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                className="w-full h-8 text-xs bg-background border border-border rounded-md px-2 focus:ring-1 focus:ring-primary outline-hidden"
+              >
+                <option value="ALL">All Agents</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.display_name || a.name || a.email}
                   </option>
                 ))}
               </select>
@@ -471,7 +497,7 @@ export function CRMDashboardWorkspace() {
               {funnel.length === 0 ? (
                 <CRMEmptyState title="No leads found in this period" />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                   {funnel.map((stage) => {
                     const isClosedWon = stage.status === 'CONVERTED';
                     const isClosedLost = ['LOST', 'NOT_INTERESTED'].includes(stage.status);

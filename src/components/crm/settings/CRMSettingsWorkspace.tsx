@@ -34,6 +34,7 @@ import { crmApi } from '@/api/endpoints/crmApi';
 import type {
   LeadSource,
   CRMStageSlaPolicy,
+  CRMStageAutomationRule,
   CRMTrialReminderPolicy,
   CRMCommunicationChannel,
   NotificationTemplateItem,
@@ -170,6 +171,53 @@ export function CRMSettingsWorkspace() {
   });
 
   // ==========================================
+  // STAGE AUTOMATION RULES STATE & MUTATIONS
+  // ==========================================
+  const [isNewRuleModalOpen, setIsNewRuleModalOpen] = React.useState(false);
+  const [newRuleName, setNewRuleName] = React.useState('');
+  const [newRuleTrigger, setNewRuleTrigger] = React.useState<CRMStageAutomationRule['trigger_event']>('FOLLOWUP_COMPLETED');
+  const [newRuleToStage, setNewRuleToStage] = React.useState('INTERESTED');
+  const [newRuleKeywords, setNewRuleKeywords] = React.useState('');
+  const [newRulePriority, setNewRulePriority] = React.useState(10);
+
+  const {
+    data: stageRules = [],
+    isLoading: isRulesLoading,
+    refetch: refetchRules,
+  } = useQuery({
+    queryKey: ['crm-stage-automation-rules'],
+    queryFn: () => crmApi.getStageAutomationRules(),
+    enabled: activeTab === 'sla',
+  });
+
+  const toggleRuleMutation = useMutation({
+    mutationFn: ({ id, is_enabled }: { id: string; is_enabled: boolean }) =>
+      crmApi.updateStageAutomationRule(id, { is_enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-stage-automation-rules'] });
+      toast.success('Stage automation rule status updated');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to update rule');
+    },
+  });
+
+  const createRuleMutation = useMutation({
+    mutationFn: (payload: Partial<CRMStageAutomationRule>) =>
+      crmApi.createStageAutomationRule(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-stage-automation-rules'] });
+      toast.success('Custom stage automation rule created');
+      setIsNewRuleModalOpen(false);
+      setNewRuleName('');
+      setNewRuleKeywords('');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to create rule');
+    },
+  });
+
+  // ==========================================
   // TAB 3: TRIAL REMINDER POLICY
   // ==========================================
   const {
@@ -270,7 +318,7 @@ export function CRMSettingsWorkspace() {
           icon={Sliders}
           badgeText="Restricted"
         />
-        <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-12">
+        <main className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           <CRMErrorState
             title="Access Denied"
             message="You do not have permission to view CRM Setup. Required permission: crm.settings.view."
@@ -316,7 +364,7 @@ export function CRMSettingsWorkspace() {
         }
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* Tabs Navigation (Consistent Segmented Control) */}
         <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border overflow-x-auto no-scrollbar">
         <button
@@ -664,6 +712,107 @@ export function CRMSettingsWorkspace() {
               ))}
             </div>
           )}
+
+          {/* ========================================================================= */}
+          {/* EVENT-DRIVEN STAGE AUTOMATION RULES SECTION                               */}
+          {/* ========================================================================= */}
+          <div className="pt-6 border-t border-border/60 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/50">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <span>Event-Driven Stage Automation Rules</span>
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                    Engine Active
+                  </Badge>
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Automatically move leads to appropriate stages upon domain events (Follow-up completed, Trial booked, Attended, No-Show, Converted).
+                </p>
+              </div>
+
+              {canEdit && (
+                <Button
+                  size="sm"
+                  onClick={() => setIsNewRuleModalOpen(true)}
+                  className="text-xs h-8 gap-1.5 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Custom Automation Rule
+                </Button>
+              )}
+            </div>
+
+            {isRulesLoading ? (
+              <div className="flex items-center justify-center p-8 bg-card rounded-xl border border-border/50 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span className="text-xs">Loading automation rules...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {stageRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className={`p-4 rounded-xl border transition-all space-y-3 bg-card ${
+                      rule.is_enabled ? 'border-border/60 shadow-sm' : 'border-border/30 opacity-70 bg-muted/10'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">{rule.name}</h3>
+                        <span className="font-mono text-[10px] text-primary">
+                          Event: {rule.trigger_event}
+                        </span>
+                      </div>
+
+                      <Badge
+                        variant={rule.is_enabled ? 'default' : 'secondary'}
+                        className="text-[10px] font-semibold"
+                      >
+                        {rule.is_enabled ? 'Enabled' : 'Disabled'}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1 border-t border-border/40 text-xs">
+                      <div className="flex justify-between items-center text-muted-foreground">
+                        <span>Target Stage:</span>
+                        <Badge variant="outline" className="text-[10px] font-semibold">
+                          {rule.to_stage}
+                        </Badge>
+                      </div>
+
+                      <div className="flex justify-between items-center text-muted-foreground">
+                        <span>Priority:</span>
+                        <span className="font-mono text-foreground">{rule.priority}</span>
+                      </div>
+
+                      {rule.conditions && Object.keys(rule.conditions).length > 0 && (
+                        <div className="text-[11px] text-muted-foreground pt-1">
+                          <span className="font-medium">Conditions: </span>
+                          <span className="font-mono text-[10px] bg-muted/50 px-1 py-0.5 rounded">
+                            {JSON.stringify(rule.conditions)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {canEdit && (
+                      <div className="pt-2 border-t border-border/40 flex justify-end">
+                        <Button
+                          variant={rule.is_enabled ? 'outline' : 'default'}
+                          size="sm"
+                          disabled={toggleRuleMutation.isPending}
+                          onClick={() => toggleRuleMutation.mutate({ id: rule.id, is_enabled: !rule.is_enabled })}
+                          className="h-7 text-xs"
+                        >
+                          {rule.is_enabled ? 'Disable Rule' : 'Enable Rule'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1389,6 +1538,125 @@ export function CRMSettingsWorkspace() {
               className="text-xs font-medium"
             >
               {updateSlaMutation.isPending ? 'Saving...' : 'Save SLA Policy'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: ADD CUSTOM AUTOMATION RULE                                         */}
+      {/* ========================================================================= */}
+      <Dialog open={isNewRuleModalOpen} onOpenChange={setIsNewRuleModalOpen}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Add Stage Automation Rule</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Define an automatic lead stage transition triggered by domain events.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Rule Name *</Label>
+              <Input
+                placeholder="e.g. VIP Interested -> High Priority Followup"
+                value={newRuleName}
+                onChange={(e) => setNewRuleName(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Trigger Event *</Label>
+              <select
+                value={newRuleTrigger}
+                onChange={(e) => setNewRuleTrigger(e.target.value as any)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
+              >
+                <option value="FOLLOWUP_COMPLETED">Follow-up Task Completed</option>
+                <option value="TRIAL_BOOKED">Trial Session Booked</option>
+                <option value="TRIAL_RESCHEDULED">Trial Session Rescheduled</option>
+                <option value="TRIAL_ATTENDED">Trial Session Attended</option>
+                <option value="TRIAL_NO_SHOW">Trial Session Marked No-Show</option>
+                <option value="TRIAL_CANCELLED">Trial Session Cancelled</option>
+                <option value="LEAD_CONVERTED">Lead Converted</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Target Stage *</Label>
+              <select
+                value={newRuleToStage}
+                onChange={(e) => setNewRuleToStage(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
+              >
+                <option value="INTERESTED">Interested</option>
+                <option value="FOLLOW_UP_PENDING">Follow-Up Pending</option>
+                <option value="TRIAL_BOOKED">Trial Booked</option>
+                <option value="TRIAL_ATTENDED">Trial Attended</option>
+                <option value="NO_SHOW">No Show</option>
+                <option value="PAYMENT_PENDING">Payment Pending</option>
+                <option value="CONVERTED">Converted</option>
+                <option value="LOST">Lost</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Outcome Keywords (Optional)</Label>
+              <Input
+                placeholder="e.g. interested, join, proceed (comma separated)"
+                value={newRuleKeywords}
+                onChange={(e) => setNewRuleKeywords(e.target.value)}
+                className="h-9 text-xs"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                Matches keywords in task completion notes or outcomes.
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Rule Priority (Higher = Runs First)</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={newRulePriority}
+                onChange={(e) => setNewRulePriority(parseInt(e.target.value, 10) || 0)}
+                className="h-9 text-xs w-28"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsNewRuleModalOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!newRuleName.trim() || createRuleMutation.isPending}
+              onClick={() => {
+                const keywords = newRuleKeywords
+                  .split(',')
+                  .map((k) => k.trim().toLowerCase())
+                  .filter(Boolean);
+                createRuleMutation.mutate({
+                  name: newRuleName.trim(),
+                  trigger_event: newRuleTrigger,
+                  from_stage: 'ANY',
+                  to_stage: newRuleToStage as any,
+                  conditions: keywords.length > 0 ? { outcome_keywords: keywords } : {},
+                  priority: newRulePriority,
+                  is_enabled: true,
+                });
+              }}
+              className="text-xs font-medium"
+            >
+              {createRuleMutation.isPending ? 'Creating...' : 'Create Rule'}
             </Button>
           </DialogFooter>
         </DialogContent>

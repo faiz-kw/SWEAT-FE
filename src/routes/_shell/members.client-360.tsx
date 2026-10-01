@@ -39,3 +39,4 @@ function Member360RouteComponent() {
 
   return <Member360Workspace memberId={search.memberId.trim()} />;
 }
+

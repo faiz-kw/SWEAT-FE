@@ -60,8 +60,35 @@ import {
   type AdminUserRow,
   type RoleDefRow,
   type LocationRow,
+  type BranchDropdownItem,
 } from "@/api/endpoints/api-admin";
 import { useAuth } from "@/contexts";
+
+export function getBranchDisplayName(b: {
+  id?: string;
+  name?: string;
+  city?: string;
+  location_name?: string;
+  code?: string;
+} | null | undefined): string {
+  if (!b) return "Branch";
+  const name = (b.name || "").trim();
+  const city = (b.city || b.location_name || "").trim();
+
+  // If city is already in the name (e.g. "SWEAT Andheri"), avoid duplicating
+  if (city && name && !name.toLowerCase().includes(city.toLowerCase())) {
+    return `${city} · ${name}`;
+  }
+  return name || city || b.code || "Branch";
+}
+
+export function getBranchAddressDisplay(b: {
+  address?: string;
+  city?: string;
+} | null | undefined): string {
+  if (!b) return "";
+  return (b.address || "").trim();
+}
 
 export const isPlatformAccount = (
   u: { tenant_id?: string; role?: string; tenant_name?: string } | null | undefined
@@ -116,7 +143,7 @@ export function UsersWorkspace() {
 
   const [users, setUsers] = React.useState<AdminUserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDefRow[]>([]);
-  const [branches, setBranches] = React.useState<{ id: string; name: string; code?: string }[]>([]);
+  const [branches, setBranches] = React.useState<BranchDropdownItem[]>([]);
   const [departments, setDepartments] = React.useState<{ id: string; name: string; code?: string }[]>([]);
   const [tenants, setTenants] = React.useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -723,18 +750,29 @@ export function UsersWorkspace() {
 
             {/* Branch Filter */}
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="h-8 text-xs w-36 bg-background">
+              <SelectTrigger className="h-8 text-xs min-w-[130px] max-w-[200px] bg-background">
                 <SelectValue placeholder="Branch" />
               </SelectTrigger>
-              <SelectContent className="text-xs">
+              <SelectContent className="text-xs max-h-64">
                 {(currentUser?.isOrgWide !== false || isPlatformAdmin) && (
                   <SelectItem value="all">All Branches</SelectItem>
                 )}
-                {uniqueBranches.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name}
-                  </SelectItem>
-                ))}
+                {uniqueBranches.map((b) => {
+                  const displayName = getBranchDisplayName(b);
+                  const addressDisplay = getBranchAddressDisplay(b);
+                  return (
+                    <SelectItem key={b.id} value={b.id} textValue={displayName} className="py-1.5 cursor-pointer">
+                      <div className="flex flex-col text-left min-w-0">
+                        <span className="font-semibold">{displayName}</span>
+                        {addressDisplay && (
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                            {addressDisplay}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 
@@ -922,11 +960,43 @@ export function UsersWorkspace() {
 
                           {/* Branch / Studio */}
                           <td className="py-3 px-4">
-                            <div className="flex items-center gap-1 text-muted-foreground">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
                               <MapPin className="size-3.5 text-primary shrink-0" />
-                              <span className="truncate max-w-[150px]">
-                                {u.active_location_name || "All Branches"}
-                              </span>
+                              <div className="flex flex-col min-w-0 max-w-[190px]">
+                                <span className="truncate font-semibold text-foreground text-xs">
+                                  {(() => {
+                                    const matchingBranch = branches.find(
+                                      (b) =>
+                                        b.id === u.active_location_id ||
+                                        b.id === (u as any).home_branch ||
+                                        b.name === u.active_location_name
+                                    );
+                                    if (matchingBranch) {
+                                      return getBranchDisplayName(matchingBranch);
+                                    }
+                                    return u.active_location_name || "All Branches";
+                                  })()}
+                                </span>
+                                {(() => {
+                                  const matchingBranch = branches.find(
+                                    (b) =>
+                                      b.id === u.active_location_id ||
+                                      b.id === (u as any).home_branch ||
+                                      b.name === u.active_location_name
+                                  );
+                                  const addr =
+                                    (matchingBranch && getBranchAddressDisplay(matchingBranch)) ||
+                                    u.active_location_address;
+                                  if (addr) {
+                                    return (
+                                      <span className="truncate text-[10px] text-muted-foreground" title={addr}>
+                                        {addr}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                             </div>
                           </td>
 
@@ -1050,8 +1120,23 @@ export function UsersWorkspace() {
                         </span>
                       )}
                       <span className="flex items-center gap-1">
-                        <MapPin className="size-3 text-primary" />
-                        {u.active_location_name || "All Branches"}
+                        <MapPin className="size-3 text-primary shrink-0" />
+                        <span>
+                          {(() => {
+                            const matchingBranch = branches.find(
+                              (b) =>
+                                b.id === u.active_location_id ||
+                                b.id === (u as any).home_branch ||
+                                b.name === u.active_location_name
+                            );
+                            if (matchingBranch) {
+                              const name = getBranchDisplayName(matchingBranch);
+                              const addr = getBranchAddressDisplay(matchingBranch);
+                              return addr ? `${name} (${addr})` : name;
+                            }
+                            return u.active_location_name || "All Branches";
+                          })()}
+                        </span>
                       </span>
                       {u.reports_to_name && (
                         <span className="flex items-center gap-1">
@@ -1299,15 +1384,31 @@ export function UsersWorkspace() {
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Primary Branch Assignment</Label>
                 <Select value={inviteBranchId} onValueChange={setInviteBranchId}>
-                  <SelectTrigger className="h-8 text-xs bg-background">
+                  <SelectTrigger className="min-h-9 h-auto py-1.5 text-xs bg-background">
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
-                  <SelectContent className="text-xs">
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="text-xs max-h-64">
+                    {uniqueBranches.map((b) => {
+                      const displayName = getBranchDisplayName(b);
+                      const addressDisplay = getBranchAddressDisplay(b);
+                      const fullSummary = addressDisplay ? `${displayName} — ${addressDisplay}` : displayName;
+                      return (
+                        <SelectItem key={b.id} value={b.id} textValue={fullSummary} className="py-2 cursor-pointer">
+                          <div className="flex flex-col text-left min-w-0 pr-2">
+                            <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                              <Building2 className="size-3.5 text-primary shrink-0" />
+                              {displayName}
+                            </span>
+                            {addressDisplay && (
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
+                                <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
+                                <span className="truncate">{addressDisplay}</span>
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -1545,18 +1646,44 @@ export function UsersWorkspace() {
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Branch access for this role</Label>
                   <p className="text-xs text-muted-foreground">Enable any number of branches. Disabling a branch removes access through this role; other roles may still grant access.</p>
-                  {uniqueBranches.map((branch) => (
-                    <label key={branch.id} className="flex items-center justify-between gap-3 rounded border p-2 text-xs">
-                      <span>{branch.name}</span>
-                      <span className="flex items-center gap-2">
-                        {editBranchAccess[branch.id] ? "Enabled" : "Disabled"}
-                        <input type="checkbox" aria-label={`Enable access to ${branch.name}`}
-                          checked={editBranchAccess[branch.id] === true}
-                          disabled={editSubmitting}
-                          onChange={(event) => setEditBranchAccess((current) => ({ ...current, [branch.id]: event.target.checked }))} />
-                      </span>
-                    </label>
-                  ))}
+                  {uniqueBranches.map((branch) => {
+                    const displayName = getBranchDisplayName(branch);
+                    const addressDisplay = getBranchAddressDisplay(branch);
+                    return (
+                      <label
+                        key={branch.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-xs hover:bg-muted/30 transition-colors cursor-pointer"
+                      >
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="font-semibold text-foreground flex items-center gap-1.5">
+                            <Building2 className="size-3.5 text-primary shrink-0" />
+                            {displayName}
+                          </span>
+                          {addressDisplay && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
+                              <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
+                              <span className="truncate">{addressDisplay}</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] font-medium text-muted-foreground">
+                            {editBranchAccess[branch.id] ? "Enabled" : "Disabled"}
+                          </span>
+                          <input
+                            type="checkbox"
+                            aria-label={`Enable access to ${displayName}`}
+                            checked={editBranchAccess[branch.id] === true}
+                            disabled={editSubmitting}
+                            onChange={(event) =>
+                              setEditBranchAccess((current) => ({ ...current, [branch.id]: event.target.checked }))
+                            }
+                            className="rounded border-input text-primary focus:ring-primary cursor-pointer"
+                          />
+                        </span>
+                      </label>
+                    );
+                  })}
                   {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
                 </div>
               ) : (

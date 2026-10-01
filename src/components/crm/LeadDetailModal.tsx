@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
   User,
   Mail,
@@ -47,6 +48,7 @@ import {
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
+import { formatBranchOptionLabel, formatBranchAddressOnly, formatBranchTitle } from '@/lib/crmLabels';
 import { ConversionWizard } from './ConversionWizard';
 import { BookTrialModal } from './BookTrialModal';
 import type {
@@ -81,6 +83,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/lib/permissions';
+import { useAuth } from '@/api/auth/AuthProvider';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
   NEW_LEAD: { label: 'New Lead', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
@@ -127,7 +130,9 @@ export function LeadDetailModal({
   onStatusTransitionClick,
   onBookTrialClick,
 }: LeadDetailModalProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const { can } = usePermissions();
   const canEdit = can('crm.leads.edit') || can('sales.leads.edit');
   const canConvert = can('crm.leads.convert') || canEdit;
@@ -309,16 +314,52 @@ export function LeadDetailModal({
     enabled: open && !!currentLead?.id,
   });
 
-  const latestTrial = leadTrials.length > 0 ? leadTrials[0] : null;
+  const latestTrial = React.useMemo(() => {
+    if (!leadTrials.length) return null;
+    const active = leadTrials.find((t) => t.is_active_trial) ||
+      leadTrials.find(
+        (t) =>
+          ['BOOKED', 'CONFIRMED', 'SCHEDULED'].includes(t.status) &&
+          !['CANCELLED', 'DECLINED'].includes(t.confirmation_status)
+      );
+    return active || leadTrials[0];
+  }, [leadTrials]);
+
+  // Logical journey count (chains of reschedules count as 1 logical trial journey)
+  const logicalTrialCount = React.useMemo(() => {
+    if (!leadTrials.length) return 0;
+    const journeys = new Set(leadTrials.map((t) => t.logical_journey_id || t.id));
+    return journeys.size;
+  }, [leadTrials]);
 
   // Active trial check: true if lead has an active booked/confirmed/scheduled trial
   const hasActiveTrial = React.useMemo(() => {
     return leadTrials.some(
       (t) =>
+        t.is_active_trial !== false &&
         ['BOOKED', 'CONFIRMED', 'SCHEDULED'].includes(t.status) &&
         !['CANCELLED', 'DECLINED'].includes(t.confirmation_status)
     );
   }, [leadTrials]);
+
+  // Eligibility for booking new trial: checks backend action_eligibility and active trial
+  const canBookTrial = React.useMemo(() => {
+    if (currentLead?.action_eligibility) {
+      return Boolean(currentLead.action_eligibility.can_book_trial) && !hasActiveTrial;
+    }
+    return !hasActiveTrial;
+  }, [currentLead?.action_eligibility, hasActiveTrial]);
+
+  const cannotBookTrialReason = React.useMemo(() => {
+    if (!currentLead) return null;
+    if (hasActiveTrial) {
+      return 'Lead already has an active trial scheduled.';
+    }
+    if (currentLead.action_eligibility?.can_book_trial === false) {
+      return currentLead.action_eligibility.can_book_trial_reason || 'Trial booking limit reached for this lead under tenant policy.';
+    }
+    return null;
+  }, [currentLead?.action_eligibility, hasActiveTrial]);
 
   // Reminder schedule for latest trial
   const { data: latestReminderSchedule = [], isLoading: isLatestReminderLoading } = useQuery({
@@ -503,6 +544,21 @@ export function LeadDetailModal({
     },
   });
 
+  // Claim / Take Over Lead Mutation
+  const takeoverMutation = useMutation({
+    mutationFn: () => crmApi.assignLead(currentLead!.id, { claim: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-activities', currentLead?.id] });
+      toast.success(currentLead?.assigned_sales_user ? 'Lead ownership taken over successfully.' : 'Lead assigned to you.');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to claim lead');
+    },
+  });
+
   // Add Follow-up Task Mutation
   const addFollowupMutation = useMutation({
     mutationFn: (payload: { task_type: FollowupTaskType; priority: FollowupPriority; due_at: string; notes?: string; assigned_to_user?: string }) =>
@@ -532,6 +588,8 @@ export function LeadDetailModal({
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['followup-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['work-queue-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', currentLead?.id] });
       setCompletingTask(null);
       setCompleteOutcome('');
       toast.success('Follow-up marked completed.');
@@ -714,124 +772,96 @@ export function LeadDetailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-full h-[95vh] sm:h-auto sm:max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-none sm:rounded-2xl">
         {/* LEAD 360 HEADER (PART E.8) */}
-        <DialogHeader className="px-5 sm:px-6 py-3.5 border-b border-border/70 bg-card/50 backdrop-blur-xs shrink-0 flex flex-col gap-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+        <DialogHeader className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/70 bg-card/50 backdrop-blur-xs shrink-0 flex flex-col gap-2 sm:gap-2.5">
+          {/* TOP ROW: Primary Identity (Avatar, Name, Status, SLA pill) & Primary CTA (Convert to Member) */}
+          {/* pr-10 sm:pr-14 ensures clear safe distance from the absolute top-right close 'X' button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 pr-10 sm:pr-14">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs sm:text-sm shadow-xs shrink-0 border border-primary/20">
                 {currentLead.first_name?.charAt(0)}
                 {currentLead.last_name?.charAt(0)}
               </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <DialogTitle className="text-lg sm:text-xl font-bold">
-                    {currentLead.first_name} {currentLead.last_name}
-                  </DialogTitle>
-                  <Badge variant="outline" className={`text-xs px-2.5 py-0.5 ${statusConf.color}`}>
-                    {statusConf.label}
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+                <DialogTitle className="text-base sm:text-xl font-bold tracking-tight text-foreground truncate">
+                  {currentLead.first_name} {currentLead.last_name}
+                </DialogTitle>
+                <Badge variant="outline" className={`text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 font-medium ${statusConf.color}`}>
+                  {statusConf.label}
+                </Badge>
+                {/* RESPONSE SLA BADGE */}
+                {currentLead.sla_details?.response_sla?.status === 'MET' && (
+                  <Badge variant="outline" className="text-[11px] sm:text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1 font-medium">
+                    <CheckCircle2 className="w-3 h-3" />
+                    1st Resp: Met ({currentLead.sla_details.response_sla.first_response_time_seconds ? formatDuration(currentLead.sla_details.response_sla.first_response_time_seconds) : 'recorded'})
                   </Badge>
-                  {/* SLA STATUS BADGE */}
-                  {sla && sla.sla_status === 'BREACHED' && (
-                    <Badge variant="outline" className="text-xs bg-rose-500/10 text-rose-500 border-rose-500/30 gap-1 font-semibold">
-                      <AlertTriangle className="w-3 h-3" />
-                      SLA Breached ({stageAgeFormatted} in stage)
-                    </Badge>
-                  )}
-                  {sla && sla.sla_status === 'ON_TRACK' && (
-                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30 gap-1 font-medium">
-                      <CheckCircle2 className="w-3 h-3" />
-                      SLA On Track ({stageAgeFormatted} in stage)
-                    </Badge>
-                  )}
-                </div>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span>Lead #{currentLead.id.substring(0, 8)}</span>
-                  <span>&bull;</span>
-                  <span>Branch: {currentLead.branch_name || 'Unassigned'}</span>
-                  <span>&bull;</span>
-                  <span>Source: {currentLead.source_name || currentLead.first_touch_source || 'Direct'}</span>
-                  <span>&bull;</span>
-                  <span>Agent: {currentLead.assigned_sales_name || 'Unassigned'}</span>
-                </DialogDescription>
+                )}
+                {currentLead.sla_details?.response_sla?.status === 'BREACHED' && (
+                  <Badge variant="outline" className="text-[11px] sm:text-xs bg-rose-500/10 text-rose-600 border-rose-500/30 gap-1 font-semibold">
+                    <AlertTriangle className="w-3 h-3" />
+                    1st Resp: Breached
+                  </Badge>
+                )}
+                {currentLead.sla_details?.response_sla?.status === 'PENDING' && (
+                  <Badge variant="outline" className="text-[11px] sm:text-xs bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1 font-medium">
+                    <Clock className="w-3 h-3" />
+                    1st Resp Due ({currentLead.sla_details.response_sla.target_display || '15m'})
+                  </Badge>
+                )}
               </div>
             </div>
 
-            {/* ACTION BUTTONS (STATE & RBAC GOVERNED) */}
+            {/* Top Right: Primary High-Intent CTA */}
             {(() => {
-              const isConverted = currentLead.current_status === 'CONVERTED';
+              const isConverted =
+                currentLead.current_status === 'CONVERTED' ||
+                Boolean(currentLead.converted_member) ||
+                (currentLead.action_eligibility?.is_terminal && currentLead.action_eligibility?.terminal_reason === 'CONVERTED');
               const isTerminalLost = currentLead.current_status === 'LOST' || currentLead.current_status === 'NOT_INTERESTED';
               const isActiveProspect = !isConverted && !isTerminalLost;
+              const memberId = currentLead.converted_member?.member_id || currentLead.converted_user_profile;
 
               return (
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
-                  {isActiveProspect && canEdit && onStatusTransitionClick && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onStatusTransitionClick(currentLead)}
-                      className="h-8 text-xs gap-1.5 font-medium"
-                    >
-                      <ArrowRight className="w-3.5 h-3.5" />
-                      Move Stage
-                    </Button>
-                  )}
-                  {isActiveProspect && canEdit && onBookTrialClick && !hasActiveTrial && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onBookTrialClick(currentLead)}
-                      className="h-8 text-xs gap-1.5 font-medium"
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      Book Trial
-                    </Button>
-                  )}
-                  {isActiveProspect && canEdit && hasActiveTrial && latestTrial && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsRescheduleOpen(true)}
-                      className="h-8 text-xs gap-1.5 font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      Edit / Reschedule Trial
-                    </Button>
-                  )}
-                  {canEdit && !isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setActiveTab('overview');
-                        setIsEditing(true);
-                      }}
-                      className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      Edit
-                    </Button>
-                  )}
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                   {isActiveProspect && canConvert && (
                     <Button
                       size="sm"
                       onClick={() => setConversionWizardOpen(true)}
-                      className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20"
+                      className="w-full sm:w-auto h-8 px-3.5 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20"
                     >
                       <UserCheck className="w-3.5 h-3.5" />
                       Convert to Member
                     </Button>
                   )}
                   {isConverted && (
-                    <Badge variant="outline" className="h-8 px-3 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Active Member
-                    </Badge>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Badge variant="outline" className="h-8 px-3 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Active Member
+                      </Badge>
+                      {memberId && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            onOpenChange(false);
+                            navigate({
+                              to: '/members/client-360',
+                              search: { memberId } as any,
+                            });
+                          }}
+                          className="h-8 px-3.5 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Member 360</span>
+                        </Button>
+                      )}
+                    </div>
                   )}
                   {isTerminalLost && canEdit && onStatusTransitionClick && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onStatusTransitionClick(currentLead)}
-                      className="h-8 text-xs gap-1.5 font-medium border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                      className="w-full sm:w-auto h-8 px-3 text-xs gap-1.5 font-medium border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                     >
                       <RotateCw className="w-3.5 h-3.5" />
                       Reopen Lead
@@ -841,6 +871,144 @@ export function LeadDetailModal({
               );
             })()}
           </div>
+
+          {/* BOTTOM ROW: Clean Metadata & Secondary Action Toolbar */}
+          {(() => {
+            const isConverted =
+              currentLead.current_status === 'CONVERTED' ||
+              Boolean(currentLead.converted_member) ||
+              (currentLead.action_eligibility?.is_terminal && currentLead.action_eligibility?.terminal_reason === 'CONVERTED');
+            const isTerminalLost = currentLead.current_status === 'LOST' || currentLead.current_status === 'NOT_INTERESTED';
+            const isActiveProspect = !isConverted && !isTerminalLost;
+
+            // Check if this lead is already owned by the currently logged-in user
+            const isAssignedToCurrentUser = Boolean(
+              currentUser && (
+                (currentUser.userId && currentLead.assigned_sales_user === currentUser.userId) ||
+                ((currentUser as any).id && currentLead.assigned_sales_user === (currentUser as any).id) ||
+                (currentUser.fullName && currentLead.assigned_sales_name &&
+                  currentUser.fullName.trim().toLowerCase() === currentLead.assigned_sales_name.trim().toLowerCase()) ||
+                (currentUser.email && (currentLead as any).assigned_sales_email &&
+                  currentUser.email.trim().toLowerCase() === (currentLead as any).assigned_sales_email.trim().toLowerCase())
+              )
+            );
+
+            return (
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pt-2 border-t border-border/40">
+                {/* Left Metadata Bar */}
+                <DialogDescription className="text-xs text-muted-foreground flex items-center gap-x-2 gap-y-1 flex-wrap m-0">
+                  <span className="font-mono text-[11px] bg-muted/60 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80 font-medium">
+                    #{currentLead.id.substring(0, 8)}
+                  </span>
+                  <span>&bull;</span>
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-muted-foreground/70" />
+                    {currentLead.branch_name || 'Unassigned'}
+                  </span>
+                  <span>&bull;</span>
+                  <span>Source: {currentLead.source_name || currentLead.first_touch_source || 'Direct'}</span>
+                  <span>&bull;</span>
+                  <span>
+                    Assigned:{' '}
+                    {currentLead.assigned_sales_name ? (
+                      <strong className="text-foreground">
+                        {currentLead.assigned_sales_name}
+                        {isAssignedToCurrentUser && (
+                          <span className="ml-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            You
+                          </span>
+                        )}
+                      </strong>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">Unassigned</span>
+                    )}
+                  </span>
+                  {/* Stage Duration Pill if present */}
+                  {(currentLead.sla_details?.stage_sla?.stage_age_seconds || stageAgeSeconds > 0) && (
+                    <>
+                      <span>&bull;</span>
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        {formatDuration(currentLead.sla_details?.stage_sla?.stage_age_seconds ?? stageAgeSeconds)} in stage
+                      </span>
+                    </>
+                  )}
+                </DialogDescription>
+
+                {/* Right Secondary Actions */}
+                {isActiveProspect && (
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap pt-1 md:pt-0">
+                    {canEdit && onStatusTransitionClick && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onStatusTransitionClick(currentLead)}
+                        className="h-7 px-2.5 text-xs gap-1 font-medium bg-background hover:bg-muted"
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                        Move Stage
+                      </Button>
+                    )}
+                    {canEdit && onBookTrialClick && canBookTrial && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onBookTrialClick(currentLead)}
+                        className="h-7 px-2.5 text-xs gap-1 font-medium bg-background hover:bg-muted"
+                      >
+                        <Calendar className="w-3 h-3" />
+                        Book Trial
+                      </Button>
+                    )}
+                    {canEdit && hasActiveTrial && latestTrial && activeTab !== 'trial' && latestTrial.status !== 'ATTENDED' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsRescheduleOpen(true)}
+                        className="h-7 px-2.5 text-xs gap-1 font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        Reschedule Trial
+                      </Button>
+                    )}
+                    {canEdit && currentUser && !isAssignedToCurrentUser && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => takeoverMutation.mutate()}
+                        disabled={takeoverMutation.isPending}
+                        className="h-7 px-2.5 text-xs gap-1 font-medium border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
+                        title={currentLead.assigned_sales_user ? 'Take ownership of this lead' : 'Assign this lead to yourself'}
+                      >
+                        {takeoverMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : currentLead.assigned_sales_user ? (
+                          <UserCheck className="w-3 h-3" />
+                        ) : (
+                          <UserPlus className="w-3 h-3" />
+                        )}
+                        {currentLead.assigned_sales_user ? 'Take Over' : 'Assign to Me'}
+                      </Button>
+                    )}
+                    {canEdit && !isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setActiveTab('overview');
+                          setIsEditing(true);
+                        }}
+                        className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Edit
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Conversion Wizard */}
           {currentLead && conversionWizardOpen && (
@@ -864,7 +1032,7 @@ export function LeadDetailModal({
                 setActiveTab('overview');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'overview'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -880,7 +1048,7 @@ export function LeadDetailModal({
                 setActiveTab('timeline');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'timeline'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -902,7 +1070,7 @@ export function LeadDetailModal({
                 setActiveTab('followups');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'followups'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -924,7 +1092,7 @@ export function LeadDetailModal({
                 setActiveTab('trial');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'trial'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -932,9 +1100,9 @@ export function LeadDetailModal({
             >
               <Calendar className="w-3.5 h-3.5" />
               Trial
-              {leadTrials.length > 0 && (
+              {logicalTrialCount > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {leadTrials.length}
+                  {logicalTrialCount}
                 </span>
               )}
             </button>
@@ -946,7 +1114,7 @@ export function LeadDetailModal({
                 setActiveTab('commercial');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'commercial'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -968,7 +1136,7 @@ export function LeadDetailModal({
                 setActiveTab('attribution');
                 setIsEditing(false);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'attribution'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -1019,7 +1187,9 @@ export function LeadDetailModal({
                       >
                         <option value="">Select branch</option>
                         {branches.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
+                          <option key={b.id} value={b.id}>
+                            {formatBranchOptionLabel(b)}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -1090,8 +1260,46 @@ export function LeadDetailModal({
               ) : (
                 /* OVERVIEW CARDS */
                 <div className="space-y-4">
-                  {/* NEXT BEST ACTION CARD (PHASE 7) */}
-                  {isNextActionLoading ? (
+                  {/* CONVERTED MEMBER CARD OR NEXT BEST ACTION CARD */}
+                  {(currentLead.current_status === 'CONVERTED' || Boolean(currentLead.converted_member) || (currentLead.action_eligibility?.is_terminal && currentLead.action_eligibility?.terminal_reason === 'CONVERTED')) ? (
+                    <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                              Conversion Complete
+                            </span>
+                            <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-600 bg-emerald-500/10">
+                              ACTIVE MEMBER
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            This lead has successfully converted to an active Member. CRM sales workflow is terminal.
+                          </p>
+                        </div>
+                      </div>
+                      {(currentLead.converted_member?.member_id || currentLead.converted_user_profile) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            onOpenChange(false);
+                            navigate({
+                              to: '/members/client-360',
+                              search: { memberId: currentLead.converted_member?.member_id || currentLead.converted_user_profile } as any,
+                            });
+                          }}
+                          className="gap-1.5 text-xs font-semibold shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer self-start sm:self-center"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Member 360</span>
+                        </Button>
+                      )}
+                    </div>
+                  ) : isNextActionLoading ? (
                     <div className="p-4 rounded-xl border border-border/60 bg-muted/20 flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
                       <span>Evaluating pipeline attention rules & next best action...</span>
@@ -1239,9 +1447,30 @@ export function LeadDetailModal({
                         Branch & Program Interest
                       </h4>
                       <div className="space-y-2 text-xs">
-                        <div className="flex justify-between py-1 border-b border-border/40">
-                          <span className="text-muted-foreground">Branch</span>
-                          <span className="font-semibold text-foreground">{currentLead.branch_name || 'Unassigned'}</span>
+                        <div className="flex justify-between items-start py-1 border-b border-border/40 gap-2">
+                          <span className="text-muted-foreground shrink-0">Branch</span>
+                          <div className="text-right">
+                            <div className="font-semibold text-foreground">
+                              {(() => {
+                                const matchingBranch = branches.find(
+                                  (b) => b.id === currentLead.branch_id || b.id === currentLead.branch || b.name === currentLead.branch_name
+                                );
+                                return matchingBranch ? formatBranchTitle(matchingBranch) : (currentLead.branch_name || 'Unassigned');
+                              })()}
+                            </div>
+                            {(() => {
+                              const matchingBranch = branches.find(
+                                (b) => b.id === currentLead.branch_id || b.id === currentLead.branch || b.name === currentLead.branch_name
+                              );
+                              const addr = matchingBranch ? formatBranchAddressOnly(matchingBranch) : '';
+                              return addr ? (
+                                <div className="text-[11px] text-muted-foreground flex items-center justify-end gap-1 mt-0.5">
+                                  <MapPin className="w-3 h-3 text-primary shrink-0" />
+                                  <span>{addr}</span>
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
                         </div>
                         <div className="flex justify-between py-1 border-b border-border/40">
                           <span className="text-muted-foreground">Interested Program</span>
@@ -2461,39 +2690,70 @@ export function LeadDetailModal({
           )}
 
           {/* TAB 5.5: TRIAL SESSION */}
-          {activeTab === 'trial' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    Trial Sessions & Schedule History
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Authoritative occurrence bookings, attendance tracking, and reminder schedules.
-                  </p>
+          {activeTab === 'trial' && (() => {
+            const isConverted =
+              currentLead.current_status === 'CONVERTED' ||
+              Boolean(currentLead.converted_member) ||
+              (currentLead.action_eligibility?.is_terminal && currentLead.action_eligibility?.terminal_reason === 'CONVERTED');
+            const memberId = currentLead.converted_member?.member_id || currentLead.converted_user_profile;
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Trial Sessions & Schedule History
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Authoritative occurrence bookings, attendance tracking, and reminder schedules.
+                    </p>
+                  </div>
+                  {!isConverted && canEdit && onBookTrialClick && canBookTrial && (
+                    <Button
+                      size="sm"
+                      onClick={() => onBookTrialClick(currentLead)}
+                      className="h-8 text-xs gap-1.5 font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Book Trial Session
+                    </Button>
+                  )}
+
                 </div>
-                {canEdit && onBookTrialClick && !hasActiveTrial && (
-                  <Button
-                    size="sm"
-                    onClick={() => onBookTrialClick(currentLead)}
-                    className="h-8 text-xs gap-1.5 font-medium"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Book Trial Session
-                  </Button>
+
+                {!isConverted && !hasActiveTrial && cannotBookTrialReason && (
+                  <div className="p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>{cannotBookTrialReason}</span>
+                  </div>
                 )}
-                {canEdit && hasActiveTrial && latestTrial && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsRescheduleOpen(true)}
-                    className="h-8 text-xs gap-1.5 font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                    Reschedule / Edit Session
-                  </Button>
+
+                {isConverted && (
+                  <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-foreground">
+                        This prospect has converted to an active Member. Prospect trial booking is locked. All future class participation must be scheduled through Member Bookings.
+                      </span>
+                    </div>
+                    {memberId && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          onOpenChange(false);
+                          navigate({
+                            to: '/members/client-360',
+                            search: { memberId } as any,
+                          });
+                        }}
+                        className="h-7 px-2.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs gap-1 cursor-pointer shrink-0 self-start sm:self-center"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Member 360</span>
+                      </Button>
+                    )}
+                  </div>
                 )}
-              </div>
 
               {isTrialsLoading ? (
                 <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
@@ -2509,9 +2769,13 @@ export function LeadDetailModal({
                   <Calendar className="w-8 h-8 mx-auto text-muted-foreground/40" />
                   <div>
                     <div className="font-semibold text-foreground">No Trial Sessions Scheduled</div>
-                    <div className="mt-0.5">This prospect has not yet booked a trial class.</div>
+                    <div className="mt-0.5">
+                      {isConverted
+                        ? 'This lead converted to a member without historical trials.'
+                        : 'This prospect has not yet booked a trial class.'}
+                    </div>
                   </div>
-                  {canEdit && onBookTrialClick && (
+                  {!isConverted && canEdit && onBookTrialClick && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -2558,7 +2822,27 @@ export function LeadDetailModal({
                           <span className="text-muted-foreground text-[11px]">Date & Time</span>
                           <div className="font-medium text-foreground flex items-center gap-1">
                             <Clock className="w-3 h-3 text-primary" />
-                            {latestTrial.booking_date} ({latestTrial.start_time} - {latestTrial.end_time})
+                            {(() => {
+                              const dateStr = latestTrial.booking_date || (latestTrial.scheduled_start ? new Date(latestTrial.scheduled_start).toISOString().split('T')[0] : '');
+                              let displayDate = dateStr;
+                              try {
+                                if (dateStr) {
+                                  const d = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
+                                  if (!isNaN(d.getTime())) {
+                                    displayDate = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+                                  }
+                                }
+                              } catch {
+                                displayDate = dateStr;
+                              }
+                              const startTime = latestTrial.start_time || (latestTrial.scheduled_start ? new Date(latestTrial.scheduled_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+                              const endTime = latestTrial.end_time || (latestTrial.scheduled_end ? new Date(latestTrial.scheduled_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
+                              if (!displayDate && !startTime) return 'Schedule unavailable';
+                              if (startTime && endTime) return `${displayDate} (${startTime} – ${endTime})`;
+                              if (startTime) return `${displayDate} at ${startTime}`;
+                              return displayDate;
+                            })()}
                           </div>
                         </div>
                         <div className="space-y-0.5">
@@ -2575,6 +2859,17 @@ export function LeadDetailModal({
                         </div>
                       </div>
 
+                      {/* RESCHEDULE USAGE STATS (POLICY-DRIVEN) */}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/20 px-3 py-1.5 rounded-md border border-border/40">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <RotateCw className="w-3.5 h-3.5 text-primary" />
+                          Reschedules: {latestTrial.reschedules_used ?? 0} used
+                        </span>
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          {latestTrial.reschedules_remaining ?? 0} free reschedules remaining (max {latestTrial.max_reschedules ?? 3})
+                        </span>
+                      </div>
+
                       {latestTrial.notes && (
                         <div className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-md border border-border/40">
                           <strong>Notes:</strong> {latestTrial.notes}
@@ -2588,9 +2883,9 @@ export function LeadDetailModal({
                       )}
 
                       {/* ACTIONS FOR ACTIVE TRIAL */}
-                      {canEdit && latestTrial.status !== 'CANCELLED' && latestTrial.status !== 'RESCHEDULED' && (
+                      {!isConverted && canEdit && latestTrial.status !== 'CANCELLED' && latestTrial.status !== 'RESCHEDULED' && latestTrial.status !== 'ATTENDED' && (
                         <div className="flex items-center gap-2 pt-1 border-t border-border/40 flex-wrap">
-                          {latestTrial.confirmation_status !== 'CONFIRMED' && (
+                          {latestTrial.confirmation_status !== 'CONFIRMED' && (latestTrial.available_actions ? latestTrial.available_actions.can_confirm : true) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -2602,7 +2897,7 @@ export function LeadDetailModal({
                               Confirm Phone Call
                             </Button>
                           )}
-                          {latestTrial.status !== 'ATTENDED' && (
+                          {(latestTrial.available_actions ? latestTrial.available_actions.can_mark_attended : latestTrial.status !== 'ATTENDED') && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -2614,7 +2909,7 @@ export function LeadDetailModal({
                               Mark Attended
                             </Button>
                           )}
-                          {latestTrial.status !== 'NO_SHOW' && (
+                          {(latestTrial.available_actions ? latestTrial.available_actions.can_mark_no_show : (latestTrial.status !== 'NO_SHOW' && latestTrial.status !== 'ATTENDED')) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -2626,32 +2921,36 @@ export function LeadDetailModal({
                               Mark No-Show
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setIsRescheduleOpen(true)}
-                            className="h-7 text-xs gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                          >
-                            <RotateCw className="w-3 h-3" />
-                            Reschedule / Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setCancellingTrialId(latestTrial.id);
-                              setCancelReason('Prospect requested cancellation');
-                            }}
-                            className="h-7 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
-                          >
-                            <XCircle className="w-3 h-3" />
-                            Cancel Trial
-                          </Button>
+                          {(latestTrial.available_actions ? latestTrial.available_actions.can_reschedule : latestTrial.status !== 'ATTENDED') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setIsRescheduleOpen(true)}
+                              className="h-7 text-xs gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                            >
+                              <RotateCw className="w-3 h-3" />
+                              Reschedule / Edit
+                            </Button>
+                          )}
+                          {(latestTrial.available_actions ? latestTrial.available_actions.can_cancel : latestTrial.status !== 'ATTENDED') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCancellingTrialId(latestTrial.id);
+                                setCancelReason('Prospect requested cancellation');
+                              }}
+                              className="h-7 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              Cancel Trial
+                            </Button>
+                          )}
                         </div>
                       )}
 
-                      {/* If trial is cancelled or rescheduled, show button to book fresh trial */}
-                      {canEdit && onBookTrialClick && !hasActiveTrial && (
+                      {/* If trial is completed/cancelled, show button to book fresh trial ONLY if backend eligibility permits */}
+                      {!isConverted && canEdit && onBookTrialClick && canBookTrial && (
                         <div className="pt-2 border-t border-border/40">
                           <Button
                             size="sm"
@@ -2688,13 +2987,26 @@ export function LeadDetailModal({
                                 className="p-2 rounded-md border border-border/60 bg-card/50 text-[11px] flex items-center justify-between"
                               >
                                 <div>
-                                  <span className="font-semibold text-foreground">{pt.name}</span>
+                                  <span className="font-semibold text-foreground">
+                                    {pt.name || (pt.type === 'IMMEDIATE_CONFIRMATION' ? 'Immediate Confirmation' : `${pt.offset_value ?? ''} ${pt.offset_unit?.toLowerCase() || 'minutes'} before`)}
+                                  </span>
                                   <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
                                     <Clock className="w-2.5 h-2.5" />
                                     {new Date(pt.scheduled_at).toLocaleDateString()} {new Date(pt.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </div>
                                 </div>
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] px-1.5 py-0 ${
+                                    pt.status === 'PENDING'
+                                      ? 'border-blue-500/30 text-blue-500 bg-blue-500/10'
+                                      : pt.status === 'CANCELLED'
+                                      ? 'border-destructive/30 text-destructive bg-destructive/10'
+                                      : pt.status === 'SUPERSEDED'
+                                      ? 'border-amber-500/30 text-amber-500 bg-amber-500/10'
+                                      : 'border-muted-foreground/30 text-muted-foreground'
+                                  }`}
+                                >
                                   {pt.status}
                                 </Badge>
                               </div>
@@ -2706,36 +3018,40 @@ export function LeadDetailModal({
                   )}
 
                   {/* HISTORICAL SESSIONS LIST */}
-                  {leadTrials.length > 1 && (
+                  {leadTrials.filter((t) => t.id !== latestTrial?.id).length > 0 && (
                     <div className="space-y-2 pt-2">
                       <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        Booking History & Replacements ({leadTrials.length - 1})
+                        Booking History & Replacements ({leadTrials.filter((t) => t.id !== latestTrial?.id).length})
                       </h5>
                       <div className="divide-y divide-border border border-border rounded-lg bg-card/30">
-                        {leadTrials.slice(1).map((histTrial) => (
-                          <div key={histTrial.id} className="p-3 text-xs flex items-center justify-between">
-                            <div>
-                              <div className="font-semibold text-foreground">
-                                {histTrial.class_name} &bull; {histTrial.booking_date}
+                        {leadTrials
+                          .filter((t) => t.id !== latestTrial?.id)
+                          .map((histTrial) => (
+                            <div key={histTrial.id} className="p-3 text-xs flex items-center justify-between">
+                              <div>
+                                <div className="font-semibold text-foreground">
+                                  {histTrial.class_name} &bull; {histTrial.booking_date || (histTrial.scheduled_start ? new Date(histTrial.scheduled_start).toLocaleDateString() : '')}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {histTrial.start_time && histTrial.end_time ? `${histTrial.start_time} - ${histTrial.end_time}` : ''} at {histTrial.branch_name}
+                                </div>
                               </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {histTrial.start_time} - {histTrial.end_time} at {histTrial.branch_name}
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {histTrial.status === 'CANCELLED' ? 'CANCELLED / REPLACED' : histTrial.status}
+                                </Badge>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px]">
-                                {histTrial.status}
-                              </Badge>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
                       </div>
                     </div>
                   )}
                 </div>
               )}
             </div>
-          )}          {/* TAB 5: COMMERCIAL (Phase 9 & Consolidated) */}
+          );
+        })()}
+          {/* TAB 5: COMMERCIAL (Phase 9 & Consolidated) */}
           {activeTab === 'commercial' && (
             <div className="space-y-6">
               <div>

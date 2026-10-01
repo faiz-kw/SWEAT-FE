@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
+import { formatBranchOptionLabel, formatBranchAddressOnly } from '@/lib/crmLabels';
 import type { Lead, TrialSlot, BookTrialPayload, TrialBooking, RescheduleTrialPayload } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,11 +124,11 @@ export function BookTrialModal({
     }
   }, [open, selectedBranchId, branches, activeLead?.branch]);
 
-  // Fetch programs for branch
+  // Fetch programs for branch (canonical endpoint enforces branch availability & trial policy)
   const { data: programs = [] } = useQuery({
     queryKey: ['active-programs', selectedBranchId],
     queryFn: () => crmApi.getPrograms(selectedBranchId || undefined),
-    enabled: open,
+    enabled: open && !!selectedBranchId,
   });
 
   // Defensive deduplication by canonical entity ID
@@ -456,7 +457,7 @@ export function BookTrialModal({
             </div>
           ) : null}
 
-          {/* 2. PROGRAM -> BRANCH -> TRIAL DATE */}
+          {/* 2. PROGRAM -> BRANCH -> CLASSES -> TRIAL DATE */}
           <div className="space-y-2">
             {isReschedule && (
               <div className="text-xs font-semibold text-foreground flex items-center gap-1.5 pt-1">
@@ -466,11 +467,45 @@ export function BookTrialModal({
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* PROGRAM SELECTOR */}
+              {/* 1. BRANCH SELECTOR */}
               <div className="space-y-1">
-                <Label className="text-xs font-medium flex items-center gap-1">
-                  <Dumbbell className="w-3 h-3 text-muted-foreground" />
-                  Interested Program
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-primary" />
+                  1. Branch *
+                </Label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => {
+                    const newBranch = e.target.value;
+                    setSelectedBranchId(newBranch);
+                    setSelectedProgramId('');
+                    setSelectedSlot(null);
+                  }}
+                  disabled={isConverted}
+                  className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs font-medium focus:ring-1 focus:ring-primary"
+                  required
+                >
+                  <option value="" disabled>Select Branch</option>
+                  {uniqueBranches.map((b) => {
+                    const addr = (b.address || b.address_line_1 || b.location_name || b.city || '').trim();
+                    const name = (b.name || b.code || 'Studio').trim();
+                    const label = addr && !name.toLowerCase().includes(addr.toLowerCase())
+                      ? `${name} — ${addr}`
+                      : name;
+                    return (
+                      <option key={b.id} value={b.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 2. PROGRAM SELECTOR (LOADED FOR SELECTED BRANCH) */}
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Dumbbell className="w-3 h-3 text-primary" />
+                  2. Program
                 </Label>
                 <select
                   value={selectedProgramId}
@@ -478,10 +513,10 @@ export function BookTrialModal({
                     setSelectedProgramId(e.target.value);
                     setSelectedSlot(null);
                   }}
-                  disabled={isConverted}
-                  className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs"
+                  disabled={isConverted || !selectedBranchId}
+                  className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs font-medium focus:ring-1 focus:ring-primary"
                 >
-                  <option value="">All Trial Programs</option>
+                  <option value="">All Programs for Branch</option>
                   {uniquePrograms.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -490,36 +525,11 @@ export function BookTrialModal({
                 </select>
               </div>
 
-              {/* BRANCH SELECTOR */}
+              {/* 3. TRIAL DATE SELECTOR */}
               <div className="space-y-1">
-                <Label className="text-xs font-medium flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-muted-foreground" />
-                  Branch / Location *
-                </Label>
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => {
-                    setSelectedBranchId(e.target.value);
-                    setSelectedSlot(null);
-                  }}
-                  disabled={isConverted}
-                  className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs"
-                  required
-                >
-                  <option value="" disabled>Select Branch</option>
-                  {uniqueBranches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} {((b as any).city ? `(${(b as any).city})` : '')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* TRIAL DATE SELECTOR */}
-              <div className="space-y-1">
-                <Label className="text-xs font-medium flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-muted-foreground" />
-                  Trial Date *
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-primary" />
+                  3. Trial Date *
                 </Label>
                 <Input
                   type="date"
@@ -530,7 +540,7 @@ export function BookTrialModal({
                     setSelectedSlot(null);
                   }}
                   disabled={isConverted}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs font-medium"
                   required
                 />
               </div>
@@ -646,6 +656,16 @@ export function BookTrialModal({
                               className="text-[10px] px-2 py-0.5 text-muted-foreground border-border/60"
                             >
                               Overall spots: {slot.remaining_capacity} of {slot.total_capacity} remaining
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-2 py-0.5 font-medium ${
+                                slot.allow_reschedule
+                                  ? 'border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10'
+                                  : 'border-muted-foreground/30 text-muted-foreground bg-muted/20'
+                              }`}
+                            >
+                              {slot.allow_reschedule ? 'Reschedule Allowed' : 'No Reschedule'}
                             </Badge>
                           </div>
 

@@ -55,9 +55,15 @@ export interface Lead {
   latest_touch_source?: string | null;
   campaign_reference?: string | null;
   converted_user_profile?: string | null;
+  converted_member?: ConvertedMemberRef | null;
+  action_eligibility?: LeadActionEligibility;
   attributions?: LeadAttribution[];
   latest_attribution?: LeadAttribution | null;
   sla?: LeadSlaInfo | null;
+  sla_details?: LeadSlaDetails | null;
+  response_sla_status?: 'PENDING' | 'MET' | 'BREACHED';
+  first_response_at?: string | null;
+  first_response_time_seconds?: number | null;
   attention?: LeadAttentionSummary | null;
   last_activity?: {
     activity_type: string;
@@ -66,6 +72,26 @@ export interface Lead {
   } | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ConvertedMemberRef {
+  member_id: string;
+  member_number?: string;
+  full_name?: string;
+  conversion_id?: string | null;
+  membership_id?: string | null;
+}
+
+export interface LeadActionEligibility {
+  can_move_stage: boolean;
+  can_book_trial: boolean;
+  can_book_trial_reason?: string | null;
+  can_convert: boolean;
+  can_takeover: boolean;
+  can_view_lead: boolean;
+  can_view_member_360: boolean;
+  is_terminal: boolean;
+  terminal_reason?: string | null;
 }
 
 export type TouchType = 'FIRST_TOUCH' | 'LEAD_CAPTURE' | 'ASSISTED_TOUCH';
@@ -110,6 +136,65 @@ export interface LeadSlaInfo {
   sla_target_unit?: 'MINUTES' | 'HOURS' | 'DAYS' | null;
   sla_due_at?: string | null;
   sla_status: SlaStatus;
+}
+
+export interface ResponseSlaInfo {
+  status: 'PENDING' | 'MET' | 'BREACHED';
+  target_seconds: number;
+  target_display: string;
+  first_response_at?: string | null;
+  first_response_time_seconds?: number | null;
+  is_frozen: boolean;
+  due_at?: string | null;
+  remaining_seconds?: number | null;
+}
+
+export interface StageSlaInfo {
+  status: 'ON_TRACK' | 'WARNING' | 'BREACHED' | 'NOT_CONFIGURED';
+  canonical_stage: LeadStatus;
+  stage_entered_at: string;
+  stage_age_seconds: number;
+  target_seconds?: number | null;
+  target_display?: string | null;
+  due_at?: string | null;
+  remaining_seconds?: number | null;
+}
+
+export interface LeadSlaDetails {
+  lead_id: string;
+  current_status: LeadStatus;
+  created_at: string;
+  response_sla: ResponseSlaInfo;
+  stage_sla: StageSlaInfo;
+}
+
+export interface CRMStageAutomationRule {
+  id: string;
+  organization: string;
+  name: string;
+  trigger_event:
+    | 'FOLLOWUP_COMPLETED'
+    | 'TRIAL_BOOKED'
+    | 'TRIAL_RESCHEDULED'
+    | 'TRIAL_ATTENDED'
+    | 'TRIAL_NO_SHOW'
+    | 'TRIAL_CANCELLED'
+    | 'LEAD_CONVERTED';
+  trigger_event_display?: string;
+  from_stage: string;
+  from_stage_display?: string;
+  to_stage: LeadStatus;
+  to_stage_display?: string;
+  conditions: {
+    task_types?: string[];
+    positive_outcome_only?: boolean;
+    outcome_keywords?: string[];
+    [key: string]: any;
+  };
+  priority: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LeadTimelineEvent {
@@ -452,6 +537,17 @@ export type TrialConfirmationChannel =
   | 'SMS'
   | 'API';
 
+export interface TrialAvailableActions {
+  can_mark_attended: boolean;
+  can_mark_no_show: boolean;
+  can_reschedule: boolean;
+  can_cancel: boolean;
+  can_confirm: boolean;
+  can_request_reschedule: boolean;
+  can_book_new_trial: boolean;
+  can_convert_member: boolean;
+}
+
 export interface TrialBooking {
   id: string;
   organization?: string;
@@ -462,16 +558,23 @@ export interface TrialBooking {
   lead_phone?: string;
   lead_email?: string;
   class_occurrence?: string;
+  class_occurrence_id?: string;
+  occurrence_id?: string;
+  class_template_id?: string;
   class_name?: string;
   booking_date?: string;
   start_time?: string;
   end_time?: string;
+  start_at?: string;
+  end_at?: string;
   scheduled_start?: string;
   scheduled_end?: string;
+  timezone?: string;
   trial_type?: string;
   booking_source?: string;
   assigned_trainer_profile?: string | null;
   trainer_name?: string | null;
+  trainer?: string | null;
   status: TrialBookingStatus;
   confirmation_status: TrialConfirmationStatus;
   confirmation_channel?: TrialConfirmationChannel | null;
@@ -480,6 +583,12 @@ export interface TrialBooking {
   cancellation_reason?: string | null;
   rescheduled_from?: string | null;
   is_rescheduled?: boolean;
+  logical_journey_id?: string;
+  reschedules_used?: number;
+  reschedules_remaining?: number;
+  max_reschedules?: number;
+  is_active_trial?: boolean;
+  available_actions?: TrialAvailableActions;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -546,11 +655,15 @@ export interface TrialSummaryCounts {
 }
 
 export interface TrialReminderSchedulePoint {
-  name: string;
+  id?: string;
+  name?: string;
+  type?: string;
   scheduled_at: string;
   channel: string;
-  status: 'PENDING' | 'PAST';
+  status: 'PENDING' | 'PAST' | 'CANCELLED' | 'SUPERSEDED' | string;
   offset_minutes?: number;
+  offset_value?: number;
+  offset_unit?: string;
 }
 
 export interface BookTrialPayload {
@@ -922,6 +1035,7 @@ export interface ConversionQuote {
     duration_value: number;
     duration_unit: string;
     total_days: number | null;
+    validity_days?: number | null;
     status: string;
   };
   package_price: {

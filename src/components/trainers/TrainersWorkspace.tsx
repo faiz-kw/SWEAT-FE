@@ -309,12 +309,12 @@ export function TrainersWorkspace() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+    <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
       {/* Top Header */}
-      <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 py-4 sm:py-5 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4 sm:py-5 sticky top-0 z-10 w-full">
+        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
                 <UserCheck className="w-5 h-5" />
               </span>
@@ -332,7 +332,7 @@ export function TrainersWorkspace() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -398,9 +398,9 @@ export function TrainersWorkspace() {
       </header>
 
       {/* Navigation Tabs & Filters */}
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
             <button
               onClick={() => setActiveTab('directory')}
               className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
@@ -436,7 +436,7 @@ export function TrainersWorkspace() {
           </div>
 
           {activeTab === 'directory' && !isTrainer && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Branch Filter */}
               <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
                 <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">Branch:</span>
@@ -454,7 +454,7 @@ export function TrainersWorkspace() {
                 </select>
               </div>
 
-              <div className="relative flex-1 sm:w-64">
+              <div className="relative flex-1 min-w-[200px] sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search code or bio..."
@@ -719,26 +719,26 @@ export function TrainersWorkspace() {
             ) : (
               <>
                 {/* Desktop Data Grid */}
-                <div className="hidden md:block rounded-xl border border-border/60 bg-card overflow-hidden shadow-xs">
-                  <table className="w-full text-left text-sm">
+                <div className="hidden md:block rounded-xl border border-border/60 bg-card overflow-x-auto shadow-xs w-full">
+                  <table className="w-full text-left text-sm min-w-[850px]">
                     <thead className="bg-muted/40 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       <tr>
-                        <th className="px-5 py-3.5">Trainer</th>
-                        <th className="px-4 py-3.5">Trainer Code</th>
-                        <th className="px-4 py-3.5">Assigned Branch</th>
-                        <th className="px-4 py-3.5">Experience</th>
+                        <th className="px-5 py-3.5 whitespace-nowrap">Trainer</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Trainer Code</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Assigned Branch</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Experience</th>
                         <th className="px-4 py-3.5">Specialties</th>
-                        <th className="px-4 py-3.5">Buffer</th>
-                        <th className="px-4 py-3.5">Status</th>
-                        <th className="px-4 py-3.5 text-right">Actions</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Buffer</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Status</th>
+                        <th className="px-4 py-3.5 text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
                       {trainers.map((trainer) => (
                         <tr key={trainer.id} className="hover:bg-muted/20 transition-colors">
-                          <td className="px-5 py-3.5">
+                          <td className="px-5 py-3.5 whitespace-nowrap">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs shrink-0">
                                 {(trainer.trainer_name || trainer.trainer_code || 'T').substring(0, 2).toUpperCase()}
                               </div>
                               <div>
@@ -747,28 +747,28 @@ export function TrainersWorkspace() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground">
+                          <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
                             {trainer.trainer_code}
                           </td>
-                          <td className="px-4 py-3.5 text-xs">
+                          <td className="px-4 py-3.5 text-xs whitespace-nowrap">
                             <span className="font-medium text-foreground">
                               {trainer.branch_names && trainer.branch_names.length > 0
                                 ? trainer.branch_names.join(', ')
                                 : 'All Branches'}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                          <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
                             {trainer.experience_years ? `${trainer.experience_years} yrs` : '—'}
                           </td>
                           <td className="px-4 py-3.5">
-                            <div className="flex flex-wrap gap-1 max-w-xs">
+                            <div className="flex flex-wrap gap-1 max-w-sm">
                               {trainer.can_teach_all_specialties ? (
-                                <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/20">
+                                <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/20 whitespace-nowrap">
                                   All Specialties
                                 </Badge>
                               ) : trainer.specialties && trainer.specialties.length > 0 ? (
                                 trainer.specialties.slice(0, 3).map((spec) => (
-                                  <Badge key={spec.id} variant="secondary" className="text-[10px]">
+                                  <Badge key={spec.id} variant="secondary" className="text-[10px] whitespace-nowrap">
                                     {spec.code} ({spec.proficiency_level.substring(0, 3)})
                                   </Badge>
                                 ))
@@ -1052,7 +1052,7 @@ export function TrainersWorkspace() {
 
         {/* Live Slot Eligibility Engine View */}
         {activeTab === 'availability' && (
-          <div className="max-w-2xl mx-auto rounded-2xl border border-border/60 bg-card p-6 sm:p-8 shadow-xs space-y-6">
+          <div className="max-w-4xl mx-auto rounded-2xl border border-border/60 bg-card p-6 sm:p-8 shadow-xs space-y-6">
             <div className="border-b border-border/50 pb-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" />

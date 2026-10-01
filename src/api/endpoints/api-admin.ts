@@ -22,6 +22,7 @@ export interface AdminUserRow extends Row {
   tenant_name?: string;
   active_location_id?: string;
   active_location_name?: string;
+  active_location_address?: string;
   allowed_locations?: any[];
   reports_to_id?: string;
   reports_to_name?: string;
@@ -356,12 +357,25 @@ export async function updateRolePermissionsApi(
 
 // ── LOCATIONS & BRANCHES ──────────────────────────────────────────────
 
-export async function fetchBranchesApi(): Promise<{ id: string; name: string; code: string; is_active?: boolean }[]> {
+export interface BranchDropdownItem {
+  id: string;
+  name: string;
+  code: string;
+  city?: string;
+  location_name?: string;
+  address?: string;
+  is_active?: boolean;
+}
+
+export async function fetchBranchesApi(): Promise<BranchDropdownItem[]> {
   const res = await api.get<any>('/tenant/branches/');
   return toArray<any>(res.data).map((b: any) => ({
     id: b.id,
     name: b.name,
-    code: b.code,
+    code: b.code || '',
+    city: b.city || b.location_name || '',
+    location_name: b.location_name || b.city || '',
+    address: b.address || '',
     is_active: b.is_active ?? (b.status === 'ACTIVE'),
   }));
 }

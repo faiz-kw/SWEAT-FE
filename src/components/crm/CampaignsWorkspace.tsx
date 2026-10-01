@@ -43,6 +43,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { formatBranchOptionLabel } from '@/lib/crmLabels';
 
 export function CampaignsWorkspace() {
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -174,7 +175,7 @@ export function CampaignsWorkspace() {
         }
       />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* KPI Metrics Row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <CRMKpiTile
@@ -269,7 +270,7 @@ export function CampaignsWorkspace() {
                 <option value="ALL">All Branches (Global)</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {formatBranchOptionLabel(b)}
                   </option>
                 ))}
               </select>
