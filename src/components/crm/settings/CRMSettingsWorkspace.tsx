@@ -1,3 +1,4 @@
+import { MetaLeadSettings } from './MetaLeadSettings';
 import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -77,7 +78,7 @@ export function CRMSettingsWorkspace() {
   const canEdit = can('crm.settings.edit');
 
   const [activeTab, setActiveTab] = React.useState<
-    'sources' | 'agents' | 'sla' | 'attention' | 'reminders' | 'channels' | 'templates' | 'automation'
+    'sources' | 'agents' | 'sla' | 'attention' | 'reminders' | 'channels' | 'templates' | 'automation' | 'meta'
   >('sources');
 
   // ==========================================
@@ -367,6 +368,7 @@ export function CRMSettingsWorkspace() {
       <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* Tabs Navigation (Consistent Segmented Control) */}
         <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border overflow-x-auto no-scrollbar">
+        <button type="button" onClick={() => setActiveTab('meta')} className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm ${activeTab === 'meta' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'}`}>Meta Lead Ads</button>
         <button
           type="button"
           onClick={() => setActiveTab('sources')}
@@ -478,6 +480,7 @@ export function CRMSettingsWorkspace() {
       {/* ========================================================================= */}
       {/* TAB 1: LEAD SOURCES                                                        */}
       {/* ========================================================================= */}
+      {activeTab === 'meta' && <MetaLeadSettings canEdit={canEdit} />}
       {activeTab === 'sources' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/50">
