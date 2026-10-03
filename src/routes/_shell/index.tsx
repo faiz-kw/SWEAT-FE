@@ -1,21 +1,25 @@
+import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { FunnelBars, TrendChart } from "@/components/enterprise/Charts";
 import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
 import { dashboardMetrics, leadFunnel, revenueTrend } from "@/services/repo";
+import { useAuth } from "@/contexts";
+import { isMemberUser } from "@/lib/nav";
+import { WebMemberPortalWorkspace } from "@/components/member-portal/WebMemberPortalWorkspace";
 
 export const Route = createFileRoute("/_shell/")({
   head: () => ({
     meta: [
-      { title: "Executive Dashboard · PerformanceOS Admin" },
+      { title: "Executive Dashboard · PerformanceOS" },
       {
         name: "description",
-        content: "Revenue, membership and lead funnel performance across all fitness locations.",
+        content: "Multi-location fitness and performance executive command center.",
       },
-      { property: "og:title", content: "Executive Dashboard · PerformanceOS Admin" },
+      { property: "og:title", content: "Executive Dashboard · PerformanceOS" },
       {
         property: "og:description",
-        content: "Revenue, membership and lead funnel performance across all fitness locations.",
+        content: "Multi-location fitness and performance executive command center.",
       },
     ],
   }),
@@ -23,6 +27,20 @@ export const Route = createFileRoute("/_shell/")({
 });
 
 function Dashboard() {
+  const { user } = useAuth();
+
+  React.useEffect(() => {
+    if (!isMemberUser(user)) {
+      const brand = user?.branding?.app_name || "SWEAT Elite";
+      document.title = `Executive Dashboard · ${brand}`;
+    }
+  }, [user]);
+
+  // If authenticated user is a Member, render the Web Member Portal workspace
+  if (isMemberUser(user)) {
+    return <WebMemberPortalWorkspace />;
+  }
+
   const metrics = dashboardMetrics();
   const trend = revenueTrend() as unknown as Record<string, unknown>[];
   const funnel = leadFunnel() as unknown as { stage: string; count: number }[];

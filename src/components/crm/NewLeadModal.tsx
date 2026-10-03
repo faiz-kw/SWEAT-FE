@@ -292,7 +292,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   }, [phone, email]);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value;
+    const raw = e.target.value;
     // Strip all non-numeric characters
     let digits = raw.replace(/\D/g, '');
     // If user pasted +91 or 91 with 12 digits, strip prefix 91
@@ -587,13 +587,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 {/* Email Address */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Email Address (Gmail Only) <span className="text-destructive">*</span>
+                    Email Address <span className="text-destructive">*</span>
                   </Label>
                   <div className="relative">
                     <Mail className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       type="email"
-                      placeholder="rahul.sharma@gmail.com"
+                      placeholder="rahul.sharma@example.com"
                       value={email}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\s+/g, '');

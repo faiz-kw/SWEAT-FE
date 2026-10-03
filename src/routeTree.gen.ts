@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as ActivateRouteImport } from './routes/activate'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellLifecycleRouteImport } from './routes/_shell/lifecycle'
@@ -119,6 +120,11 @@ import { Route as ShellPlatformTenantsNewRouteImport } from './routes/_shell/pla
 
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ActivateRoute = ActivateRouteImport.update({
+  id: '/activate',
+  path: '/activate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -672,6 +678,7 @@ const ShellPlatformTenantsNewRoute = ShellPlatformTenantsNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
+  '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
@@ -779,6 +786,7 @@ export interface FileRoutesByFullPath {
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesByTo {
+  '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
@@ -889,6 +897,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteWithChildren
+  '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
   '/_shell/lifecycle': typeof ShellLifecycleRoute
   '/_shell/members': typeof ShellMembersRouteWithChildren
@@ -1000,6 +1009,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/activate'
     | '/login'
     | '/lifecycle'
     | '/members'
@@ -1107,6 +1117,7 @@ export interface FileRouteTypes {
     | '/platform/tenants/new'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/activate'
     | '/login'
     | '/lifecycle'
     | '/members'
@@ -1216,6 +1227,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_shell'
+    | '/activate'
     | '/login'
     | '/_shell/lifecycle'
     | '/_shell/members'
@@ -1326,6 +1338,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   ShellRoute: typeof ShellRouteWithChildren
+  ActivateRoute: typeof ActivateRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -1336,6 +1349,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/activate': {
+      id: '/activate'
+      path: '/activate'
+      fullPath: '/activate'
+      preLoaderRoute: typeof ActivateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -2322,6 +2342,7 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   ShellRoute: ShellRouteWithChildren,
+  ActivateRoute: ActivateRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

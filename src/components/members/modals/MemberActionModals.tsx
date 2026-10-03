@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { discountsApi } from '@/api/endpoints/discountsApi';
+import { formatCurrency } from '@/utils/currencyUtils';
 import type { Member } from '@/types/members';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -808,10 +810,40 @@ export const RejoinModal: React.FC<{
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [couponCode, setCouponCode] = useState<string>('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentProvider, setPaymentProvider] = useState<string>('CASH');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   const [reason, setReason] = useState<string>('Former member returning to active status');
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim() || !selectedPlan) return;
+    setIsApplyingCoupon(true);
+    try {
+      const res = await discountsApi.validateCoupon({
+        code: couponCode.trim().toUpperCase(),
+        user_profile_id: member.id,
+        order_subtotal: String(selectedPlan.price),
+        branch_id: (member as any).branch_id || (member as any).branch || undefined,
+        package_id: selectedPlan.package_id || selectedPlan.id,
+      });
+      if (res.is_valid) {
+        setAppliedCoupon(res);
+        setPaymentAmount(res.final_subtotal ? String(res.final_subtotal) : String(Number(selectedPlan.price) - Number(res.discount_amount || 0)));
+        toast.success(`Coupon "${res.code}" applied! Discount: ${formatCurrency(res.discount_amount)}`);
+      } else {
+        setAppliedCoupon(null);
+        toast.error(res.reason || 'Coupon is not eligible for this member/package');
+      }
+    } catch (err: any) {
+      setAppliedCoupon(null);
+      toast.error(err?.response?.data?.error || 'Failed to validate coupon');
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
 
   const { data: plans = [], isLoading: plansLoading } = useQuery({
     queryKey: ['membership-plans'],
@@ -886,6 +918,8 @@ export const RejoinModal: React.FC<{
                 value={selectedPlanId}
                 onChange={(e) => {
                   setSelectedPlanId(e.target.value);
+                  setCouponCode('');
+                  setAppliedCoupon(null);
                   const p = plans.find((pl: any) => pl.id === e.target.value || pl.package_id === e.target.value);
                   if (p) setPaymentAmount(String(p.price));
                 }}
@@ -898,6 +932,34 @@ export const RejoinModal: React.FC<{
                   </option>
                 ))}
               </select>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Promotional Coupon (Optional)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                placeholder="Enter promo coupon code"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                className="font-mono text-xs uppercase"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleApplyCoupon}
+                disabled={!couponCode.trim() || !selectedPlanId || isApplyingCoupon}
+                className="text-xs h-9"
+              >
+                {isApplyingCoupon ? 'Checking...' : 'Apply'}
+              </Button>
+            </div>
+            {appliedCoupon && (
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                ✓ Coupon {appliedCoupon.code} applied: Saved {formatCurrency(appliedCoupon.discount_amount)}
+              </div>
             )}
           </div>
 

@@ -21,6 +21,10 @@ import {
   AlertCircle,
   Briefcase,
   Calendar,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Copy,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -50,8 +54,10 @@ import {
   fetchUsersApi,
   toggleUserActiveApi,
   inviteUserApi,
+  resendUserInviteApi,
   updateUserApi,
   deleteUserApi,
+  resetUserPasswordApi,
   fetchRolesApi,
   fetchBranchesApi,
   fetchDepartmentsApi,
@@ -186,6 +192,44 @@ export function UsersWorkspace() {
   const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
+
+  // Reset Password State & Handlers
+  const [resettingUser, setResettingUser] = React.useState<AdminUserRow | null>(null);
+  const [resetPasswordVal, setResetPasswordVal] = React.useState("Sweat@2026!");
+  const [isResettingPassword, setIsResettingPassword] = React.useState(false);
+  const [showResetPassword, setShowResetPassword] = React.useState(false);
+
+  // Invite Link Modal State
+  const [inviteModalData, setInviteModalData] = React.useState<{
+    name: string;
+    email: string;
+    link: string;
+  } | null>(null);
+
+  const handleOpenResetPassword = (user: AdminUserRow) => {
+    setResettingUser(user);
+    setResetPasswordVal("Sweat@2026!");
+    setShowResetPassword(false);
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resettingUser) return;
+    if (!resetPasswordVal || resetPasswordVal.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
+    }
+    setIsResettingPassword(true);
+    try {
+      const res = await resetUserPasswordApi(resettingUser.id, resetPasswordVal);
+      toast.success(res.message || `Password for ${resettingUser.email} reset successfully.`);
+      setResettingUser(null);
+    } catch (err: any) {
+      toast.error(extractApiError(err, "Failed to reset password"));
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   // Canonical deduplication helpers by entity ID
   const uniqueBranches = React.useMemo(() => {
@@ -473,6 +517,31 @@ export function UsersWorkspace() {
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || err?.message || "Failed to deactivate user");
+    }
+  };
+
+  // Handle Resend Invite / Copy Activation Link
+  const handleResendInvite = async (user: AdminUserRow) => {
+    try {
+      const res = await resendUserInviteApi(user.id, user.email);
+      const link =
+        res.invite_link ||
+        `${window.location.origin}/activate?invited_email=${encodeURIComponent(user.email)}&tenant=sweat`;
+
+      setInviteModalData({
+        name: user.full_name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
+        email: user.email,
+        link,
+      });
+
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success(`Activation link copied to clipboard for ${user.email}!`);
+      } catch {
+        toast.success(`Invite link generated for ${user.email}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to dispatch user invitation.");
     }
   };
 
@@ -1029,6 +1098,17 @@ export function UsersWorkspace() {
                                 <Edit2 className="size-3 mr-1" /> Edit
                               </Button>
 
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenResetPassword(u)}
+                                className="h-7 px-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-500/10 cursor-pointer"
+                                title="Reset user password"
+                              >
+                                <KeyRound className="size-3 mr-1" /> Reset Pwd
+                              </Button>
+
+
                               {!isRoot && (
                                 <>
                                   <Button
@@ -1154,6 +1234,14 @@ export function UsersWorkspace() {
                         className="h-7 px-2 text-[11px] font-semibold text-primary"
                       >
                         <Edit2 className="size-3 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenResetPassword(u)}
+                        className="h-7 px-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                      >
+                        <KeyRound className="size-3 mr-1" /> Reset Pwd
                       </Button>
                       {!isRoot && (
                         <>
@@ -1755,6 +1843,27 @@ export function UsersWorkspace() {
                 </Select>
               </div>
 
+              <div className="pt-2.5 border-t border-border flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">Security Credentials</div>
+                  <div className="text-[11px] text-muted-foreground">Reset this user's sign-in password</div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (editingUser) {
+                      setEditModalOpen(false);
+                      handleOpenResetPassword(editingUser);
+                    }
+                  }}
+                  className="h-8 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border-amber-500/30 cursor-pointer"
+                >
+                  <KeyRound className="size-3.5 mr-1.5" /> Reset Password
+                </Button>
+              </div>
+
               <DialogFooter className="pt-2">
                 <Button
                   type="button"
@@ -1776,6 +1885,161 @@ export function UsersWorkspace() {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Modal */}
+      <Dialog open={!!resettingUser} onOpenChange={(open) => { if (!open) setResettingUser(null); }}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <KeyRound className="size-5" />
+              <DialogTitle className="text-base font-bold text-foreground">Reset Password</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Set a new secure sign-in password for <strong className="text-foreground">{resettingUser?.full_name || resettingUser?.email}</strong> ({resettingUser?.email}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleConfirmResetPassword} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">New Password</Label>
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordVal("Sweat@2026!")}
+                  className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                >
+                  Use default (Sweat@2026!)
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  type={showResetPassword ? "text" : "password"}
+                  value={resetPasswordVal}
+                  onChange={(e) => setResetPasswordVal(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  required
+                  minLength={8}
+                  className="pr-10 text-xs font-mono"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  {showResetPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Must contain at least 8 characters. The user can immediately sign in with this new password.
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setResettingUser(null)}
+                disabled={isResettingPassword}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isResettingPassword || resetPasswordVal.length < 8}
+                className="text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              >
+                {isResettingPassword ? (
+                  <>
+                    <RefreshCw className="size-3.5 mr-1.5 animate-spin" /> Resetting...
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="size-3.5 mr-1.5" /> Save New Password
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Activation / Invite Link Dialog */}
+      <Dialog open={!!inviteModalData} onOpenChange={(open) => !open && setInviteModalData(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Mail className="size-4 text-primary" />
+              Staff Activation Link Ready
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Share this secure activation link with <strong>{inviteModalData?.name}</strong> ({inviteModalData?.email}) so they can activate their account and set their password.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Activation & Login URL</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={inviteModalData?.link || ""}
+                  className="h-9 text-xs bg-muted/30 font-mono text-muted-foreground select-all"
+                />
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (inviteModalData?.link) {
+                      await navigator.clipboard.writeText(inviteModalData.link);
+                      toast.success("Copied activation link!");
+                    }
+                  }}
+                  className="shrink-0 gap-1.5 text-xs font-semibold cursor-pointer"
+                >
+                  <Copy className="size-3.5" /> Copy
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground text-[11px] mb-1">
+                Instructions for Staff Member:
+              </p>
+              <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                <li>Open the activation link in any web browser.</li>
+                <li>Enter their registered email (<code>{inviteModalData?.email}</code>).</li>
+                <li>Set their permanent password to access the SWEAT POS.</li>
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInviteModalData(null)}
+              className="text-xs font-semibold cursor-pointer"
+            >
+              Done
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (inviteModalData?.link) {
+                  window.open(inviteModalData.link, "_blank");
+                }
+              }}
+              className="gap-1.5 text-xs font-semibold cursor-pointer"
+            >
+              <ArrowUpRight className="size-3.5" /> Open in New Tab
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

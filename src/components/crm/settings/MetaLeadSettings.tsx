@@ -8,6 +8,9 @@ import {
   type MetaImport,
   type MetaMetadata,
   type MetaAuditHistoryItem,
+  type MetaDiscoveredPage,
+  type MetaDiscoveredForm,
+  type MetaFormQuestion,
 } from '@/api/endpoints/metaLeadsApi';
 import { useApp } from '@/contexts/app-context';
 import { Button } from '@/components/ui/button';
@@ -34,6 +37,14 @@ import {
   Trash2,
   Sparkles,
   Info,
+  ExternalLink,
+  Lock,
+  Link2,
+  Globe,
+  Radio,
+  Check,
+  Send,
+  Zap,
 } from 'lucide-react';
 import { CRMErrorState } from '../common/CRMErrorState';
 import { CRMLoadingState } from '../common/CRMLoadingState';
@@ -58,17 +69,35 @@ function formatError(error: unknown): string {
   const data = e.data || e.response?.data;
   if (data && typeof data === 'object') {
     const messages = Object.entries(data as Record<string, unknown>).map(
-      ([k, v]) => `${k !== 'detail' && k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(', ') : JSON.stringify(v)}`
+      ([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : String(val)}`
     );
-    return messages.join('; ');
+    if (messages.length) return messages.join(' | ');
   }
-  return e.message || 'The operation failed. Please check inputs and retry.';
+  return e.message || 'An unexpected error occurred. Please check the logs.';
+}
+
+function statusBadgeVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'IMPORTED':
+      return 'default';
+    case 'NEEDS_MAPPING':
+    case 'NEEDS_ASSIGNMENT':
+    case 'NEEDS_REVIEW':
+      return 'secondary';
+    case 'FAILED':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
 }
 
 function statusLabel(value: string) {
-  return value.toLowerCase().replaceAll('_', ' ');
+  return value.replace(/_/g, ' ');
 }
 
+// ===========================================================================
+// Main Component
+// ===========================================================================
 export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const { tenantId } = useApp();
   const client = useQueryClient();
@@ -85,6 +114,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const [submissionId, setSubmissionId] = React.useState('');
   const [detailId, setDetailId] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<MetaImport | null>(null);
+  const [showConnectModal, setShowConnectModal] = React.useState(false);
+  const [testTab, setTestTab] = React.useState<'SIMULATOR' | 'LIVE_WEBHOOK'>('SIMULATOR');
 
   const metadataQuery = useQuery({
     queryKey: [...queryKeyBase, 'metadata'],
@@ -113,41 +144,47 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, is_active, version }: { id: string; is_active: boolean; version: number }) =>
       metaLeadsApi.toggleActive(id, is_active, version),
-    onSuccess: (updated) => {
+    onSuccess: (data) => {
+      toast.success(`Form mapping ${data.name} is now ${data.is_active ? 'active' : 'paused'}.`);
       void refreshAll();
-      toast.success(`Form "${updated.name}" is now ${updated.is_active ? 'enabled' : 'paused'}.`);
     },
-    onError: (err) => toast.error(formatError(err)),
+    onError: (e) => toast.error(formatError(e)),
   });
 
   const simulateMutation = useMutation({
     mutationFn: metaLeadsApi.simulate,
     onSuccess: (data) => {
       setResult(data);
+      if (data.status === 'IMPORTED') {
+        toast.success(`Simulator delivery imported successfully as CRM Lead ID ${data.lead || 'N/A'}`);
+      } else {
+        toast.warning(`Simulator intake saved with status: ${statusLabel(data.status)}`);
+      }
       void refreshAll();
-      void client.invalidateQueries({ queryKey: ['leads'] });
-      toast(
-        data.duplicate_delivery
-          ? 'Existing submission returned; no duplicate lead created.'
-          : `Test submission processed: ${statusLabel(data.status)}`
-      );
     },
-    onError: (error) => toast.error(formatError(error)),
+    onError: (e) => toast.error(formatError(e)),
   });
 
   const retryMutation = useMutation({
-    mutationFn: metaLeadsApi.retry,
+    mutationFn: (importId: string) => metaLeadsApi.retry(importId),
     onSuccess: (data) => {
-      setResult(data);
+      toast.success(`Re-processed event: ${statusLabel(data.status)}`);
       void refreshAll();
-      void client.invalidateQueries({ queryKey: ['leads'] });
-      toast(`Retry result: ${statusLabel(data.status)}`);
     },
-    onError: (error) => toast.error(formatError(error)),
+    onError: (e) => toast.error(formatError(e)),
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: metaLeadsApi.disconnect,
+    onSuccess: () => {
+      toast.success('Meta account disconnected successfully.');
+      void refreshAll();
+    },
+    onError: (e) => toast.error(formatError(e)),
   });
 
   if (metadataQuery.isPending) {
-    return <CRMLoadingState message="Loading Meta integration configuration..." />;
+    return <CRMLoadingState message="Loading Meta Lead Ads configuration..." />;
   }
 
   if (metadataQuery.isError) {
@@ -182,71 +219,187 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-6">
-      {/* ── Top Integration Status Card ────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 7-Step Setup Guide / Stepper Banner                                 */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <section className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
+              ✓
+            </span>
+            <h2 className="font-semibold text-base">Meta Lead Ads Setup Flow</h2>
+          </div>
+          <Badge variant="outline" className="text-xs">
+            Multi-Tenant Isolated: {tenantId || 'SWEAT'}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1 text-xs">
+          {[
+            { step: '1', title: 'Connect Account', active: meta.is_connected, desc: 'OAuth & Scopes' },
+            { step: '2', title: 'Choose Page/Form', active: (mappingsQuery.data?.results.length ?? 0) > 0, desc: 'Meta Page & Form' },
+            { step: '3', title: 'Match Fields', active: (mappingsQuery.data?.results.length ?? 0) > 0, desc: 'Name & Contact' },
+            { step: '4', title: 'Branch Routing', active: true, desc: 'Fixed or Answer' },
+            { step: '5', title: 'Follow-up Rules', active: true, desc: 'Stage & Tasks' },
+            { step: '6', title: 'Test Intake', active: (importsQuery.data?.results.length ?? 0) > 0, desc: 'Sandbox & Live' },
+            { step: '7', title: 'Enable Live', active: mappingsQuery.data?.results.some((m) => m.is_active) ?? false, desc: 'Active & Verified' },
+          ].map((item) => (
+            <div
+              key={item.step}
+              className={`rounded-lg border p-2.5 space-y-1 transition-colors ${
+                item.active
+                  ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-950 dark:bg-emerald-950/20'
+                  : 'border-muted bg-muted/20'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`font-bold text-xs ${item.active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                  Step {item.step}
+                </span>
+                {item.active && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
+              </div>
+              <p className="font-semibold text-foreground truncate">{item.title}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* Step 1: Meta Account Connection Card                                */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-lg">Meta Lead Ads Integration</h2>
-              <Badge variant="secondary" className="text-xs">
-                Tenant: {tenantId || 'Default'}
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                Meta Account Connection
+              </h3>
+              <Badge
+                variant={meta.is_connected ? 'default' : meta.connection_status === 'TOKEN_EXPIRED' ? 'destructive' : 'outline'}
+                className="px-2.5 py-0.5 text-xs font-semibold"
+              >
+                {meta.is_connected
+                  ? 'Live Connected'
+                  : meta.connection_status === 'TOKEN_EXPIRED'
+                  ? 'Token Expired'
+                  : 'Not Connected (Simulator Active)'}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Configure Facebook & Instagram instant form intake, CRM field mappings, branch routing, and lead lifecycle rules.
+              Securely authenticate your Facebook Business Page to discover Lead Gen forms and enable real-time webhook ingestion.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge
-              variant={meta.connection_status === 'LIVE_CONNECTED' ? 'default' : 'outline'}
-              className="px-2.5 py-1 text-xs"
-            >
-              {meta.connection_status === 'LIVE_CONNECTED' ? 'Live Connected' : 'Not Connected (Simulation Active)'}
-            </Badge>
+            {meta.is_connected ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!canEdit || disconnectMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to disconnect this Meta account? Incoming live leads will be paused.')) {
+                      disconnectMutation.mutate();
+                    }
+                  }}
+                >
+                  Disconnect
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!canEdit}
+                  onClick={() => setShowConnectModal(true)}
+                >
+                  Reconnect
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                disabled={!canEdit}
+                onClick={() => setShowConnectModal(true)}
+                className="gap-1.5"
+              >
+                <Link2 className="h-4 w-4" />
+                Connect Meta Account
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={() => void refreshAll()} title="Refresh settings">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-2">
-          <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Operating Mode</span>
-            <p className="text-sm font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              Development Simulator
+        {/* Connection details / Diagnostic strip */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Authorized Meta User</span>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {meta.connection?.meta_user_name || 'No account connected'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Real CRM records are created for validation. Real Meta OAuth tokens and live webhook delivery are disabled.
+              {meta.connection?.meta_user_id ? `User ID: ${meta.connection.meta_user_id}` : 'Tenant sandbox mode'}
             </p>
           </div>
 
-          <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Outbound Communications</span>
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Token Security & Expiry</span>
+            <p className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+              <Lock className="h-3.5 w-3.5 text-emerald-600" />
+              AES-128 Fernet Encrypted
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {meta.connection?.masked_access_token ? `Token: ${meta.connection.masked_access_token}` : 'Zero plaintext in DB'}
+            </p>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Granted Meta Scopes</span>
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {meta.connection?.scopes && meta.connection.scopes.length > 0 ? (
+                meta.connection.scopes.map((s) => (
+                  <Badge key={s} variant="secondary" className="text-[10px] px-1.5 py-0">
+                    {s}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground">pages_show_list, leads_retrieval</span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Outbound Comms Protection</span>
             <p className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              Protected (Outbound Disabled)
+              Protected & Isolated
             </p>
             <p className="text-xs text-muted-foreground">
-              Simulator leads are blocked from sending real emails, WhatsApp, or SMS to members/prospects.
-            </p>
-          </div>
-
-          <div className="rounded-lg border bg-muted/40 p-3 space-y-1 sm:col-span-2 lg:col-span-1">
-            <span className="text-xs font-medium text-muted-foreground">Sales Assignment Engine</span>
-            <p className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
-              <UserCheck className="h-4 w-4 shrink-0 text-primary" />
-              {meta.tenant_assignment_policy?.auto_strategy.replace('_', ' ') || 'Round Robin'} ({meta.tenant_assignment_policy?.mode_allowed || 'Both'})
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Reuses tenant assignment policy. Fallback to unassigned:{' '}
-              {meta.tenant_assignment_policy?.allow_unassigned_fallback ? 'Allowed' : 'Disabled'}.
+              Test leads never receive real emails, WhatsApp, or SMS.
             </p>
           </div>
         </div>
+
+        {!meta.meta_app_configured && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-3 dark:border-amber-900/50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Platform App Credentials Pending</p>
+              <p className="mt-0.5">
+                The Meta App ID and Secret (<code>META_APP_ID</code> and <code>META_APP_SECRET</code>) must be configured in your environment before live OAuth callbacks can complete. In the meantime, full offline simulation and development workflows are active.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
-      {/* ── Form Mappings Section ─────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* Form Mappings Section (Steps 2, 3, 4, 5, 7)                         */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -298,105 +451,81 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           <>
             {!mappingsQuery.data.results.length && (
               <div className="rounded-xl border border-dashed p-8 text-center space-y-2">
-                <FileText className="h-8 w-8 mx-auto text-muted-foreground" />
-                <h4 className="font-medium text-sm">No Form Mappings Configured</h4>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  Add a mapping to specify how answers from your Meta Instant Form route into CRM branches, assign sales representatives, and initialize the prospective member lifecycle.
+                <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-semibold">No Meta form mappings created yet</p>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  Click "+ Add Form Mapping" above to link a Facebook Page and Lead Form to your CRM branches and pipelines.
                 </p>
-                {canEdit && (
-                  <Button size="sm" onClick={() => setEditing(null)} className="mt-2">
-                    Create your first mapping
-                  </Button>
-                )}
               </div>
             )}
 
             <div className="grid gap-4 md:grid-cols-2">
               {mappingsQuery.data.results.map((mapping) => {
-                const fixedBranch = meta.branches.find((b) => b.id === mapping.branch);
-                const fallbackBranch = meta.branches.find((b) => b.id === mapping.fallback_branch);
-                const leadSource = meta.lead_sources.find((s) => s.id === mapping.lead_source);
-                const specificUser = meta.eligible_users?.find((u) => u.id === mapping.assigned_sales_user);
+                const branchName =
+                  mapping.branch_mode === 'FIXED'
+                    ? meta.branches.find((b) => b.id === mapping.branch)?.name || 'Default Branch'
+                    : `Dynamic (${Object.keys(mapping.branch_answers).length} routed answers)`;
+                const sourceName = meta.lead_sources.find((s) => s.id === mapping.lead_source)?.name || mapping.lead_source;
+                const assignedUser = meta.eligible_users?.find((u) => u.id === mapping.assigned_sales_user)?.name;
 
                 return (
                   <article
                     key={mapping.id}
-                    className="rounded-xl border bg-card p-4 sm:p-5 space-y-4 shadow-sm flex flex-col justify-between"
+                    className={`rounded-xl border bg-card p-4 sm:p-5 space-y-4 shadow-sm transition-all ${
+                      mapping.is_active ? 'border-border' : 'border-dashed opacity-80'
+                    }`}
                   >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h4 className="font-semibold text-base break-words">{mapping.name}</h4>
-                          <p className="text-xs text-muted-foreground break-all mt-0.5">
-                            Page: <span className="font-mono">{mapping.page_id}</span> · Form: <span className="font-mono">{mapping.form_id}</span>
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant={mapping.is_active ? 'secondary' : 'outline'} className="text-xs">
-                            {mapping.is_active ? 'Enabled' : 'Paused'}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-base">{mapping.name}</h4>
+                          <Badge variant={mapping.is_active ? 'default' : 'secondary'} className="text-[10px]">
+                            {mapping.is_active ? 'Active' : 'Paused'}
                           </Badge>
-                          <Badge variant="outline" className="text-xs font-mono">
+                          <Badge variant="outline" className="text-[10px]">
                             v{mapping.version}
                           </Badge>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t">
-                        <div>
-                          <span className="text-muted-foreground">Branch Routing:</span>
-                          <p className="font-medium mt-0.5">
-                            {mapping.branch_mode === 'ANSWER' ? (
-                              <span>
-                                Form Answer (<span className="font-mono">{mapping.branch_field}</span>)
-                                {mapping.unmatched_branch_policy === 'FALLBACK_BRANCH' && fallbackBranch
-                                  ? ` · Fallback: ${fallbackBranch.name}`
-                                  : ' · Unmatched held'}
-                              </span>
-                            ) : (
-                              fixedBranch?.name || 'Branch not found'
-                            )}
-                          </p>
-                        </div>
-
-                        <div>
-                          <span className="text-muted-foreground">Lead Source:</span>
-                          <p className="font-medium mt-0.5">{leadSource?.name || 'Unknown Source'}</p>
-                        </div>
-
-                        <div>
-                          <span className="text-muted-foreground">Initial Stage:</span>
-                          <p className="font-medium mt-0.5">{statusLabel(mapping.initial_stage || 'NEW_LEAD')}</p>
-                        </div>
-
-                        <div>
-                          <span className="text-muted-foreground">Sales Assignment:</span>
-                          <p className="font-medium mt-0.5">
-                            {mapping.assignment_mode === 'SPECIFIC_USER' && specificUser
-                              ? `Assigned to ${specificUser.name}`
-                              : 'Tenant Auto Policy'}
-                          </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                          <span>Page: <code className="bg-muted px-1 py-0.5 rounded">{mapping.page_id}</code></span>
+                          <span>Form: <code className="bg-muted px-1 py-0.5 rounded">{mapping.form_id}</code></span>
                         </div>
                       </div>
-
-                      {mapping.create_followup_task && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/30 px-2.5 py-1.5 rounded-md">
-                          <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span>
-                            Automated follow-up ({mapping.followup_task_type || 'CALL'}) due within {mapping.followup_due_hours || 24}h
-                          </span>
-                        </div>
-                      )}
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t">
-                      <div className="flex items-center gap-1.5">
+                    <div className="grid grid-cols-2 gap-2 text-xs border-y py-2.5">
+                      <div>
+                        <span className="text-muted-foreground">Routing:</span>
+                        <p className="font-medium text-foreground">{branchName}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Lead Source:</span>
+                        <p className="font-medium text-foreground">{sourceName}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Initial Stage:</span>
+                        <p className="font-medium text-foreground">
+                          {statusLabel(mapping.initial_stage || 'NEW_LEAD')}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Sales Assignment:</span>
+                        <p className="font-medium text-foreground">
+                          {mapping.assignment_mode === 'SPECIFIC_USER'
+                            ? assignedUser || 'Specific User'
+                            : 'Tenant Policy'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                      <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           disabled={!canEdit}
                           onClick={() => setEditing(mapping)}
                         >
-                          <Settings2 className="h-3.5 w-3.5 mr-1" />
                           Edit
                         </Button>
                         <Button
@@ -440,7 +569,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         <Button
                           variant="default"
                           size="sm"
-                          disabled={!canEdit || !meta.simulator_enabled || !mapping.is_active}
+                          disabled={!canEdit || !mapping.is_active}
                           onClick={() => {
                             setSelected(mapping);
                             setAnswers({});
@@ -468,28 +597,19 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         )}
       </section>
 
-      {/* ── Test Enquiry Simulator ────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* Step 6: Acceptance Testing & Intake Simulator                       */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       {selected && (
-        <form
-          className="rounded-xl border bg-card p-4 sm:p-6 space-y-4 shadow-md"
-          onSubmit={(event) => {
-            event.preventDefault();
-            simulateMutation.mutate({
-              page_id: selected.page_id,
-              form_id: selected.form_id,
-              external_lead_id: submissionId,
-              field_data: questions.map((name) => ({ name, values: [answers[name] || ''] })),
-            });
-          }}
-        >
+        <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-4 shadow-md">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
             <div>
               <h3 className="font-semibold text-base flex items-center gap-2">
-                <span>Simulate Form Submission:</span>
+                <span>Acceptance Testing for:</span>
                 <span className="text-primary">{selected.name}</span>
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Submit test answers through the authoritative ingestion pipeline to verify mapping, routing, and duplicate protection.
+                Verify lead intake, mapping, duplicate prevention, and attribution without live ad spend.
               </p>
             </div>
             <Button type="button" variant="ghost" size="sm" onClick={() => setSelected(null)}>
@@ -497,188 +617,308 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
             </Button>
           </div>
 
-          <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1">
-            <p>
-              <strong>Verification note:</strong> Re-submitting the exact same Submission ID verifies duplicate rejection and idempotency. Generating a new Submission ID tests fresh intake.
-            </p>
-            <p className="text-muted-foreground">{meta.phone_validation}</p>
+          {/* Test Tabs */}
+          <div className="flex items-center gap-2 border-b pb-2 text-xs">
+            <button
+              type="button"
+              className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
+                testTab === 'SIMULATOR'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/40 text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => setTestTab('SIMULATOR')}
+            >
+              Development Simulator (Offline)
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
+                testTab === 'LIVE_WEBHOOK'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/40 text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => setTestTab('LIVE_WEBHOOK')}
+            >
+              Live Meta Webhook (Production)
+            </button>
           </div>
 
-          <label className={labelClass}>
-            <span>Submission External ID (Meta Lead ID)</span>
-            <div className="flex gap-2">
-              <Input
-                required
-                maxLength={100}
-                value={submissionId}
-                onChange={(e) => setSubmissionId(e.target.value)}
-                className="font-mono text-xs"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSubmissionId(crypto.randomUUID())}
-              >
-                New ID
-              </Button>
-            </div>
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {questions.map((questionKey) => (
-              <label key={questionKey} className={labelClass}>
-                <span className="flex items-center justify-between">
-                  <span>Question: <span className="font-mono text-xs">{questionKey}</span></span>
-                  {selected.branch_mode === 'ANSWER' && selected.branch_field === questionKey && (
-                    <Badge variant="outline" className="text-[10px]">Branch Selector</Badge>
-                  )}
+          {testTab === 'SIMULATOR' ? (
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                simulateMutation.mutate({
+                  page_id: selected.page_id,
+                  form_id: selected.form_id,
+                  external_lead_id: submissionId,
+                  field_data: questions.map((name) => ({ name, values: [answers[name] || ''] })),
+                });
+              }}
+            >
+              <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                  Development Simulator Safety Guarantees:
                 </span>
-                <Input
-                  maxLength={2000}
-                  value={answers[questionKey] || ''}
-                  onChange={(e) => setAnswers({ ...answers, [questionKey]: e.target.value })}
-                  placeholder={`Enter answer for ${questionKey}`}
-                />
-              </label>
-            ))}
-          </div>
+                <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+                  <li>Creates real CRM records in your tenant database for full lifecycle verification.</li>
+                  <li>Attribution records are marked with <code>raw_metadata.is_test = true</code>.</li>
+                  <li>Outbound communications (WhatsApp, Email, SMS) are strictly disabled for simulated leads.</li>
+                </ul>
+              </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex gap-2">
-              <Button disabled={!canEdit || !meta.simulator_enabled || simulateMutation.isPending}>
-                {simulateMutation.isPending ? 'Processing...' : 'Run Simulation'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setSelected(null)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </form>
-      )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={labelClass}>
+                  <span>Simulation External Lead ID:</span>
+                  <Input
+                    value={submissionId}
+                    onChange={(e) => setSubmissionId(e.target.value)}
+                    placeholder="e.g. sim-lead-001"
+                    required
+                  />
+                  <span className="text-[11px] text-muted-foreground">
+                    Change this value to test a new enquiry, or keep the same value to verify duplicate rejection.
+                  </span>
+                </label>
+              </div>
 
-      {/* Simulator Execution Feedback Result */}
-      {result && (
-        <div
-          role="status"
-          className={`rounded-xl border p-4 text-sm space-y-1 ${
-            result.status === 'IMPORTED'
-              ? 'bg-emerald-500/10 border-emerald-500/20'
-              : result.status === 'FAILED'
-              ? 'bg-destructive/10 border-destructive/20'
-              : 'bg-amber-500/10 border-amber-500/20'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <strong className="capitalize flex items-center gap-1.5">
-              {result.status === 'IMPORTED' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              ) : result.status === 'FAILED' ? (
-                <ShieldAlert className="h-4 w-4 text-destructive" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-amber-600" />
+              <div className="border-t pt-3 space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Simulate Form Questions & Answers
+                </h4>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {questions.map((question) => (
+                    <label key={question} className={labelClass}>
+                      <span className="truncate" title={question}>
+                        Question: <code className="text-xs">{question}</code>
+                      </span>
+                      <Input
+                        value={answers[question] || ''}
+                        onChange={(e) => setAnswers({ ...answers, [question]: e.target.value })}
+                        placeholder={`Answer for ${question}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const sample: Record<string, string> = {};
+                    questions.forEach((q) => {
+                      if (q.includes('name')) sample[q] = 'Simulated Prospect';
+                      else if (q.includes('email')) sample[q] = 'prospect.sim@example.test';
+                      else if (q.includes('phone')) sample[q] = '+919876543210';
+                      else if (q.includes('city') || q.includes('location')) sample[q] = 'Andheri';
+                      else sample[q] = 'Yes';
+                    });
+                    setAnswers(sample);
+                    toast.info('Populated standard test responses.');
+                  }}
+                >
+                  <Sparkles className="h-3.5 w-3.5 mr-1 text-primary" />
+                  Fill Sample Answers
+                </Button>
+
+                <Button type="submit" disabled={simulateMutation.isPending} className="gap-1.5">
+                  <Send className="h-4 w-4" />
+                  {simulateMutation.isPending ? 'Ingesting Event...' : 'Submit Simulated Intake'}
+                </Button>
+              </div>
+
+              {result && (
+                <div
+                  className={`rounded-lg border p-4 text-xs space-y-2 ${
+                    result.status === 'IMPORTED'
+                      ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                      : 'border-amber-300 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Intake Result: {statusLabel(result.status)}</span>
+                    <Badge variant={statusBadgeVariant(result.status)}>{result.status}</Badge>
+                  </div>
+                  <p>
+                    <strong>Import ID:</strong> <code className="bg-background px-1 py-0.5 rounded">{result.id}</code>
+                  </p>
+                  {result.lead && (
+                    <p>
+                      <strong>CRM Lead Created:</strong>{' '}
+                      <code className="bg-background px-1 py-0.5 rounded text-primary font-bold">{result.lead}</code>
+                    </p>
+                  )}
+                  {result.error_message && (
+                    <p className="text-destructive">
+                      <strong>Issue:</strong> {result.error_message}
+                    </p>
+                  )}
+                </div>
               )}
-              Simulation Outcome: {statusLabel(result.status)}
-            </strong>
-            <span className="text-xs font-mono text-muted-foreground">ID: {result.external_lead_id}</span>
-          </div>
-          <p className="text-xs">
-            {result.error_message ||
-              (result.status === 'IMPORTED'
-                ? 'Test lead was successfully saved into the CRM. You can verify it in the Leads workspace.'
-                : 'Enquiry was received and held for review. Review reasons below.')}
-          </p>
-          {result.lead && (
-            <p className="text-xs font-mono text-muted-foreground pt-1">
-              Created CRM Lead ID: {result.lead}
-            </p>
+            </form>
+          ) : (
+            <div className="space-y-4 text-xs">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                <h4 className="font-semibold text-sm flex items-center gap-1.5">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  Live Webhook Integration Verification
+                </h4>
+                <p className="text-muted-foreground">
+                  Meta delivers live lead advertisements via HTTPS webhooks directly to your platform endpoint. Each delivery is signed with HMAC-SHA256 using your App Secret and processed asynchronously via Celery.
+                </p>
+
+                <div className="grid gap-2 pt-2 sm:grid-cols-2">
+                  <div className="rounded border bg-background p-2.5 space-y-1">
+                    <span className="text-muted-foreground font-medium">Callback Webhook URL:</span>
+                    <p className="font-mono text-xs select-all text-primary font-semibold break-all">
+                      {window.location.origin}/api/v1/webhooks/meta/leads/
+                    </p>
+                  </div>
+                  <div className="rounded border bg-background p-2.5 space-y-1">
+                    <span className="text-muted-foreground font-medium">Verify Token:</span>
+                    <p className="font-mono text-xs select-all font-semibold">
+                      Configured in META_WEBHOOK_VERIFY_TOKEN
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-2">
+                <span className="font-semibold text-foreground">How to run a live acceptance test with Meta:</span>
+                <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                  <li>Ensure your Meta App webhook is subscribed to the <code>leadgen</code> topic for Page <code>{selected.page_id}</code>.</li>
+                  <li>Open the official <a href="https://developers.facebook.com/tools/lead-ads-testing" target="_blank" rel="noreferrer" className="text-primary underline inline-flex items-center gap-0.5">Meta Lead Ads Testing Tool <ExternalLink className="h-3 w-3" /></a>.</li>
+                  <li>Select Page ID <code>{selected.page_id}</code> and Form ID <code>{selected.form_id}</code>.</li>
+                  <li>Click <strong>Create Lead</strong>. Meta sends a live webhook payload.</li>
+                  <li>Refresh the Ingestion Log below to inspect the imported event, campaign attribution, and created CRM lead.</li>
+                </ol>
+              </div>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* ── Import Operations & History Section ────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* Ingestion History & Delivery Audit Table                            */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-base">Import Operations & Audit History</h3>
+            <h3 className="font-semibold text-base">Meta Lead Ingestion Audit Log</h3>
             <p className="text-xs text-muted-foreground">
-              Monitor incoming lead payloads, diagnostic failure reasons, and perform authorized retries.
+              Real-time delivery log showing webhook events, deduplication, retry tracking, and attribution capture.
             </p>
           </div>
 
-          {/* Filter status tabs */}
-          <div className="flex flex-wrap gap-1 bg-muted p-1 rounded-lg text-xs">
-            {[
-              { id: 'ALL', label: 'All' },
-              { id: 'NEEDS_ATTENTION', label: 'Needs Attention' },
-              { id: 'IMPORTED', label: 'Imported' },
-              { id: 'FAILED', label: 'Failed' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setStatusFilter(tab.id);
-                  setImportPage(1);
-                }}
-                className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                  statusFilter === tab.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <select
+              className={controlClass}
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setImportPage(1);
+              }}
+            >
+              <option value="ALL">All Delivery Statuses</option>
+              <option value="NEEDS_ATTENTION">Needs Attention (Unmapped / Review / Failed)</option>
+              <option value="IMPORTED">Imported</option>
+              <option value="NEEDS_MAPPING">Needs Mapping</option>
+              <option value="NEEDS_ASSIGNMENT">Needs Assignment</option>
+              <option value="NEEDS_REVIEW">Needs Review</option>
+              <option value="FAILED">Failed</option>
+            </select>
           </div>
         </div>
 
         {importsQuery.isPending ? (
-          <CRMLoadingState message="Loading imports..." />
+          <CRMLoadingState message="Loading intake history..." />
         ) : importsQuery.isError ? (
           <CRMErrorState
-            title="Cannot load import history"
+            title="Cannot load ingestion logs"
             message={formatError(importsQuery.error)}
             onRetry={() => importsQuery.refetch()}
           />
         ) : (
           <>
             {!displayedImports.length && (
-              <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                No submissions matching the current filter.
-              </p>
+              <div className="rounded-xl border border-dashed p-8 text-center space-y-2">
+                <Clock className="mx-auto h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-semibold">No Meta intake events recorded yet</p>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  When a prospect submits a lead form or you run a test enquiry, delivery records will appear here.
+                </p>
+              </div>
             )}
 
             <div className="space-y-3">
               {displayedImports.map((item) => {
-                const isHeld = ['NEEDS_MAPPING', 'NEEDS_ASSIGNMENT', 'NEEDS_REVIEW'].includes(item.status);
-                const isFailed = item.status === 'FAILED';
-                const isSuccess = item.status === 'IMPORTED';
-
+                const isLive = item.mode === 'LIVE';
                 return (
-                  <article key={item.id} className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+                  <article
+                    key={item.id}
+                    className="rounded-xl border bg-card p-4 text-xs space-y-3 shadow-sm hover:border-primary/30 transition-colors"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold font-mono break-all">{item.external_lead_id}</p>
-                          <Badge
-                            variant={isSuccess ? 'secondary' : isFailed ? 'destructive' : 'outline'}
-                            className="capitalize text-xs"
-                          >
+                          <Badge variant={statusBadgeVariant(item.status)} className="text-[11px]">
                             {statusLabel(item.status)}
                           </Badge>
+                          <Badge
+                            variant={isLive ? 'default' : 'outline'}
+                            className={`text-[10px] ${isLive ? 'bg-indigo-600 hover:bg-indigo-700' : 'text-amber-700 dark:text-amber-400'}`}
+                          >
+                            {isLive ? 'LIVE' : 'SIMULATOR'}
+                          </Badge>
+                          {item.duplicate_delivery && (
+                            <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                              Duplicate Delivery
+                            </Badge>
+                          )}
+                          <span className="text-muted-foreground">
+                            {new Date(item.received_at).toLocaleString()}
+                          </span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Received: {new Date(item.received_at).toLocaleString()} · Attempt {item.attempt_count}
-                          {item.mapping_version ? ` · Mapping v${item.mapping_version}` : ''}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Lead ID: <code className="bg-muted px-1 py-0.5 rounded font-mono">{item.external_lead_id}</code></span>
+                          <span>Page: <code className="bg-muted px-1 py-0.5 rounded font-mono">{item.page_id}</code></span>
+                          <span>Form: <code className="bg-muted px-1 py-0.5 rounded font-mono">{item.form_id}</code></span>
+                        </div>
+                        {(item.campaign_name || item.ad_name) && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            <span className="text-muted-foreground font-medium">Attribution:</span>
+                            {item.campaign_name && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Campaign: {item.campaign_name}
+                              </Badge>
+                            )}
+                            {item.ad_name && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Ad: {item.ad_name}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {item.status !== 'IMPORTED' && (
+                        {item.lead && (
+                          <span className="font-semibold text-primary">
+                            CRM Lead: <code className="bg-primary/10 px-1.5 py-0.5 rounded">{item.lead}</code>
+                          </span>
+                        )}
+                        {['FAILED', 'NEEDS_MAPPING', 'NEEDS_REVIEW'].includes(item.status) && (
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={!canEdit || !meta.simulator_enabled || retryMutation.isPending}
+                            disabled={!canEdit || retryMutation.isPending}
                             onClick={() => retryMutation.mutate(item.id)}
+                            title="Retry ingestion pipeline"
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Retry
@@ -689,58 +929,51 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                           size="sm"
                           onClick={() => setDetailId(detailId === item.id ? null : item.id)}
                         >
-                          {detailId === item.id ? 'Hide Details' : 'View Payload'}
+                          {detailId === item.id ? 'Hide Payload' : 'View Payload'}
                         </Button>
                       </div>
                     </div>
 
                     {item.error_message && (
-                      <div
-                        className={`text-xs p-2.5 rounded-md ${
-                          isFailed
-                            ? 'bg-destructive/10 text-destructive'
-                            : isHeld
-                            ? 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        <strong>Reason:</strong> {item.error_message}
+                      <div className="rounded border border-destructive/20 bg-destructive/10 p-2.5 text-destructive flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Failure Reason:</strong> {item.error_message}
+                        </div>
                       </div>
                     )}
 
                     {/* Detailed payload expansion */}
                     {detailId === item.id && (
-                      <div className="border-t pt-3 space-y-3 text-xs">
+                      <div className="border-t pt-3 space-y-3">
                         {detailQuery.isPending ? (
                           <p className="text-muted-foreground">Loading payload details...</p>
                         ) : detailQuery.isError ? (
                           <p className="text-destructive">{formatError(detailQuery.error)}</p>
                         ) : (
-                          <div className="space-y-3">
-                            <div>
-                              <h5 className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide mb-1">
-                                Form Question Answers
-                              </h5>
-                              <dl className="grid gap-1.5 sm:grid-cols-2 bg-muted/40 p-3 rounded-lg">
-                                {detailQuery.data?.field_data?.map((field) => (
-                                  <div key={field.name} className="space-y-0.5">
-                                    <dt className="text-muted-foreground font-mono">{field.name}</dt>
-                                    <dd className="font-medium break-words">{field.values.join(', ') || '—'}</dd>
-                                  </div>
-                                ))}
-                              </dl>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded border bg-muted/30 p-2.5 space-y-1">
+                              <span className="font-semibold text-foreground">Form Field Data Received:</span>
+                              <pre className="overflow-x-auto text-[11px] p-2 bg-background rounded border">
+                                {JSON.stringify(detailQuery.data?.field_data || [], null, 2)}
+                              </pre>
                             </div>
-
-                            {detailQuery.data?.mapping_snapshot && (
-                              <div>
-                                <h5 className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide mb-1">
-                                  Mapping Snapshot at Execution
-                                </h5>
-                                <pre className="bg-muted p-2 rounded text-[11px] font-mono overflow-x-auto max-h-40">
-                                  {JSON.stringify(detailQuery.data.mapping_snapshot, null, 2)}
-                                </pre>
-                              </div>
-                            )}
+                            <div className="rounded border bg-muted/30 p-2.5 space-y-1">
+                              <span className="font-semibold text-foreground">Mapping Snapshot & Metadata:</span>
+                              <pre className="overflow-x-auto text-[11px] p-2 bg-background rounded border">
+                                {JSON.stringify(
+                                  {
+                                    mapping_snapshot: detailQuery.data?.mapping_snapshot,
+                                    campaign_id: detailQuery.data?.campaign_id,
+                                    campaign_name: detailQuery.data?.campaign_name,
+                                    adset_id: detailQuery.data?.adset_id,
+                                    ad_id: detailQuery.data?.ad_id,
+                                  },
+                                  null,
+                                  2
+                                )}
+                              </pre>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -760,14 +993,145 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           </>
         )}
       </section>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* Meta OAuth Modal                                                    */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {showConnectModal && (
+        <MetaOAuthModal
+          onClose={() => setShowConnectModal(false)}
+          onSuccess={() => {
+            setShowConnectModal(false);
+            void refreshAll();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapping History Modal
-// ─────────────────────────────────────────────────────────────────────────────
+// ===========================================================================
+// Meta OAuth Modal Component
+// ===========================================================================
+function MetaOAuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [authCode, setAuthCode] = React.useState('');
+  const [authState, setAuthState] = React.useState('');
+  const [isLoadingAuth, setIsLoadingAuth] = React.useState(false);
+  const [isSubmittingCode, setIsSubmittingCode] = React.useState(false);
 
+  const handleLaunchOAuth = async () => {
+    try {
+      setIsLoadingAuth(true);
+      const data = await metaLeadsApi.oauthInit();
+      setAuthState(data.state);
+      window.open(data.auth_url, '_blank', 'width=650,height=700');
+      toast.info('Meta authorization dialog opened. Complete login and copy authorization code if manual callback is required.');
+    } catch (e) {
+      toast.error(formatError(e));
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
+  const handleCompleteCallback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authCode.trim()) {
+      toast.error('Please enter the authorization code provided by Meta.');
+      return;
+    }
+    try {
+      setIsSubmittingCode(true);
+      const res = await metaLeadsApi.oauthCallback(authCode.trim(), authState.trim());
+      if (res.success) {
+        toast.success(`Connected Meta account successfully: ${res.connection.meta_user_name}`);
+        onSuccess();
+      } else {
+        toast.error(res.message || 'Authorization could not be completed.');
+      }
+    } catch (err) {
+      toast.error(formatError(err));
+    } finally {
+      setIsSubmittingCode(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Globe className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-lg">Connect Meta Business Account</h3>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <p className="text-muted-foreground">
+            Authorizing your Meta account grants the SWEAT platform secure access to retrieve your Facebook Pages, discovered Lead Ads forms, and real-time webhook subscriptions.
+          </p>
+
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+            <span className="font-semibold text-foreground">Requested Meta Permissions:</span>
+            <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+              <li><code>pages_show_list</code>: View your managed Facebook pages.</li>
+              <li><code>leads_retrieval</code>: Securely fetch lead form answers and campaign details.</li>
+              <li><code>pages_manage_metadata</code>: Automatically subscribe pages to live lead webhooks.</li>
+            </ul>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-2">
+            <Button
+              type="button"
+              className="w-full gap-2"
+              onClick={handleLaunchOAuth}
+              disabled={isLoadingAuth}
+            >
+              <ExternalLink className="h-4 w-4" />
+              {isLoadingAuth ? 'Preparing OAuth...' : '1. Launch Meta Login Window'}
+            </Button>
+          </div>
+
+          <form onSubmit={handleCompleteCallback} className="border-t pt-3 space-y-3">
+            <span className="font-semibold text-foreground">
+              2. Complete Connection via Authorization Code
+            </span>
+            <p className="text-muted-foreground">
+              If the popup returns an authorization code or you are testing via UAT:
+            </p>
+            <div className="space-y-2">
+              <Input
+                value={authCode}
+                onChange={(e) => setAuthCode(e.target.value)}
+                placeholder="Enter Authorization Code (code=...)"
+                required
+              />
+              <Input
+                value={authState}
+                onChange={(e) => setAuthState(e.target.value)}
+                placeholder="State token (auto-filled if dialog launched)"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={isSubmittingCode}>
+                {isSubmittingCode ? 'Exchanging Token...' : 'Complete Connection'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Mapping History Modal
+// ===========================================================================
 function MappingHistoryModal({ mapping, onClose }: { mapping: MetaMapping; onClose: () => void }) {
   const query = useQuery({
     queryKey: ['meta-mapping-history', mapping.id],
@@ -775,71 +1139,42 @@ function MappingHistoryModal({ mapping, onClose }: { mapping: MetaMapping; onClo
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl max-h-[85vh] rounded-xl border bg-card p-6 shadow-xl flex flex-col space-y-4">
-        <div className="flex items-center justify-between border-b pb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-xl border bg-card p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between border-b pb-3 shrink-0">
           <div>
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <History className="h-5 w-5 text-primary" />
-              Change History: {mapping.name}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Durable audit trail of who changed configuration settings and when.
-            </p>
+            <h3 className="font-semibold text-base">Configuration Audit Trail: {mapping.name}</h3>
+            <p className="text-xs text-muted-foreground">History of modifications, version updates, and status toggles.</p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div className="overflow-y-auto space-y-3 flex-1 pr-1 text-xs">
           {query.isPending ? (
-            <CRMLoadingState message="Loading audit history..." />
+            <p className="text-muted-foreground py-6 text-center">Loading audit history...</p>
           ) : query.isError ? (
-            <p className="text-sm text-destructive">{formatError(query.error)}</p>
+            <p className="text-destructive py-6 text-center">{formatError(query.error)}</p>
           ) : !query.data?.results.length ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No change history recorded yet.</p>
+            <p className="text-muted-foreground py-6 text-center">No audit trail records found for this mapping.</p>
           ) : (
-            query.data.results.map((item) => (
-              <div key={item.id} className="rounded-lg border bg-muted/20 p-3 space-y-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {item.action_code}
-                    </Badge>
-                    {item.version && <span className="font-mono text-muted-foreground">v{item.version}</span>}
-                  </div>
-                  <span className="text-muted-foreground">{new Date(item.occurred_at).toLocaleString()}</span>
+            query.data.results.map((log: MetaAuditHistoryItem) => (
+              <div key={log.id} className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground">{statusLabel(log.action_code)}</span>
+                  <span className="text-muted-foreground">{new Date(log.occurred_at).toLocaleString()}</span>
                 </div>
-                <p className="text-foreground">
-                  Changed by: <strong>{item.actor_name}</strong> ({item.actor_type})
-                </p>
-
-                {item.before_data && item.after_data && (
-                  <details className="mt-1 cursor-pointer">
-                    <summary className="text-primary hover:underline text-[11px]">View Modified Attributes</summary>
-                    <div className="mt-2 grid grid-cols-2 gap-2 p-2 bg-background rounded border text-[11px]">
-                      <div>
-                        <span className="font-semibold text-muted-foreground block mb-1">Before:</span>
-                        <pre className="font-mono overflow-x-auto max-h-32 text-[10px]">
-                          {JSON.stringify(item.before_data, null, 2)}
-                        </pre>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-muted-foreground block mb-1">After:</span>
-                        <pre className="font-mono overflow-x-auto max-h-32 text-[10px]">
-                          {JSON.stringify(item.after_data, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  </details>
-                )}
+                <div className="text-muted-foreground flex items-center gap-3">
+                  <span>Actor: <strong>{log.actor_name}</strong> ({log.actor_type})</span>
+                  {log.version && <span>Version: <strong>v{log.version}</strong></span>}
+                </div>
               </div>
             ))
           )}
         </div>
 
-        <div className="border-t pt-3 flex justify-end">
+        <div className="border-t pt-3 flex justify-end shrink-0">
           <Button variant="outline" size="sm" onClick={onClose}>
             Close
           </Button>
@@ -849,10 +1184,9 @@ function MappingHistoryModal({ mapping, onClose }: { mapping: MetaMapping; onClo
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapping Editor Form
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ===========================================================================
+// Mapping Editor Form (Steps 2, 3, 4, 5, 7)
+// ===========================================================================
 function MappingEditor({
   mapping,
   metadata,
@@ -871,6 +1205,12 @@ function MappingEditor({
   const [formId, setFormId] = React.useState(mapping?.form_id || '');
   const [active, setActive] = React.useState(mapping?.is_active ?? false);
   const [source, setSource] = React.useState(mapping?.lead_source || '');
+
+  // Dynamic discovered Pages & Forms
+  const [discoveredPages, setDiscoveredPages] = React.useState<MetaDiscoveredPage[]>(metadata.pages || []);
+  const [discoveredForms, setDiscoveredForms] = React.useState<MetaDiscoveredForm[]>([]);
+  const [isLoadingForms, setIsLoadingForms] = React.useState(false);
+  const [isManualPageForm, setIsManualPageForm] = React.useState(!metadata.is_connected);
 
   // Branch routing states
   const [branchMode, setBranchMode] = React.useState<MetaMapping['branch_mode']>(mapping?.branch_mode || 'FIXED');
@@ -903,6 +1243,59 @@ function MappingEditor({
     Boolean(mapping?.field_defaults && Object.keys(mapping.field_defaults).length > 0)
   );
 
+  // Follow-up task automation states
+  const [createFollowup, setCreateFollowup] = React.useState(mapping?.create_followup_task ?? false);
+  const [followupType, setFollowupType] = React.useState(mapping?.followup_task_type || 'CALL');
+  const [followupHours, setFollowupHours] = React.useState(mapping?.followup_due_hours || 24);
+
+  // Version conflict detection state
+  const [versionConflict, setVersionConflict] = React.useState<string | null>(null);
+
+  // Fetch forms when pageId changes and connected
+  React.useEffect(() => {
+    if (pageId && metadata.is_connected && !isManualPageForm) {
+      setIsLoadingForms(true);
+      metaLeadsApi
+        .forms(pageId)
+        .then((res) => {
+          setDiscoveredForms(res.forms || []);
+        })
+        .catch((e) => {
+          console.warn('Could not discover forms for page:', e);
+        })
+        .finally(() => setIsLoadingForms(false));
+    }
+  }, [pageId, metadata.is_connected, isManualPageForm]);
+
+  const handleSelectDiscoveredForm = async (fId: string) => {
+    setFormId(fId);
+    try {
+      const res = await metaLeadsApi.formFields(fId);
+      if (res.form?.questions && res.form.questions.length > 0) {
+        // Auto-match questions to CRM destinations
+        const newFields: { destination: string; question: string }[] = [];
+        res.form.questions.forEach((q) => {
+          const key = q.key.toLowerCase();
+          if (key.includes('full_name') || key.includes('name')) {
+            newFields.push({ destination: 'full_name', question: q.key });
+          } else if (key.includes('email')) {
+            newFields.push({ destination: 'email', question: q.key });
+          } else if (key.includes('phone')) {
+            newFields.push({ destination: 'phone', question: q.key });
+          } else if (key.includes('city') || key.includes('location')) {
+            newFields.push({ destination: 'city', question: q.key });
+          }
+        });
+        if (newFields.length > 0) {
+          setFields(newFields);
+          toast.success(`Discovered ${res.form.questions.length} questions and auto-mapped ${newFields.length} CRM fields!`);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not auto-fetch questions:', e);
+    }
+  };
+
   const hasNameMapping = fields.some(
     (f) => (f.destination === 'full_name' || f.destination === 'first_name') && f.question.trim().length > 0
   );
@@ -919,22 +1312,6 @@ function MappingEditor({
     return metadata.destination_fields.filter((f) => !DISALLOWED_DEFAULT_FIELDS.includes(f.value));
   }, [metadata]);
 
-  const handleUseBasicTestFields = () => {
-    setFields([
-      { destination: 'full_name', question: 'full_name' },
-      { destination: 'email', question: 'email' },
-    ]);
-    toast.info('Added basic simulator fields: Full name and Email.');
-  };
-
-  // Follow-up task automation states
-  const [createFollowup, setCreateFollowup] = React.useState(mapping?.create_followup_task ?? false);
-  const [followupType, setFollowupType] = React.useState(mapping?.followup_task_type || 'CALL');
-  const [followupHours, setFollowupHours] = React.useState(mapping?.followup_due_hours || 24);
-
-  // Version conflict detection state
-  const [versionConflict, setVersionConflict] = React.useState<string | null>(null);
-
   const saveMutation = useMutation({
     mutationFn: (payload: MappingInput) => metaLeadsApi.save(payload, mapping?.id),
     onSuccess: () => {
@@ -945,7 +1322,7 @@ function MappingEditor({
       const err = e as { response?: { data?: Record<string, unknown> } };
       if (err.response?.data?.['expected_version']) {
         setVersionConflict(
-          'Conflict detected: Another administrator updated this form mapping while you were editing. Please reload to review the latest settings.'
+          'Conflict detected: Another administrator updated this form mapping while you were editing. Please reload to review latest settings.'
         );
       } else {
         toast.error(formatError(e));
@@ -957,25 +1334,21 @@ function MappingEditor({
     event.preventDefault();
     setVersionConflict(null);
 
-    // Validate field mappings presence
     if (fields.length === 0) {
       toast.error('Please configure at least one field mapping.');
       return;
     }
 
-    // Validate that each mapping has a question key and destination
     if (fields.some((f) => !f.question.trim() || !f.destination)) {
       toast.error('Please enter the question in your form and choose the CRM field for all mapping rows.');
       return;
     }
 
-    // Validate duplicate destination mappings
     if (new Set(fields.map((f) => f.destination)).size !== fields.length) {
       toast.error('Each CRM destination field may only be mapped once.');
       return;
     }
 
-    // Validate required fields (name and contact)
     if (!hasNameMapping) {
       toast.error('A name mapping (Full name or First name) is required so the lead can be identified.');
       return;
@@ -986,14 +1359,12 @@ function MappingEditor({
       return;
     }
 
-    // Validate disallowed default fields
     if (incompatibleDefaults.length > 0) {
-      toast.error('Default values are not permitted for contact, identity, or consent fields. Please remove or update them before saving.');
+      toast.error('Default values are not permitted for contact, identity, or consent fields.');
       setShowDefaults(true);
       return;
     }
 
-    // Validate duplicate branch routing answers
     if (new Set(routes.map((r) => r.answer.trim().toLowerCase())).size !== routes.length) {
       toast.error('Each branch answer option must be unique.');
       return;
@@ -1004,16 +1375,15 @@ function MappingEditor({
       page_id: pageId,
       form_id: formId,
       is_active: active,
-      lead_source: source,
+      field_mappings: Object.fromEntries(fields.map((f) => [f.destination, f.question.trim()])),
+      field_defaults: Object.fromEntries(defaults.filter((d) => d.destination && d.value.trim()).map((d) => [d.destination, d.value.trim()])),
       branch_mode: branchMode,
       branch: branchMode === 'FIXED' ? branch || null : null,
-      branch_field: branchMode === 'ANSWER' ? branchField : '',
-      branch_answers:
-        branchMode === 'ANSWER' ? Object.fromEntries(routes.map((r) => [r.answer.trim(), r.branchId])) : {},
-      unmatched_branch_policy: branchMode === 'ANSWER' ? unmatchedBranchPolicy : 'HOLD',
-      fallback_branch: branchMode === 'ANSWER' && unmatchedBranchPolicy === 'FALLBACK_BRANCH' ? fallbackBranch || null : null,
-      field_mappings: Object.fromEntries(fields.map((f) => [f.destination, f.question.trim()])),
-      field_defaults: Object.fromEntries(defaults.filter((d) => d.destination && d.value).map((d) => [d.destination, d.value.trim()])),
+      branch_field: branchMode === 'ANSWER' ? branchField.trim() : '',
+      branch_answers: branchMode === 'ANSWER' ? Object.fromEntries(routes.map((r) => [r.answer.trim(), r.branchId])) : {},
+      unmatched_branch_policy: unmatchedBranchPolicy,
+      fallback_branch: unmatchedBranchPolicy === 'FALLBACK_BRANCH' ? fallbackBranch || null : null,
+      lead_source: source,
       initial_stage: initialStage,
       repeat_policy: repeatPolicy,
       assignment_mode: assignmentMode,
@@ -1021,776 +1391,516 @@ function MappingEditor({
       create_followup_task: createFollowup,
       followup_task_type: followupType,
       followup_due_hours: Number(followupHours) || 24,
-      ...(mapping ? { expected_version: mapping.version } : {}),
+      ...(mapping?.version !== undefined ? { expected_version: mapping.version } : {}),
     };
 
     saveMutation.mutate(payload);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border bg-card p-4 sm:p-6 space-y-6 shadow-md">
-      <div className="flex items-center justify-between border-b pb-4">
+    <form onSubmit={handleSubmit} className="rounded-xl border bg-card p-4 sm:p-6 space-y-6 shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
-          <h3 className="font-semibold text-lg">{mapping ? 'Edit Form Mapping' : 'New Form Mapping'}</h3>
+          <h3 className="font-semibold text-lg">{mapping ? `Edit Mapping: ${mapping.name}` : 'New Meta Form Mapping'}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Configure how form responses translate into prospective member records in your CRM.
+            Configure Page/form IDs, field matchings, branch routing, and lead lifecycle rules.
           </p>
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={!canEdit || saveMutation.isPending}>
+            {saveMutation.isPending ? 'Saving...' : mapping ? 'Update Mapping' : 'Save Mapping'}
+          </Button>
+        </div>
       </div>
 
       {versionConflict && (
-        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>Concurrent Modification Detected</span>
-          </div>
-          <p className="text-xs text-destructive">{versionConflict}</p>
-          <Button type="button" size="sm" variant="outline" onClick={onSaved}>
-            Reload latest version
-          </Button>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{versionConflict}</span>
         </div>
       )}
 
-      <fieldset disabled={!canEdit || saveMutation.isPending} className="space-y-6">
-        {/* ── Section 1: Basic Identifiers ─────────────────────────────────── */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold flex items-center gap-1.5">
-            <FileText className="h-4 w-4 text-primary" />
-            1. Form Identifiers
-          </h4>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className={labelClass}>
-              <span>Mapping Name</span>
-              <Input
-                required
-                maxLength={200}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. 7-Day Trial Lead Form"
-              />
-            </label>
+      {/* Section 1: Page & Form Discovery */}
+      <section className="space-y-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Globe className="h-3.5 w-3.5 text-primary" />
+          Step 2: Choose Facebook Page & Lead Form
+        </h4>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span>Mapping Configuration Name:</span>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Andheri Summer Fitness Campaign Form"
+              required
+            />
+          </label>
+
+          <label className={labelClass}>
+            <span>CRM Lead Source:</span>
+            <select
+              className={controlClass}
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              required
+            >
+              <option value="">Select Lead Source</option>
+              {metadata.lead_sources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {metadata.is_connected && !isManualPageForm ? (
+          <div className="grid gap-4 sm:grid-cols-2 bg-muted/20 p-3 rounded-lg border">
             <label className={labelClass}>
-              <span>CRM Lead Source (Meta Type)</span>
+              <span>Select Authorized Facebook Page:</span>
               <select
-                required
                 className={controlClass}
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
+                value={pageId}
+                onChange={(e) => {
+                  setPageId(e.target.value);
+                  setFormId('');
+                }}
+                required
               >
-                <option value="">Select active Meta lead source</option>
-                {metadata.lead_sources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
+                <option value="">Select a Page...</option>
+                {discoveredPages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (ID: {p.id})
                   </option>
                 ))}
               </select>
             </label>
 
             <label className={labelClass}>
-              <span>Facebook Page ID</span>
-              <Input
+              <span>Select Lead Gen Form:</span>
+              <select
+                className={controlClass}
+                value={formId}
+                onChange={(e) => handleSelectDiscoveredForm(e.target.value)}
+                disabled={!pageId || isLoadingForms}
                 required
-                maxLength={100}
+              >
+                <option value="">
+                  {isLoadingForms ? 'Discovering forms...' : !pageId ? 'Select Page first' : 'Select a Form...'}
+                </option>
+                {discoveredForms.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} (Status: {f.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className={labelClass}>
+              <span>Facebook Page ID:</span>
+              <Input
                 value={pageId}
                 onChange={(e) => setPageId(e.target.value)}
-                placeholder="e.g. 10482910492"
-                className="font-mono text-xs"
+                placeholder="e.g. 109283746501928"
+                required
               />
             </label>
 
             <label className={labelClass}>
-              <span>Meta Form ID</span>
+              <span>Meta Lead Form ID:</span>
               <Input
-                required
-                maxLength={100}
                 value={formId}
                 onChange={(e) => setFormId(e.target.value)}
-                placeholder="e.g. 89201940124"
-                className="font-mono text-xs"
+                placeholder="e.g. 981273645019283"
+                required
               />
             </label>
           </div>
-          {!metadata.lead_sources.length && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              No active Lead Source with type 'META' exists. Please create one under CRM Settings → Lead Sources first.
-            </p>
-          )}
+        )}
+
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="text-primary underline hover:text-primary/80"
+            onClick={() => setIsManualPageForm(!isManualPageForm)}
+          >
+            {isManualPageForm ? 'Switch to Discovered Meta Pages/Forms' : 'Or enter Page and Form IDs manually'}
+          </button>
+        </div>
+      </section>
+
+      {/* Section 2: Match Fields */}
+      <section className="space-y-4 border-t pt-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            Step 3: Match Fields (Form Question → CRM Destination)
+          </h4>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setFields([...fields, { destination: '', question: '' }])}
+          >
+            + Add Field
+          </Button>
         </div>
 
-        {/* ── Section 2: Match Form Answers to CRM Fields ───────────────── */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div className="space-y-1">
-              <h4 className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
-                <Layers className="h-4 w-4 text-primary" />
-                2. Match form answers to CRM fields
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
-                Tell us where to save each answer. For example, the form’s Full name answer goes into the CRM’s Full name field. Enter customer details later when testing.
-              </p>
+        <div className="space-y-2">
+          {fields.map((field, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <Input
+                value={field.question}
+                onChange={(e) => {
+                  const updated = [...fields];
+                  if (updated[idx]) {
+                    updated[idx] = { ...updated[idx], question: e.target.value };
+                    setFields(updated);
+                  }
+                }}
+                placeholder="Form Question Key (e.g. full_name, email, phone_number)"
+                className="flex-1"
+                required
+              />
+              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              <select
+                className={`${controlClass} flex-1`}
+                value={field.destination}
+                onChange={(e) => {
+                  const updated = [...fields];
+                  if (updated[idx]) {
+                    updated[idx] = { ...updated[idx], destination: e.target.value };
+                    setFields(updated);
+                  }
+                }}
+                required
+              >
+                <option value="">Select CRM Destination Field</option>
+                {metadata.destination_fields.map((df) => (
+                  <option key={df.value} value={df.value}>
+                    {df.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setFields(fields.filter((_, i) => i !== idx))}
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
             </div>
-
-            {fields.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUseBasicTestFields}
-                  className="text-xs h-8 gap-1.5 border-dashed"
-                  title="Populate standard name and email simulator test fields"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Use basic test fields
-                </Button>
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled={fields.length >= metadata.destination_fields.length}
-                  onClick={() => setFields([...fields, { destination: '', question: '' }])}
-                  className="text-xs h-8"
-                >
-                  + Add field mapping
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Inline Requirements Status */}
-          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-muted/20 border text-xs">
-            <span className="text-muted-foreground font-medium text-[11px] uppercase tracking-wider">Required for CRM:</span>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors',
-                hasNameMapping
-                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20'
-              )}
-            >
-              {hasNameMapping ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-              Name mapping (Full name or First name)
-            </span>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors',
-                hasContactMapping
-                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20'
-              )}
-            >
-              {hasContactMapping ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-              Contact mapping (Email or Phone)
-            </span>
-          </div>
-
-          {/* Live Meta vs Manual Question Entry Guidance */}
-          <div className="rounded-lg bg-muted/40 border border-border/70 p-3 text-xs text-muted-foreground space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium text-foreground">
-              <Info className="h-4 w-4 text-primary shrink-0" />
-              <span>Manual question-key entry (Development mode)</span>
-            </div>
-            <p className="leading-relaxed">
-              Type the exact question key used in your Meta Instant Form or simulator payload (for example: <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">full_name</code>, <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">email</code>, or <code className="font-mono bg-background px-1.5 py-0.5 rounded border text-[11px] text-foreground">phone</code>).
-            </p>
-            <p className="text-[11px] text-muted-foreground/80">
-              When an authorised live Meta connection is connected, form questions will automatically populate from your selected form.
-            </p>
-          </div>
-
-          {/* Empty State when no mappings configured */}
-          {fields.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/10">
-              <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <Layers className="h-5 w-5" />
-              </div>
-              <div className="space-y-1">
-                <h5 className="text-sm font-semibold text-foreground">No form answers are mapped yet</h5>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-                  Tell us where to save each answer. For example, the form’s Full name answer goes into the CRM’s Full name field. Enter customer details later when testing.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setFields([{ destination: '', question: '' }])}
-                  className="text-xs gap-1.5"
-                >
-                  + Add field mapping
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUseBasicTestFields}
-                  className="text-xs gap-1.5 border-dashed"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Use basic test fields
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                These are editable simulator examples, not live Meta form fields.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="hidden sm:grid grid-cols-[1fr_auto_1fr_auto] gap-3 px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                <span>Question in your form</span>
-                <span className="w-6 text-center"></span>
-                <span>Save answer into</span>
-                <span className="w-8"></span>
-              </div>
-
-              {fields.map((field, index) => (
-                <div
-                  key={index}
-                  className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto] items-center bg-card p-3 rounded-lg border shadow-xs"
-                >
-                  <div className="w-full min-w-0">
-                    <label className="text-xs font-medium sm:hidden block mb-1">
-                      Question in your form
-                    </label>
-                    <Input
-                      required
-                      maxLength={100}
-                      value={field.question}
-                      onChange={(e) =>
-                        setFields(fields.map((f, i) => (i === index ? { ...f, question: e.target.value } : f)))
-                      }
-                      placeholder="e.g. full_name or email"
-                      className="font-mono text-xs w-full"
-                    />
-                  </div>
-
-                  <div className="hidden sm:flex items-center justify-center text-muted-foreground px-1">
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-
-                  <div className="w-full min-w-0">
-                    <label className="text-xs font-medium sm:hidden block mb-1">
-                      Save answer into
-                    </label>
-                    <select
-                      required
-                      className={controlClass}
-                      value={field.destination}
-                      onChange={(e) =>
-                        setFields(fields.map((f, i) => (i === index ? { ...f, destination: e.target.value } : f)))
-                      }
-                    >
-                      <option value="">Select CRM field</option>
-                      {metadata.destination_fields.map((dest) => (
-                        <option key={dest.value} value={dest.value}>
-                          {dest.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex sm:justify-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive h-9 px-2"
-                      onClick={() => setFields(fields.filter((_, i) => i !== index))}
-                      title="Remove mapping"
-                      aria-label="Remove mapping"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Collapsible Optional Defaults Section ── */}
-          <div className="rounded-xl border bg-card/60 overflow-hidden transition-all">
-            <button
-              type="button"
-              onClick={() => setShowDefaults(!showDefaults)}
-              className="w-full flex items-center justify-between p-3.5 text-left hover:bg-muted/30 transition-colors"
-            >
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-xs text-foreground">
-                  Use a value when an answer is missing (Optional)
-                </span>
-                {defaults.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal">
-                    {defaults.length} {defaults.length === 1 ? 'default' : 'defaults'}
-                  </Badge>
-                )}
-                {incompatibleDefaults.length > 0 && (
-                  <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-medium gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Needs correction
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-1 text-muted-foreground text-xs shrink-0">
-                <span>{showDefaults ? 'Hide' : 'Show'}</span>
-                {showDefaults ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </div>
-            </button>
-
-            {showDefaults && (
-              <div className="p-3.5 sm:p-4 pt-1 space-y-3 border-t border-border/50">
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  If an incoming lead does not provide an answer for an optional question, the CRM will save this fallback value instead. Defaults only apply when the form answer is empty or missing.
-                </p>
-
-                {incompatibleDefaults.length > 0 && (
-                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 space-y-1 text-xs text-destructive">
-                    <div className="flex items-center gap-1.5 font-semibold">
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                      <span>Incompatible Default Detected</span>
-                    </div>
-                    <p>
-                      Shared names, phone numbers, email addresses, and automated consent cannot be defaulted across leads. Please remove the flagged defaults below before saving.
-                    </p>
-                  </div>
-                )}
-
-                {defaults.length === 0 ? (
-                  <div className="text-center py-4 border border-dashed rounded-lg bg-muted/10 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      No fallback default values configured. Form answers will only be saved when provided by the customer.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDefaults([...defaults, { destination: '', value: '' }])}
-                      className="text-xs h-7"
-                    >
-                      + Add default value
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {defaults.map((def, index) => {
-                      const isIncompatible = DISALLOWED_DEFAULT_FIELDS.includes(def.destination);
-                      return (
-                        <div
-                          key={index}
-                          className={cn(
-                            'grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end p-2.5 rounded-lg border transition-colors',
-                            isIncompatible
-                              ? 'bg-destructive/5 border-destructive/40'
-                              : 'bg-muted/10 border-border/60'
-                          )}
-                        >
-                          <label className={labelClass}>
-                            <span className="text-xs flex items-center justify-between">
-                              <span>CRM Field</span>
-                              {isIncompatible && (
-                                <span className="text-[10px] text-destructive font-semibold">Not allowed for defaults</span>
-                              )}
-                            </span>
-                            <select
-                              required
-                              className={cn(controlClass, isIncompatible && 'border-destructive text-destructive')}
-                              value={def.destination}
-                              onChange={(e) =>
-                                setDefaults(defaults.map((d, i) => (i === index ? { ...d, destination: e.target.value } : d)))
-                              }
-                            >
-                              <option value="">Select supported field</option>
-                              {allowedDefaultFields.map((f) => (
-                                <option key={f.value} value={f.value}>
-                                  {f.label}
-                                </option>
-                              ))}
-                              {isIncompatible && (
-                                <option value={def.destination}>
-                                  ⚠️ {metadata.destination_fields.find((f) => f.value === def.destination)?.label || def.destination} (Incompatible)
-                                </option>
-                              )}
-                            </select>
-                          </label>
-
-                          <label className={labelClass}>
-                            <span className="text-xs">Default Value</span>
-                            <Input
-                              required
-                              maxLength={200}
-                              value={def.value}
-                              onChange={(e) =>
-                                setDefaults(defaults.map((d, i) => (i === index ? { ...d, value: e.target.value } : d)))
-                              }
-                              placeholder="e.g. General Fitness or Local Area"
-                              className={cn('text-xs', isIncompatible && 'border-destructive')}
-                            />
-                          </label>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:text-destructive h-9 px-2"
-                            onClick={() => setDefaults(defaults.filter((_, i) => i !== index))}
-                            title="Remove default"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-                      <p className="text-[11px] text-muted-foreground">
-                        Defaults are restricted to profile attributes (such as Fitness Goal, Area, or Country). Contact details and consent cannot be defaulted.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDefaults([...defaults, { destination: '', value: '' }])}
-                        className="text-xs h-7 shrink-0"
-                      >
-                        + Add default value
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          ))}
         </div>
 
-        {/* ── Section 3: Branch Routing ───────────────────────────────────── */}
-        <div className="space-y-3 pt-2 border-t">
-          <div>
-            <h4 className="text-sm font-semibold flex items-center gap-1.5">
-              <ArrowRight className="h-4 w-4 text-primary" />
-              3. Branch Routing
-            </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Route leads directly to a fixed branch or dynamically select branches based on a question answer.
-            </p>
-          </div>
+        <div className="flex flex-wrap gap-2 pt-1 text-xs">
+          <Badge variant={hasNameMapping ? 'default' : 'destructive'} className="text-[10px]">
+            {hasNameMapping ? '✓ Name Mapped' : '✗ Name Mapping Missing'}
+          </Badge>
+          <Badge variant={hasContactMapping ? 'default' : 'destructive'} className="text-[10px]">
+            {hasContactMapping ? '✓ Contact Mapped' : '✗ Email or Phone Missing'}
+          </Badge>
+        </div>
+      </section>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+      {/* Section 3: Branch & Salesperson Routing */}
+      <section className="space-y-4 border-t pt-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Settings2 className="h-3.5 w-3.5 text-primary" />
+          Step 4: Branch & Salesperson Routing
+        </h4>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span>Branch Routing Mode:</span>
+            <select
+              className={controlClass}
+              value={branchMode}
+              onChange={(e) => setBranchMode(e.target.value as MetaMapping['branch_mode'])}
+            >
+              <option value="FIXED">Fixed Branch (All enquiries route to one branch)</option>
+              <option value="ANSWER">Answer-Based (Route by form question answer)</option>
+            </select>
+          </label>
+
+          {branchMode === 'FIXED' ? (
             <label className={labelClass}>
-              <span>Routing Mode</span>
+              <span>Destination Branch:</span>
               <select
                 className={controlClass}
-                value={branchMode}
-                onChange={(e) => setBranchMode(e.target.value as MetaMapping['branch_mode'])}
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                required
               >
-                {metadata.branch_modes.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                <option value="">Select Branch</option>
+                {metadata.branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
                   </option>
                 ))}
               </select>
             </label>
+          ) : (
+            <label className={labelClass}>
+              <span>Form Question Used for Branch Decision:</span>
+              <Input
+                value={branchField}
+                onChange={(e) => setBranchField(e.target.value)}
+                placeholder="e.g. preferred_location or city"
+                required
+              />
+            </label>
+          )}
+        </div>
 
-            {branchMode === 'FIXED' ? (
-              <label className={labelClass}>
-                <span>Destination Branch</span>
+        {branchMode === 'ANSWER' && (
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold">Answer Routing Table:</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRoutes([...routes, { answer: '', branchId: '' }])}
+              >
+                + Add Route
+              </Button>
+            </div>
+            {routes.map((rt, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  value={rt.answer}
+                  onChange={(e) => {
+                    const updated = [...routes];
+                    if (updated[idx]) {
+                      updated[idx] = { ...updated[idx], answer: e.target.value };
+                      setRoutes(updated);
+                    }
+                  }}
+                  placeholder="Answer (e.g. Andheri)"
+                  className="flex-1"
+                />
+                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
                 <select
+                  className={`${controlClass} flex-1`}
+                  value={rt.branchId}
+                  onChange={(e) => {
+                    const updated = [...routes];
+                    if (updated[idx]) {
+                      updated[idx] = { ...updated[idx], branchId: e.target.value };
+                      setRoutes(updated);
+                    }
+                  }}
                   required
-                  className={controlClass}
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
                 >
-                  <option value="">Select branch</option>
+                  <option value="">Select Branch</option>
                   {metadata.branches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
                   ))}
                 </select>
-              </label>
-            ) : (
-              <label className={labelClass}>
-                <span>Branch Question Key</span>
-                <Input
-                  required
-                  maxLength={100}
-                  value={branchField}
-                  onChange={(e) => setBranchField(e.target.value)}
-                  placeholder="e.g. preferred_center"
-                  className="font-mono text-xs"
-                />
-              </label>
-            )}
-          </div>
-
-          {branchMode === 'ANSWER' && (
-            <div className="space-y-3 bg-muted/20 p-4 rounded-xl border">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">Answer-to-Branch Mapping Rules</span>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => setRoutes([...routes, { answer: '', branchId: '' }])}
+                  onClick={() => setRoutes(routes.filter((_, i) => i !== idx))}
                 >
-                  + Add Option
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </div>
+            ))}
 
-              {routes.map((route, index) => (
-                <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end">
-                  <label className={labelClass}>
-                    <span className="text-xs">When answer equals</span>
-                    <Input
-                      required
-                      maxLength={200}
-                      value={route.answer}
-                      onChange={(e) =>
-                        setRoutes(routes.map((r, i) => (i === index ? { ...r, answer: e.target.value } : r)))
-                      }
-                      placeholder="e.g. Downtown"
-                    />
-                  </label>
-
-                  <label className={labelClass}>
-                    <span className="text-xs">Route to Branch</span>
-                    <select
-                      required
-                      className={controlClass}
-                      value={route.branchId}
-                      onChange={(e) =>
-                        setRoutes(routes.map((r, i) => (i === index ? { ...r, branchId: e.target.value } : r)))
-                      }
-                    >
-                      <option value="">Select branch</option>
-                      {metadata.branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRoutes(routes.filter((_, i) => i !== index))}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-
-              <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t">
-                <label className={labelClass}>
-                  <span>Handling for Unmatched or Missing Answers</span>
-                  <select
-                    className={controlClass}
-                    value={unmatchedBranchPolicy}
-                    onChange={(e) => setUnmatchedBranchPolicy(e.target.value as 'HOLD' | 'FALLBACK_BRANCH')}
-                  >
-                    <option value="HOLD">Hold for review (Recommended: Needs branch assignment)</option>
-                    <option value="FALLBACK_BRANCH">Route to designated fallback branch</option>
-                  </select>
-                </label>
-
-                {unmatchedBranchPolicy === 'FALLBACK_BRANCH' && (
-                  <label className={labelClass}>
-                    <span>Designated Fallback Branch</span>
-                    <select
-                      required
-                      className={controlClass}
-                      value={fallbackBranch}
-                      onChange={(e) => setFallbackBranch(e.target.value)}
-                    >
-                      <option value="">Select fallback branch</option>
-                      {metadata.branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <HelpCircle className="h-3 w-3 shrink-0" />
-                The system will never silently select an arbitrary branch. Unmatched leads are held for administrator review unless an explicit fallback branch is configured.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* ── Section 4: Lead Handling & Lifecycle ────────────────────────── */}
-        <div className="space-y-3 pt-2 border-t">
-          <div>
-            <h4 className="text-sm font-semibold flex items-center gap-1.5">
-              <UserCheck className="h-4 w-4 text-primary" />
-              4. Lead Handling & Lifecycle Rules
-            </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Specify initial pipeline stages, duplicate enquiry behavior, and sales rep allocation.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className={labelClass}>
-              <span>Initial Pipeline Stage</span>
-              <select
-                className={controlClass}
-                value={initialStage}
-                onChange={(e) => setInitialStage(e.target.value)}
-              >
-                {(metadata.initial_stages || [{ value: 'NEW_LEAD', label: 'New Lead' }]).map((stage) => (
-                  <option key={stage.value} value={stage.value}>
-                    {stage.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className={labelClass}>
-              <span>Duplicate / Repeat-Enquiry Policy</span>
-              <select
-                className={controlClass}
-                value={repeatPolicy}
-                onChange={(e) => setRepeatPolicy(e.target.value as MetaMapping['repeat_policy'])}
-              >
-                {metadata.repeat_policies.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className={labelClass}>
-              <span>Sales Representative Allocation</span>
-              <select
-                className={controlClass}
-                value={assignmentMode}
-                onChange={(e) => setAssignmentMode(e.target.value as 'TENANT_POLICY' | 'SPECIFIC_USER')}
-              >
-                <option value="TENANT_POLICY">
-                  Follow Tenant Policy ({metadata.tenant_assignment_policy?.auto_strategy.replace('_', ' ') || 'Round Robin'})
-                </option>
-                <option value="SPECIFIC_USER">Assign to specific staff member</option>
-              </select>
-            </label>
-
-            {assignmentMode === 'SPECIFIC_USER' && (
+            <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t text-xs">
               <label className={labelClass}>
-                <span>Designated Sales Representative</span>
+                <span>Unmatched Answer Policy:</span>
                 <select
-                  required
                   className={controlClass}
-                  value={assignedSalesUser}
-                  onChange={(e) => setAssignedSalesUser(e.target.value)}
+                  value={unmatchedBranchPolicy}
+                  onChange={(e) => setUnmatchedBranchPolicy(e.target.value as 'HOLD' | 'FALLBACK_BRANCH')}
                 >
-                  <option value="">Select sales staff member</option>
-                  {(metadata.eligible_users || []).map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
+                  <option value="HOLD">Hold for Manual Review (NEEDS_REVIEW)</option>
+                  <option value="FALLBACK_BRANCH">Route to Fallback Branch</option>
                 </select>
               </label>
-            )}
+
+              {unmatchedBranchPolicy === 'FALLBACK_BRANCH' && (
+                <label className={labelClass}>
+                  <span>Fallback Branch:</span>
+                  <select
+                    className={controlClass}
+                    value={fallbackBranch}
+                    onChange={(e) => setFallbackBranch(e.target.value)}
+                    required
+                  >
+                    <option value="">Select Fallback Branch</option>
+                    {metadata.branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
           </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 pt-2">
+          <label className={labelClass}>
+            <span>Sales Assignment Policy:</span>
+            <select
+              className={controlClass}
+              value={assignmentMode}
+              onChange={(e) => setAssignmentMode(e.target.value as 'TENANT_POLICY' | 'SPECIFIC_USER')}
+            >
+              <option value="TENANT_POLICY">Tenant Policy (Automatic Round Robin)</option>
+              <option value="SPECIFIC_USER">Assign to Specific Salesperson</option>
+            </select>
+          </label>
+
+          {assignmentMode === 'SPECIFIC_USER' && (
+            <label className={labelClass}>
+              <span>Salesperson:</span>
+              <select
+                className={controlClass}
+                value={assignedSalesUser}
+                onChange={(e) => setAssignedSalesUser(e.target.value)}
+                required
+              >
+                <option value="">Select Salesperson</option>
+                {metadata.eligible_users?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </section>
+
+      {/* Section 4: Follow-up & Rules */}
+      <section className="space-y-4 border-t pt-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <UserCheck className="h-3.5 w-3.5 text-primary" />
+          Step 5: Follow-up & Lifecycle Rules
+        </h4>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={labelClass}>
+            <span>Initial Pipeline Stage:</span>
+            <select
+              className={controlClass}
+              value={initialStage}
+              onChange={(e) => setInitialStage(e.target.value)}
+            >
+              {metadata.initial_stages?.map((st) => (
+                <option key={st.value} value={st.value}>
+                  {st.label}
+                </option>
+              )) || <option value="NEW_LEAD">New Lead</option>}
+            </select>
+          </label>
+
+          <label className={labelClass}>
+            <span>Repeat Lead Submission Policy:</span>
+            <select
+              className={controlClass}
+              value={repeatPolicy}
+              onChange={(e) => setRepeatPolicy(e.target.value as MetaMapping['repeat_policy'])}
+            >
+              <option value="REVIEW">Flag for Review (Do not create duplicate lead)</option>
+              <option value="CREATE_NEW">Create New Lead Entry</option>
+            </select>
+          </label>
         </div>
 
-        {/* ── Section 5: Follow-up Automation ─────────────────────────────── */}
-        <div className="space-y-3 pt-2 border-t">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                <Clock className="h-4 w-4 text-primary" />
-                5. Automated Follow-up Task Creation
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Automatically generate outreach tasks for assigned sales staff upon intake.
-              </p>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={createFollowup}
-                onChange={(e) => setCreateFollowup(e.target.checked)}
-                className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-              />
-              <span>Enable Task Creation</span>
-            </label>
-          </div>
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+            <input
+              type="checkbox"
+              checked={createFollowup}
+              onChange={(e) => setCreateFollowup(e.target.checked)}
+              className="rounded border-input text-primary focus:ring-primary"
+            />
+            <span>Automatically generate follow-up task upon lead import</span>
+          </label>
 
           {createFollowup && (
-            <div className="grid gap-4 sm:grid-cols-2 bg-muted/20 p-4 rounded-xl border">
+            <div className="grid gap-3 sm:grid-cols-2 pt-1 text-xs">
               <label className={labelClass}>
-                <span>Follow-up Task Type</span>
+                <span>Follow-up Task Type:</span>
                 <select
                   className={controlClass}
                   value={followupType}
                   onChange={(e) => setFollowupType(e.target.value)}
                 >
-                  {(metadata.task_types || [
-                    { value: 'CALL', label: 'Phone Call' },
-                    { value: 'WHATSAPP', label: 'WhatsApp Message' },
-                    { value: 'EMAIL', label: 'Email Outreach' },
-                    { value: 'MEETING', label: 'Consultation Meeting' },
-                  ]).map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
+                  {metadata.task_types?.map((tt) => (
+                    <option key={tt.value} value={tt.value}>
+                      {tt.label}
                     </option>
-                  ))}
+                  )) || (
+                    <>
+                      <option value="CALL">Phone Call</option>
+                      <option value="WHATSAPP">WhatsApp Message</option>
+                      <option value="EMAIL">Email</option>
+                    </>
+                  )}
                 </select>
               </label>
 
               <label className={labelClass}>
-                <span>Due Within (Hours from intake)</span>
+                <span>Task Due In (Hours):</span>
                 <Input
                   type="number"
-                  min={1}
-                  max={720}
+                  min="1"
+                  max="168"
                   value={followupHours}
-                  onChange={(e) => setFollowupHours(parseInt(e.target.value, 10) || 24)}
+                  onChange={(e) => setFollowupHours(Number(e.target.value))}
                 />
               </label>
             </div>
           )}
         </div>
+      </section>
 
-        {/* Active Toggle & Action Buttons */}
-        <div className="pt-4 border-t flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(e) => setActive(e.target.checked)}
-              className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-            />
-            <span>Enable this form mapping immediately</span>
-          </label>
+      {/* Section 5: Enable & Concurrency */}
+      <section className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="rounded border-input text-primary focus:ring-primary"
+          />
+          <span>Enable this mapping for live ingestion upon saving</span>
+        </label>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : 'Save Configuration'}
-            </Button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={!canEdit || saveMutation.isPending}>
+            {saveMutation.isPending ? 'Saving...' : mapping ? 'Update Mapping' : 'Save Mapping'}
+          </Button>
         </div>
-      </fieldset>
+      </section>
     </form>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pagination Controls
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ===========================================================================
+// Pagination Helper Component
+// ===========================================================================
 function Pagination({
   page,
   previous,
@@ -1804,16 +1914,26 @@ function Pagination({
   change: (page: number) => void;
   count: number;
 }) {
+  if (count <= 10 && page === 1) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-2">
-      <span>
-        {count} {count === 1 ? 'record' : 'records'} · Page {page}
-      </span>
-      <div className="flex items-center gap-1.5">
-        <Button variant="outline" size="sm" disabled={!previous} onClick={() => change(page - 1)}>
+    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+      <span>Total records: {count}</span>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!previous}
+          onClick={() => change(page - 1)}
+        >
           Previous
         </Button>
-        <Button variant="outline" size="sm" disabled={!next} onClick={() => change(page + 1)}>
+        <span className="font-semibold text-foreground">Page {page}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!next}
+          onClick={() => change(page + 1)}
+        >
           Next
         </Button>
       </div>

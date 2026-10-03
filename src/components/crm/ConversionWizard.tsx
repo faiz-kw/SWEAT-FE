@@ -785,6 +785,8 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
     setSelectedBranchId(newBranchId);
     setSelectedProgramId(null);
     setSelectedVersionId(null);
+    setCouponCode('');
+    setAppliedCoupon('');
     setQuote(null);
     setError(null);
   }, []);
@@ -792,6 +794,16 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   const handleProgramChange = useCallback((newProgId: string) => {
     setSelectedProgramId(newProgId || null);
     setSelectedVersionId(null);
+    setCouponCode('');
+    setAppliedCoupon('');
+    setQuote(null);
+    setError(null);
+  }, []);
+
+  const handleVersionSelect = useCallback((verId: string | null) => {
+    setSelectedVersionId(verId);
+    setCouponCode('');
+    setAppliedCoupon('');
     setQuote(null);
     setError(null);
   }, []);
@@ -956,7 +968,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                   selectedProgram={selectedProgramId}
                   onProgramChange={handleProgramChange}
                   selectedVersionId={selectedVersionId}
-                  onSelect={setSelectedVersionId}
+                  onSelect={handleVersionSelect}
                 />
               )}
               {step === 2 && quote && (

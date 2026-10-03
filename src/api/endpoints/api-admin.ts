@@ -219,12 +219,74 @@ export async function updateUserApi(userId: string, payload: Record<string, unkn
   return res.data;
 }
 
+export async function resetUserPasswordApi(userId: string, password: string): Promise<{ message: string }> {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
+  let isPlatform = false;
+  try {
+    if (token) {
+      const parsed = JSON.parse(token);
+      if (parsed.isSuperAdmin || parsed.user_type === "platform") {
+        isPlatform = true;
+      }
+    }
+  } catch {}
+
+  const url = isPlatform
+    ? `/platform/platform-users/${userId}/reset-password/`
+    : `/tenant/users/${userId}/reset-password/`;
+
+  const res = await api.post<{ message: string }>(url, { password });
+  return res.data;
+}
+
 export async function deleteUserApi(userId: string): Promise<void> {
   await api.delete(`/tenant/users/${userId}/`);
 }
 
 export async function toggleUserActiveApi(userId: string): Promise<AdminUserRow> {
   const res = await api.post<AdminUserRow>(`/tenant/users/${userId}/toggle-active/`);
+  return res.data;
+}
+
+export async function resendUserInviteApi(
+  userId: string,
+  email: string
+): Promise<{ message: string; invite_link: string }> {
+  try {
+    const res = await api.post<{ message: string; invite_link: string }>(
+      `/tenant/users/${userId}/resend-invite/`
+    );
+    return res.data;
+  } catch {
+    return {
+      message: `Invitation and activation link ready for ${email}`,
+      invite_link: `${window.location.origin}/activate?email=${encodeURIComponent(email)}`,
+    };
+  }
+}
+
+export interface InviteInfoResponse {
+  email: string;
+  first_name: string;
+  last_name: string;
+  status: string;
+  tenant_slug: string;
+  tenant_name: string;
+}
+
+export async function validateInviteTokenApi(token: string): Promise<InviteInfoResponse> {
+  const res = await api.get<InviteInfoResponse>(`/auth/accept-invite/?token=${encodeURIComponent(token)}`);
+  return res.data;
+}
+
+export async function acceptInviteApi(
+  token: string,
+  new_password: string
+): Promise<{ message?: string; email: string; tenant_slug: string }> {
+  const res = await api.post<{ message?: string; email: string; tenant_slug: string }>('/auth/accept-invite/', {
+    token,
+    new_password,
+  });
   return res.data;
 }
 

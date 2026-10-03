@@ -163,3 +163,41 @@ export interface DynamicOffer {
   auto_apply: boolean;
   priority: number;
 }
+
+export interface MemberContextResult {
+  has_membership: boolean;
+  membership_id?: string | null;
+  membership_number?: string | null;
+  membership_status?: string | null;
+  current_package_id?: string | null;
+  current_package_name?: string | null;
+  current_package_version_id?: string | null;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  package_age_days?: number | null;
+  remaining_days?: number | null;
+  sessions_allocated?: number | null;
+  sessions_consumed?: number | null;
+  sessions_remaining?: number | null;
+  usage_percentage?: number | null;
+  is_unlimited?: boolean;
+  metrics_available?: boolean;
+  all_memberships?: Array<{
+    id: string;
+    membership_number: string;
+    package_name: string;
+    package_id: string;
+    status: string;
+  }>;
+}
+
+export interface RuleMetadataResult {
+  rule_types: Array<{ value: string; label: string }>;
+  evaluation_modes: Array<{ value: string; label: string }>;
+  status_choices: Array<{ value: string; label: string }>;
+  operators: Array<{ value: string; label: string }>;
+  action_types: Array<{ value: string; label: string }>;
+  condition_types: Array<{ value: string; label: string }>;
+}

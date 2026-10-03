@@ -45,7 +45,7 @@ async function request<T>(
 
     // Auto-route tenant-scoped endpoints under /tenant/ if not already prefixed with a known root
     const cleanPath = normalizedEndpoint.replace(/^\/+/, '');
-    const knownRoots = ['tenant/', 'admin/', 'platform/', 'auth/', 'billing/', 'admin-config/'];
+    const knownRoots = ['tenant/', 'admin/', 'platform/', 'auth/', 'billing/', 'admin-config/', 'mobile/'];
     const hasKnownRoot = knownRoots.some((root) => cleanPath.startsWith(root));
     if (!hasKnownRoot && cleanPath.length > 0) {
       normalizedEndpoint = `/tenant/${cleanPath}`;

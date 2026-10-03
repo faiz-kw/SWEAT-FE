@@ -7,7 +7,7 @@ import { AppProvider, useAuth } from "@/contexts";
 import { isAuthenticated, refreshAndHydrateSession } from "@/services";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { hasPermission } from "@/lib/permissions";
-import { NAV, isOrganizationAdmin } from "@/lib/nav";
+import { NAV, isOrganizationAdmin, isMemberUser } from "@/lib/nav";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_shell")({
@@ -45,6 +45,15 @@ function ShellLayout() {
   // they get bounced back to the dashboard with an Access Denied alert.
   React.useEffect(() => {
     if (isLoading || !user) return;
+
+    // Members should only access the member workspace
+    if (isMemberUser(user)) {
+      if (pathname !== "/" && !pathname.startsWith("/member")) {
+        void navigate({ to: "/" });
+        return;
+      }
+      return;
+    }
 
     const isSuper = user.userType === "platform" || (!user.tenantId && (!!user.isSuperAdmin || user.role === "Super Admin"));
 
@@ -118,6 +127,17 @@ function ShellLayout() {
 
   if (!isAuth) {
     return null;
+  }
+
+  // If user is a Member, render the clean, dedicated Web Member Portal shell
+  if (isMemberUser(user)) {
+    return (
+      <AppProvider>
+        <div className="min-h-screen bg-background text-foreground">
+          <Outlet />
+        </div>
+      </AppProvider>
+    );
   }
 
   return (

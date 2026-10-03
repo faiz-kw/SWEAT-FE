@@ -92,6 +92,40 @@ export const discountsApi = {
     return res.data;
   },
 
+  getMemberContext: async (userProfileId: string, membershipId?: string): Promise<import('../types/discounts').MemberContextResult> => {
+    const res = await api.get('/tenant/discount-campaigns/member-context/', {
+      params: { user_profile_id: userProfileId, membership_id: membershipId },
+    });
+    return res.data;
+  },
+
+  syncConditionsActions: async (
+    ruleId: string,
+    data: { conditions: Partial<DiscountRuleCondition>[]; actions: Partial<DiscountRuleAction>[] }
+  ): Promise<DiscountEligibilityRule> => {
+    const res = await api.post(`/tenant/discount-eligibility-rules/${ruleId}/sync-conditions-actions/`, data);
+    return res.data;
+  },
+
+  getRuleMetadata: async (): Promise<import('../types/discounts').RuleMetadataResult> => {
+    const res = await api.get('/tenant/discount-eligibility-rules/metadata/');
+    return res.data;
+  },
+
+  toggleRuleStatus: async (ruleId: string, status?: string): Promise<DiscountEligibilityRule> => {
+    const res = await api.post(`/tenant/discount-eligibility-rules/${ruleId}/toggle-status/`, { status });
+    return res.data;
+  },
+
+  updateEligibilityRule: async (ruleId: string, data: Partial<DiscountEligibilityRule>): Promise<DiscountEligibilityRule> => {
+    const res = await api.patch(`/tenant/discount-eligibility-rules/${ruleId}/`, data);
+    return res.data;
+  },
+
+  deleteEligibilityRule: async (ruleId: string): Promise<void> => {
+    await api.delete(`/tenant/discount-eligibility-rules/${ruleId}/`);
+  },
+
   // Redemptions
   getRedemptions: async (params?: { campaign_id?: string; order_id?: string }): Promise<DiscountRedemption[]> => {
     const res = await api.get('/tenant/discount-redemptions/', { params });

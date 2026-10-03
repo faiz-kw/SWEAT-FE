@@ -146,6 +146,48 @@ export function isTrainerUser(user: any, trainers?: any[]): boolean {
 }
 
 /**
+ * Check whether an authenticated user has a Member identity.
+ * Evaluates role codes, role names, and membership attributes.
+ * Always returns false for Admins and Staff/Trainers.
+ */
+export function isMemberUser(user: any): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin || user.userType === "platform") return false;
+  if (isOrganizationAdmin(user)) return false;
+  if (isTrainerUser(user)) return false;
+
+  const roleName = String(user.role || user.role_code || "").toUpperCase().trim();
+  if (
+    roleName === "MEMBER" ||
+    roleName === "CLIENT" ||
+    roleName.includes("MEMBER") ||
+    roleName.includes("CUSTOMER")
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(user.roles) && user.roles.length > 0) {
+    const hasMemberRole = user.roles.some((r: any) => {
+      const code = String(r.code || "").toUpperCase().trim();
+      const name = String(r.name || "").toUpperCase().trim();
+      return (
+        code === "MEMBER" ||
+        code === "CLIENT" ||
+        code.includes("MEMBER") ||
+        name.includes("MEMBER")
+      );
+    });
+    if (hasMemberRole) return true;
+  }
+
+  if (user.membership_number || user.is_member || user.user_type === "member") {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Filter NAV sections and their items based on:
  * 1. Super Admin vs. Tenant scope (visibility)
  * 2. Organization Admin access for administration sections
