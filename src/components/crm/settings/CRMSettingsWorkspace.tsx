@@ -79,7 +79,24 @@ export function CRMSettingsWorkspace() {
 
   const [activeTab, setActiveTab] = React.useState<
     'sources' | 'agents' | 'sla' | 'attention' | 'reminders' | 'channels' | 'templates' | 'automation' | 'meta'
-  >('sources');
+  >(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('tab') === 'meta' || p.has('meta_connected') || p.has('meta_error')) {
+        return 'meta';
+      }
+    }
+    return 'sources';
+  });
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('tab') === 'meta' || p.has('meta_connected') || p.has('meta_error')) {
+        setActiveTab('meta');
+      }
+    }
+  }, []);
 
   // ==========================================
   // TAB 1: LEAD SOURCES STATE & MUTATIONS

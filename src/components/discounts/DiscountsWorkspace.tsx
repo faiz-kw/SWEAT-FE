@@ -58,8 +58,10 @@ import { CRMPageHeader } from '@/components/crm/common/CRMPageHeader';
 import { CRMKpiTile } from '@/components/crm/common/CRMKpiTile';
 import { CRMFilterBar } from '@/components/crm/common/CRMFilterBar';
 import { CRMEmptyState } from '@/components/crm/common/CRMEmptyState';
+import { CRMErrorState } from '@/components/crm/common/CRMErrorState';
 import { CRMLoadingState } from '@/components/crm/common/CRMLoadingState';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/utils/currencyUtils';
 
 interface DiscountsWorkspaceProps {
   initialTab?: 'campaigns' | 'rules' | 'redemptions' | 'simulator';
@@ -193,11 +195,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [ruleActionType, setRuleActionType] = useState<ActionType>('APPLY_PERCENTAGE_DISCOUNT');
   const [ruleActionPercent, setRuleActionPercent] = useState('20.00');
   const [ruleActionAmount, setRuleActionAmount] = useState('');
+  const [ruleActionCampaignId, setRuleActionCampaignId] = useState('');
   const [ruleActionMessage, setRuleActionMessage] = useState('Qualified for 20% renewal discount!');
   const [ruleActionAutoApply, setRuleActionAutoApply] = useState(false);
 
   // Simulator State
   const [simUserProfileId, setSimUserProfileId] = useState('');
+  const [selectedMembershipId, setSelectedMembershipId] = useState('');
   const [simCode, setSimCode] = useState('SUMMER20');
   const [simSubtotal, setSimSubtotal] = useState('5000');
   const [simBranchId, setSimBranchId] = useState('');
@@ -217,6 +221,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const {
     data: campaigns = [],
     isLoading: loadingCampaigns,
+    isError: errorCampaigns,
     refetch: refetchCampaigns,
   } = useQuery({
     queryKey: ['discount-campaigns'],
@@ -226,6 +231,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const {
     data: rules = [],
     isLoading: loadingRules,
+    isError: errorRules,
     refetch: refetchRules,
   } = useQuery({
     queryKey: ['discount-rules'],
@@ -235,6 +241,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const {
     data: redemptions = [],
     isLoading: loadingRedemptions,
+    isError: errorRedemptions,
     refetch: refetchRedemptions,
   } = useQuery({
     queryKey: ['discount-redemptions'],
@@ -289,11 +296,17 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     isLoading: loadingMemberContext,
     refetch: refetchMemberContext,
   } = useQuery<MemberContextResult>({
-    queryKey: ['discount-member-context', simUserProfileId],
-    queryFn: () => discountsApi.getMemberContext(simUserProfileId),
+    queryKey: ['discount-member-context', simUserProfileId, selectedMembershipId],
+    queryFn: () => discountsApi.getMemberContext(simUserProfileId, selectedMembershipId || undefined),
     enabled: Boolean(simUserProfileId),
     staleTime: 10 * 1000,
   });
+
+  React.useEffect(() => {
+    if (liveMemberContext?.membership_id && !selectedMembershipId) {
+      setSelectedMembershipId(liveMemberContext.membership_id);
+    }
+  }, [liveMemberContext, selectedMembershipId]);
 
   // Campaign Mutations
   const saveCampaignMutation = useMutation({
@@ -464,6 +477,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setRuleActionAmount('');
     setRuleActionMessage('Exclusive renewal privilege: 20% off your renewal package!');
     setRuleActionAutoApply(false);
+    setRuleActionCampaignId('');
     setIsRuleModalOpen(true);
   };
 
@@ -493,14 +507,16 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       setRuleConditions([]);
     }
 
-    if (rule.actions && rule.actions.length > 0) {
+    if (rule.actions && rule.actions.length > 0 && rule.actions[0]) {
       const act = rule.actions[0];
       setRuleActionType(act.action_type);
       setRuleActionPercent(act.discount_percentage ? String(act.discount_percentage) : '');
       setRuleActionAmount(act.discount_amount ? String(act.discount_amount) : '');
       setRuleActionMessage(act.message || '');
       setRuleActionAutoApply(act.auto_apply || false);
+      setRuleActionCampaignId((act.configuration as any)?.target_campaign_id || (act as any).target_campaign || '');
     } else {
+      setRuleActionCampaignId('');
       setRuleActionType('APPLY_PERCENTAGE_DISCOUNT');
       setRuleActionPercent('15.00');
       setRuleActionAmount('');
@@ -530,25 +546,47 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       let savedRule: DiscountEligibilityRule;
       if (editingRule) {
         savedRule = await discountsApi.updateEligibilityRule(editingRule.id, rulePayload);
-        toast.success(`Rule "${savedRule.name}" updated`);
-      } else {
-        savedRule = await discountsApi.createEligibilityRule(rulePayload);
-        // Create conditions for new rule
-        for (let i = 0; i < ruleConditions.length; i++) {
-          const c = ruleConditions[i];
-          await discountsApi.addRuleCondition(savedRule.id, {
+        await discountsApi.syncConditionsActions(savedRule.id, {
+          conditions: ruleConditions.map((c, i) => ({
             condition_type: c.condition_type,
             operator: c.operator,
             numeric_value: c.numeric_value ? c.numeric_value : null,
             text_value: c.text_value ? c.text_value : null,
             sequence: i + 1,
-          });
+          })),
+          actions: [
+            {
+              action_type: ruleActionType,
+              discount_percentage: ruleActionType === 'APPLY_PERCENTAGE_DISCOUNT' ? ruleActionPercent : null,
+              discount_amount: ruleActionType === 'APPLY_FIXED_DISCOUNT' ? ruleActionAmount : null,
+              target_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
+              message: ruleActionMessage,
+              auto_apply: ruleActionAutoApply,
+            },
+          ],
+        });
+        toast.success(`Rule "${savedRule.name}" updated with conditions & action`);
+      } else {
+        savedRule = await discountsApi.createEligibilityRule(rulePayload);
+        // Create conditions for new rule
+        for (let i = 0; i < ruleConditions.length; i++) {
+          const c = ruleConditions[i];
+          if (c) {
+            await discountsApi.addRuleCondition(savedRule.id, {
+              condition_type: c.condition_type,
+              operator: c.operator,
+              numeric_value: c.numeric_value ? c.numeric_value : null,
+              text_value: c.text_value ? c.text_value : null,
+              sequence: i + 1,
+            });
+          }
         }
         // Create action for new rule
         await discountsApi.addRuleAction(savedRule.id, {
           action_type: ruleActionType,
           discount_percentage: ruleActionType === 'APPLY_PERCENTAGE_DISCOUNT' ? ruleActionPercent : null,
           discount_amount: ruleActionType === 'APPLY_FIXED_DISCOUNT' ? ruleActionAmount : null,
+          target_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
           message: ruleActionMessage,
           auto_apply: ruleActionAutoApply,
         });
@@ -604,7 +642,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     }
     setSimLoading(true);
     try {
-      let payload: any = {
+      const payload: any = {
         user_profile_id: simUserProfileId,
         branch_id: simBranchId || undefined,
         target_package_id: simPackageId || undefined,
@@ -635,16 +673,21 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     }
   };
 
+  // Defensive array guards
+  const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
+  const safeRules = Array.isArray(rules) ? rules : [];
+  const safeRedemptions = Array.isArray(redemptions) ? redemptions : [];
+
   // Filter campaigns
-  const filteredCampaigns = campaigns.filter(
+  const filteredCampaigns = safeCampaigns.filter(
     (c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.codes?.some((code) => code.code.toLowerCase().includes(searchTerm.toLowerCase()))
+      c.codes?.some((code: DiscountCode) => code.code.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const activeCampaignsCount = campaigns.filter((c) => c.status === 'ACTIVE').length;
-  const totalSavingsIssued = redemptions.reduce(
+  const activeCampaignsCount = safeCampaigns.filter((c) => c.status === 'ACTIVE').length;
+  const totalSavingsIssued = safeRedemptions.reduce(
     (acc, r) => acc + (parseFloat(r.discount_amount || '0') || 0),
     0
   );
@@ -710,12 +753,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             label="Active Campaigns"
             value={activeCampaignsCount}
             isLoading={loadingCampaigns}
-            badge={{ text: `${campaigns.length} Total`, variant: 'info' }}
+            badge={{ text: `${safeCampaigns.length} Total`, variant: 'info' }}
             hint="Promotions currently active"
           />
           <CRMKpiTile
             label="Eligibility Rules"
-            value={rules.length}
+            value={safeRules.length}
             isLoading={loadingRules}
             badge={{ text: `${rules.filter((r) => r.status === 'ACTIVE').length} Active`, variant: 'neutral' }}
             hint="Contextual retention triggers"
@@ -768,7 +811,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <Sparkles className="w-3.5 h-3.5" />
             <span>Dynamic Rules</span>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-              {rules.length}
+              {safeRules.length}
             </Badge>
           </button>
 
@@ -785,7 +828,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <Award className="w-3.5 h-3.5" />
             <span>Redemption Audit</span>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-              {redemptions.length}
+              {safeRedemptions.length}
             </Badge>
           </button>
 
@@ -914,7 +957,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
 
                           <div className="space-y-1.5">
                             {camp.codes && camp.codes.length > 0 ? (
-                              camp.codes.map((c) => (
+                              camp.codes.map((c: DiscountCode) => (
                                 <div
                                   key={c.id}
                                   className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50 text-xs"
@@ -1044,7 +1087,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 message="Unable to communicate with the dynamic rules engine. Please verify network access and retry."
                 onRetry={refetchRules}
               />
-            ) : rules.length === 0 ? (
+            ) : safeRules.length === 0 ? (
               <CRMEmptyState
                 icon={Sparkles}
                 title="No Dynamic Eligibility Rules"
@@ -1260,7 +1303,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 message="Unable to communicate with the redemptions service. Please verify network access and retry."
                 onRetry={refetchRedemptions}
               />
-            ) : redemptions.length === 0 ? (
+            ) : safeRedemptions.length === 0 ? (
               <CRMEmptyState
                 icon={Award}
                 title="No Redemptions Recorded"

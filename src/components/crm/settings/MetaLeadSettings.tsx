@@ -117,6 +117,23 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const [showConnectModal, setShowConnectModal] = React.useState(false);
   const [testTab, setTestTab] = React.useState<'SIMULATOR' | 'LIVE_WEBHOOK'>('SIMULATOR');
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.has('meta_connected')) {
+        const pagesCount = p.get('pages') || '0';
+        toast.success(`Meta account connected successfully! (${pagesCount} pages discovered)`);
+        client.invalidateQueries({ queryKey: queryKeyBase });
+        window.history.replaceState({}, '', window.location.pathname + '?tab=meta');
+      } else if (p.has('meta_error')) {
+        const err = p.get('meta_error') || 'Authorization Error';
+        const desc = p.get('meta_desc') || '';
+        toast.error(`Meta Connection Failed: ${err}${desc ? ` - ${desc}` : ''}`);
+        window.history.replaceState({}, '', window.location.pathname + '?tab=meta');
+      }
+    }
+  }, []);
+
   const metadataQuery = useQuery({
     queryKey: [...queryKeyBase, 'metadata'],
     queryFn: metaLeadsApi.metadata,
