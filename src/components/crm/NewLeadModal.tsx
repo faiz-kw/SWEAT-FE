@@ -382,8 +382,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   const validateForm = (): boolean => {
     const errors: LeadFormErrors = {};
 
-    if (!firstName.trim()) errors.firstName = 'First name is required.';
-    if (!lastName.trim()) errors.lastName = 'Last name is required.';
+    if (!firstName.trim()) errors.firstName = 'Name is required.';
     const cleanEmail = email.trim();
     if (!cleanEmail) {
       errors.email = 'Email address is required.';
@@ -393,14 +392,8 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
     const cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone) {
-      errors.phone = 'Contact number is required.';
-    } else if (cleanPhone.length !== 10) {
-      errors.phone = 'Please enter a valid 10-digit mobile number.';
+      errors.phone = 'Mobile number is required.';
     }
-
-    if (!selectedBranch) errors.branch = 'Branch selection is required.';
-    if (!selectedProgram) errors.program = 'Program selection is required.';
-    if (!selectedSource) errors.source = 'Lead source is required.';
     if (assignmentMode === 'MANUAL') {
       if (!selectedAgent) {
         if (assignmentConfig?.assignment_mode_allowed === 'MANUAL' && !assignmentConfig?.allow_unassigned_fallback) {
@@ -468,9 +461,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
         ? 'AUTO'
         : 'MANUAL';
 
+    const branchToUse = selectedBranch || uniqueBranches[0]?.id || null;
+    const programToUse = selectedProgram || null;
+    const sourceToUse = selectedSource || sources[0]?.id || null;
+
     const payload: CreateLeadPayload = {
       first_name: firstName.trim(),
-      last_name: lastName.trim(),
+      last_name: lastName.trim() || '',
       email_normalized: email.trim().toLowerCase(),
       phone_normalized: canonicalPhone,
       assignment_mode: effectiveAssignmentMode,
@@ -478,10 +475,10 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       date_of_birth: dateOfBirth || null,
       country: country || null,
       area: location.trim() || null,
-      branch: selectedBranch,
-      interested_program: selectedProgram,
+      branch: branchToUse,
+      interested_program: programToUse,
       fitness_goal: fitnessGoal.trim() || null,
-      lead_source: selectedSource,
+      lead_source: sourceToUse,
       assigned_sales_user: effectiveAssignmentMode === 'MANUAL' && selectedAgent ? selectedAgent : null,
       referred_by_user: referredByUserId || null,
       referred_by_name: referredByName.trim() || null,
@@ -570,14 +567,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 {/* Last Name */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Last Name <span className="text-destructive">*</span>
+                    Last Name
                   </Label>
                   <Input
                     placeholder="e.g. Sharma"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     className={`h-9 text-xs sm:text-sm ${formErrors.lastName ? 'border-destructive' : ''}`}
-                    required
                   />
                   {formErrors.lastName && (
                     <p className="text-[11px] text-destructive">{formErrors.lastName}</p>
@@ -694,7 +690,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 {/* Branch Name */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Branch Name <span className="text-destructive">*</span>
+                    Branch Name
                   </Label>
                   <select
                     value={selectedBranch}
@@ -706,7 +702,6 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                       formErrors.branch ? 'border-destructive' : ''
                     }`}
                     disabled={isBranchesLoading}
-                    required
                   >
                     {isBranchesLoading ? (
                       <option value="">Loading branches...</option>
@@ -733,7 +728,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 {/* Interested In (Program) */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Interested In <span className="text-destructive">*</span>
+                    Interested In
                   </Label>
                   <select
                     value={selectedProgram}
@@ -742,7 +737,6 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                       formErrors.program ? 'border-destructive' : ''
                     }`}
                     disabled={isProgramsLoading || !selectedBranch}
-                    required
                   >
                     {isProgramsLoading ? (
                       <option value="">Loading programs...</option>
@@ -847,7 +841,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 {/* Lead Source */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Lead Source <span className="text-destructive">*</span>
+                    Lead Source
                   </Label>
                   <select
                     value={selectedSource}
@@ -856,7 +850,6 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                       formErrors.source ? 'border-destructive' : ''
                     }`}
                     disabled={isSourcesLoading}
-                    required
                   >
                     {isSourcesLoading ? (
                       <option value="">Loading lead sources...</option>

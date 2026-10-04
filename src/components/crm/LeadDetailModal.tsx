@@ -3185,7 +3185,7 @@ export function LeadDetailModal({
                               </span>
                               <span className="text-xs font-mono font-bold text-foreground">
                                 {camp.discount_type === 'PERCENTAGE'
-                                  ? `${camp.discount_value}% OFF`
+                                  ? `${formatPercentage(camp.discount_value)}% OFF`
                                   : `₹${camp.discount_value} OFF`}
                               </span>
                             </div>

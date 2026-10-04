@@ -25,6 +25,8 @@ lerna-debug.log*
 *.local
 .env.local
 .dev.vars
+*.rdb
+dump.rdb
 
 # Backend (Separated into SWEAT-BE repository)
 backend/

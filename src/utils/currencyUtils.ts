@@ -25,3 +25,27 @@ export function formatCurrency(
     minimumFractionDigits: options?.showDecimals ? 2 : 0,
   }).format(num);
 }
+
+/**
+ * Standardized percentage formatting utility for PerformanceOS & SWEAT.
+ * Consistently strips decimals and renders whole integer percentages (e.g. "20%" or "20") everywhere.
+ */
+export function formatPercentage(
+  val: number | string | null | undefined,
+  options?: {
+    withSymbol?: boolean;
+    defaultValue?: string;
+  }
+): string {
+  if (val === null || val === undefined || val === '') {
+    return options?.defaultValue ?? (options?.withSymbol ? '0%' : '0');
+  }
+
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (isNaN(num)) {
+    return options?.defaultValue ?? (options?.withSymbol ? '0%' : '0');
+  }
+
+  const rounded = Math.round(num);
+  return options?.withSymbol ? `${rounded}%` : String(rounded);
+}

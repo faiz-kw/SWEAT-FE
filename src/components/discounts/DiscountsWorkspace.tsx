@@ -61,7 +61,7 @@ import { CRMEmptyState } from '@/components/crm/common/CRMEmptyState';
 import { CRMErrorState } from '@/components/crm/common/CRMErrorState';
 import { CRMLoadingState } from '@/components/crm/common/CRMLoadingState';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/utils/currencyUtils';
+import { formatCurrency, formatPercentage } from '@/utils/currencyUtils';
 
 interface DiscountsWorkspaceProps {
   initialTab?: 'campaigns' | 'rules' | 'redemptions' | 'simulator';
@@ -105,6 +105,19 @@ const RULE_TYPE_OPTIONS: Array<{ value: RuleType; label: string }> = [
   { value: 'REJOIN', label: 'Win-Back / Rejoin Promo' },
   { value: 'COUPON', label: 'Promotional Coupon Rule' },
 ];
+
+function formatDateForInput(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return year + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
+}
 
 export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   initialTab,
@@ -152,7 +165,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [campName, setCampName] = useState('');
   const [campDesc, setCampDesc] = useState('');
   const [campType, setCampType] = useState<DiscountType>('PERCENTAGE');
-  const [campValue, setCampValue] = useState('15.00');
+  const [campValue, setCampValue] = useState('15');
   const [campMaxDiscount, setCampMaxDiscount] = useState('1000.00');
   const [campMinOrder, setCampMinOrder] = useState('500.00');
   const [campUsageLimit, setCampUsageLimit] = useState('100');
@@ -398,13 +411,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampName('');
     setCampDesc('');
     setCampType('PERCENTAGE');
-    setCampValue('15.00');
+    setCampValue('15');
     setCampMaxDiscount('1000.00');
     setCampMinOrder('500.00');
     setCampUsageLimit('100');
     setCampPerUserLimit('1');
     setCampStatus('ACTIVE');
-    setCampValidFrom(new Date().toISOString().slice(0, 16));
+    setCampValidFrom(formatDateForInput(new Date()));
     setCampValidUntil('');
     setCampBranchId('');
     setCampPackageId('');
@@ -416,14 +429,14 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampName(camp.name);
     setCampDesc(camp.description || '');
     setCampType(camp.discount_type);
-    setCampValue(camp.discount_value);
+    setCampValue(camp.discount_type === 'PERCENTAGE' ? formatPercentage(camp.discount_value) : camp.discount_value);
     setCampMaxDiscount(camp.max_discount || '');
     setCampMinOrder(camp.minimum_order_amount || '');
     setCampUsageLimit(camp.usage_limit ? String(camp.usage_limit) : '');
     setCampPerUserLimit(camp.per_user_limit ? String(camp.per_user_limit) : '1');
     setCampStatus(camp.status);
-    setCampValidFrom(camp.valid_from ? new Date(camp.valid_from).toISOString().slice(0, 16) : '');
-    setCampValidUntil(camp.valid_until ? new Date(camp.valid_until).toISOString().slice(0, 16) : '');
+    setCampValidFrom(camp.valid_from ? formatDateForInput(camp.valid_from) : '');
+    setCampValidUntil(camp.valid_until ? formatDateForInput(camp.valid_until) : '');
     setCampBranchId(camp.configuration?.branch_id || '');
     setCampPackageId(camp.configuration?.package_id || '');
     setIsCampaignModalOpen(true);
@@ -473,7 +486,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       },
     ]);
     setRuleActionType('APPLY_PERCENTAGE_DISCOUNT');
-    setRuleActionPercent('20.00');
+    setRuleActionPercent('20');
     setRuleActionAmount('');
     setRuleActionMessage('Exclusive renewal privilege: 20% off your renewal package!');
     setRuleActionAutoApply(false);
@@ -510,7 +523,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     if (rule.actions && rule.actions.length > 0 && rule.actions[0]) {
       const act = rule.actions[0];
       setRuleActionType(act.action_type);
-      setRuleActionPercent(act.discount_percentage ? String(act.discount_percentage) : '');
+      setRuleActionPercent(act.discount_percentage ? formatPercentage(act.discount_percentage) : '');
       setRuleActionAmount(act.discount_amount ? String(act.discount_amount) : '');
       setRuleActionMessage(act.message || '');
       setRuleActionAutoApply(act.auto_apply || false);
@@ -892,7 +905,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           </Badge>
                           <span className="text-xs text-primary font-mono font-semibold bg-primary/10 px-2 py-0.5 rounded">
                             {camp.discount_type === 'PERCENTAGE'
-                              ? `${camp.discount_value}% OFF`
+                              ? `${formatPercentage(camp.discount_value)}% OFF`
                               : `₹${camp.discount_value} OFF`}
                           </span>
                         </div>
@@ -1259,7 +1272,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                                 <div className="font-mono text-xs">
                                   Benefit:{' '}
                                   {a.discount_percentage
-                                    ? `${a.discount_percentage}% OFF`
+                                    ? `${formatPercentage(a.discount_percentage)}% OFF`
                                     : a.discount_amount
                                     ? `₹${a.discount_amount} OFF`
                                     : 'Special Incentive'}
@@ -1486,7 +1499,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <span className="text-muted-foreground">Session Usage:</span>{' '}
                         <span className="font-mono text-foreground font-semibold">
                           {liveMemberContext.usage_percentage !== null && liveMemberContext.usage_percentage !== undefined
-                            ? `${liveMemberContext.usage_percentage}%`
+                            ? `${formatPercentage(liveMemberContext.usage_percentage)}%`
                             : 'Unavailable'}
                         </span>
                       </div>
@@ -1690,7 +1703,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           <span>Benefit:</span>
                           <span>
                             {off.discount_percentage
-                              ? `${off.discount_percentage}% DISCOUNT`
+                              ? `${formatPercentage(off.discount_percentage)}% DISCOUNT`
                               : off.discount_amount
                               ? `₹${off.discount_amount} DISCOUNT`
                               : off.action_type}
@@ -1717,7 +1730,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       {/* CREATE / EDIT CAMPAIGN MODAL                              */}
       {/* ========================================================= */}
       <Dialog open={isCampaignModalOpen} onOpenChange={setIsCampaignModalOpen}>
-        <DialogContent className="max-w-lg bg-background border border-border">
+        <DialogContent className="max-w-xl sm:max-w-2xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto bg-background border border-border p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Tag className="w-5 h-5 text-primary" />
@@ -1734,7 +1747,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 placeholder="e.g. Diwali Flash Sale"
                 value={campName}
                 onChange={(e) => setCampName(e.target.value)}
-                className="h-9 text-xs"
+                className="h-9 text-xs sm:text-sm"
               />
             </div>
 
@@ -1744,17 +1757,23 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 placeholder="Campaign notes and marketing description"
                 value={campDesc}
                 onChange={(e) => setCampDesc(e.target.value)}
-                className="h-9 text-xs"
+                className="h-9 text-xs sm:text-sm"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Discount Type *</label>
                 <select
                   value={campType}
-                  onChange={(e) => setCampType(e.target.value as DiscountType)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
+                  onChange={(e) => {
+                    const next = e.target.value as DiscountType;
+                    setCampType(next);
+                    if (next === 'PERCENTAGE' && campValue) {
+                      setCampValue(formatPercentage(campValue));
+                    }
+                  }}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
                 >
                   <option value="PERCENTAGE">Percentage (%)</option>
                   <option value="FIXED">Fixed Amount (₹)</option>
@@ -1762,19 +1781,21 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Discount Value *</label>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  Discount Value {campType === 'PERCENTAGE' ? '(%) *' : '(₹) *'}
+                </label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step={campType === 'PERCENTAGE' ? '1' : '0.01'}
                   required
                   value={campValue}
                   onChange={(e) => setCampValue(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Max Discount Cap (₹)</label>
                 <Input
@@ -1782,7 +1803,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   placeholder="Optional cap"
                   value={campMaxDiscount}
                   onChange={(e) => setCampMaxDiscount(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
               </div>
 
@@ -1793,12 +1814,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   placeholder="0.00"
                   value={campMinOrder}
                   onChange={(e) => setCampMinOrder(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Total Usage Limit</label>
                 <Input
@@ -1806,7 +1827,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   placeholder="Unlimited"
                   value={campUsageLimit}
                   onChange={(e) => setCampUsageLimit(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
               </div>
 
@@ -1817,18 +1838,32 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   placeholder="1"
                   value={campPerUserLimit}
                   onChange={(e) => setCampPerUserLimit(e.target.value)}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Status</label>
+                <select
+                  value={campStatus}
+                  onChange={(e) => setCampStatus(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                  <option value="DRAFT">DRAFT</option>
+                  <option value="PAUSED">PAUSED</option>
+                </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Branch Scope (Optional)</label>
                 <select
                   value={campBranchId}
                   onChange={(e) => setCampBranchId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
                 >
                   <option value="">All Branches</option>
                   {branches.map((b) => (
@@ -1844,7 +1879,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 <select
                   value={campPackageId}
                   onChange={(e) => setCampPackageId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
                 >
                   <option value="">All Packages</option>
                   {packages.map((p) => (
@@ -1856,39 +1891,51 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Status</label>
-                <select
-                  value={campStatus}
-                  onChange={(e) => setCampStatus(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
-                >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="PAUSED">PAUSED</option>
-                </select>
+            {/* Dedicated Responsive Validity & Schedule Card */}
+            <div className="p-3.5 sm:p-4 rounded-xl border border-border/80 bg-muted/20 space-y-3">
+              <div className="flex items-center">
+                <span className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <span>Campaign Validity & Schedule</span>
+                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Valid From</label>
-                <Input
-                  type="datetime-local"
-                  value={campValidFrom}
-                  onChange={(e) => setCampValidFrom(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">
+                    Valid From (Start) *
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    required
+                    value={campValidFrom}
+                    onChange={(e) => setCampValidFrom(e.target.value)}
+                    className="h-10 text-xs sm:text-sm font-mono w-full min-w-0 bg-background"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Valid Until</label>
-                <Input
-                  type="datetime-local"
-                  value={campValidUntil}
-                  onChange={(e) => setCampValidUntil(e.target.value)}
-                  className="h-9 text-xs"
-                />
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-foreground">
+                      Valid Until (Expiry)
+                    </label>
+                    {campValidUntil && (
+                      <button
+                        type="button"
+                        onClick={() => setCampValidUntil('')}
+                        className="text-[10px] text-destructive hover:underline font-medium"
+                      >
+                        Clear Expiry
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    type="datetime-local"
+                    value={campValidUntil}
+                    onChange={(e) => setCampValidUntil(e.target.value)}
+                    className="h-10 text-xs sm:text-sm font-mono w-full min-w-0 bg-background"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1923,7 +1970,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       {/* GENERATE CODE MODAL                                       */}
       {/* ========================================================= */}
       <Dialog open={isGenerateCodeOpen} onOpenChange={setIsGenerateCodeOpen}>
-        <DialogContent className="max-w-md bg-background border border-border">
+        <DialogContent className="max-w-md w-[95vw] sm:w-full bg-background border border-border p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Tag className="w-5 h-5 text-primary" />
@@ -2021,7 +2068,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       {/* DYNAMIC RULE BUILDER MODAL                                */}
       {/* ========================================================= */}
       <Dialog open={isRuleModalOpen} onOpenChange={setIsRuleModalOpen}>
-        <DialogContent className="max-w-2xl bg-background border border-border max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl sm:max-w-2xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto bg-background border border-border p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -2052,7 +2099,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Rule Type *</label>
                 <select
