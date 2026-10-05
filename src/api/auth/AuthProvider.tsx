@@ -145,30 +145,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // On Mount: Restore Session from Refresh Cookie
   // ---------------------------------------------------------------
   React.useEffect(() => {
+    let isMounted = true;
+    let didTimeout = false;
     async function restoreSession(): Promise<void> {
-      // If already authenticated and profile is hydrated (from _shell.tsx beforeLoad)
-      if (isAuthenticated()) {
-        const existing = getCurrentUser();
-        if (existing?.fullName) {
-          setUser(existing);
+      try {
+        // If already authenticated and profile is hydrated (from _shell.tsx beforeLoad)
+        if (isAuthenticated()) {
+          const existing = getCurrentUser();
+          if (existing?.fullName) {
+            if (isMounted && !didTimeout) {
+              setUser(existing);
+              setIsLoading(false);
+            }
+            // Still fetch fresh profile in background so any permission changes on DB are loaded immediately
+            void fetchAndSetProfile();
+            return;
+          }
+        }
+
+        // Otherwise, execute combined refresh and profile hydration
+        const ok = await refreshAndHydrateSession();
+        // If the watchdog already timed out, discard late session updates
+        if (isMounted && !didTimeout) {
+          if (ok) {
+            setUser(getCurrentUser());
+          } else {
+            setUser(null);
+          }
+        }
+      } catch (err) {
+        console.warn("[AuthProvider] Session restoration encountered error:", err);
+        if (isMounted && !didTimeout) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted && !didTimeout) {
           setIsLoading(false);
-          // Still fetch fresh profile in background so any permission changes on DB are loaded immediately
-          void fetchAndSetProfile();
-          return;
         }
       }
-
-      // Otherwise, execute combined refresh and profile hydration
-      const ok = await refreshAndHydrateSession();
-      if (ok) {
-        setUser(getCurrentUser());
-      } else {
-        setUser(null);
-      }
-      setIsLoading(false);
     }
 
+    // Safety watchdog: ensure loading state never hangs for > 5s under network failure
+    const watchdog = setTimeout(() => {
+      if (isMounted) {
+        didTimeout = true;
+        setIsLoading((loading) => {
+          if (loading) {
+            console.warn("[AuthProvider] Session restoration watchdog timed out after 5s. Clearing loading state.");
+            return false;
+          }
+          return loading;
+        });
+      }
+    }, 5000);
+
     void restoreSession();
+    return () => {
+      isMounted = false;
+      clearTimeout(watchdog);
+    };
   }, []); // runs only once, on mount
 
   // ---------------------------------------------------------------

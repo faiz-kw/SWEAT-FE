@@ -11,14 +11,21 @@ import { NAV, isOrganizationAdmin, isMemberUser } from "@/lib/nav";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_shell")({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     // If running on server during SSR, skip guard so SSR doesn't redirect before client hydration
     if (typeof window === "undefined") return;
+    if (location.pathname === "/login") return;
 
     if (isAuthenticated()) return;
 
-    const success = await refreshAndHydrateSession();
-    if (success) return;
+    try {
+      // Bounded race: abort after 4.5s so stalled networks cannot hang router navigation
+      const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 4500));
+      const success = await Promise.race([refreshAndHydrateSession(), timeoutPromise]);
+      if (success) return;
+    } catch (err) {
+      console.warn("[_shell beforeLoad] Session hydration failed:", err);
+    }
 
     throw redirect({ to: "/login" });
   },
@@ -31,14 +38,62 @@ const ALWAYS_ALLOWED_SECTIONS = new Set(["dashboard"]);
 function ShellLayout() {
   const { isAuthenticated: isAuth, isLoading, user } = useAuth();
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const mainRef = React.useRef<HTMLElement>(null);
+  const { pathname, searchStr, hash } = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      searchStr: s.location.searchStr,
+      hash: s.location.hash,
+    }),
+  });
 
-  // Auth redirect
+  // Automatically reset main scroll container to top whenever route or search parameters change
+  React.useLayoutEffect(() => {
+    const resetScroll = () => {
+      if (hash) {
+        const el = document.getElementById(hash.replace(/^#/, ''));
+        if (el) {
+          el.scrollIntoView();
+          return;
+        }
+      }
+      if (mainRef.current) {
+        mainRef.current.scrollTop = 0;
+        mainRef.current.scrollLeft = 0;
+      }
+      window.scrollTo(0, 0);
+    };
+
+    resetScroll();
+    const r1 = requestAnimationFrame(resetScroll);
+    const r2 = requestAnimationFrame(() => requestAnimationFrame(resetScroll));
+
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
+  }, [pathname, searchStr, hash]);
+
+  // Auth redirect (loop-safe: only navigate if not already on /login)
   React.useEffect(() => {
     if (!isLoading && !isAuth) {
-      navigate({ to: "/login" });
+      if (pathname !== "/login") {
+        navigate({ to: "/login" });
+      }
     }
-  }, [isLoading, isAuth, navigate]);
+  }, [isLoading, isAuth, pathname, navigate]);
+
+  // Safety watchdog: ensure unauthenticated/failed sessions never freeze on 'Authenticating session...'
+  React.useEffect(() => {
+    if (!isLoading) return;
+    const watchdog = setTimeout(() => {
+      console.warn("[ShellLayout] Auth session check timed out after 5s. Redirecting to /login.");
+      if (pathname !== "/login") {
+        navigate({ to: "/login" });
+      }
+    }, 5000);
+    return () => clearTimeout(watchdog);
+  }, [isLoading, pathname, navigate]);
 
   // Route-level access guard: redirect if a tenant user navigates directly to an unpermitted URL.
   // This closes the "sidebar-only" gap — even if someone pastes a blocked URL in the address bar,
@@ -146,7 +201,7 @@ function ShellLayout() {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
           <Topbar />
-          <main className="scrollbar-thin flex-1 min-h-0 overflow-y-auto">
+          <main ref={mainRef} className="scrollbar-thin flex-1 min-h-0 overflow-y-auto">
             <Outlet />
           </main>
         </div>

@@ -151,6 +151,16 @@ export function Sidebar() {
   const isDark = theme === "dark";
 
   // Nav list rendered directly in both desktop and mobile modes (prevents unmount jumps)
+  const handleNavClick = (isMobile: boolean) => {
+    if (isMobile) setMobileOpen(false);
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+      mainEl.scrollLeft = 0;
+    }
+    window.scrollTo(0, 0);
+  };
+
   const renderNavContent = (isMobile = false) => {
     // Apply search filter on top of centrally permission-filtered nav
     const filteredNav = roleFilteredNav
@@ -185,7 +195,7 @@ export function Sidebar() {
               <Link
                 key={section.id}
                 to={item.to}
-                onClick={() => isMobile && setMobileOpen(false)}
+                onClick={() => handleNavClick(isMobile)}
                 className={cn(
                   "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-150",
                   isActive
@@ -249,7 +259,7 @@ export function Sidebar() {
                       <Link
                         key={item.to}
                         to={item.to}
-                        onClick={() => isMobile && setMobileOpen(false)}
+                        onClick={() => handleNavClick(isMobile)}
                         className={cn(
                           "group relative flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-all duration-150",
                           isItemActive

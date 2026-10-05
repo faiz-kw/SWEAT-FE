@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Tag,
+  Globe,
   Clock,
   Bell,
   Radio,
@@ -97,6 +98,16 @@ export function CRMSettingsWorkspace() {
       }
     }
   }, []);
+
+  // When switching between workspace tabs, reset scroll to top
+  React.useEffect(() => {
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+      mainEl.scrollLeft = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [activeTab]);
 
   // ==========================================
   // TAB 1: LEAD SOURCES STATE & MUTATIONS
@@ -382,10 +393,21 @@ export function CRMSettingsWorkspace() {
         }
       />
 
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+      <main className="w-full max-w-full overflow-x-hidden px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* Tabs Navigation (Consistent Segmented Control) */}
         <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border overflow-x-auto no-scrollbar">
-        <button type="button" onClick={() => setActiveTab('meta')} className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm ${activeTab === 'meta' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'}`}>Meta Lead Ads</button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('meta')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-sm ${
+            activeTab === 'meta'
+              ? 'bg-background text-foreground shadow-sm font-semibold'
+              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+          }`}
+        >
+          <Globe className="w-3.5 h-3.5" />
+          <span>Meta Lead Ads</span>
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab('sources')}
