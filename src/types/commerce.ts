@@ -70,7 +70,11 @@ export interface OrderItem {
 export interface PaymentTransaction {
   id: string;
   order: string;
+  order_number?: string;
+  branch_name?: string;
+  branch_id?: string;
   user_profile?: string;
+  member_name?: string;
   provider: PaymentProvider;
   payment_method?: string;
   provider_transaction_id?: string;
@@ -79,6 +83,9 @@ export interface PaymentTransaction {
   currency: string;
   status: PaymentStatus;
   paid_at?: string;
+  recorded_by_name?: string;
+  approved_by_name?: string;
+  approval_status?: string;
   metadata?: Record<string, any>;
   created_at?: string;
 }
@@ -87,13 +94,18 @@ export interface Refund {
   id: string;
   payment_transaction: string;
   order: string;
+  order_number?: string;
+  branch_name?: string;
+  member_name?: string;
   amount: string | number;
   reason_code?: string;
   reason_text?: string;
   provider_reference?: string;
   status: RefundStatus;
   requested_by_user?: string;
+  requested_by_name?: string;
   approved_by_user?: string;
+  approved_by_name?: string;
   created_at?: string;
 }
 
@@ -101,6 +113,7 @@ export interface MemberInvoice {
   id: string;
   invoice_number: string;
   order: string;
+  order_number?: string;
   user_profile?: string;
   member_name?: string;
   branch: string;
@@ -136,6 +149,9 @@ export interface Order {
   total_amount: string | number;
   currency: string;
   source: string;
+  paid_amount?: string;
+  outstanding_balance?: string;
+  item_summary?: string;
   notes?: string;
   items?: OrderItem[];
   payments?: PaymentTransaction[];
@@ -158,4 +174,19 @@ export interface PaymentLink {
   status: 'CREATED' | 'SENT' | 'OPENED' | 'PAID' | 'EXPIRED' | 'CANCELLED';
   created_by_user?: string;
   created_at?: string;
+}
+
+
+export interface CommerceSummary {
+  total_orders: number;
+  settled_orders: number;
+  pending_orders: number;
+  total_settled_amount: string;
+  total_outstanding_amount: string;
+  gross_revenue: string;
+  refunded_amount: string;
+  net_revenue: string;
+  cash_collected: string;
+  online_collected: string;
+  pending_approval_cash_amount: string;
 }

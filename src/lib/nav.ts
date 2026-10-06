@@ -460,7 +460,7 @@ export const NAV: NavSection[] = [
       { label: "Permissions", to: "/admin/permissions", permission: "core.permissions.view" },
       { label: "Locations", to: "/admin/locations", permission: "core.settings.view" },
       { label: "Services", to: "/admin/services", visibility: "superadmin_only" },
-      { label: "Configuration", to: "/admin/configuration", visibility: "superadmin_only" },
+      { label: "Configuration", to: "/admin/configuration", permission: "core.settings.view" },
       { label: "Forms & Assessments", to: "/admin/forms", permission: "core.settings.view" },
       { label: "Integrations", to: "/admin/integrations", visibility: "superadmin_only" },
       { label: "API", to: "/admin/api", visibility: "superadmin_only" },

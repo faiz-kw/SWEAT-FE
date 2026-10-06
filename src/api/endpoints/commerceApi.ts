@@ -11,15 +11,24 @@ import {
   Refund,
   MemberInvoice,
   PaymentLink,
+  CommerceSummary,
 } from '../types/commerce';
 
 export const commerceApi = {
+  // --- Summary ---
+  async getSummary(branchId?: string): Promise<CommerceSummary> {
+    const params = branchId ? { branch_id: branchId } : {};
+    const res = await api.get<CommerceSummary>('/tenant/orders/summary/', { params });
+    return res.data;
+  },
+
   // --- Orders ---
   async getOrders(filters?: {
     branch_id?: string;
     user_profile_id?: string;
     lead_id?: string;
     status?: string;
+    search?: string;
   }): Promise<Order[]> {
     const res = await api.get<any>('/tenant/orders/', { params: filters });
     return res.data?.results || res.data || [];
@@ -57,8 +66,14 @@ export const commerceApi = {
   },
 
   // --- Transactions ---
-  async getTransactions(orderId?: string): Promise<PaymentTransaction[]> {
-    const params = orderId ? { order_id: orderId } : {};
+  async getTransactions(filters?: {
+    order_id?: string;
+    branch_id?: string;
+    provider?: string;
+    status?: string;
+    search?: string;
+  } | string): Promise<PaymentTransaction[]> {
+    const params = typeof filters === 'string' ? { order_id: filters } : (filters || {});
     const res = await api.get<any>('/tenant/payment-transactions/', { params });
     return res.data?.results || res.data || [];
   },
@@ -71,6 +86,37 @@ export const commerceApi = {
     return res.data;
   },
 
+  // --- Cash Report ---
+  async getCashReport(params?: {
+    branch_id?: string;
+    date?: string;
+    agent_id?: string;
+    status?: string;
+    search?: string;
+  }): Promise<{
+    branch_id: string | null;
+    branch_name: string;
+    date: string;
+    total_transactions: number;
+    total_physical_cash_recorded: string;
+    approved_cash: string;
+    pending_approval_cash: string;
+    rejected_cash: string;
+    agent_collections: Array<{
+      agent_id: string;
+      agent_name: string;
+      physical_cash: string;
+      approved_cash: string;
+      pending_cash: string;
+      rejected_cash: string;
+      count: number;
+    }>;
+    transactions: PaymentTransaction[];
+  }> {
+    const res = await api.get<any>('/tenant/payment-transactions/cash-report/', { params });
+    return res.data;
+  },
+
   // --- Invoices ---
   async getInvoices(filters?: { user_profile_id?: string; branch_id?: string }): Promise<MemberInvoice[]> {
     const res = await api.get<any>('/tenant/member-invoices/', { params: filters });
@@ -78,8 +124,8 @@ export const commerceApi = {
   },
 
   // --- Refunds ---
-  async getRefunds(): Promise<Refund[]> {
-    const res = await api.get<any>('/tenant/refunds/');
+  async getRefunds(filters?: { branch_id?: string; status?: string; search?: string }): Promise<Refund[]> {
+    const res = await api.get<any>('/tenant/refunds/', { params: filters });
     return res.data?.results || res.data || [];
   },
 };

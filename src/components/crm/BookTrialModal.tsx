@@ -292,7 +292,7 @@ export function BookTrialModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-full max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background border border-border rounded-xl shadow-2xl">
+      <DialogContent className="max-w-2xl w-full max-h-[calc(100dvh-2.5rem)] sm:max-h-[min(88vh,720px)] flex flex-col p-0 gap-0 overflow-hidden bg-background border border-border rounded-xl shadow-2xl">
         <DialogHeader className="px-5 sm:px-6 py-4 border-b border-border bg-card/60 shrink-0">
           <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
             {isReschedule ? (
@@ -314,7 +314,7 @@ export function BookTrialModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
           {/* CONVERTED LEAD GUARD ALERT */}
           {isConverted && (
             <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">

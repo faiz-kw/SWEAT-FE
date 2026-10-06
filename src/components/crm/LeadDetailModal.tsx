@@ -769,8 +769,29 @@ export function LeadDetailModal({
   const stageAgeFormatted = formatDuration(stageAgeSeconds);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-full h-[95vh] sm:h-auto sm:max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-none sm:rounded-2xl">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && (conversionWizardOpen || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]'))) {
+          return;
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (conversionWizardOpen || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]')) {
+              e.preventDefault();
+            }
+          }}
+          className="max-w-4xl w-full h-[calc(100dvh-2rem)] sm:h-[calc(100dvh-3rem)] max-h-[840px] flex flex-col p-0 gap-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-xl sm:rounded-2xl"
+        >
         {/* LEAD 360 HEADER (PART E.8) */}
         <DialogHeader className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/70 bg-card/50 backdrop-blur-xs shrink-0 flex flex-col gap-2 sm:gap-2.5">
           {/* TOP ROW: Primary Identity (Avatar, Name, Status, SLA pill) & Primary CTA (Convert to Member) */}
@@ -1154,7 +1175,7 @@ export function LeadDetailModal({
         </DialogHeader>
 
         {/* BODY CONTENT BY TAB */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-4">

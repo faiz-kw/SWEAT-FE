@@ -494,7 +494,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-full max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-2xl">
+      <DialogContent className="max-w-3xl w-full max-h-[calc(100dvh-2.5rem)] sm:max-h-[min(88vh,760px)] flex flex-col p-0 gap-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-2xl">
         {/* Sticky Header */}
         <DialogHeader className="px-6 py-4 border-b border-border/70 bg-card/50 backdrop-blur-xs shrink-0">
           <div className="flex items-center justify-between">
@@ -513,8 +513,8 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
         </DialogHeader>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
             {/* Duplicate Lead Detection Alert */}
             {duplicateMatches.length > 0 && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-start gap-3 text-amber-600 dark:text-amber-400">

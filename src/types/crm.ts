@@ -822,6 +822,8 @@ export interface AutomationWorkflowVersion {
 
 export interface AutomationWorkflow {
   id: string;
+  config_id?: string;
+  config?: Record<string, any>;
   name: string;
   description: string;
   domain: string;
@@ -1062,6 +1064,37 @@ export interface ConversionQuote {
   } | null;
   entitlements: ConversionEntitlement[];
   payment_providers: PaymentProvider[];
+  partial_payment?: {
+    enabled: boolean;
+    min_first_payment_type: 'PERCENTAGE' | 'FIXED';
+    min_first_payment_percentage: string;
+    min_first_payment_amount: string;
+    max_installments: number;
+    min_installment_amount: string;
+    activation_rule: string;
+    allow_booking_with_outstanding_balance: boolean;
+  };
+}
+
+export interface CheckoutOrderResponse {
+  order_id: string;
+  order_number: string;
+  razorpay_order_id: string;
+  key_id: string;
+  amount: number;
+  currency: string;
+  total_order_amount?: string;
+  already_paid_amount?: string;
+  outstanding_balance?: string;
+  charge_amount?: string;
+  is_partial_payment?: boolean;
+  name: string;
+  description: string;
+  prefill?: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
 }
 
 export interface ConversionPayload {
@@ -1073,10 +1106,22 @@ export interface ConversionPayload {
   coupon_code?: string;
   start_date?: string;
   idempotency_key?: string;
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  razorpay_signature?: string;
+  order_id?: string;
+  is_partial_payment?: boolean;
+  channel?: 'STAFF' | 'MEMBER_PORTAL' | 'MEMBER_APP';
 }
 
 export interface ConversionResult {
-  conversion_id: string;
+  status?: string;
+  approval_request_id?: string;
+  message?: string;
+  total_paid?: string;
+  outstanding_balance?: string;
+  membership_activated?: boolean;
+  conversion_id?: string;
   lead_id: string;
   lead_status: 'CONVERTED';
   order_id: string;

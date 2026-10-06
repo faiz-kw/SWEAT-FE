@@ -4,12 +4,9 @@ import { CommerceWorkspace } from "@/components/commerce/CommerceWorkspace";
 export const Route = createFileRoute("/_shell/finance/refunds")({
   head: () => ({
     meta: [
-      { title: "Refunds · PerformanceOS Admin" },
-      { name: "description", content: "Refunds workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Refunds · PerformanceOS Admin" },
-      { property: "og:description", content: "Refunds workspace in the PerformanceOS fitness business operating system." },
+      { title: "Refunds · SWEAT Finance" },
+      { name: "description", content: "Refunds workspace in SWEAT Finance." },
     ],
   }),
   component: () => <CommerceWorkspace initialTab="refunds" />,
 });
-

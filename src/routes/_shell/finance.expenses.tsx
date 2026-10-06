@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { CommerceWorkspace } from "@/components/commerce/CommerceWorkspace";
 
 export const Route = createFileRoute("/_shell/finance/expenses")({
   head: () => ({
     meta: [
-      { title: "Expenses · PerformanceOS Admin" },
-      { name: "description", content: "Expenses workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Expenses · PerformanceOS Admin" },
-      { property: "og:description", content: "Expenses workspace in the PerformanceOS fitness business operating system." },
+      { title: "Expenses · SWEAT Finance" },
+      { name: "description", content: "Expenses workspace in SWEAT Finance." },
     ],
   }),
-  component: () => <ModuleView path="/finance/expenses" />,
+  component: () => <CommerceWorkspace initialTab="expenses" />,
 });

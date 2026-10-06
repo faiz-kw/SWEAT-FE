@@ -822,6 +822,34 @@ export const crmApi = {
     return res.data;
   },
 
+  createCheckoutOrder: async (
+    leadId: string,
+    payload: {
+      package_version_id: string;
+      branch_id: string;
+      coupon_code?: string;
+      is_partial_payment?: boolean;
+      partial_amount?: string | number;
+      channel?: string;
+    }
+  ): Promise<import('@/types/crm').CheckoutOrderResponse> => {
+    const res = await api.post<import('@/types/crm').CheckoutOrderResponse>(
+      `/tenant/leads/${leadId}/checkout-order/`,
+      payload
+    );
+    return res.data;
+  },
+
+  getPaymentPolicy: async (): Promise<any> => {
+    const res = await api.get('/tenant/organization-settings/payment-policy/');
+    return res.data;
+  },
+
+  updatePaymentPolicy: async (policy: any): Promise<any> => {
+    const res = await api.patch('/tenant/organization-settings/payment-policy/', { payment_policy: policy });
+    return res.data;
+  },
+
   executeConversion: async (
     leadId: string,
     payload: import('@/types/crm').ConversionPayload

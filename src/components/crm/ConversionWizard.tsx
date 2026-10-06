@@ -5,6 +5,7 @@
  */
 import * as React from 'react';
 import { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -47,13 +48,9 @@ function generateIdempotencyKey(): string {
 }
 
 // Presentation metadata for supported payment providers
-const PROVIDER_METADATA: Record<string, { label: string; icon: string }> = {
-  CASH: { label: 'Cash', icon: '💵' },
-  RAZORPAY: { label: 'Razorpay', icon: '⚡' },
-  ICICI_POS: { label: 'ICICI POS', icon: '🏧' },
-  BANK_TRANSFER: { label: 'Bank Transfer', icon: '🏦' },
-  STRIPE: { label: 'Stripe', icon: '💳' },
-  OTHER: { label: 'Other', icon: '💰' },
+const PROVIDER_METADATA: Record<string, { label: string; icon: string; description?: string }> = {
+  CASH: { label: 'Cash', icon: '💵', description: 'Centre cash collection (requires approval)' },
+  RAZORPAY: { label: 'Online Payment', icon: '💳', description: 'Razorpay UPI / Cards / Netbanking' },
 };
 
 const STEPS = [
@@ -280,7 +277,7 @@ function PackagePickerStep({
             <p className="text-xs sm:text-sm font-medium">No active packages for this program at this branch</p>
           </div>
         ) : (
-          <div className="grid gap-2 sm:gap-2.5 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
+          <div className="grid gap-2 sm:gap-2.5 max-h-48 sm:max-h-56 md:max-h-60 overflow-y-auto pr-1">
             {versions.map((v) => {
               const selected = selectedVersionId === v.id;
               const activePrice = v.prices?.find((p: any) => p.status === 'ACTIVE') || v.prices?.[0];
@@ -516,13 +513,15 @@ function PricingStep({
 // ─── Step 3: Payment Details ──────────────────────────────────────────────────
 
 function PaymentStep({
-  quote, paymentProvider, paymentAmount, startDate,
-  onProviderChange, onAmountChange, onStartDateChange,
+  quote, paymentProvider, paymentAmount, startDate, isPartialPayment,
+  onPartialPaymentChange, onProviderChange, onAmountChange, onStartDateChange,
 }: {
   quote: ConversionQuote;
   paymentProvider: PaymentProvider | '';
   paymentAmount: string;
   startDate: string;
+  isPartialPayment: boolean;
+  onPartialPaymentChange: (val: boolean) => void;
   onProviderChange: (p: PaymentProvider) => void;
   onAmountChange: (a: string) => void;
   onStartDateChange: (d: string) => void;
@@ -530,6 +529,11 @@ function PaymentStep({
   const quoted = parseFloat(quote.pricing.total_payable);
   const entered = parseFloat(paymentAmount || '0');
   const isShort = entered < quoted && entered > 0;
+  const partialCfg = quote.partial_payment;
+  const partialEnabled = partialCfg?.enabled ?? false;
+  const minFirstAmount = partialCfg ? parseFloat(partialCfg.min_first_payment_amount) : quoted;
+  const isBelowMinPartial = isPartialPayment && entered < minFirstAmount;
+  const exceedsTotal = entered > quoted;
 
   // STRICT BACKEND-DRIVEN: Only render providers present in backend response. Zero fallback!
   const backendProviders = quote.payment_providers || [];
@@ -537,13 +541,14 @@ function PaymentStep({
     value: code as PaymentProvider,
     label: PROVIDER_METADATA[code]?.label ?? code,
     icon: PROVIDER_METADATA[code]?.icon ?? '💳',
+    description: PROVIDER_METADATA[code]?.description,
   }));
 
   return (
     <div className="space-y-5">
       <div>
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2.5">
-          Payment Method (Configured Providers)
+          Payment Method
         </Label>
         {availableOptions.length === 0 ? (
           <div className="p-4 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400 text-sm">
@@ -551,30 +556,132 @@ function PaymentStep({
             No payment method is currently configured for this branch or package. Please contact an administrator.
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             {availableOptions.map((p) => (
               <button
                 key={p.value}
                 type="button"
-                onClick={() => onProviderChange(p.value)}
+                onClick={() => {
+                  onProviderChange(p.value);
+                  if (p.value === 'CASH') {
+                    onPartialPaymentChange(false);
+                    onAmountChange(quote.pricing.total_payable);
+                  }
+                }}
                 className={[
-                  'flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-center transition-all duration-200',
+                  'flex flex-col items-start p-3.5 rounded-xl border text-left transition-all duration-200',
                   paymentProvider === p.value
                     ? 'bg-primary/10 border-primary text-primary font-semibold shadow-sm'
                     : 'bg-card border-border hover:bg-accent/40 text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
-                <span className="text-xl">{p.icon}</span>
-                <span className="text-xs">{p.label}</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">{p.icon}</span>
+                  <span className="text-sm font-semibold">{p.label}</span>
+                </div>
+                {p.description && (
+                  <span className="text-[11px] text-muted-foreground line-clamp-1">{p.description}</span>
+                )}
               </button>
             ))}
           </div>
         )}
       </div>
 
+      {paymentProvider === 'CASH' && (
+        <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300 text-xs space-y-1">
+          <div className="font-semibold flex items-center gap-1.5">
+            <ShieldCheck size={14} className="text-amber-600 dark:text-amber-400" />
+            Cash Approval Workflow (Segregation of Duties)
+          </div>
+          <p>
+            Cash payment will be submitted for manager approval upon submission. The recording agent cannot approve their own cash transaction. Membership activates only once approved.
+          </p>
+        </div>
+      )}
+
+      {paymentProvider === 'RAZORPAY' && partialEnabled && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+            Payment Mode (Razorpay)
+          </Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onPartialPaymentChange(false);
+                onAmountChange(quote.pricing.total_payable);
+              }}
+              className={[
+                'p-2.5 rounded-lg border text-center text-xs font-medium transition-all',
+                !isPartialPayment
+                  ? 'bg-primary text-primary-foreground border-primary font-bold shadow-sm'
+                  : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              Pay Full Amount ({formatCurrency(quote.pricing.total_payable, quote.pricing.currency)})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onPartialPaymentChange(true);
+                if (partialCfg) {
+                  onAmountChange(partialCfg.min_first_payment_amount);
+                }
+              }}
+              className={[
+                'p-2.5 rounded-lg border text-center text-xs font-medium transition-all',
+                isPartialPayment
+                  ? 'bg-primary text-primary-foreground border-primary font-bold shadow-sm'
+                  : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              Pay Partial Amount
+            </button>
+          </div>
+
+          {isPartialPayment && partialCfg && (
+            <div className="p-3.5 bg-muted/30 rounded-xl border border-border/80 space-y-2 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Package Price / Total:</span>
+                <span className="font-semibold text-foreground">{formatCurrency(quote.pricing.total_payable, quote.pricing.currency)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Already Paid:</span>
+                <span className="font-semibold text-foreground">{formatCurrency('0.00', quote.pricing.currency)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Current Payment:</span>
+                <span className="font-bold text-primary">{formatCurrency(paymentAmount || '0.00', quote.pricing.currency)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Outstanding After Payment:</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400">
+                  {formatCurrency(Math.max(0, quoted - entered).toFixed(2), quote.pricing.currency)}
+                </span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Minimum Payable Now:</span>
+                <span className="font-semibold text-foreground">{formatCurrency(partialCfg.min_first_payment_amount, quote.pricing.currency)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Maximum Installments:</span>
+                <span className="font-semibold text-foreground">{partialCfg.max_installments ?? 3}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground pt-1 border-t border-border/60 text-[11px]">
+                <span>Membership Activation Policy:</span>
+                <span className="font-medium text-foreground">
+                  {partialCfg.activation_rule === 'MINIMUM_PARTIAL_PAYMENT' ? 'Activates upon minimum payment' : 'Activates only upon full payment'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
-          Payment Amount to Record ({quote.pricing.currency})
+          {isPartialPayment ? 'Amount to Pay Now' : 'Payment Amount to Record'} ({quote.pricing.currency})
         </Label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">
@@ -586,22 +693,29 @@ function PaymentStep({
             type="number"
             step="0.01"
             min="0"
+            disabled={paymentProvider === 'RAZORPAY' && !isPartialPayment}
             value={paymentAmount}
             onChange={(e) => onAmountChange(e.target.value)}
             className="bg-background border-border pl-7 text-base sm:text-lg font-semibold"
             placeholder={quote.pricing.total_payable}
           />
         </div>
-        {isShort && (
+        {isBelowMinPartial && (
+          <p className="text-xs text-rose-600 dark:text-rose-400 mt-1.5 flex items-center gap-1 font-medium">
+            <AlertTriangle size={12} />
+            Amount must be at least {formatCurrency(partialCfg?.min_first_payment_amount || '0', quote.pricing.currency)}
+          </p>
+        )}
+        {exceedsTotal && (
+          <p className="text-xs text-rose-600 dark:text-rose-400 mt-1.5 flex items-center gap-1 font-medium">
+            <AlertTriangle size={12} />
+            Amount cannot exceed total payable of {formatCurrency(quote.pricing.total_payable, quote.pricing.currency)}
+          </p>
+        )}
+        {!isPartialPayment && isShort && (
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
             <AlertTriangle size={12} />
             Amount is less than quoted total of {formatCurrency(quote.pricing.total_payable, quote.pricing.currency)}
-          </p>
-        )}
-        {entered >= quoted && entered > 0 && (
-          <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-            <Check size={12} className="text-emerald-600 dark:text-emerald-400" />
-            Amount to record matches quote ({formatCurrency(quote.pricing.total_payable, quote.pricing.currency)})
           </p>
         )}
       </div>
@@ -617,7 +731,7 @@ function PaymentStep({
             className="bg-background border-border pl-9 text-sm"
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Leave blank to start today</p>
+        {/* <p className="text-xs text-muted-foreground mt-1">Leave blank to start today</p> */}
       </div>
     </div>
   );
@@ -686,6 +800,58 @@ function ReviewStep({
 // ─── Step 5: Success ──────────────────────────────────────────────────────────
 
 function SuccessStep({ result, lead, onClose }: { result: ConversionResult; lead: Lead; onClose: () => void }) {
+  if (result.status === 'PENDING_APPROVAL') {
+    return (
+      <div className="flex flex-col items-center text-center py-4 space-y-6">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-500/20 flex items-center justify-center">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500/30 flex items-center justify-center">
+            <Clock size={32} className="text-amber-600 dark:text-amber-400" />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1">Cash Payment Recorded!</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground">Pending manager approval before membership activates</p>
+        </div>
+
+        <div className="w-full rounded-xl bg-card border border-border divide-y divide-border text-left shadow-sm">
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Order #</span>
+            <span className="font-semibold text-foreground">{result.order_number}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Membership #</span>
+            <span className="font-semibold text-foreground">{result.membership_number || 'Provisional (Pending)'}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Provisional Session Allowance</span>
+            <span className="font-semibold text-foreground">{(result as any).provisional_sessions ?? 4} Sessions</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Approval Request #</span>
+            <span className="font-mono text-xs text-foreground">{result.approval_request_id}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Amount to Collect</span>
+            <span className="font-bold text-foreground">{(result as any).amount || result.total_paid} INR</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+            <span className="text-muted-foreground">Approval Status</span>
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+              PENDING APPROVAL
+            </span>
+          </div>
+        </div>
+
+        <div className="w-full rounded-xl bg-muted/40 border border-border p-3 text-xs text-muted-foreground text-left">
+          Segregation of Duties Enforced: A separate manager must review and approve this cash collection under <strong>Automation → Approvals</strong>.
+        </div>
+
+        <Button onClick={onClose} className="w-full">Done</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center text-center py-4 space-y-6">
       <div className="relative">
@@ -700,37 +866,55 @@ function SuccessStep({ result, lead, onClose }: { result: ConversionResult; lead
       </div>
 
       <div>
-        <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1">Welcome, {lead.first_name}! 🎉</h3>
-        <p className="text-xs sm:text-sm text-muted-foreground">Lead successfully converted to an active member</p>
+        <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1">
+          {result.status === 'PARTIAL_PAYMENT_RECORDED' ? 'Partial Payment Successful!' : `Welcome, ${lead.first_name}! 🎉`}
+        </h3>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          {result.status === 'PARTIAL_PAYMENT_RECORDED'
+            ? 'Installment received. Outstanding balance tracked on member profile.'
+            : 'Lead successfully converted to an active member'}
+        </p>
       </div>
 
       <div className="w-full rounded-xl bg-card border border-border divide-y divide-border text-left shadow-sm">
-        {([
-          { label: 'Membership #', value: result.membership_number, accent: true },
-          { label: 'Order #', value: result.order_number },
-          ...(result.invoice_number ? [{ label: 'Invoice #', value: result.invoice_number }] : []),
-          { label: 'Account', value: result.identity_created ? 'Account created — activation pending' : 'Existing account reused' },
-          { label: 'Converted At', value: new Date(result.converted_at).toLocaleString('en-IN') },
-        ] as Array<{ label: string; value: string; accent?: boolean }>).map((r) => (
-          <div key={r.label} className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
-            <span className="text-muted-foreground">{r.label}</span>
-            <span className={`font-medium ${r.accent ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-foreground'}`}>{r.value}</span>
-          </div>
-        ))}
+        {result.status === 'PARTIAL_PAYMENT_RECORDED' ? (
+          <>
+            <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+              <span className="text-muted-foreground">Order #</span>
+              <span className="font-semibold text-foreground">{result.order_number}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+              <span className="text-muted-foreground">Total Paid</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{result.total_paid}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+              <span className="text-muted-foreground">Outstanding Balance</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">₹{result.outstanding_balance}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+              <span className="text-muted-foreground">Membership Status</span>
+              <span className="font-medium text-foreground">
+                {result.membership_activated ? 'Activated (Grace Mode)' : 'Activation Pending Settlement'}
+              </span>
+            </div>
+          </>
+        ) : (
+          ([
+            { label: 'Membership #', value: result.membership_number, accent: true },
+            { label: 'Order #', value: result.order_number },
+            ...(result.invoice_number ? [{ label: 'Invoice #', value: result.invoice_number }] : []),
+            { label: 'Account', value: result.identity_created ? 'Account created — activation pending' : 'Existing account reused' },
+            { label: 'Converted At', value: result.converted_at ? new Date(result.converted_at).toLocaleString('en-IN') : 'Just now' },
+          ] as Array<{ label: string; value: string; accent?: boolean }>).map((r) => (
+            <div key={r.label} className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
+              <span className="text-muted-foreground">{r.label}</span>
+              <span className={`font-medium ${r.accent ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-foreground'}`}>{r.value}</span>
+            </div>
+          ))
+        )}
       </div>
 
-      {result.identity_created && (
-        <div className="w-full rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 flex items-start gap-3 text-left">
-          <UserCheck size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-800 dark:text-amber-300">
-            A new member profile has been registered in <strong>INVITED</strong> status. Member password setup will take place upon onboarding activation.
-          </p>
-        </div>
-      )}
-
-      <Button onClick={onClose} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
-        <CheckCircle2 size={16} className="mr-2" />Done
-      </Button>
+      <Button onClick={onClose} className="w-full">Done</Button>
     </div>
   );
 }
@@ -742,6 +926,21 @@ export interface ConversionWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConverted?: () => void;
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && (window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 }
 
 export function ConversionWizard({ lead, open, onOpenChange, onConverted }: ConversionWizardProps) {
@@ -763,6 +962,46 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   const [error, setError] = useState<string | null>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isFetchingQuote, setIsFetchingQuote] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+
+  const handleCancelRazorpay = useCallback(() => {
+    setIsProcessingPayment(false);
+    const rzpContainer = document.querySelector('.razorpay-container');
+    if (rzpContainer) {
+      rzpContainer.remove();
+    }
+    toast.info('Payment was cancelled. You can retry checkout when ready.');
+  }, []);
+
+  useEffect(() => {
+    if (!isProcessingPayment) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCancelRazorpay();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isProcessingPayment, handleCancelRazorpay]);
+
+  useEffect(() => {
+    if (!isProcessingPayment) return;
+    const interval = setInterval(() => {
+      const container = document.querySelector('.razorpay-container') as HTMLElement | null;
+      if (container && !container.dataset.hasCloseHandler) {
+        container.dataset.hasCloseHandler = 'true';
+        container.addEventListener('click', (e) => {
+          if (e.target === container) {
+            handleCancelRazorpay();
+          }
+        });
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isProcessingPayment, handleCancelRazorpay]);
 
   useEffect(() => {
     if (open) {
@@ -864,7 +1103,11 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead-detail', lead.id] });
       queryClient.invalidateQueries({ queryKey: ['conversion-eligibility', lead.id] });
-      toast.success(`${lead.first_name} is now a member!`);
+      if (data.status === 'PENDING_APPROVAL') {
+        toast.info('Cash payment recorded and submitted for manager approval');
+      } else {
+        toast.success(`${lead.first_name} is now a member!`);
+      }
       onConverted?.();
     },
     onError: (err: any) => {
@@ -899,7 +1142,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
     } else if (step === 3) {
       if (!paymentProvider) { toast.error('Please select a payment method'); return; }
       if (!paymentAmount || parseFloat(paymentAmount) <= 0) { toast.error('Please enter a valid payment amount'); return; }
-      if (quote && parseFloat(paymentAmount) < parseFloat(quote.pricing.total_payable)) {
+      if (!isPartialPayment && quote && parseFloat(paymentAmount) < parseFloat(quote.pricing.total_payable)) {
         toast.error('Payment must be at least the quoted total'); return;
       }
       setStep(4);
@@ -914,7 +1157,76 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
       };
       if (appliedCoupon) payload.coupon_code = appliedCoupon;
       if (startDate) payload.start_date = startDate;
-      convertMutation.mutate(payload);
+
+      if (paymentProvider === 'RAZORPAY') {
+        try {
+          setIsProcessingPayment(true);
+          const isLoaded = await loadRazorpayScript();
+          if (!isLoaded) {
+            toast.error('Razorpay SDK failed to load. Please check your network.');
+            setIsProcessingPayment(false);
+            return;
+          }
+
+          const checkoutOrder = await crmApi.createCheckoutOrder(lead.id, {
+            package_version_id: selectedVersionId,
+            branch_id: selectedBranchId,
+            coupon_code: appliedCoupon || undefined,
+            is_partial_payment: isPartialPayment,
+            partial_amount: isPartialPayment ? paymentAmount : undefined,
+            channel: 'STAFF',
+          });
+
+          const options = {
+            key: checkoutOrder.key_id,
+            amount: checkoutOrder.amount,
+            currency: checkoutOrder.currency,
+            name: checkoutOrder.name || 'SWEAT',
+            description: checkoutOrder.description,
+            order_id: checkoutOrder.razorpay_order_id,
+            prefill: checkoutOrder.prefill,
+            theme: { color: '#0f172a' },
+            config: checkoutOrder.config,
+            ...(checkoutOrder.config_id ? { config_id: checkoutOrder.config_id } : {}),
+            handler: function (response: any) {
+              const completePayload: ConversionPayload = {
+                ...payload,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                order_id: checkoutOrder.order_id,
+                is_partial_payment: isPartialPayment,
+                idempotency_key: response.razorpay_order_id,
+              };
+              convertMutation.mutate(completePayload);
+              setIsProcessingPayment(false);
+            },
+            modal: {
+              backdropclose: true,
+              escape: true,
+              confirm_close: false,
+              ondismiss: function () {
+                handleCancelRazorpay();
+              },
+            },
+          };
+
+          const rzp = new (window as any).Razorpay(options);
+          rzp.on('payment.failed', function (resp: any) {
+            setIsProcessingPayment(false);
+            const desc = resp?.error?.description || 'Payment failed';
+            toast.error(`Razorpay: ${desc}`);
+          });
+          rzp.open();
+        } catch (err: any) {
+          setIsProcessingPayment(false);
+          const msg = err?.response?.data?.error || err?.message || 'Failed to initialize Razorpay checkout';
+          toast.error(msg);
+          setError(msg);
+        }
+      } else {
+        convertMutation.mutate(payload);
+      }
     }
   }, [step, selectedVersionId, selectedBranchId, fetchQuote, paymentProvider, paymentAmount, quote, appliedCoupon, startDate, idempotencyKey, convertMutation]);
 
@@ -925,10 +1237,28 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   const notEligible = eligibility && !eligibility.eligible && lead.current_status === 'CONVERTED';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="w-[96vw] max-w-lg sm:max-w-xl md:max-w-2xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-2xl"
-      >
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && (isProcessingPayment || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]'))) {
+          return;
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+              <DialogContent
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            // Prevent escape key from closing the wizard while processing or during payment
+            e.preventDefault();
+          }}
+          className="w-[96vw] max-w-lg sm:max-w-xl md:max-w-2xl h-[calc(100dvh-2rem)] sm:h-auto max-h-[calc(100dvh-2.5rem)] sm:max-h-[min(88vh,720px)] flex flex-col p-0 gap-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-2xl"
+        >
         {/* Header */}
         <DialogHeader className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-border/80 shrink-0">
           <div className="flex items-center gap-3">
@@ -945,7 +1275,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-4 sm:py-5">
           {notEligible ? (
             <div className="flex flex-col items-center text-center py-8 space-y-4">
               <CheckCircle2 size={40} className="text-emerald-600 dark:text-emerald-400" />
@@ -986,6 +1316,8 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                   paymentProvider={paymentProvider}
                   paymentAmount={paymentAmount}
                   startDate={startDate}
+                  isPartialPayment={isPartialPayment}
+                  onPartialPaymentChange={setIsPartialPayment}
                   onProviderChange={setPaymentProvider}
                   onAmountChange={setPaymentAmount}
                   onStartDateChange={setStartDate}
@@ -1026,7 +1358,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
 
         {/* Footer */}
         {!showSuccess && !notEligible && (
-          <div className="px-5 sm:px-6 py-4 border-t border-border/80 flex items-center justify-between gap-3 shrink-0 bg-muted/20">
+          <div className="px-5 sm:px-6 py-3 sm:py-3.5 border-t border-border/80 flex items-center justify-between gap-3 shrink-0 bg-muted/20">
             <Button
               type="button"
               variant="ghost"
@@ -1040,7 +1372,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
               type="button"
               onClick={handleNext}
               disabled={
-                isConverting || isApplyingCoupon || isFetchingQuote ||
+                isConverting || isProcessingPayment || isApplyingCoupon || isFetchingQuote ||
                 (step === 1 && !selectedVersionId) ||
                 (step === 3 && (!paymentProvider || !paymentAmount)) ||
                 (step === 4 && !canRecordPayment)
@@ -1053,11 +1385,15 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                   : 'bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200'
               }`}
             >
-              {(isConverting || isFetchingQuote) ? (
-                <><Loader2 size={14} className="animate-spin" />{isConverting ? 'Converting…' : 'Loading…'}</>
+              {(isConverting || isProcessingPayment || isFetchingQuote) ? (
+                <><Loader2 size={14} className="animate-spin" />{isProcessingPayment ? 'Opening Razorpay…' : isConverting ? 'Converting…' : 'Loading…'}</>
               ) : step === 4 ? (
                 canRecordPayment ? (
-                  <><CheckCircle2 size={14} />Confirm Conversion</>
+                  paymentProvider === 'RAZORPAY' ? (
+                    <><CreditCard size={14} />Pay with Razorpay</>
+                  ) : (
+                    <><CheckCircle2 size={14} />Confirm Conversion</>
+                  )
                 ) : (
                   <><ShieldCheck size={14} />Payment Authority Required</>
                 )
@@ -1068,6 +1404,19 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
           </div>
         )}
       </DialogContent>
+      {typeof document !== 'undefined' && isProcessingPayment && createPortal(
+        <div className="fixed top-4 right-4 z-[2147483648] flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <button
+            type="button"
+            onClick={handleCancelRazorpay}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-950/95 hover:bg-slate-900 text-white text-xs font-bold shadow-2xl border border-white/20 backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 ring-2 ring-black/40"
+          >
+            <X className="w-4 h-4 text-rose-400" />
+            <span>Cancel & Close</span>
+          </button>
+        </div>,
+        document.body
+      )}
     </Dialog>
   );
 }

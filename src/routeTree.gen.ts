@@ -60,8 +60,10 @@ import { Route as ShellCsFeedbackRouteImport } from './routes/_shell/cs.feedback
 import { Route as ShellCsGrievancesRouteImport } from './routes/_shell/cs.grievances'
 import { Route as ShellCsMemberHealthRouteImport } from './routes/_shell/cs.member-health'
 import { Route as ShellCsRetentionRouteImport } from './routes/_shell/cs.retention'
+import { Route as ShellFinanceIndexRouteImport } from './routes/_shell/finance.index'
 import { Route as ShellFinanceExpensesRouteImport } from './routes/_shell/finance.expenses'
 import { Route as ShellFinanceInvoicesRouteImport } from './routes/_shell/finance.invoices'
+import { Route as ShellFinanceOrdersRouteImport } from './routes/_shell/finance.orders'
 import { Route as ShellFinanceOutstandingRouteImport } from './routes/_shell/finance.outstanding'
 import { Route as ShellFinancePaymentsRouteImport } from './routes/_shell/finance.payments'
 import { Route as ShellFinanceRefundsRouteImport } from './routes/_shell/finance.refunds'
@@ -380,6 +382,11 @@ const ShellCsRetentionRoute = ShellCsRetentionRouteImport.update({
   path: '/cs/retention',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellFinanceIndexRoute = ShellFinanceIndexRouteImport.update({
+  id: '/finance/',
+  path: '/finance/',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellFinanceExpensesRoute = ShellFinanceExpensesRouteImport.update({
   id: '/finance/expenses',
   path: '/finance/expenses',
@@ -388,6 +395,11 @@ const ShellFinanceExpensesRoute = ShellFinanceExpensesRouteImport.update({
 const ShellFinanceInvoicesRoute = ShellFinanceInvoicesRouteImport.update({
   id: '/finance/invoices',
   path: '/finance/invoices',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellFinanceOrdersRoute = ShellFinanceOrdersRouteImport.update({
+  id: '/finance/orders',
+  path: '/finance/orders',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellFinanceOutstandingRoute = ShellFinanceOutstandingRouteImport.update({
@@ -729,6 +741,7 @@ export interface FileRoutesByFullPath {
   '/cs/retention': typeof ShellCsRetentionRoute
   '/finance/expenses': typeof ShellFinanceExpensesRoute
   '/finance/invoices': typeof ShellFinanceInvoicesRoute
+  '/finance/orders': typeof ShellFinanceOrdersRoute
   '/finance/outstanding': typeof ShellFinanceOutstandingRoute
   '/finance/payments': typeof ShellFinancePaymentsRoute
   '/finance/refunds': typeof ShellFinanceRefundsRoute
@@ -783,6 +796,7 @@ export interface FileRoutesByFullPath {
   '/support/escalations': typeof ShellSupportEscalationsRoute
   '/support/sla': typeof ShellSupportSlaRoute
   '/support/tickets': typeof ShellSupportTicketsRoute
+  '/finance/': typeof ShellFinanceIndexRoute
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesByTo {
@@ -838,6 +852,7 @@ export interface FileRoutesByTo {
   '/cs/retention': typeof ShellCsRetentionRoute
   '/finance/expenses': typeof ShellFinanceExpensesRoute
   '/finance/invoices': typeof ShellFinanceInvoicesRoute
+  '/finance/orders': typeof ShellFinanceOrdersRoute
   '/finance/outstanding': typeof ShellFinanceOutstandingRoute
   '/finance/payments': typeof ShellFinancePaymentsRoute
   '/finance/refunds': typeof ShellFinanceRefundsRoute
@@ -892,6 +907,7 @@ export interface FileRoutesByTo {
   '/support/escalations': typeof ShellSupportEscalationsRoute
   '/support/sla': typeof ShellSupportSlaRoute
   '/support/tickets': typeof ShellSupportTicketsRoute
+  '/finance': typeof ShellFinanceIndexRoute
   '/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRoutesById {
@@ -949,6 +965,7 @@ export interface FileRoutesById {
   '/_shell/cs/retention': typeof ShellCsRetentionRoute
   '/_shell/finance/expenses': typeof ShellFinanceExpensesRoute
   '/_shell/finance/invoices': typeof ShellFinanceInvoicesRoute
+  '/_shell/finance/orders': typeof ShellFinanceOrdersRoute
   '/_shell/finance/outstanding': typeof ShellFinanceOutstandingRoute
   '/_shell/finance/payments': typeof ShellFinancePaymentsRoute
   '/_shell/finance/refunds': typeof ShellFinanceRefundsRoute
@@ -1003,6 +1020,7 @@ export interface FileRoutesById {
   '/_shell/support/escalations': typeof ShellSupportEscalationsRoute
   '/_shell/support/sla': typeof ShellSupportSlaRoute
   '/_shell/support/tickets': typeof ShellSupportTicketsRoute
+  '/_shell/finance/': typeof ShellFinanceIndexRoute
   '/_shell/platform/tenants/new': typeof ShellPlatformTenantsNewRoute
 }
 export interface FileRouteTypes {
@@ -1060,6 +1078,7 @@ export interface FileRouteTypes {
     | '/cs/retention'
     | '/finance/expenses'
     | '/finance/invoices'
+    | '/finance/orders'
     | '/finance/outstanding'
     | '/finance/payments'
     | '/finance/refunds'
@@ -1114,6 +1133,7 @@ export interface FileRouteTypes {
     | '/support/escalations'
     | '/support/sla'
     | '/support/tickets'
+    | '/finance/'
     | '/platform/tenants/new'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1169,6 +1189,7 @@ export interface FileRouteTypes {
     | '/cs/retention'
     | '/finance/expenses'
     | '/finance/invoices'
+    | '/finance/orders'
     | '/finance/outstanding'
     | '/finance/payments'
     | '/finance/refunds'
@@ -1223,6 +1244,7 @@ export interface FileRouteTypes {
     | '/support/escalations'
     | '/support/sla'
     | '/support/tickets'
+    | '/finance'
     | '/platform/tenants/new'
   id:
     | '__root__'
@@ -1279,6 +1301,7 @@ export interface FileRouteTypes {
     | '/_shell/cs/retention'
     | '/_shell/finance/expenses'
     | '/_shell/finance/invoices'
+    | '/_shell/finance/orders'
     | '/_shell/finance/outstanding'
     | '/_shell/finance/payments'
     | '/_shell/finance/refunds'
@@ -1333,6 +1356,7 @@ export interface FileRouteTypes {
     | '/_shell/support/escalations'
     | '/_shell/support/sla'
     | '/_shell/support/tickets'
+    | '/_shell/finance/'
     | '/_shell/platform/tenants/new'
   fileRoutesById: FileRoutesById
 }
@@ -1701,6 +1725,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellCsRetentionRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/finance/': {
+      id: '/_shell/finance/'
+      path: '/finance'
+      fullPath: '/finance/'
+      preLoaderRoute: typeof ShellFinanceIndexRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/finance/expenses': {
       id: '/_shell/finance/expenses'
       path: '/finance/expenses'
@@ -1713,6 +1744,13 @@ declare module '@tanstack/react-router' {
       path: '/finance/invoices'
       fullPath: '/finance/invoices'
       preLoaderRoute: typeof ShellFinanceInvoicesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/finance/orders': {
+      id: '/_shell/finance/orders'
+      path: '/finance/orders'
+      fullPath: '/finance/orders'
+      preLoaderRoute: typeof ShellFinanceOrdersRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/finance/outstanding': {
@@ -2187,6 +2225,7 @@ interface ShellRouteChildren {
   ShellCsRetentionRoute: typeof ShellCsRetentionRoute
   ShellFinanceExpensesRoute: typeof ShellFinanceExpensesRoute
   ShellFinanceInvoicesRoute: typeof ShellFinanceInvoicesRoute
+  ShellFinanceOrdersRoute: typeof ShellFinanceOrdersRoute
   ShellFinanceOutstandingRoute: typeof ShellFinanceOutstandingRoute
   ShellFinancePaymentsRoute: typeof ShellFinancePaymentsRoute
   ShellFinanceRefundsRoute: typeof ShellFinanceRefundsRoute
@@ -2235,6 +2274,7 @@ interface ShellRouteChildren {
   ShellSupportEscalationsRoute: typeof ShellSupportEscalationsRoute
   ShellSupportSlaRoute: typeof ShellSupportSlaRoute
   ShellSupportTicketsRoute: typeof ShellSupportTicketsRoute
+  ShellFinanceIndexRoute: typeof ShellFinanceIndexRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
@@ -2288,6 +2328,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellCsRetentionRoute: ShellCsRetentionRoute,
   ShellFinanceExpensesRoute: ShellFinanceExpensesRoute,
   ShellFinanceInvoicesRoute: ShellFinanceInvoicesRoute,
+  ShellFinanceOrdersRoute: ShellFinanceOrdersRoute,
   ShellFinanceOutstandingRoute: ShellFinanceOutstandingRoute,
   ShellFinancePaymentsRoute: ShellFinancePaymentsRoute,
   ShellFinanceRefundsRoute: ShellFinanceRefundsRoute,
@@ -2336,6 +2377,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellSupportEscalationsRoute: ShellSupportEscalationsRoute,
   ShellSupportSlaRoute: ShellSupportSlaRoute,
   ShellSupportTicketsRoute: ShellSupportTicketsRoute,
+  ShellFinanceIndexRoute: ShellFinanceIndexRoute,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)

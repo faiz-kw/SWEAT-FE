@@ -63,6 +63,28 @@ export type MetaMapping = {
 
 export type MappingInput = Omit<MetaMapping, 'id' | 'version' | 'updated_at'> & { expected_version?: number };
 
+export type MetaImportMatchedLead = {
+  id: string;
+  name: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  status?: string;
+  created_at?: string | null;
+};
+
+export type MetaImportResolution = {
+  resolved_by_id: string;
+  resolved_by_name: string;
+  resolved_at: string;
+  reason: string;
+  action: string;
+  previous_status?: string;
+  previous_error_code?: string;
+  matched_lead_id?: string | null;
+};
+
 export type MetaImport = {
   id: string;
   mode: 'SIMULATOR' | 'LIVE' | string;
@@ -71,6 +93,8 @@ export type MetaImport = {
   external_lead_id: string;
   status: string;
   lead: string | null;
+  matched_lead?: MetaImportMatchedLead | null;
+  resolution?: MetaImportResolution | null;
   mapping_version: number | null;
   attempt_count: number;
   error_code: string;
@@ -159,4 +183,6 @@ export const metaLeadsApi = {
   simulate: async (payload: { page_id: string; form_id: string; external_lead_id: string; field_data: { name: string; values: string[] }[] }) =>
     (await api.post<MetaImport>('/tenant/meta-lead-imports/simulate/', payload)).data,
   retry: async (id: string) => (await api.post<MetaImport>(`/tenant/meta-lead-imports/${id}/retry/`, {})).data,
+  resolve: async (id: string, payload: { reason: string; action?: string }) =>
+    (await api.post<MetaImport>(`/tenant/meta-lead-imports/${id}/resolve/`, payload)).data,
 };

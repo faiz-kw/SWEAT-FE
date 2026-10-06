@@ -48,7 +48,8 @@ import {
   User,
   AlertTriangle,
   RotateCcw,
-  FlaskConical,
+  Copy,
+  CheckCheck,
 } from 'lucide-react';
 import { CRMErrorState } from '../common/CRMErrorState';
 import { CRMLoadingState } from '../common/CRMLoadingState';
@@ -139,23 +140,34 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
   // UI state
   const [formSearch, setFormSearch] = React.useState('');
-  const [formModeFilter, setFormModeFilter] = React.useState<'ALL' | 'LIVE' | 'TEST' | 'UNCLASSIFIED'>('ALL');
   const [formStatusFilter, setFormStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [formPage, setFormPage] = React.useState(1);
   const FORMS_PER_PAGE = 6;
 
-  const [importStatusFilter, setImportStatusFilter] = React.useState<'ALL' | 'NEEDS_ATTENTION' | 'ADDED' | 'FAILED'>('ALL');
+  const [importStatusFilter, setImportStatusFilter] = React.useState<
+    'ALL' | 'NEEDS_ATTENTION' | 'ADDED' | 'RESOLVED' | 'FAILED'
+  >('ALL');
   const [importPage, setImportPage] = React.useState(1);
 
   const [editing, setEditing] = React.useState<MetaMapping | null | undefined>(undefined);
   const [historyMapping, setHistoryMapping] = React.useState<MetaMapping | null>(null);
-  const [selectedForTest, setSelectedForTest] = React.useState<MetaMapping | null>(null);
-  const [testAnswers, setTestAnswers] = React.useState<Record<string, string>>({});
-  const [testSubmissionId, setTestSubmissionId] = React.useState('');
-  const [testResult, setTestResult] = React.useState<MetaImport | null>(null);
+  const [resolvingImportId, setResolvingImportId] = React.useState<string | null>(null);
+  const [resolveReason, setResolveReason] = React.useState<string>(
+    'Duplicate enquiry already handled by sales team'
+  );
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [expandedIssueId, setExpandedIssueId] = React.useState<string | null>(null);
   const [showConnectModal, setShowConnectModal] = React.useState(false);
   const [expandedDetailsMap, setExpandedDetailsMap] = React.useState<Record<string, boolean>>({});
+
+  const handleCopySubmissionId = (id: string) => {
+    void navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    toast.success('Submission ID copied to clipboard');
+    setTimeout(() => {
+      setCopiedId((curr) => (curr === id ? null : curr));
+    }, 2000);
+  };
 
   // Handle OAuth return params
   React.useEffect(() => {
@@ -189,6 +201,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const backendImportFilter =
     importStatusFilter === 'ADDED'
       ? 'IMPORTED'
+      : importStatusFilter === 'RESOLVED'
+      ? 'RESOLVED'
       : importStatusFilter === 'FAILED'
       ? 'FAILED'
       : undefined;
@@ -210,28 +224,34 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     onError: (e) => toast.error(formatError(e)),
   });
 
-  const simulateMutation = useMutation({
-    mutationFn: metaLeadsApi.simulate,
+  const retryMutation = useMutation({
+    mutationFn: (importId: string) => metaLeadsApi.retry(importId),
     onSuccess: (data) => {
-      setTestResult(data);
       if (data.status === 'IMPORTED') {
-        toast.success(`Test lead received and added to CRM (Lead #${data.lead || 'Created'})`);
+        toast.success('Lead processed and added to CRM successfully.');
+      } else if (data.status === 'NEEDS_REVIEW') {
+        toast.info('Enquiry re-checked and held for review: this contact already has an active CRM lead.');
+      } else if (data.status === 'NEEDS_MAPPING') {
+        toast.warning('Enquiry still needs field matching before it can be imported.');
+      } else if (data.status === 'NEEDS_ASSIGNMENT') {
+        toast.warning('Enquiry still needs branch assignment before it can be imported.');
+      } else if (data.status === 'RESOLVED') {
+        toast.info('Enquiry is marked as resolved.');
       } else {
-        toast.warning(`Test lead received with status: ${data.status}`);
+        toast.warning(`Enquiry could not be imported: ${data.error_message || 'Check form settings and try again.'}`);
       }
       void refreshAll();
     },
     onError: (e) => toast.error(formatError(e)),
   });
 
-  const retryMutation = useMutation({
-    mutationFn: (importId: string) => metaLeadsApi.retry(importId),
-    onSuccess: (data) => {
-      if (data.status === 'IMPORTED') {
-        toast.success('Lead processed and added to CRM successfully.');
-      } else {
-        toast.info(`Lead re-processed: ${data.status}`);
-      }
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      metaLeadsApi.resolve(id, { reason, action: 'DISMISSED' }),
+    onSuccess: () => {
+      toast.success('Repeat enquiry marked as resolved. Existing CRM lead and tasks preserved.');
+      setResolvingImportId(null);
+      setResolveReason('Duplicate enquiry already handled by sales team');
       void refreshAll();
     },
     onError: (e) => toast.error(formatError(e)),
@@ -264,9 +284,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const allMappings = mappingsQuery.data?.results || [];
   const allImports = importsQuery.data?.results || [];
 
-  // Filter mappings by search, mode, and status
+  // Filter mappings by search and status
   const filteredMappings = allMappings.filter((m) => {
-    // Search
     if (formSearch.trim()) {
       const q = formSearch.toLowerCase();
       const pageName = meta.pages?.find((p) => p.id === m.page_id)?.name?.toLowerCase() || '';
@@ -281,21 +300,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
       if (!matches) return false;
     }
 
-    // Status filter
     if (formStatusFilter === 'ACTIVE' && !m.is_active) return false;
     if (formStatusFilter === 'PAUSED' && m.is_active) return false;
-
-    // Mode filter based reliably on stored metadata
-    const isTest = isTestMapping(m);
-    const isLive = isLiveMapping(m, meta);
-    if (formModeFilter === 'LIVE' && !isLive) return false;
-    if (formModeFilter === 'TEST' && !isTest) return false;
-    if (formModeFilter === 'UNCLASSIFIED' && (isTest || isLive)) return false;
 
     return true;
   });
 
-  // Client-side pagination for lead forms to avoid crowding screen
+  // Client-side pagination for lead forms
   const totalFormPages = Math.ceil(filteredMappings.length / FORMS_PER_PAGE) || 1;
   const currentFormPage = Math.min(formPage, totalFormPages);
   const paginatedMappings = filteredMappings.slice(
@@ -311,89 +322,37 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     if (importStatusFilter === 'ADDED') {
       return item.status === 'IMPORTED';
     }
+    if (importStatusFilter === 'RESOLVED') {
+      return item.status === 'RESOLVED';
+    }
     if (importStatusFilter === 'FAILED') {
       return item.status === 'FAILED';
     }
     return true;
   });
 
-  // Truthful Setup Progress Derivation
-  // Permissions & Connection derived state
+  // Connection and Setup Progress state
   const isPlatformConfigured = Boolean(meta.meta_app_configured || meta.app_id_configured);
   const hasConnectPermission = canEdit;
   const canConnect = isPlatformConfigured && hasConnectPermission;
 
-  const handleTestWithoutFacebook = () => {
-    // If mappings exist, select the active mapping or first mapping
-    const target = allMappings.find((m) => m.is_active) || allMappings[0];
-    if (target) {
-      setSelectedForTest(target);
-      toast.info(`Opened local simulator for "${target.name}". This creates local test records without connecting to Facebook.`);
-      setTimeout(() => {
-        const el = document.getElementById('meta-simulator-panel');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-    } else {
-      // No mapping exists yet: open form editor with a local simulator template
-      setEditing({
-        id: '',
-        name: 'Local Test Form',
-        page_id: 'local_test_page_001',
-        form_id: 'local_test_form_001',
-        is_active: true,
-        version: 1,
-        field_mappings: {
-          full_name: 'full_name',
-          email: 'email',
-          phone: 'phone_number',
-        },
-        field_defaults: {
-          is_test: 'true',
-          mode: 'SIMULATOR',
-        },
-        branch_mode: 'FIXED',
-        branch: meta.branches[0]?.id || null,
-        branch_field: '',
-        branch_answers: {},
-        lead_source: meta.lead_sources[0]?.id || '',
-        initial_stage: 'NEW_LEAD',
-        repeat_policy: 'REVIEW',
-        create_followup_task: true,
-        followup_task_type: 'CALL',
-        followup_due_hours: 24,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      toast.info('Configure and save this test lead form to start simulating enquiries.');
-    }
-  };
-
-  // 1. Facebook Connection State
-  const isConnectionActive = (meta.is_connected ?? (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED')) && meta.connection_status !== 'TOKEN_EXPIRED';
+  const isConnectionActive =
+    (meta.is_connected ??
+      (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED')) &&
+    meta.connection_status !== 'TOKEN_EXPIRED';
   const isConnectionAttention = meta.connection_status === 'TOKEN_EXPIRED';
-
-  // 2. Lead Forms State (must have at least one active live mapping connected to an authorized live page)
-  const hasLiveActiveForms = isConnectionActive && allMappings.some((m) => m.is_active && isLiveMapping(m, meta));
-  const hasOnlyTestForms = allMappings.some((m) => isTestMapping(m)) && !hasLiveActiveForms;
-
-  // 3. Testing & Receiving State (ONLY live imported leads with an active connection & active form mark this complete!)
-  const hasLiveReceivedLeads =
-    isConnectionActive &&
-    hasLiveActiveForms &&
-    allImports.some((i) => i.mode === 'LIVE' && i.status === 'IMPORTED');
-  const hasSimulatorTested = allImports.some((i) => i.mode === 'SIMULATOR' && i.status === 'IMPORTED');
+  const hasActiveForms = allMappings.some((m) => m.is_active);
+  const hasReceivedEnquiries = allImports.some((i) => i.status === 'IMPORTED');
 
   return (
     <div className="space-y-6 max-w-7xl w-full max-w-full overflow-x-hidden">
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 1. Header & Connection Status                                       */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 1. Header & Connection Status */}
       <header className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Facebook & Instagram Leads
         </h1>
         <p className="text-sm text-muted-foreground">
-          Automatically add enquiries from your lead forms to CRM and assign them to the right team.
+          Receive enquiries from Facebook and Instagram and send them to the right branch and team.
         </p>
       </header>
 
@@ -405,7 +364,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               <h2 className="font-semibold text-base text-foreground">
                 Facebook Connection
               </h2>
-              {/* Exactly one clear connection status badge */}
               {isConnectionActive ? (
                 <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1 text-xs">
                   <CheckCircle2 className="h-3 w-3" />
@@ -428,28 +386,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               {isConnectionActive
                 ? `Connected to Facebook as ${meta.connection?.meta_user_name || 'Authorized User'}. Your lead forms will automatically synchronize.`
                 : isConnectionAttention
-                ? 'Your Facebook connection has expired or permissions were updated. Please reconnect to continue receiving leads.'
-                : 'Connect your Facebook account to access your gym’s lead forms and start receiving leads automatically.'}
+                ? 'Your Facebook connection has expired or permissions were updated. Please reconnect to continue receiving enquiries.'
+                : 'Connect your Facebook account to access your gym’s lead forms and start receiving enquiries automatically.'}
             </p>
           </div>
 
           <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 w-full sm:w-auto">
-            {/* Unified Action Buttons Row */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              {meta.simulator_enabled && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTestWithoutFacebook}
-                  className="gap-2 h-9 px-3.5 text-xs font-medium flex-1 sm:flex-initial justify-center"
-                  title="Test enquiry ingestion using local simulator without connecting Facebook"
-                >
-                  <FlaskConical className="h-4 w-4 text-primary" />
-                  Test without Facebook
-                </Button>
-              )}
-
               {isConnectionActive ? (
                 <div className="flex items-center gap-2 flex-1 sm:flex-initial">
                   <Button
@@ -459,7 +402,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     onClick={() => {
                       if (
                         window.confirm(
-                          'Are you sure you want to disconnect Facebook? Incoming leads from your forms will be paused.'
+                          'Are you sure you want to disconnect Facebook? Incoming enquiries from your forms will be paused.'
                         )
                       ) {
                         disconnectMutation.mutate();
@@ -503,7 +446,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               </Button>
             </div>
 
-            {/* Clear, properly aligned explanation below the button row */}
             {!isConnectionActive && (
               <div className="w-full sm:w-auto flex sm:justify-end">
                 {!isPlatformConfigured ? (
@@ -520,48 +462,43 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           </div>
         </div>
 
-        {/* Collapsed, permission-protected Technical details */}
+        {/* Restricted Diagnostic View */}
         {canEdit && (
           <details className="mt-3 pt-3 border-t text-xs text-muted-foreground group">
             <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1.5 select-none">
               <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Technical details</span>
+              <span>Connection details</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             </summary>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-3 pb-1">
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
-                <span className="text-[11px] font-semibold text-foreground">Account Diagnostics</span>
-                <p>Status: {meta.connection_status}</p>
-                <p>User: {meta.connection?.meta_user_name || 'None'}</p>
-                <p className="truncate">User ID: {meta.connection?.meta_user_id || 'None'}</p>
+                <span className="text-[11px] font-semibold text-foreground">Account Status</span>
+                <p>Status: {meta.connection_status === 'LIVE_CONNECTED' || meta.connection_status === 'CONNECTED' ? 'Active' : meta.connection_status}</p>
+                <p>Authorized user: {meta.connection?.meta_user_name || 'None'}</p>
               </div>
 
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
                 <span className="text-[11px] font-semibold text-foreground">Token Security</span>
                 <p>Storage: Encrypted at rest</p>
                 <p>
-                  Expires:{' '}
+                  Token valid until:{' '}
                   {meta.connection?.expires_at
                     ? new Date(meta.connection.expires_at).toLocaleDateString()
-                    : 'Standard token'}
+                    : 'Standard active token'}
                 </p>
-                <p>Outbound Comms: Protected for test leads</p>
               </div>
 
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
-                <span className="text-[11px] font-semibold text-foreground">Authorized Pages</span>
-                <p>Discovered pages: {meta.pages?.length || 0}</p>
-                <p>Live webhook reception: {meta.live_available ? 'Ready' : 'Pending'}</p>
-                <p className="truncate">Tenant: {tenantId}</p>
+                <span className="text-[11px] font-semibold text-foreground">Pages & Webhooks</span>
+                <p>Connected pages: {meta.pages?.length || 0}</p>
+                <p>Webhook reception: {meta.live_available ? 'Configured' : 'Pending platform setup'}</p>
               </div>
             </div>
           </details>
         )}
       </section>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 2. Truthful Setup Progress (3 Clear Steps)                          */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 2. Three Clear Setup Steps */}
       <section className="rounded-xl border bg-card p-5 sm:p-6 shadow-sm space-y-3">
         <h2 className="font-semibold text-sm text-foreground uppercase tracking-wider">
           Setup Progress
@@ -604,81 +541,71 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
             </p>
           </div>
 
-          {/* Step 2: Set up lead forms */}
+          {/* Step 2: Choose your forms */}
           <div
             className={`rounded-lg border p-4 space-y-2 transition-all ${
-              hasLiveActiveForms
+              hasActiveForms
                 ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-950 dark:bg-emerald-950/20'
-                : hasOnlyTestForms
+                : allMappings.length > 0
                 ? 'border-border bg-card'
                 : 'border-muted bg-muted/20'
             }`}
           >
             <div className="flex flex-wrap items-center justify-between gap-1.5">
               <span className="text-xs font-bold text-muted-foreground uppercase">Step 2</span>
-              {hasLiveActiveForms ? (
+              {hasActiveForms ? (
                 <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                   <Check className="h-3.5 w-3.5" /> Completed
                 </span>
-              ) : hasOnlyTestForms ? (
+              ) : allMappings.length > 0 ? (
                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                  Test form only
+                  Forms paused
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground font-medium">To do</span>
               )}
             </div>
-            <h3 className="font-semibold text-sm text-foreground">Set up lead forms</h3>
+            <h3 className="font-semibold text-sm text-foreground">Choose your forms</h3>
             <p className="text-xs text-muted-foreground">
-              {hasLiveActiveForms
-                ? 'Live form mappings active and routing leads'
-                : hasOnlyTestForms
-                ? 'Test forms configured. Connect a live form to complete setup.'
+              {hasActiveForms
+                ? `${allMappings.filter((m) => m.is_active).length} form(s) active and routing enquiries`
+                : allMappings.length > 0
+                ? 'Lead forms are configured but currently paused'
                 : 'Match questions to CRM fields and choose branch'}
             </p>
           </div>
 
-          {/* Step 3: Test and start receiving leads */}
+          {/* Step 3: Receive enquiries */}
           <div
             className={`rounded-lg border p-4 space-y-2 transition-all ${
-              hasLiveReceivedLeads
+              hasReceivedEnquiries
                 ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-950 dark:bg-emerald-950/20'
-                : hasSimulatorTested
-                ? 'border-border bg-card'
                 : 'border-muted bg-muted/20'
             }`}
           >
             <div className="flex flex-wrap items-center justify-between gap-1.5">
               <span className="text-xs font-bold text-muted-foreground uppercase">Step 3</span>
-              {hasLiveReceivedLeads ? (
+              {hasReceivedEnquiries ? (
                 <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-3.5 w-3.5" /> Completed
-                </span>
-              ) : hasSimulatorTested ? (
-                <span className="text-xs font-medium text-muted-foreground">
-                  Simulator tested
+                  <Check className="h-3.5 w-3.5" /> Active
                 </span>
               ) : (
-                <span className="text-xs text-muted-foreground font-medium">Pending live test</span>
+                <span className="text-xs text-muted-foreground font-medium">Waiting for enquiries</span>
               )}
             </div>
-            <h3 className="font-semibold text-sm text-foreground">Test and start receiving leads</h3>
+            <h3 className="font-semibold text-sm text-foreground">Receive enquiries</h3>
             <p className="text-xs text-muted-foreground">
-              {hasLiveReceivedLeads
-                ? 'Live leads actively received and imported into CRM'
-                : hasSimulatorTested
-                ? isConnectionActive
-                  ? 'Simulator test passed. Set up a live form to start receiving live leads.'
-                  : 'Simulator test passed. Connect Facebook to receive live leads.'
-                : 'Submit a test enquiry or publish your Facebook campaign'}
+              {hasReceivedEnquiries
+                ? 'Incoming enquiries are being received and sent to CRM'
+                : isConnectionActive
+                ? 'Connected. Enquiries from published Facebook ads will arrive here'
+                : 'Connect Facebook and activate forms to receive enquiries'}
             </p>
           </div>
         </div>
       </section>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 3. Form Editor Modal / Inline Form                                 */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 3. Form Editor Modal */}
       {editing !== undefined && (
         <MappingEditor
           key={editing?.id || 'new'}
@@ -688,15 +615,12 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           onClose={() => setEditing(undefined)}
           onSaved={() => {
             setEditing(undefined);
-            setSelectedForTest(null);
             void refreshAll();
           }}
         />
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 4. Lead forms (Simplified Form List)                                */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 4. Lead forms */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -715,7 +639,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           </Button>
         </div>
 
-        {/* Search, Status & Mode Filters */}
+        {/* Search & Status Filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-card border rounded-lg p-3">
           <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -730,98 +654,49 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* Mode filter pills */}
-            <div className="flex items-center rounded-md border p-0.5 bg-muted/40">
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  formModeFilter === 'ALL'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormModeFilter('ALL');
-                  setFormPage(1);
-                }}
-              >
-                All forms
-              </button>
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  formModeFilter === 'LIVE'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormModeFilter('LIVE');
-                  setFormPage(1);
-                }}
-              >
-                Live forms
-              </button>
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  formModeFilter === 'TEST'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormModeFilter('TEST');
-                  setFormPage(1);
-                }}
-              >
-                Test / Simulator
-              </button>
-            </div>
-
-            {/* Status filter pills */}
-            <div className="flex items-center rounded-md border p-0.5 bg-muted/40">
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  formStatusFilter === 'ALL'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormStatusFilter('ALL');
-                  setFormPage(1);
-                }}
-              >
-                All status
-              </button>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  formStatusFilter === 'ACTIVE'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormStatusFilter('ACTIVE');
-                  setFormPage(1);
-                }}
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  formStatusFilter === 'PAUSED'
-                    ? 'bg-background shadow-xs text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => {
-                  setFormStatusFilter('PAUSED');
-                  setFormPage(1);
-                }}
-              >
-                Paused
-              </button>
-            </div>
+          <div className="flex items-center rounded-md border p-0.5 bg-muted/40 text-xs">
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                formStatusFilter === 'ALL'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => {
+                setFormStatusFilter('ALL');
+                setFormPage(1);
+              }}
+            >
+              All forms
+            </button>
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                formStatusFilter === 'ACTIVE'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => {
+                setFormStatusFilter('ACTIVE');
+                setFormPage(1);
+              }}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                formStatusFilter === 'PAUSED'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => {
+                setFormStatusFilter('PAUSED');
+                setFormPage(1);
+              }}
+            >
+              Paused
+            </button>
           </div>
         </div>
 
@@ -831,11 +706,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         ) : filteredMappings.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/10">
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-semibold">No lead forms found</p>
+            <p className="text-sm font-semibold">
+              {allMappings.length === 0 ? 'No lead forms connected' : 'No lead forms match your search'}
+            </p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {formSearch || formModeFilter !== 'ALL' || formStatusFilter !== 'ALL'
-                ? 'Try adjusting your search or filters to find what you are looking for.'
-                : 'Click "Set up a form" to connect your first lead form to CRM.'}
+              {allMappings.length === 0
+                ? 'Click "Set up a form" to connect your first lead form to CRM.'
+                : 'Try adjusting your search or status filter to find what you are looking for.'}
             </p>
           </div>
         ) : (
@@ -847,10 +724,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                   ? meta.branches.find((b) => b.id === mapping.branch)?.name || 'Default branch'
                   : 'Route based on form answer';
               const assignedUser = meta.eligible_users?.find((u) => u.id === mapping.assigned_sales_user)?.name;
-              const isTest = isTestMapping(mapping);
-              const isLive = isLiveMapping(mapping, meta);
-              const modeLabel = isTest ? 'Test / Simulator' : isLive ? 'Live mode' : 'Mode unclassified';
-              const modeVariant: 'default' | 'secondary' | 'outline' = isTest ? 'secondary' : isLive ? 'default' : 'outline';
               const isDetailsExpanded = !!expandedDetailsMap[mapping.id];
 
               return (
@@ -860,7 +733,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     mapping.is_active ? 'border-border' : 'border-dashed opacity-85'
                   }`}
                 >
-                  {/* Card Header: Form Name, Status & Mode */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -871,15 +743,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         >
                           {mapping.is_active ? 'Active' : 'Paused'}
                         </Badge>
-                        <Badge
-                          variant={modeVariant}
-                          className="text-[10px] px-2 py-0.5"
-                        >
-                          {modeLabel}
-                        </Badge>
                       </div>
 
-                      {/* Facebook Page name when available */}
                       {pageName && (
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
                           <Globe className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -889,7 +754,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     </div>
                   </div>
 
-                  {/* Clean 2-Column Summary */}
                   <div className="grid grid-cols-2 gap-3 text-xs border-y py-3">
                     <div className="space-y-0.5">
                       <span className="text-muted-foreground flex items-center gap-1">
@@ -910,11 +774,11 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     </div>
                   </div>
 
-                  {/* Expandable Technical Details */}
+                  {/* Expandable Details */}
                   <div className="text-xs">
                     <button
                       type="button"
-                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors cursor-pointer"
                       onClick={() =>
                         setExpandedDetailsMap({
                           ...expandedDetailsMap,
@@ -962,7 +826,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     )}
                   </div>
 
-                  {/* Action Buttons: Edit, Pause/Resume, Test, Change history */}
+                  {/* Actions: Edit, Change history, Pause/Resume */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
                     <div className="flex items-center gap-1.5">
                       <Button
@@ -985,47 +849,31 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                       </Button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!canEdit || toggleActiveMutation.isPending}
-                        onClick={() =>
-                          toggleActiveMutation.mutate({
-                            id: mapping.id,
-                            is_active: !mapping.is_active,
-                            version: mapping.version,
-                          })
-                        }
-                        title={mapping.is_active ? 'Pause this form' : 'Resume this form'}
-                      >
-                        {mapping.is_active ? (
-                          <>
-                            <Pause className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                            Pause
-                          </>
-                        ) : (
-                          <>
-                            <Play className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                            Resume
-                          </>
-                        )}
-                      </Button>
-
-                      <Button
-                        variant="default"
-                        size="sm"
-                        disabled={!canEdit}
-                        onClick={() => {
-                          setSelectedForTest(mapping);
-                          setTestAnswers({});
-                          setTestSubmissionId(crypto.randomUUID());
-                          setTestResult(null);
-                        }}
-                      >
-                        Test
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canEdit || toggleActiveMutation.isPending}
+                      onClick={() =>
+                        toggleActiveMutation.mutate({
+                          id: mapping.id,
+                          is_active: !mapping.is_active,
+                          version: mapping.version,
+                        })
+                      }
+                      title={mapping.is_active ? 'Pause this form' : 'Resume this form'}
+                    >
+                      {mapping.is_active ? (
+                        <>
+                          <Pause className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                          Pause
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                          Resume
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </article>
               );
@@ -1061,177 +909,17 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         )}
       </section>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* Test Lead Submission Card (when Test is clicked)                    */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {selectedForTest && (
-        <section id="meta-simulator-panel" className="rounded-xl border bg-card p-5 sm:p-6 space-y-4 shadow-md scroll-mt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold text-base flex items-center gap-2">
-                  <span>Test Lead Submission:</span>
-                  <span className="text-primary">{selectedForTest.name}</span>
-                </h3>
-                <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
-                  Local Simulator
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Submit a safe local test lead to verify routing, duplicate detection, and CRM assignment without spending ad budget or connecting Facebook.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedForTest(null)}
-              className="self-end sm:self-auto"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const questions = [
-                ...new Set([
-                  ...Object.values(selectedForTest.field_mappings),
-                  ...(selectedForTest.branch_mode === 'ANSWER' && selectedForTest.branch_field
-                    ? [selectedForTest.branch_field]
-                    : []),
-                ]),
-              ];
-
-              simulateMutation.mutate({
-                page_id: selectedForTest.page_id,
-                form_id: selectedForTest.form_id,
-                external_lead_id: testSubmissionId || crypto.randomUUID(),
-                field_data: questions.map((name) => ({
-                  name,
-                  values: [testAnswers[name] || ''],
-                })),
-              });
-            }}
-          >
-            <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <ShieldAlert className="h-4 w-4 text-emerald-600" />
-                Test Lead Safety Guarantees:
-              </span>
-              <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
-                <li>Creates local test records in CRM to test follow-up tasks and branch assignment without connecting Facebook.</li>
-                <li>Marked as a test lead so real emails, SMS, or WhatsApp messages are never sent.</li>
-                <li>Simulator testing is restricted to local development and test environments.</li>
-              </ul>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={labelClass}>
-                <span>Test Lead ID:</span>
-                <Input
-                  value={testSubmissionId}
-                  onChange={(e) => setTestSubmissionId(e.target.value)}
-                  placeholder="e.g. test-lead-001"
-                  required
-                />
-                <span className="text-[11px] text-muted-foreground">
-                  Use the same ID to test duplicate handling, or change it for a new enquiry.
-                </span>
-              </label>
-            </div>
-
-            <div className="border-t pt-3 space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Form Questions & Answers
-              </h4>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[
-                  ...new Set([
-                    ...Object.values(selectedForTest.field_mappings),
-                    ...(selectedForTest.branch_mode === 'ANSWER' && selectedForTest.branch_field
-                      ? [selectedForTest.branch_field]
-                      : []),
-                  ]),
-                ].map((question) => (
-                  <label key={question} className={labelClass}>
-                    <span className="truncate" title={question}>
-                      {question}:
-                    </span>
-                    <Input
-                      value={testAnswers[question] || ''}
-                      onChange={(e) =>
-                        setTestAnswers({ ...testAnswers, [question]: e.target.value })
-                      }
-                      placeholder={`Answer for ${question}`}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const questions = [
-                    ...new Set([
-                      ...Object.values(selectedForTest.field_mappings),
-                      ...(selectedForTest.branch_mode === 'ANSWER' && selectedForTest.branch_field
-                        ? [selectedForTest.branch_field]
-                        : []),
-                    ]),
-                  ];
-                  const sample: Record<string, string> = {};
-                  questions.forEach((q) => {
-                    const lk = q.toLowerCase();
-                    if (lk.includes('name')) sample[q] = 'Alex Morgan';
-                    else if (lk.includes('email')) sample[q] = 'alex.morgan@example.test';
-                    else if (lk.includes('phone')) sample[q] = '+919876543210';
-                    else if (lk.includes('city') || lk.includes('branch') || lk.includes('location'))
-                      sample[q] = 'Andheri';
-                    else sample[q] = 'Yes';
-                  });
-                  setTestAnswers(sample);
-                  toast.info('Sample prospect answers populated.');
-                }}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className="h-3.5 w-3.5 mr-1 text-primary" />
-                Fill Sample Answers
-              </Button>
-
-              <Button
-                type="submit"
-                disabled={simulateMutation.isPending}
-                className="w-full sm:w-auto gap-1.5"
-              >
-                <Send className="h-4 w-4" />
-                {simulateMutation.isPending ? 'Sending test lead...' : 'Send Test Lead'}
-              </Button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 5. Recent lead imports (Renamed from Meta Lead Ingestion Audit Log) */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 5. Recent enquiries */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Recent lead imports</h2>
+            <h2 className="text-lg font-semibold text-foreground">Recent enquiries</h2>
             <p className="text-xs text-muted-foreground">
               Track incoming enquiries from your Facebook and Instagram lead forms.
             </p>
           </div>
 
-          {/* Status filter tabs */}
+          {/* Plain Status Filter Tabs */}
           <div className="flex items-center rounded-md border p-0.5 bg-muted/40 text-xs">
             <button
               type="button"
@@ -1245,7 +933,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                 setImportPage(1);
               }}
             >
-              All imports
+              All
             </button>
             <button
               type="button"
@@ -1259,7 +947,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                 setImportPage(1);
               }}
             >
-              Needs your attention
+              Needs attention
             </button>
             <button
               type="button"
@@ -1273,7 +961,21 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                 setImportPage(1);
               }}
             >
-              Added to CRM
+              Added to leads
+            </button>
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                importStatusFilter === 'RESOLVED'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => {
+                setImportStatusFilter('RESOLVED');
+                setImportPage(1);
+              }}
+            >
+              Resolved
             </button>
             <button
               type="button"
@@ -1287,19 +989,23 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                 setImportPage(1);
               }}
             >
-              Could not import
+              Could not add
             </button>
           </div>
         </div>
 
         {importsQuery.isPending ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading recent imports...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading recent enquiries...</div>
         ) : displayedImports.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/10">
             <Clock className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-semibold">No lead imports found</p>
+            <p className="text-sm font-semibold">
+              {allImports.length === 0 ? 'No enquiries received yet' : 'No enquiries match your filter'}
+            </p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Incoming enquiries from your Facebook and Instagram forms will show up here in real time.
+              {allImports.length === 0
+                ? 'Incoming enquiries from your Facebook and Instagram forms will show up here in real time.'
+                : 'Try selecting another status filter to view other enquiries.'}
             </p>
           </div>
         ) : (
@@ -1315,12 +1021,12 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                   ? meta.branches.find((b) => b.id === matchingMapping.branch)?.name
                   : null;
 
-              // Plain language status mapping
               const isAdded = item.status === 'IMPORTED';
               const isPending = item.status === 'PENDING';
               const isNeedsAttention = ['NEEDS_MAPPING', 'NEEDS_ASSIGNMENT', 'NEEDS_REVIEW'].includes(
                 item.status
               );
+              const isResolved = item.status === 'RESOLVED';
               const isFailed = item.status === 'FAILED';
 
               const isIssueExpanded = expandedIssueId === item.id;
@@ -1333,11 +1039,10 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        {/* Plain-language Status Badge */}
                         {isAdded && (
                           <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs">
                             <CheckCircle2 className="h-3 w-3" />
-                            Added to CRM
+                            Added to leads
                           </Badge>
                         )}
                         {isPending && (
@@ -1349,22 +1054,22 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         {isNeedsAttention && (
                           <Badge className="bg-amber-600 hover:bg-amber-700 text-white gap-1 text-xs">
                             <AlertCircle className="h-3 w-3" />
-                            Needs your attention
+                            Needs attention
+                          </Badge>
+                        )}
+                        {isResolved && (
+                          <Badge className="bg-slate-700 hover:bg-slate-800 text-white gap-1 text-xs">
+                            <CheckCheck className="h-3 w-3 text-emerald-400" />
+                            Resolved
                           </Badge>
                         )}
                         {isFailed && (
                           <Badge variant="destructive" className="gap-1 text-xs">
                             <AlertCircle className="h-3 w-3" />
-                            Could not import
+                            Could not add
                           </Badge>
                         )}
 
-                        {/* Mode badge */}
-                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                          {item.mode === 'LIVE' ? 'Live lead' : 'Simulator test'}
-                        </Badge>
-
-                        {/* Received Time */}
                         <span className="text-xs text-muted-foreground">
                           {new Date(item.received_at).toLocaleString([], {
                             dateStyle: 'medium',
@@ -1373,21 +1078,52 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         </span>
                       </div>
 
-                      {/* Lead Name, Form, and Branch */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-sm text-foreground font-medium">
-                        <span>{leadName ? <strong>{leadName}</strong> : <span className="text-muted-foreground">Enquiry #{item.external_lead_id.slice(0, 12)}</span>}</span>
-                        <span className="text-muted-foreground font-normal">•</span>
-                        <span className="text-muted-foreground font-normal">Form: <strong className="text-foreground">{formDisplayName}</strong></span>
-                        {branchDisplayName && (
-                          <>
-                            <span className="text-muted-foreground font-normal">•</span>
-                            <span className="text-muted-foreground font-normal">Branch: <strong className="text-foreground">{branchDisplayName}</strong></span>
-                          </>
-                        )}
+                      <div className="space-y-1 pt-0.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-foreground font-medium">
+                          <span>
+                            {leadName ? <strong>{leadName}</strong> : <span className="text-muted-foreground">Lead Form Enquiry</span>}
+                          </span>
+                          <span className="text-muted-foreground font-normal">•</span>
+                          <span className="text-muted-foreground font-normal">
+                            Form: <strong className="text-foreground">{formDisplayName}</strong>
+                          </span>
+                          {branchDisplayName && (
+                            <>
+                              <span className="text-muted-foreground font-normal">•</span>
+                              <span className="text-muted-foreground font-normal">
+                                Branch: <strong className="text-foreground">{branchDisplayName}</strong>
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>Submission ID:</span>
+                          <code className="font-mono bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-foreground select-all">
+                            {item.external_lead_id}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => handleCopySubmissionId(item.external_lead_id)}
+                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                            title="Copy complete submission ID"
+                          >
+                            {copiedId === item.external_lead_id ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600 font-medium">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                <span>Copy ID</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Action buttons: View lead / View issue */}
                     <div className="flex items-center gap-2">
                       {item.lead && (
                         <Button
@@ -1403,24 +1139,53 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         </Button>
                       )}
 
-                      {(isNeedsAttention || isFailed) && (
+                      {item.matched_lead && !item.lead && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            window.location.href = `/crm/leads?search=${encodeURIComponent(item.matched_lead!.id)}`;
+                          }}
+                          className="gap-1 text-xs border-primary/40 text-primary hover:bg-primary/10"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                          View existing lead
+                        </Button>
+                      )}
+
+                      {(isNeedsAttention || isFailed || isResolved) && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setExpandedIssueId(isIssueExpanded ? null : item.id)}
                           className="gap-1 text-xs"
                         >
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                          {isIssueExpanded ? 'Hide issue' : 'View issue'}
+                          {isResolved ? (
+                            <>
+                              <CheckCheck className="h-3.5 w-3.5 text-slate-600" />
+                              {isIssueExpanded ? 'Hide details' : 'View resolution'}
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                              {isIssueExpanded ? 'Hide issue' : 'View issue'}
+                            </>
+                          )}
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  {/* Actionable Issue Explanation Banner */}
+                  {/* Expanded Issue / Resolution Banner */}
                   {isIssueExpanded && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20 p-3.5 space-y-2 text-xs text-amber-950 dark:text-amber-200">
-                      <div className="flex items-start justify-between gap-3">
+                    <div
+                      className={`rounded-lg border p-3.5 space-y-3 text-xs ${
+                        isResolved
+                          ? 'border-slate-300 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100'
+                          : 'border-amber-300 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20 text-amber-950 dark:text-amber-200'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
                           <p className="font-semibold text-sm">
                             {item.status === 'NEEDS_MAPPING'
@@ -1429,69 +1194,245 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                               ? 'Branch routing required'
                               : item.status === 'NEEDS_REVIEW'
                               ? 'Repeat enquiry review'
-                              : 'Import failed'}
+                              : item.status === 'RESOLVED'
+                              ? 'Repeat enquiry resolved'
+                              : 'Could not add enquiry'}
                           </p>
                           <p className="text-muted-foreground">
                             {item.status === 'NEEDS_MAPPING'
                               ? 'This enquiry could not be automatically saved because the form is missing field matches for required CRM contact details.'
                               : item.status === 'NEEDS_ASSIGNMENT'
-                              ? 'The prospect’s form answer did not match any assigned branch, and no fallback branch is configured.'
+                              ? "The prospect's form answer did not match any assigned branch, and no fallback branch is configured."
                               : item.status === 'NEEDS_REVIEW'
-                              ? 'This person has enquired before. The lead was held to prevent unintentional duplicates.'
+                              ? 'This person has enquired before. The enquiry was held to prevent unintentional duplicate leads.'
+                              : item.status === 'RESOLVED'
+                              ? 'This submission was reviewed and marked as resolved. Existing CRM lead and tasks were preserved.'
                               : item.error_message || 'The enquiry could not be processed due to a validation error.'}
                           </p>
                         </div>
 
-                        {canEdit && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={retryMutation.isPending}
-                            onClick={() => retryMutation.mutate(item.id)}
-                            className="shrink-0 gap-1.5"
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            Retry import
-                          </Button>
+                        {canEdit && !isResolved && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={retryMutation.isPending || resolveMutation.isPending}
+                              onClick={() => retryMutation.mutate(item.id)}
+                              className="shrink-0 gap-1.5"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Retry enquiry
+                            </Button>
+
+                            {item.status === 'NEEDS_REVIEW' && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                disabled={resolveMutation.isPending}
+                                onClick={() =>
+                                  setResolvingImportId(resolvingImportId === item.id ? null : item.id)
+                                }
+                                className="shrink-0 gap-1.5 bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                              >
+                                <CheckCheck className="h-3.5 w-3.5" />
+                                {resolvingImportId === item.id ? 'Cancel' : 'Resolve repeat enquiry'}
+                              </Button>
+                            )}
+                          </div>
                         )}
+                      </div>
+
+                      {/* Matching Existing Lead Details Card */}
+                      {item.matched_lead && (
+                        <div className="rounded-md border border-primary/20 bg-background/90 p-3 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-primary" />
+                              <span className="font-semibold text-foreground text-sm">
+                                Matching CRM Lead: {item.matched_lead.name}
+                              </span>
+                              {item.matched_lead.status && (
+                                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">
+                                  {item.matched_lead.status}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                window.location.href = `/crm/leads?search=${encodeURIComponent(
+                                  item.matched_lead!.id
+                                )}`;
+                              }}
+                              className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/10"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View existing lead
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                            {item.matched_lead.phone && (
+                              <span>
+                                Phone: <strong className="font-mono text-foreground">{item.matched_lead.phone}</strong>
+                              </span>
+                            )}
+                            {item.matched_lead.email && (
+                              <span>
+                                Email: <strong className="text-foreground">{item.matched_lead.email}</strong>
+                              </span>
+                            )}
+                            {item.matched_lead.created_at && (
+                              <span>
+                                Created: <strong>{new Date(item.matched_lead.created_at).toLocaleDateString()}</strong>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inline Resolution Confirmation Form */}
+                      {canEdit && resolvingImportId === item.id && (
+                        <div className="rounded-md border border-slate-300 dark:border-slate-700 bg-background p-3.5 space-y-3 shadow-xs">
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                              <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
+                              Resolution Reason
+                            </label>
+                            <p className="text-[11px] text-muted-foreground">
+                              Select or describe why this repeat enquiry is being dismissed. It will be recorded in audit history without adding new leads or tasks.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              'Duplicate enquiry already handled by sales team',
+                              'Customer contacted via phone/WhatsApp directly',
+                              'Existing active member inquiry',
+                              'Spam or invalid submission',
+                            ].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setResolveReason(preset)}
+                                className={`text-[11px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                                  resolveReason === preset
+                                    ? 'bg-primary text-primary-foreground border-primary font-medium'
+                                    : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+                                }`}
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+
+                          <Input
+                            value={resolveReason}
+                            onChange={(e) => setResolveReason(e.target.value)}
+                            placeholder="Enter custom resolution reason..."
+                            className="text-xs h-8"
+                          />
+
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={resolveMutation.isPending}
+                              onClick={() => setResolvingImportId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              disabled={resolveMutation.isPending || !resolveReason.trim()}
+                              onClick={() =>
+                                resolveMutation.mutate({ id: item.id, reason: resolveReason.trim() })
+                              }
+                              className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                            >
+                              <Check className="h-3 w-3" />
+                              {resolveMutation.isPending ? 'Resolving...' : 'Confirm Resolution'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Display Resolution Summary if Resolved */}
+                      {isResolved && item.resolution && (
+                        <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-background/80 p-3 space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-semibold text-foreground text-xs">
+                            <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Resolution Audit Details</span>
+                          </div>
+                          <p className="text-xs text-foreground">
+                            Reason: <span className="font-medium">{item.resolution.reason}</span>
+                          </p>
+                          <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
+                            <span>
+                              Resolved by: <strong className="text-foreground">{item.resolution.resolved_by_name}</strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              When:{' '}
+                              <strong>
+                                {new Date(item.resolution.resolved_at).toLocaleString([], {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })}
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              CRM lead and follow-up tasks preserved
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Readable Incoming Form Answers (replaces raw JSON) */}
+                  {item.field_data && item.field_data.length > 0 && (
+                    <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                      <span className="font-semibold text-xs text-foreground">Incoming form answers</span>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                        {item.field_data.map((f, i) => (
+                          <div key={i} className="bg-background rounded p-2 border">
+                            <span className="text-[11px] text-muted-foreground block capitalize">
+                              {f.name.replace(/_/g, ' ')}:
+                            </span>
+                            <span className="font-medium text-foreground">{f.values?.join(', ') || '—'}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Protected Technical Details (gated on canEdit) */}
+                  {/* Restricted Support Diagnostics (gated on canEdit) */}
                   {canEdit && (
                     <details className="text-xs text-muted-foreground pt-1 border-t group">
                       <summary className="cursor-pointer hover:text-foreground font-medium inline-flex items-center gap-1 select-none">
-                        <span>Technical payload details</span>
+                        <span>Support diagnostics</span>
                         <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="grid gap-3 md:grid-cols-2 pt-2.5">
-                        <div className="rounded border bg-muted/20 p-2.5 space-y-1">
-                          <span className="font-semibold text-foreground text-[11px]">
-                            Form Answers Received:
-                          </span>
-                          <pre className="overflow-x-auto text-[11px] p-2 bg-background rounded border font-mono">
-                            {JSON.stringify(item.field_data || [], null, 2)}
-                          </pre>
+                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 pt-2.5 text-[11px]">
+                        <div className="rounded border bg-muted/20 p-2">
+                          <span className="text-muted-foreground block">Form ID:</span>
+                          <code className="font-mono text-foreground font-medium">{item.form_id || '—'}</code>
                         </div>
-                        <div className="rounded border bg-muted/20 p-2.5 space-y-1">
-                          <span className="font-semibold text-foreground text-[11px]">
-                            Attribution & Processing Metadata:
-                          </span>
-                          <pre className="overflow-x-auto text-[11px] p-2 bg-background rounded border font-mono">
-                            {JSON.stringify(
-                              {
-                                external_lead_id: item.external_lead_id,
-                                page_id: item.page_id,
-                                form_id: item.form_id,
-                                campaign_name: item.campaign_name,
-                                ad_name: item.ad_name,
-                                error_code: item.error_code,
-                              },
-                              null,
-                              2
-                            )}
-                          </pre>
+                        <div className="rounded border bg-muted/20 p-2">
+                          <span className="text-muted-foreground block">Page ID:</span>
+                          <code className="font-mono text-foreground font-medium">{item.page_id || '—'}</code>
+                        </div>
+                        <div className="rounded border bg-muted/20 p-2">
+                          <span className="text-muted-foreground block">Campaign:</span>
+                          <span className="text-foreground font-medium">{item.campaign_name || 'Direct / None'}</span>
+                        </div>
+                        <div className="rounded border bg-muted/20 p-2">
+                          <span className="text-muted-foreground block">Delivery Status:</span>
+                          <span className="text-foreground font-medium">{item.status}</span>
                         </div>
                       </div>
                     </details>
@@ -1530,9 +1471,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         )}
       </section>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 6. Facebook Connection Modal                                        */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 6. Facebook Connection Modal */}
       {showConnectModal && (
         <MetaOAuthModal
           onClose={() => setShowConnectModal(false)}
@@ -1543,9 +1482,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         />
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 7. Mapping History Modal                                            */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 7. Mapping History Modal */}
       {historyMapping && (
         <MappingHistoryModal
           mapping={historyMapping}
@@ -1556,9 +1493,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-// ===========================================================================
-// Mapping Editor Form (4 Sections with Question Labels)
-// ===========================================================================
+
 function MappingEditor({
   mapping,
   metadata,

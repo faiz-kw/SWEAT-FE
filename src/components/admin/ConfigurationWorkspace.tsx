@@ -1,5 +1,7 @@
 import * as React from "react";
-import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw } from "lucide-react";
+import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle } from "lucide-react";
+import { crmApi } from "@/api/endpoints/crmApi";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 import { PageHeader, PageBody } from "@/components/enterprise/Page";
@@ -31,20 +33,71 @@ export function ConfigurationWorkspace() {
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle">("general");
+  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle" | "payment">("general");
+  const [paymentPolicy, setPaymentPolicy] = React.useState<any>({
+    payment_methods: {
+      staff_cash_enabled: true,
+      staff_razorpay_enabled: true,
+      member_razorpay_enabled: true,
+    },
+    razorpay_methods: {
+      upi: true,
+      card: true,
+      emi: true,
+      netbanking: true,
+      wallet: true,
+      paylater: false,
+    },
+    cash_policy: {
+      require_approval: true,
+      no_self_approval: true,
+      approval_required_for_success: true,
+      approval_required_for_activation: true,
+      allowed_recorder_roles: ['ADMIN', 'MANAGER', 'SALES_REP', 'CASHIER'],
+      allowed_approver_roles: ['ADMIN', 'MANAGER', 'FINANCE'],
+    },
+    partial_payment_policy: {
+      enabled: true,
+      min_first_payment_type: 'PERCENTAGE',
+      min_first_payment_percentage: '30.00',
+      min_first_payment_amount: '1000.00',
+      max_installments: 3,
+      min_installment_amount: '500.00',
+      balance_due_days: 30,
+      activation_rule: 'FULL_PAYMENT_ONLY',
+      allow_booking_with_outstanding_balance: false,
+      overdue_grace_days: 7,
+    },
+  });
 
   React.useEffect(() => {
     fetchTenantSettingsApi()
       .then((data) => setSettings(data))
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    crmApi.getPaymentPolicy()
+      .then((data) => {
+        if (data && typeof data === 'object') {
+          setPaymentPolicy((prev: any) => ({
+            ...prev,
+            ...data,
+            payment_methods: { ...prev.payment_methods, ...(data.payment_methods || {}) },
+            razorpay_methods: { ...prev.razorpay_methods, ...(data.razorpay_methods || {}) },
+            cash_policy: { ...prev.cash_policy, ...(data.cash_policy || {}) },
+            partial_payment_policy: { ...prev.partial_payment_policy, ...(data.partial_payment_policy || {}) },
+          }));
+        }
+      })
+      .catch((err) => console.error("Failed to load payment policy", err));
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await updateTenantSettingsApi(settings);
-      toast.success("Business configuration & policy settings updated successfully!");
+      await crmApi.updatePaymentPolicy(paymentPolicy);
+      toast.success("Business configuration & payment policies saved successfully!");
     } catch (err: any) {
       toast.error(err?.message || "Failed to update configuration");
     } finally {
@@ -77,6 +130,7 @@ export function ConfigurationWorkspace() {
             { id: "billing", label: "Tax & GST Billing", icon: Receipt },
             { id: "booking", label: "Booking & Cancellation Policies", icon: Settings },
             { id: "lifecycle", label: "Membership Lifecycle & Freeze", icon: ShieldAlert },
+            { id: "payment", label: "Payment & Checkout Policy", icon: CreditCard },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -253,6 +307,267 @@ export function ConfigurationWorkspace() {
                   />
                   <p className="text-xs text-muted-foreground">Days after expiry before turnstile access is automatically locked.</p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* PAYMENT & CHECKOUT POLICY TAB */}
+          {activeTab === "payment" && (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* SECTION 1: CASH PAYMENT & OUTLET COLLECTION */}
+              <div className="rounded-xl border border-border/70 p-5 bg-card/60 space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-border/40 pb-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Banknote className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base text-foreground">Cash Payment & Outlet Collection Policy</h3>
+                    <p className="text-xs text-muted-foreground">Manage physical cash collections by staff at SWEAT fitness outlets.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="flex items-center justify-between p-3.5 rounded-lg border border-border/60 bg-background">
+                    <div>
+                      <Label className="text-sm font-medium text-foreground">Cash Payment for Staff / Outlets</Label>
+                      <p className="text-xs text-muted-foreground">Allow authorized centre staff to record cash transactions</p>
+                    </div>
+                    <Switch
+                      checked={paymentPolicy.payment_methods?.staff_cash_enabled ?? true}
+                      onCheckedChange={(val) => setPaymentPolicy((prev: any) => ({
+                        ...prev,
+                        payment_methods: { ...prev.payment_methods, staff_cash_enabled: val }
+                      }))}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5 rounded-lg border border-border/60 bg-background">
+                    <div>
+                      <Label className="text-sm font-medium text-foreground">Require Manager Cash Approval</Label>
+                      <p className="text-xs text-muted-foreground">Cash transactions require separate authorized approval (Default: ON)</p>
+                    </div>
+                    <Switch
+                      checked={paymentPolicy.cash_policy?.require_approval ?? true}
+                      onCheckedChange={(val) => setPaymentPolicy((prev: any) => ({
+                        ...prev,
+                        cash_policy: { ...prev.cash_policy, require_approval: val }
+                      }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Segregation of Duties Notice */}
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+                  <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <span className="font-semibold">Segregation of Duties Enforced:</span> Staff recording cash cannot approve their own requests. Approvals require an authorized manager or finance role with audit rationale recorded on rejection.
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: ONLINE PAYMENT METHODS (RAZORPAY) */}
+              <div className="rounded-xl border border-border/70 p-5 bg-card/60 space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-border/40 pb-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    <CreditCard className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base text-foreground">Online Payment Methods (Razorpay Checkout)</h3>
+                    <p className="text-xs text-muted-foreground">Select customer payment methods enabled on Razorpay Standard Checkout for SWEAT.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
+                  {[
+                    { key: "upi", label: "UPI", desc: "Google Pay, PhonePe, Paytm, QR", icon: Smartphone },
+                    { key: "card", label: "Cards", desc: "Visa, Mastercard, RuPay, Amex", icon: CreditCard },
+                    { key: "emi", label: "EMI", desc: "Credit / Debit Card EMIs", icon: Receipt },
+                    { key: "netbanking", label: "Netbanking", desc: "All major Indian retail banks", icon: Landmark },
+                    { key: "wallet", label: "Wallet", desc: "Paytm, Mobikwik, Freecharge", icon: Wallet },
+                    { key: "paylater", label: "Pay Later", desc: "BNPL (Disabled by SWEAT policy)", icon: AlertCircle },
+                  ].map((m) => {
+                    const isChecked = paymentPolicy.razorpay_methods?.[m.key] ?? (m.key !== "paylater");
+                    const Icon = m.icon;
+                    return (
+                      <div
+                        key={m.key}
+                        onClick={() => {
+                          setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            razorpay_methods: {
+                              ...prev.razorpay_methods,
+                              [m.key]: !isChecked
+                            }
+                          }));
+                        }}
+                        className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                          isChecked
+                            ? "bg-primary/5 border-primary/40 text-foreground"
+                            : "bg-background border-border/60 text-muted-foreground opacity-70"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}} // handled by parent onClick
+                          className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary pointer-events-none"
+                        />
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-semibold">{m.label}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-1">{m.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  * Note: Selected methods reflect tenant policy. Availability on checkout also depends on merchant enablement in your Razorpay Dashboard. Pay Later is excluded by default.
+                </p>
+              </div>
+
+              {/* SECTION 3: PARTIAL PAYMENT POLICY */}
+              <div className="rounded-xl border border-border/70 p-5 bg-card/60 space-y-4">
+                <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                      <Receipt className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-base text-foreground">Partial Payment & Installment Rules</h3>
+                      <p className="text-xs text-muted-foreground">Configure multi-installment payments for Online Razorpay purchases.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={paymentPolicy.partial_payment_policy?.enabled ?? true}
+                    onCheckedChange={(val) => setPaymentPolicy((prev: any) => ({
+                      ...prev,
+                      partial_payment_policy: { ...prev.partial_payment_policy, enabled: val }
+                    }))}
+                  />
+                </div>
+
+                {paymentPolicy.partial_payment_policy?.enabled && (
+                  <div className="space-y-4 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="min_type">Minimum First Payment Type</Label>
+                        <select
+                          id="min_type"
+                          value={paymentPolicy.partial_payment_policy?.min_first_payment_type || "PERCENTAGE"}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            partial_payment_policy: { ...prev.partial_payment_policy, min_first_payment_type: e.target.value }
+                          }))}
+                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="PERCENTAGE">Percentage of Order Total (%)</option>
+                          <option value="FIXED">Fixed Amount (INR ₹)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="min_val">
+                          {paymentPolicy.partial_payment_policy?.min_first_payment_type === "FIXED"
+                            ? "Minimum First Payment Amount (₹)"
+                            : "Minimum First Payment Percentage (%)"}
+                        </Label>
+                        <Input
+                          id="min_val"
+                          type="number"
+                          value={
+                            paymentPolicy.partial_payment_policy?.min_first_payment_type === "FIXED"
+                              ? (paymentPolicy.partial_payment_policy?.min_first_payment_amount || 1000)
+                              : (paymentPolicy.partial_payment_policy?.min_first_payment_percentage || 30)
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPaymentPolicy((prev: any) => ({
+                              ...prev,
+                              partial_payment_policy: {
+                                ...prev.partial_payment_policy,
+                                ...(prev.partial_payment_policy?.min_first_payment_type === "FIXED"
+                                  ? { min_first_payment_amount: val }
+                                  : { min_first_payment_percentage: val })
+                              }
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="max_inst">Maximum Allowed Installments</Label>
+                        <Input
+                          id="max_inst"
+                          type="number"
+                          value={paymentPolicy.partial_payment_policy?.max_installments || 3}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            partial_payment_policy: { ...prev.partial_payment_policy, max_installments: Number(e.target.value) }
+                          }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="min_inst_amt">Minimum Subsequent Installment (₹)</Label>
+                        <Input
+                          id="min_inst_amt"
+                          type="number"
+                          value={paymentPolicy.partial_payment_policy?.min_installment_amount || 500}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            partial_payment_policy: { ...prev.partial_payment_policy, min_installment_amount: e.target.value }
+                          }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="act_rule">Membership Activation Condition</Label>
+                        <select
+                          id="act_rule"
+                          value={paymentPolicy.partial_payment_policy?.activation_rule || "FULL_PAYMENT_ONLY"}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            partial_payment_policy: { ...prev.partial_payment_policy, activation_rule: e.target.value }
+                          }))}
+                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="FULL_PAYMENT_ONLY">Activate only upon FULL 100% payment</option>
+                          <option value="MINIMUM_PARTIAL_PAYMENT">Activate immediately once minimum payment is paid</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="balance_due">Balance Due Window (Days)</Label>
+                        <Input
+                          id="balance_due"
+                          type="number"
+                          value={paymentPolicy.partial_payment_policy?.balance_due_days || 30}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            partial_payment_policy: { ...prev.partial_payment_policy, balance_due_days: Number(e.target.value) }
+                          }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3.5 rounded-lg border border-border/60 bg-background">
+                      <div>
+                        <Label className="text-sm font-medium text-foreground">Allow Workout Bookings with Outstanding Balance</Label>
+                        <p className="text-xs text-muted-foreground">Allow member to book sessions and attend while installment balance is pending</p>
+                      </div>
+                      <Switch
+                        checked={paymentPolicy.partial_payment_policy?.allow_booking_with_outstanding_balance ?? false}
+                        onCheckedChange={(val) => setPaymentPolicy((prev: any) => ({
+                          ...prev,
+                          partial_payment_policy: { ...prev.partial_payment_policy, allow_booking_with_outstanding_balance: val }
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
