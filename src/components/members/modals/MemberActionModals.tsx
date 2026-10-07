@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   UserCheck,
   Receipt,
+  Download,
+  Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
@@ -1034,6 +1036,55 @@ export const InvoiceDetailModal: React.FC<{
 }> = ({ isOpen, onClose, invoice, member }) => {
   if (!invoice) return null;
 
+  const handleDownload = () => {
+    const pkgName = invoice.package_name || (invoice.order && typeof invoice.order === 'object' && invoice.order.items?.[0]?.item_name_snapshot) || 'Membership Plan Subscription';
+    const orderRef = invoice.order_number || invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.order_number) || 'ORD-CANONICAL';
+    const payRef = invoice.payment_reference || (invoice.order && typeof invoice.order === 'object' && invoice.order.payments?.[0]?.provider_transaction_id) || invoice.order_number || 'TXN-REF';
+
+    const text = [
+      '====================================================',
+      '           SWEAT FITNESS - OFFICIAL TAX INVOICE     ',
+      '====================================================',
+      `Invoice Number : ${invoice.invoice_number}`,
+      `Date           : ${new Date(invoice.issued_at || Date.now()).toLocaleDateString('en-IN')}`,
+      `Status         : ${invoice.status}`,
+      '----------------------------------------------------',
+      'MEMBER DETAILS',
+      `Name           : ${member?.name || invoice.member_name || 'Member Customer'}`,
+      `Member Ref     : ${member?.member_number || invoice.user_profile || 'N/A'}`,
+      `Branch         : ${member?.home_branch || invoice.branch_name || 'Main Branch'}`,
+      `Phone          : ${member?.phone || '-'}`,
+      `Email          : ${member?.email || '-'}`,
+      '----------------------------------------------------',
+      'ORDER & PAYMENT',
+      `Order Ref      : ${orderRef}`,
+      `Package        : ${pkgName}`,
+      `Payment Ref    : ${payRef}`,
+      '----------------------------------------------------',
+      'FINANCIAL SUMMARY',
+      `Subtotal       : INR ${Number(invoice.subtotal || invoice.total_amount).toFixed(2)}`,
+      `Discount       : INR ${Number(invoice.discount_amount || 0).toFixed(2)}`,
+      `Tax / GST (18%): INR ${Number(invoice.tax_amount || 0).toFixed(2)}`,
+      '----------------------------------------------------',
+      `TOTAL PAID     : INR ${Number(invoice.total_amount).toFixed(2)}`,
+      '====================================================',
+    ].join('\n');
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Invoice-${invoice.invoice_number}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const pkgName = invoice.package_name || (invoice.order && typeof invoice.order === 'object' && invoice.order.items?.[0]?.item_name_snapshot) || 'Membership Plan Subscription';
+  const orderRef = invoice.order_number || invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.order_number) || 'ORD-CANONICAL';
+  const payRef = invoice.payment_reference || (invoice.order && typeof invoice.order === 'object' && invoice.order.payments?.[0]?.provider_transaction_id) || invoice.order_number || 'TXN-REF';
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
@@ -1078,8 +1129,9 @@ export const InvoiceDetailModal: React.FC<{
               <tbody className="divide-y divide-border">
                 <tr>
                   <td className="p-2.5">
-                    <span className="font-semibold text-foreground">Membership Plan Subscription</span>
-                    <div className="text-[10px] text-muted-foreground">Order Ref: {invoice.order_id || 'Canonical Order'}</div>
+                    <span id="invoice-package-name" className="font-semibold text-foreground">{pkgName}</span>
+                    <div id="invoice-order-ref" className="text-[10px] text-muted-foreground font-mono">Order Ref: {orderRef}</div>
+                    <div id="invoice-payment-ref" className="text-[10px] text-muted-foreground font-mono">Payment Ref: {payRef}</div>
                   </td>
                   <td className="p-2.5 text-right font-medium">₹{Number(invoice.subtotal || invoice.total_amount).toLocaleString()}</td>
                 </tr>
@@ -1108,8 +1160,11 @@ export const InvoiceDetailModal: React.FC<{
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button onClick={() => window.print()} className="bg-primary text-primary-foreground">
-            Print Invoice
+          <Button id="btn-download-invoice" variant="outline" onClick={handleDownload} className="gap-1.5">
+            <Download className="w-4 h-4" /> Download
+          </Button>
+          <Button id="btn-print-invoice" onClick={() => window.print()} className="bg-primary text-primary-foreground gap-1.5">
+            <Printer className="w-4 h-4" /> Print Invoice
           </Button>
         </DialogFooter>
       </DialogContent>

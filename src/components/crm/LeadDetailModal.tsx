@@ -771,14 +771,21 @@ export function LeadDetailModal({
   return (
     <Dialog
       open={open}
+      modal={!conversionWizardOpen}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && (conversionWizardOpen || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]'))) {
+        if (!nextOpen && conversionWizardOpen) {
           return;
         }
         onOpenChange(nextOpen);
       }}
     >
       <DialogContent
+          onClose={() => {
+            const rzp = document.querySelector('.razorpay-container');
+            if (rzp) rzp.remove();
+            setConversionWizardOpen(false);
+            onOpenChange(false);
+          }}
           onPointerDownOutside={(e) => {
             e.preventDefault();
           }}
@@ -786,7 +793,7 @@ export function LeadDetailModal({
             e.preventDefault();
           }}
           onEscapeKeyDown={(e) => {
-            if (conversionWizardOpen || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]')) {
+            if (conversionWizardOpen) {
               e.preventDefault();
             }
           }}
@@ -1031,18 +1038,7 @@ export function LeadDetailModal({
             );
           })()}
 
-          {/* Conversion Wizard */}
-          {currentLead && conversionWizardOpen && (
-            <ConversionWizard
-              lead={currentLead}
-              open={conversionWizardOpen}
-              onOpenChange={setConversionWizardOpen}
-              onConverted={() => {
-                queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead.id] });
-                queryClient.invalidateQueries({ queryKey: ['leads'] });
-              }}
-            />
-          )}
+
 
           {/* CONSOLIDATED 6-TAB BAR */}
           <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pt-1 -mb-1 border-t border-border/40">
@@ -3660,6 +3656,19 @@ export function LeadDetailModal({
           }}
         />
       )}
+
+          {/* Conversion Wizard */}
+          {currentLead && conversionWizardOpen && (
+            <ConversionWizard
+              lead={currentLead}
+              open={conversionWizardOpen}
+              onOpenChange={setConversionWizardOpen}
+              onConverted={() => {
+                queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead.id] });
+                queryClient.invalidateQueries({ queryKey: ['leads'] });
+              }}
+            />
+          )}
 
       {/* Cancel Trial Dialog */}
       {cancellingTrialId && (

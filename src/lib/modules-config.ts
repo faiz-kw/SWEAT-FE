@@ -33,7 +33,6 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
       { id: "/crm/trials", label: "Trial Sessions", to: "/crm/trials", description: "Free and paid workout trial booking tracker." },
       { id: "/crm/activities", label: "Sales Activities", to: "/crm/activities", description: "Calls, meetings, and sales interaction logs." },
       { id: "/crm/follow-ups", label: "Task Follow-ups", to: "/crm/follow-ups", description: "Scheduled tasks and reminders for sales reps." },
-      { id: "/crm/offers", label: "Special Offers", to: "/crm/offers", description: "Targeted promotional packages and deals." },
       { id: "/crm/coupons", label: "Discount Coupons", to: "/crm/coupons", description: "Promo code management and redemption rules." },
       { id: "/crm/setup", label: "CRM Setup", to: "/crm/setup", description: "Configurable lead sources, stage SLAs, trial reminders, and channels." },
     ],

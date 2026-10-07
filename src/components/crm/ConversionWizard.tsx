@@ -4,7 +4,7 @@
  * Theme-aware (Light & Dark), zero-mock, backend-authoritative payment & pricing.
  */
 import * as React from 'react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -963,14 +963,57 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isFetchingQuote, setIsFetchingQuote] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const rzpInstanceRef = useRef<any>(null);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
+
+  // Ensure Razorpay container and document.body maintain pointer-events auto and maximum z-index during checkout
+  useEffect(() => {
+    if (!isProcessingPayment) return;
+    const fixEvents = () => {
+      if (document.body.style.pointerEvents === 'none') {
+        document.body.style.pointerEvents = 'auto';
+      }
+      const rzp = document.querySelector('.razorpay-container') as HTMLElement | null;
+      if (rzp) {
+        rzp.style.pointerEvents = 'auto';
+        rzp.style.zIndex = '2147483647';
+        rzp.style.position = 'fixed';
+        const iframe = rzp.querySelector('iframe');
+        if (iframe) {
+          iframe.style.pointerEvents = 'auto';
+        }
+      }
+    };
+    fixEvents();
+    const obs = new MutationObserver(fixEvents);
+    obs.observe(document.body, { attributes: true, attributeFilter: ['style', 'class'], childList: true, subtree: true });
+    const interval = setInterval(fixEvents, 250);
+    return () => {
+      obs.disconnect();
+      clearInterval(interval);
+      document.body.style.pointerEvents = 'auto';
+    };
+  }, [isProcessingPayment]);
+
+  useEffect(() => {
+    return () => {
+      rzpInstanceRef.current = null;
+      const rzpContainer = document.querySelector('.razorpay-container');
+      if (rzpContainer) {
+        rzpContainer.remove();
+      }
+      document.body.style.pointerEvents = 'auto';
+    };
+  }, []);
 
   const handleCancelRazorpay = useCallback(() => {
     setIsProcessingPayment(false);
+    rzpInstanceRef.current = null;
     const rzpContainer = document.querySelector('.razorpay-container');
     if (rzpContainer) {
       rzpContainer.remove();
     }
+    document.body.style.pointerEvents = 'auto';
     toast.info('Payment was cancelled. You can retry checkout when ready.');
   }, []);
 
@@ -1189,6 +1232,12 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
             config: checkoutOrder.config,
             ...(checkoutOrder.config_id ? { config_id: checkoutOrder.config_id } : {}),
             handler: function (response: any) {
+              rzpInstanceRef.current = null;
+              const rzpContainer = document.querySelector('.razorpay-container');
+              if (rzpContainer) {
+                rzpContainer.remove();
+              }
+              document.body.style.pointerEvents = 'auto';
               const completePayload: ConversionPayload = {
                 ...payload,
                 razorpay_order_id: response.razorpay_order_id,
@@ -1211,9 +1260,19 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
             },
           };
 
+          if (rzpInstanceRef.current) {
+            return;
+          }
           const rzp = new (window as any).Razorpay(options);
+          rzpInstanceRef.current = rzp;
           rzp.on('payment.failed', function (resp: any) {
             setIsProcessingPayment(false);
+            rzpInstanceRef.current = null;
+            const rzpContainer = document.querySelector('.razorpay-container');
+            if (rzpContainer) {
+              rzpContainer.remove();
+            }
+            document.body.style.pointerEvents = 'auto';
             const desc = resp?.error?.description || 'Payment failed';
             toast.error(`Razorpay: ${desc}`);
           });
@@ -1231,7 +1290,12 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   }, [step, selectedVersionId, selectedBranchId, fetchQuote, paymentProvider, paymentAmount, quote, appliedCoupon, startDate, idempotencyKey, convertMutation]);
 
   const handleBack = () => { setError(null); setStep((s) => Math.max(1, s - 1)); };
-  const handleClose = () => onOpenChange(false);
+  const handleClose = () => {
+    if (isProcessingPayment) {
+      handleCancelRazorpay();
+    }
+    onOpenChange(false);
+  };
   const isConverting = convertMutation.isPending;
   const showSuccess = step === 5 && result;
   const notEligible = eligibility && !eligibility.eligible && lead.current_status === 'CONVERTED';
@@ -1239,23 +1303,24 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   return (
     <Dialog
       open={open}
+      modal={!isProcessingPayment}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && (isProcessingPayment || document.querySelector('.razorpay-container') || document.querySelector('iframe[src*="razorpay"]'))) {
-          return;
+        if (!nextOpen && isProcessingPayment) {
+          handleCancelRazorpay();
         }
         onOpenChange(nextOpen);
       }}
     >
-              <DialogContent
+        <DialogContent
+          onClose={handleClose}
           onPointerDownOutside={(e) => {
-            e.preventDefault();
+            if (isProcessingPayment) e.preventDefault();
           }}
           onInteractOutside={(e) => {
-            e.preventDefault();
+            if (isProcessingPayment) e.preventDefault();
           }}
           onEscapeKeyDown={(e) => {
-            // Prevent escape key from closing the wizard while processing or during payment
-            e.preventDefault();
+            if (isProcessingPayment) e.preventDefault();
           }}
           className="w-[96vw] max-w-lg sm:max-w-xl md:max-w-2xl h-[calc(100dvh-2rem)] sm:h-auto max-h-[calc(100dvh-2.5rem)] sm:max-h-[min(88vh,720px)] flex flex-col p-0 gap-0 overflow-hidden bg-background text-foreground border border-border shadow-2xl rounded-2xl"
         >
@@ -1404,19 +1469,7 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
           </div>
         )}
       </DialogContent>
-      {typeof document !== 'undefined' && isProcessingPayment && createPortal(
-        <div className="fixed top-4 right-4 z-[2147483648] flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-          <button
-            type="button"
-            onClick={handleCancelRazorpay}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-950/95 hover:bg-slate-900 text-white text-xs font-bold shadow-2xl border border-white/20 backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 ring-2 ring-black/40"
-          >
-            <X className="w-4 h-4 text-rose-400" />
-            <span>Cancel & Close</span>
-          </button>
-        </div>,
-        document.body
-      )}
+
     </Dialog>
   );
 }

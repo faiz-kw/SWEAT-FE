@@ -32,6 +32,7 @@ import {
   Refund,
 } from '../../types/commerce';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
+import { InvoiceDetailModal } from '@/components/members/modals/MemberActionModals';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -67,6 +68,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
 
   const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [paymentSubView, setPaymentSubView] = useState<'all' | 'cash_report'>('all');
   const [cashReportDate, setCashReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -552,10 +554,17 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <span className="text-[11px] text-muted-foreground">GST Tax Snapshot</span>
                       <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
                         <CheckCircle2 className="size-3.5" /> Immutable
                       </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5 btn-view-invoice"
+                        onClick={() => setSelectedInvoice(inv)}
+                      >
+                        <Receipt className="size-3.5" /> View & Print
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -1578,6 +1587,22 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedInvoice && (
+        <InvoiceDetailModal
+          isOpen={Boolean(selectedInvoice)}
+          onClose={() => setSelectedInvoice(null)}
+          invoice={selectedInvoice}
+          member={{
+            id: selectedInvoice.user_profile,
+            name: selectedInvoice.member_name || 'Member Customer',
+            member_number: selectedInvoice.user_profile ? String(selectedInvoice.user_profile).substring(0, 8) : 'MEM-001',
+            home_branch: selectedInvoice.branch_name || 'SWEAT Main',
+            phone: '+91 98765 43210',
+            email: 'member@sweat.com',
+          } as any}
+        />
+      )}
     </div>
   );
 };

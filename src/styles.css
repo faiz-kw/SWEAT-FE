@@ -245,3 +245,31 @@
     box-shadow: 0 0 20px -3px oklch(0.65 0.16 175 / 20%);
   }
 }
+
+/* Sonner Toaster pointer events & stacking when modal dialogs lock document.body */
+section[aria-label*="Notifications"] {
+  pointer-events: none !important;
+}
+
+[data-sonner-toaster] {
+  pointer-events: none !important;
+  z-index: 999999 !important;
+}
+
+[data-sonner-toast] {
+  pointer-events: auto !important;
+}
+
+[data-sonner-toast][data-visible="false"] {
+  pointer-events: none !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 50 !important;
+}
+
+[data-sonner-toast] button {
+  pointer-events: auto !important;
+}

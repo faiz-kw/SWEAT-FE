@@ -51,6 +51,7 @@ export function ConfigurationWorkspace() {
     cash_policy: {
       require_approval: true,
       no_self_approval: true,
+      provisional_sessions_allowed: 4,
       approval_required_for_success: true,
       approval_required_for_activation: true,
       allowed_recorder_roles: ['ADMIN', 'MANAGER', 'SALES_REP', 'CASHIER'],
@@ -354,6 +355,27 @@ export function ConfigurationWorkspace() {
                       }))}
                     />
                   </div>
+
+                    <div className="p-3.5 rounded-lg border border-border/60 bg-background space-y-2 sm:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="provisional_sessions_allowed" className="text-sm font-medium text-foreground">Cash Provisional Session Limit</Label>
+                          <p className="text-xs text-muted-foreground">Provisional sessions allowed to member before manager approves cash collection</p>
+                        </div>
+                        <Input
+                          id="provisional_sessions_allowed"
+                          type="number"
+                          min={0}
+                          max={50}
+                          className="w-24 text-right"
+                          value={paymentPolicy.cash_policy?.provisional_sessions_allowed ?? 4}
+                          onChange={(e) => setPaymentPolicy((prev: any) => ({
+                            ...prev,
+                            cash_policy: { ...prev.cash_policy, provisional_sessions_allowed: Number(e.target.value) }
+                          }))}
+                        />
+                      </div>
+                    </div>
                 </div>
 
                 {/* Segregation of Duties Notice */}
