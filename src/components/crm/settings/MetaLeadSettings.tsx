@@ -182,6 +182,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         const err = p.get('meta_error') || 'Authorization Error';
         const desc = p.get('meta_desc') || '';
         toast.error(`Facebook connection failed: ${err}${desc ? ` - ${desc}` : ''}`);
+        setShowConnectModal(false);
+        client.invalidateQueries({ queryKey: queryKeyBase });
         window.history.replaceState({}, '', window.location.pathname + '?tab=meta');
       }
     }
@@ -336,10 +338,12 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const hasConnectPermission = canEdit;
   const canConnect = isPlatformConfigured && hasConnectPermission;
 
-  const isConnectionActive =
-    (meta.is_connected ??
-      (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED')) &&
-    meta.connection_status !== 'TOKEN_EXPIRED';
+  const isConnectionActive = Boolean(
+    meta.is_connected &&
+      (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED') &&
+      !meta.is_synthetic &&
+      meta.connection_status !== 'TOKEN_EXPIRED'
+  );
   const isConnectionAttention = meta.connection_status === 'TOKEN_EXPIRED';
   const hasActiveForms = allMappings.some((m) => m.is_active);
   const hasReceivedEnquiries = allImports.some((i) => i.status === 'IMPORTED');
@@ -1664,6 +1668,16 @@ function MappingEditor({
       return;
     }
 
+    if (!pageId.trim() || !/^\d+$/.test(pageId.trim())) {
+      toast.error('Facebook Page ID must contain digits only.');
+      return;
+    }
+
+    if (!formId.trim() || !/^\d+$/.test(formId.trim())) {
+      toast.error('Facebook Form ID must contain digits only.');
+      return;
+    }
+
     const payload: MappingInput = {
       name: name.trim(),
       page_id: pageId.trim(),
@@ -1796,8 +1810,10 @@ function MappingEditor({
             ) : (
               <Input
                 value={pageId}
-                onChange={(e) => setPageId(e.target.value)}
-                placeholder="Enter Facebook Page ID"
+                onChange={(e) => setPageId(e.target.value.replace(/\D/g, ''))}
+                placeholder="Enter Facebook Page ID (digits only)"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 required
               />
             )}
@@ -1822,8 +1838,10 @@ function MappingEditor({
             ) : (
               <Input
                 value={formId}
-                onChange={(e) => setFormId(e.target.value)}
-                placeholder="Enter Facebook Form ID"
+                onChange={(e) => setFormId(e.target.value.replace(/\D/g, ''))}
+                placeholder="Enter Facebook Form ID (digits only)"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 required
               />
             )}

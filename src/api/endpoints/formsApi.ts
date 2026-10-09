@@ -1,4 +1,4 @@
-import { api } from '../client';
+﻿import { api } from '../client';
 
 export interface IntakeQuestionOption {
   id: string;
@@ -33,9 +33,29 @@ export interface IntakeForm {
   effective_from?: string;
   effective_until?: string | null;
   status: 'DRAFT' | 'ACTIVE' | 'RETIRED';
+  agreement_title?: string;
+  agreement_text?: string;
+  is_required_for_purchase?: boolean;
+  requires_explicit_consent?: boolean;
+  reassessment_days?: number;
+  is_default_for_all_programs?: boolean;
+  assigned_programs?: string[];
   questions?: IntakeQuestion[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ApplicableParqResponse {
+  configured: boolean;
+  form: IntakeForm | null;
+  is_reusable: boolean;
+  requires_completion: boolean;
+  reassessment_days: number;
+  agreement_title: string;
+  agreement_text: string;
+  requires_explicit_consent: boolean;
+  existing_submission: any;
+  message?: string;
 }
 
 export const formsApi = {
@@ -90,5 +110,34 @@ export const formsApi = {
 
   deleteOption: async (id: string): Promise<void> => {
     await api.delete(`/tenant/intake-question-options/${id}/`);
+  },
+
+  getApplicableParq: async (params?: { program_id?: string; lead_id?: string; user_profile_id?: string }): Promise<ApplicableParqResponse> => {
+    const res = await api.get('/tenant/intake-forms/applicable-parq/', { params });
+    return res.data;
+  },
+
+  submitPurchaseParq: async (formId: string, data: {
+    answers: Array<{
+      question_id: string;
+      text_value?: string;
+      numeric_value?: number;
+      boolean_value?: boolean;
+      date_value?: string;
+      json_value?: any;
+    }>;
+    lead_id?: string;
+    user_profile_id?: string;
+    program_id?: string;
+    order_id?: string;
+    agreement_accepted: boolean;
+    agreement_text_snapshot?: string;
+    accepted_by_name?: string;
+    signer_type?: string;
+    channel?: string;
+    idempotency_key?: string;
+  }): Promise<any> => {
+    const res = await api.post(`/tenant/intake-forms/${formId}/submit-purchase/`, data);
+    return res.data;
   },
 };

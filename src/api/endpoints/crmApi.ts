@@ -831,6 +831,7 @@ export const crmApi = {
       is_partial_payment?: boolean;
       partial_amount?: string | number;
       channel?: string;
+      parq_submission_id?: string;
     }
   ): Promise<import('@/types/crm').CheckoutOrderResponse> => {
     const res = await api.post<import('@/types/crm').CheckoutOrderResponse>(

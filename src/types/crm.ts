@@ -1112,6 +1112,7 @@ export interface ConversionPayload {
   order_id?: string;
   is_partial_payment?: boolean;
   channel?: 'STAFF' | 'MEMBER_PORTAL' | 'MEMBER_APP';
+  parq_submission_id?: string;
 }
 
 export interface ConversionResult {

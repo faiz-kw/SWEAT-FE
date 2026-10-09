@@ -8,6 +8,9 @@ import {
   MembershipRenewalPolicy,
   MembershipChangePolicy,
   MembershipChangeRequest,
+  MembershipBranchHistory,
+  ParqRequirementResponse,
+  SignParqPayload,
 } from '../types/memberships';
 
 export const membershipsApi = {
@@ -118,5 +121,29 @@ export const membershipsApi = {
   getChangeRequests: async (params?: { membership_id?: string }): Promise<MembershipChangeRequest[]> => {
     const res = await api.get('/tenant/membership-change-requests/', { params });
     return res.data.results || res.data;
+  },
+
+  getBranchHistories: async (params?: {
+    membership_id?: string;
+    branch_id?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{ count: number; total_pages: number; next: string | null; previous: string | null; results: MembershipBranchHistory[] }> => {
+    const res = await api.get('/tenant/membership-branch-histories/', { params });
+    if (res.data && typeof res.data === 'object' && 'results' in res.data) {
+      return res.data;
+    }
+    const arr: MembershipBranchHistory[] = Array.isArray(res.data) ? res.data : [];
+    return { count: arr.length, total_pages: 1, next: null, previous: null, results: arr };
+  },
+  getParqRequirement: async (membershipId: string): Promise<ParqRequirementResponse> => {
+    const res = await api.get(`/tenant/memberships/${membershipId}/parq-requirement/`);
+    return res.data;
+  },
+
+  signParq: async (membershipId: string, payload: SignParqPayload): Promise<{ success: boolean; message: string; parq_status: string; membership_id: string; submission_id: string }> => {
+    const res = await api.post(`/tenant/memberships/${membershipId}/sign-parq/`, payload);
+    return res.data;
   },
 };

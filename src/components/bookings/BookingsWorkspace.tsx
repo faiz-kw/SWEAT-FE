@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Shield,
   Layers,
+  PenTool,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatOccurrenceDateTime, formatTime12h, formatOccurrenceDate } from '@/utils/dateTimeUtils';
@@ -54,6 +55,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 import { BookTrialModal } from '../crm/BookTrialModal';
+import { MemberParqSigningModal } from '../members/modals/MemberParqSigningModal';
 
 interface BookingsWorkspaceProps {
   initialTab?: 'bookings' | 'waitlist' | 'policies';
@@ -103,6 +105,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [createBookingType, setCreateBookingType] = useState<BookingType>('MEMBER');
   const [createBookingSource, setCreateBookingSource] = useState<BookingSource>('FRONT_DESK');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [parqModalMembershipId, setParqModalMembershipId] = useState<string | null>(null);
 
   // Form states for Policy Configuration
   const [policyForm, setPolicyForm] = useState<Partial<BookingPolicySet>>({
@@ -214,6 +217,15 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
       setCreateError(null);
     },
     onError: (err: any) => {
+      const data = err?.response?.data;
+      if (data?.code === 'PARQ_REQUIRED' || data?.code === 'PARQ_CONFIG_ERROR') {
+        const memId = data?.membership_id || selectedMembershipId;
+        setCreateError(data?.detail || data?.error || 'A completed and digitally signed PAR-Q is required before booking classes.');
+        if (memId) {
+          setParqModalMembershipId(memId);
+        }
+        return;
+      }
       const msg = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Failed to create booking.';
       setCreateError(typeof msg === 'object' ? JSON.stringify(msg) : String(msg));
     },
@@ -1030,9 +1042,22 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
 
           <div className="space-y-4 py-2 text-xs sm:text-sm">
             {createError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs rounded-lg flex items-start gap-2">
-                <AlertTriangle className="size-4 shrink-0 mt-0.5" />
-                <div>{createError}</div>
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs rounded-lg space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+                  <div>{createError}</div>
+                </div>
+                {parqModalMembershipId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setParqModalMembershipId(parqModalMembershipId)}
+                    className="w-full h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm mt-1"
+                  >
+                    <PenTool className="size-3.5" />
+                    <span>Complete & Sign PAR-Q Now</span>
+                  </Button>
+                )}
               </div>
             )}
 
@@ -1969,6 +1994,20 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* MEMBER PAR-Q SIGNING MODAL */}
+      {parqModalMembershipId && (
+        <MemberParqSigningModal
+          open={!!parqModalMembershipId}
+          onOpenChange={(op) => !op && setParqModalMembershipId(null)}
+          membershipId={parqModalMembershipId}
+          onSuccess={() => {
+            setCreateError(null);
+            queryClient.invalidateQueries({ queryKey: ['member-memberships'] });
+            toast.info('PAR-Q digitally signed! You may now confirm your class reservation.');
+          }}
+        />
+      )}
 
       {/* TRIAL RESCHEDULE MODAL */}
       <BookTrialModal

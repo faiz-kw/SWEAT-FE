@@ -1,3 +1,4 @@
+import { MemberParqSigningModal } from './modals/MemberParqSigningModal';
 /**
  * src/components/members/Member360Workspace.tsx — Authoritative Member 360 Workspace
  * Production implementation with 6 clean sections:
@@ -51,6 +52,7 @@ import {
   Layers,
   Sparkles,
   ShieldCheck,
+  PenTool,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
@@ -83,6 +85,7 @@ import {
   InvoiceDetailModal,
   AdjustEntitlementModal,
   CollectPaymentModal,
+  CheckInModal,
 } from './modals/MemberActionModals';
 
 interface Member360WorkspaceProps {
@@ -192,7 +195,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     );
   }
 
-  const { member, header, overview, timeline, memberships, passbook, bookings_and_attendance, finance, health_and_forms } =
+  const { member, header, overview, timeline, memberships, passbook, bookings_and_attendance, finance, health_and_forms, par_q_form } =
     data360;
 
   // Status Badge Helper
@@ -228,8 +231,6 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   const handleActionClick = (action: MembershipLifecycleAction) => {
     if (action === 'UNFREEZE') {
       unfreezeMutation.mutate();
-    } else if (action === 'CHECK_IN') {
-      checkInMutation.mutate();
     } else {
       setActiveModal(action);
     }
@@ -488,9 +489,9 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
               { key: 'finance', label: 'Finance', icon: CreditCard },
               {
                 key: 'health',
-                label: 'Health & Forms',
+                label: 'PAR-Q Form',
                 icon: HeartPulse,
-                count: health_and_forms.submissions.length,
+                count: (par_q_form?.submissions || health_and_forms?.submissions || []).length,
               },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -787,7 +788,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         {activeTab === 'bookings' && (
           <MemberBookingsSection
             bookingsData={bookings_and_attendance}
-            onCheckIn={() => checkInMutation.mutate()}
+            onCheckIn={() => setActiveModal('CHECK_IN')}
             isCheckingIn={checkInMutation.isPending}
           />
         )}
@@ -804,10 +805,14 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         )}
 
         {/* ------------------------------------------------------------------- */}
-        {/* TAB 6: HEALTH & FORMS */}
+        {/* TAB 6: PAR-Q FORM */}
         {/* ------------------------------------------------------------------- */}
         {activeTab === 'health' && (
-          <MemberHealthFormsSection submissions={health_and_forms.submissions} />
+          <MemberHealthFormsSection
+            requirements={par_q_form?.requirements || []}
+            submissions={par_q_form?.submissions || health_and_forms?.submissions || []}
+            onRefresh={() => refetch()}
+          />
         )}
       </div>
 
@@ -880,6 +885,14 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
 
       {activeModal === 'COLLECT_PAYMENT' && (
         <CollectPaymentModal
+          isOpen={true}
+          onClose={() => setActiveModal(null)}
+          member={member}
+        />
+      )}
+
+      {activeModal === 'CHECK_IN' && (
+        <CheckInModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={member}
@@ -1687,90 +1700,353 @@ const MemberFinanceSection: React.FC<{
 };
 
 // ============================================================================
-// SUB-SECTION 5: HEALTH & FORMS DYNAMIC RENDERER
+// SUB-SECTION 5: PAR-Q FORM & CONSENT SUBMISSIONS
 // ============================================================================
 const MemberHealthFormsSection: React.FC<{
+  requirements?: Array<{
+    membership_id: string;
+    membership_number: string;
+    program_name: string;
+    package_name: string;
+    membership_status: string;
+    parq_status: 'PENDING' | 'COMPLETED' | 'WAIVED';
+    parq_completed_at?: string | null;
+    form_title: string;
+    form_id?: string | null;
+    submission_id?: string | null;
+  }>;
   submissions: MemberIntakeSubmission[];
-}> = ({ submissions }) => {
+  onRefresh?: () => void;
+}> = ({ requirements = [], submissions = [], onRefresh }) => {
+  const [expandedAgreements, setExpandedAgreements] = useState<Record<string, boolean>>({});
+  const [signingMembershipId, setSigningMembershipId] = useState<string | null>(null);
+
+  const toggleAgreement = (id: string) => {
+    setExpandedAgreements((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const pendingRequirements = requirements.filter((r) => r.parq_status === 'PENDING');
+
   return (
     <div className="space-y-6">
-      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-2">
-        <h3 className="font-semibold text-base text-foreground">Health & Dynamic Intake Forms</h3>
-        <p className="text-xs text-muted-foreground">
-          Authoritative questionnaire responses including PAR-Q, medical clearances, and lifestyle assessments.
-        </p>
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <HeartPulse className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-base text-foreground">PAR-Q Form</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Physical Activity Readiness Questionnaire (PAR-Q) submissions, medical disclosures, and explicit consent agreements per purchase.
+          </p>
+        </div>
+        {onRefresh && (
+          <Button variant="outline" size="sm" onClick={onRefresh} className="gap-2 shrink-0 self-start sm:self-auto">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Submissions</span>
+          </Button>
+        )}
       </div>
 
-      <div className="space-y-6">
-        {submissions.length > 0 ? (
-          submissions.map((sub) => (
-            <div key={sub.id} className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-border gap-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-primary" />
-                  <span className="font-semibold text-foreground text-sm">{sub.form_title}</span>
+      {/* Purchase PAR-Q Requirements Status */}
+      {requirements.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+            <span>Purchase PAR-Q Entitlement Requirements</span>
+          </h4>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {requirements.map((req) => {
+              const isPending = req.parq_status === 'PENDING';
+              return (
+                <div
+                  key={req.membership_id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isPending
+                      ? 'bg-amber-500/5 border-amber-500/30'
+                      : 'bg-card border-border/80'
+                  } space-y-3`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-foreground">
+                          {req.program_name} • {req.package_name}
+                        </span>
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground mt-0.5">
+                        {req.membership_number} ({req.membership_status})
+                      </p>
+                    </div>
+
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${
+                        isPending
+                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                          : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      }`}
+                    >
+                      {isPending ? 'PAR-Q PENDING' : 'COMPLETED'}
+                    </Badge>
+                  </div>
+
+                  <div className="text-xs flex items-center justify-between text-muted-foreground pt-1 border-t border-border/60">
+                    <span>Form: {req.form_title}</span>
+                    {isPending ? (
+                      <span className="text-amber-500 font-medium">Class Booking Blocked</span>
+                    ) : (
+                      <span className="text-emerald-500 font-medium">Cleared for Booking</span>
+                    )}
+                  </div>
+
+                  {isPending && (
+                    <Button
+                      size="sm"
+                      onClick={() => setSigningMembershipId(req.membership_id)}
+                      className="w-full h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm"
+                    >
+                      <PenTool className="w-3.5 h-3.5" />
+                      <span>Member Sign PAR-Q Now</span>
+                    </Button>
+                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Submitted: {new Date(sub.submitted_at).toLocaleString()}
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Historical Submissions List */}
+      <div className="space-y-6">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5 text-primary" />
+          <span>Signed Submission Records ({submissions.length})</span>
+        </h4>
+
+        {submissions.length > 0 ? (
+          submissions.map((sub, sIdx) => {
+            const isLatest = sIdx === 0;
+            const hasAgreement = !!sub.agreement_text_snapshot;
+            const isAgreementExpanded = !!expandedAgreements[sub.id];
+
+            return (
+              <div key={sub.id} className="bg-card border border-border rounded-xl p-5 sm:p-6 shadow-sm space-y-5">
+                {/* Header with Title, Badges, and Date */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-border gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <span className="font-semibold text-foreground text-sm sm:text-base">
+                        {sub.form_title || 'PAR-Q Form'}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                        v{sub.form_version || 1}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                        {sub.status || 'COMPLETED'}
+                      </Badge>
+                      {isLatest && (
+                        <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">
+                          Latest Submission
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Submitted: {new Date(sub.submitted_at).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div className="text-right text-xs text-muted-foreground shrink-0">
+                    <span className="font-mono text-[11px] text-muted-foreground/70">ID: {sub.id.slice(0, 8)}...</span>
+                  </div>
+                </div>
+
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-muted/20 border border-border/80 rounded-lg text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Program</span>
+                    <span className="font-semibold text-foreground">{sub.program_name || 'All Programs'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Linked Order</span>
+                    <span className="font-mono text-foreground">{sub.order_number || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Membership</span>
+                    <span className="font-mono text-foreground">{sub.membership_number || 'Pending'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Submitted By</span>
+                    <span className="text-foreground">{sub.submitted_by || 'Member'}</span>
+                  </div>
+                </div>
+
+                {/* Authenticated Drawn Signature Preview */}
+                {sub.signature_data && (
+                  <div className="p-3.5 bg-muted/30 border border-border rounded-lg space-y-2">
+                    <span className="text-muted-foreground block text-[11px] font-semibold uppercase tracking-wider">
+                      Authenticated Member Digital Signature
+                    </span>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="p-2 bg-white rounded-lg border border-border shadow-xs inline-block">
+                        <img
+                          src={sub.signature_data}
+                          alt="Member Drawn Signature"
+                          className="max-h-16 object-contain"
+                        />
+                      </div>
+                      <div className="text-xs space-y-0.5">
+                        <p className="font-semibold text-foreground">Signer: {sub.signer_identity || sub.accepted_by_name || 'Member'}</p>
+                        {sub.signature_date && (
+                          <p className="text-muted-foreground text-[11px]">
+                            Signed: {new Date(sub.signature_date).toLocaleString()}
+                          </p>
+                        )}
+                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                          Digitally Signed Canvas
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Agreement & Explicit Consent Section */}
+                <div className="p-4 bg-muted/30 border border-border rounded-lg space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span>{sub.agreement_title || 'Physical Activity Readiness & Assumption of Risk Agreement'}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {sub.agreement_accepted ? (
+                          <span className="text-emerald-500 font-medium">
+                            Explicit Consent Accepted by {sub.accepted_by_name || 'Member'} on{' '}
+                            {sub.agreement_accepted_at ? new Date(sub.agreement_accepted_at).toLocaleString() : new Date(sub.submitted_at).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-amber-500 font-medium">Agreement not accepted</span>
+                        )}
+                      </p>
+                    </div>
+
+                    {hasAgreement && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleAgreement(sub.id)}
+                        className="text-[11px] h-7 px-2.5 gap-1 text-muted-foreground hover:text-foreground self-start sm:self-auto"
+                      >
+                        {isAgreementExpanded ? 'Hide Agreement Text' : 'View Agreement Text'}
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAgreementExpanded ? 'rotate-180' : ''}`} />
+                      </Button>
+                    )}
+                  </div>
+
+                  {hasAgreement && isAgreementExpanded && (
+                    <div className="p-3 bg-background border border-border/80 rounded-md text-[11px] text-muted-foreground max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                      {sub.agreement_text_snapshot}
+                    </div>
+                  )}
+                </div>
+
+                {/* Questions & Answers Section */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider text-muted-foreground">
+                    Questionnaire Responses
+                  </h4>
+
+                  {sub.sensitive_data_restricted ? (
+                    <div className="p-4 bg-muted/20 border border-border/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Confidential Health Data Restricted</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Sensitive medical and PAR-Q answers are restricted to authorized health staff (<code className="text-primary font-mono text-[10px]">cs.member-health.view</code>).
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground border-border shrink-0 self-start sm:self-auto">
+                        CONFIDENTIAL
+                      </Badge>
+                    </div>
+                  ) : sub.answers && sub.answers.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {sub.answers.map((ans, idx) => (
+                        <div key={idx} className="p-3 bg-muted/20 border border-border rounded-lg text-xs space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-foreground font-medium">
+                              Q{idx + 1}: {ans.question_text}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {ans.category && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border text-muted-foreground">
+                                  {ans.category}
+                                </Badge>
+                              )}
+                              {ans.is_sensitive && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-400">
+                                  Sensitive
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-0.5">
+                            {ans.question_type === 'BOOLEAN' ? (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true'
+                                    ? 'text-amber-400 border-amber-500/30 bg-amber-500/5'
+                                    : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5'
+                                }
+                              >
+                                {ans.answer?.toUpperCase()}
+                              </Badge>
+                            ) : (
+                              <span className="font-semibold text-foreground">{ans.answer || '—'}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-muted/20 border border-border rounded-lg text-xs text-muted-foreground">
+                      No question responses recorded for this submission.
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {/* If sensitive data is restricted for non-health staff */}
-              {sub.sensitive_data_restricted ? (
-                <div className="p-4 bg-muted/20 border border-border/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      Intake Form Completed · PAR-Q Submitted
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Sensitive medical and questionnaire answers are restricted to authorized health & compliance staff (<code className="text-primary font-mono text-[10px]">cs.member-health.view</code>).
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground border-border shrink-0 self-start sm:self-auto">
-                    CONFIDENTIAL
-                  </Badge>
-                </div>
-              ) : (
-                /* Dynamic Q&A List */
-                <div className="space-y-3">
-                  {sub.answers.map((ans, idx) => (
-                    <div key={idx} className="p-3 bg-muted/20 border border-border rounded-lg text-xs space-y-1">
-                      <div className="text-muted-foreground font-medium">
-                        Q{idx + 1}: {ans.question_text}
-                      </div>
-                      <div className="pt-0.5">
-                        {ans.question_type === 'BOOLEAN' ? (
-                          <Badge
-                            variant="outline"
-                            className={
-                              ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true'
-                                ? 'text-amber-400 border-amber-500/30'
-                                : 'text-emerald-400 border-emerald-500/30'
-                            }
-                          >
-                            {ans.answer?.toUpperCase()}
-                          </Badge>
-                        ) : (
-                          <span className="font-semibold text-foreground">{ans.answer || '—'}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="p-12 text-center bg-card border border-dashed border-border rounded-xl space-y-2">
             <HeartPulse className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-            <p className="text-sm font-medium text-foreground">No Intake Submissions On File</p>
+            <p className="text-sm font-medium text-foreground">No PAR-Q submission yet.</p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Dynamic intake questionnaires submitted by this member or trainer will appear here automatically.
+              PAR-Q forms and purchase agreements completed by this member will appear here.
             </p>
           </div>
         )}
       </div>
+
+      {/* PAR-Q Signing Modal */}
+      {signingMembershipId && (
+        <MemberParqSigningModal
+          open={!!signingMembershipId}
+          onOpenChange={(op) => {
+            if (!op) setSigningMembershipId(null);
+          }}
+          membershipId={signingMembershipId}
+          onSuccess={() => {
+            onRefresh?.();
+          }}
+        />
+      )}
     </div>
   );
 };

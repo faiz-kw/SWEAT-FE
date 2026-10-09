@@ -110,7 +110,16 @@ export const membersApi = {
   // LIFECYCLE ACTION ENDPOINTS
   // --------------------------------------------------------------------------
 
-  async renewMembership(id: string, data: { months: number; reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async renewMembership(id: string, data: {
+    months?: number;
+    package_id?: string;
+    package_version_id?: string;
+    payment_provider?: string;
+    payment_method?: string;
+    payment_amount?: number;
+    carry_forward?: boolean;
+    reason?: string;
+  }): Promise<{ success: boolean; message: string; member: Member; status?: string; approval_request_id?: string }> {
     const res = await api.post<any>(`/tenant/members/${id}/renew/`, data);
     return res.data;
   },
@@ -163,6 +172,7 @@ export const membersApi = {
     units_delta: number;
     reason_code?: string;
     reason_text?: string;
+    idempotency_key?: string;
   }): Promise<{ success: boolean; message: string; balance_after: number | null; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/adjust-entitlement/`, data);
     return res.data;
@@ -179,7 +189,14 @@ export const membersApi = {
     return res.data;
   },
 
-  async checkInMember(id: string, data?: { branch_id?: string; method?: string }): Promise<any> {
+  async checkInMember(id: string, data?: {
+    branch_id?: string;
+    location?: string;
+    method?: string;
+    record_type?: 'FACILITY' | 'CLASS';
+    booking_id?: string;
+    consume_session?: boolean;
+  }): Promise<any> {
     const res = await api.post<any>(`/tenant/members/${id}/check-in/`, data || {});
     return res.data;
   },

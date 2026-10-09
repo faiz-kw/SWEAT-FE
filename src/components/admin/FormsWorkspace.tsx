@@ -67,6 +67,12 @@ export const FormsWorkspace: React.FC = () => {
   const [customTypeInput, setCustomTypeInput] = useState('');
   const [formStatus, setFormStatus] = useState<'DRAFT' | 'ACTIVE' | 'RETIRED'>('ACTIVE');
   const [formVersion, setFormVersion] = useState(1);
+  const [agreementTitle, setAgreementTitle] = useState('Physical Activity Readiness & Assumption of Risk Agreement');
+  const [agreementText, setAgreementText] = useState('');
+  const [isRequiredForPurchase, setIsRequiredForPurchase] = useState(true);
+  const [requiresExplicitConsent, setRequiresExplicitConsent] = useState(true);
+  const [reassessmentDays, setReassessmentDays] = useState(365);
+  const [isDefaultForAllPrograms, setIsDefaultForAllPrograms] = useState(true);
 
   // Question form state
   const [qText, setQText] = useState('');
@@ -196,6 +202,12 @@ export const FormsWorkspace: React.FC = () => {
     setCustomTypeInput('');
     setFormStatus('ACTIVE');
     setFormVersion(1);
+    setAgreementTitle('Physical Activity Readiness & Assumption of Risk Agreement');
+    setAgreementText('');
+    setIsRequiredForPurchase(true);
+    setRequiresExplicitConsent(true);
+    setReassessmentDays(365);
+    setIsDefaultForAllPrograms(true);
   };
 
   const resetQuestionFields = () => {
@@ -217,6 +229,12 @@ export const FormsWorkspace: React.FC = () => {
     setCustomTypeInput(form.form_type);
     setFormStatus(form.status);
     setFormVersion(form.version_number);
+    setAgreementTitle(form.agreement_title || 'Physical Activity Readiness & Assumption of Risk Agreement');
+    setAgreementText(form.agreement_text || '');
+    setIsRequiredForPurchase(form.is_required_for_purchase ?? true);
+    setRequiresExplicitConsent(form.requires_explicit_consent ?? true);
+    setReassessmentDays(form.reassessment_days || 365);
+    setIsDefaultForAllPrograms(form.is_default_for_all_programs ?? true);
     setIsEditFormOpen(true);
   };
 
@@ -319,8 +337,113 @@ export const FormsWorkspace: React.FC = () => {
           </div>
         </div>
 
-        {/* Forms Table */}
+        {/* Forms Table – cards on mobile, table on desktop */}
         <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+
+          {/* MOBILE CARD VIEW (hidden lg+) */}
+          <div className="lg:hidden divide-y divide-border/60">
+            {isLoading ? (
+              <div className="px-4 py-12 text-center text-muted-foreground">
+                <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                Loading form definitions...
+              </div>
+            ) : filteredForms.length === 0 ? (
+              <div className="px-4 py-12 text-center text-muted-foreground">
+                <p className="font-semibold text-foreground">No intake forms found.</p>
+                <p className="text-xs mt-1">Click &quot;Create Form&quot; to build your first questionnaire.</p>
+              </div>
+            ) : (
+              filteredForms.map((form) => {
+                const isExpandedM = expandedFormIds.has(form.id);
+                const qCountM = form.questions?.length || 0;
+                return (
+                  <React.Fragment key={`m-${form.id}`}>
+                    <div className="p-4 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-start gap-3">
+                        <button type="button" onClick={() => toggleExpand(form.id)}
+                          className="mt-0.5 p-1 rounded hover:bg-muted text-muted-foreground shrink-0">
+                          {isExpandedM ? <ChevronDown className="size-4 text-primary" /> : <ChevronRight className="size-4" />}
+                        </button>
+                        <FileText className="size-4 text-primary shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold text-sm text-foreground">{form.name}</span>
+                            <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5 shrink-0">v{form.version_number}</Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                            <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-muted text-foreground border border-border">{form.form_type}</span>
+                            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${form.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : form.status === 'DRAFT' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-muted text-muted-foreground'}`}>{form.status}</span>
+                            <button type="button" onClick={() => toggleExpand(form.id)} className="text-[11px] text-muted-foreground underline decoration-dotted">
+                              {qCountM} {qCountM === 1 ? 'question' : 'questions'}
+                            </button>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1">Created {form.created_at ? new Date(form.created_at).toLocaleDateString() : 'N/A'}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-3 pl-8">
+                        <Button size="sm" variant="outline" onClick={() => handleOpenQuestions(form)} className="h-7 text-xs gap-1">
+                          <ListPlus className="size-3.5 text-primary" /><span>Builder ({qCountM})</span>
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => handleQuickAddQuestion(form)} className="h-7 text-xs gap-1">
+                          <Plus className="size-3" /><span>Add Q</span>
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleToggleStatus(form)} className="h-7 text-xs">
+                          {form.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleOpenEdit(form)} className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                          <Edit2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    {isExpandedM && (
+                      <div className="bg-muted/20 border-t border-border/80 px-4 py-4 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="size-3.5 text-primary" />
+                            <span className="font-semibold text-xs text-foreground uppercase tracking-wider">Questions ({qCountM})</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleOpenQuestions(form)}><Edit2 className="size-3" /> Edit</Button>
+                            <Button size="sm" variant="secondary" className="h-7 text-xs gap-1" onClick={() => handleQuickAddQuestion(form)}><Plus className="size-3" /> Add</Button>
+                          </div>
+                        </div>
+                        {qCountM > 0 ? (
+                          <div className="grid gap-2">
+                            {form.questions?.slice().sort((a, b) => a.display_order - b.display_order).map((q, idx) => (
+                              <div key={q.id} className="flex items-start justify-between p-3 rounded-lg bg-card border border-border/60 gap-3">
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs font-bold text-primary">Q{idx + 1}</span>
+                                    <span className="text-xs text-foreground font-medium">{q.question_text}</span>
+                                    {q.is_required && <Badge variant="secondary" className="text-[10px] py-0">Required</Badge>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="outline" className="font-mono text-[10px] py-0">{q.question_type}</Badge>
+                                    {q.is_sensitive && <Badge variant="secondary" className="text-[10px] py-0 text-rose-500 bg-rose-500/10 flex items-center gap-1"><ShieldAlert className="size-2.5" /> PHI</Badge>}
+                                  </div>
+                                </div>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive shrink-0"
+                                  onClick={() => { if (confirm('Delete this question?')) deleteQuestionMutation.mutate(q.id); }}>
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-4 text-center border border-dashed border-border rounded-lg text-xs text-muted-foreground">
+                            No questions yet. Click &quot;Add&quot; to begin.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </div>
+
+          {/* DESKTOP TABLE VIEW (hidden below lg) */}
+          <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
               <tr>
@@ -570,6 +693,7 @@ export const FormsWorkspace: React.FC = () => {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </PageBody>
 
@@ -595,6 +719,12 @@ export const FormsWorkspace: React.FC = () => {
                 form_type: finalType,
                 status: formStatus,
                 version_number: formVersion,
+                agreement_title: agreementTitle,
+                agreement_text: agreementText,
+                is_required_for_purchase: isRequiredForPurchase,
+                requires_explicit_consent: requiresExplicitConsent,
+                reassessment_days: reassessmentDays,
+                is_default_for_all_programs: isDefaultForAllPrograms,
               });
             }}
             className="space-y-4 py-2 text-xs sm:text-sm"
@@ -681,6 +811,78 @@ export const FormsWorkspace: React.FC = () => {
               </select>
             </div>
 
+            <div className="pt-3 border-t border-border space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <ShieldCheck className="size-3.5 text-primary" />
+                <span>Booking Gate & Agreement Rules</span>
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs font-medium">Agreement Title</Label>
+                <Input
+                  value={agreementTitle}
+                  onChange={(e) => setAgreementTitle(e.target.value)}
+                  placeholder="Physical Activity Readiness & Assumption of Risk Agreement"
+                  className="text-xs"
+                />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs font-medium">Agreement & Consent Text</Label>
+                <textarea
+                  value={agreementText}
+                  onChange={(e) => setAgreementText(e.target.value)}
+                  placeholder="Full agreement text presented to members before payment..."
+                  rows={3}
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRequiredForPurchase}
+                    onChange={(e) => setIsRequiredForPurchase(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary size-3.5"
+                  />
+                  <span>Required Before Class Booking</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={requiresExplicitConsent}
+                    onChange={(e) => setRequiresExplicitConsent(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary size-3.5"
+                  />
+                  <span>Require Explicit Consent</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isDefaultForAllPrograms}
+                    onChange={(e) => setIsDefaultForAllPrograms(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary size-3.5"
+                  />
+                  <span>Default for All Programs</span>
+                </label>
+
+                <div>
+                  <Label className="mb-1 block text-[11px] font-medium text-muted-foreground">Reassessment Validity (Days)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={reassessmentDays}
+                    onChange={(e) => setReassessmentDays(parseInt(e.target.value) || 365)}
+                    className="text-xs h-8"
+                  />
+                </div>
+              </div>
+            </div>
+
             <DialogFooter className="gap-2 sm:gap-0 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsCreateFormOpen(false)}>
                 Cancel
@@ -711,6 +913,12 @@ export const FormsWorkspace: React.FC = () => {
                     form_type: finalType,
                     status: formStatus,
                     version_number: formVersion,
+                    agreement_title: agreementTitle,
+                    agreement_text: agreementText,
+                    is_required_for_purchase: isRequiredForPurchase,
+                    requires_explicit_consent: requiresExplicitConsent,
+                    reassessment_days: reassessmentDays,
+                    is_default_for_all_programs: isDefaultForAllPrograms,
                   },
                 });
               }}
@@ -782,6 +990,78 @@ export const FormsWorkspace: React.FC = () => {
                   <option value="DRAFT">DRAFT</option>
                   <option value="RETIRED">RETIRED</option>
                 </select>
+              </div>
+
+              <div className="pt-3 border-t border-border space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <ShieldCheck className="size-3.5 text-primary" />
+                  <span>Booking Gate & Agreement Rules</span>
+                </div>
+
+                <div>
+                  <Label className="mb-1 block text-xs font-medium">Agreement Title</Label>
+                  <Input
+                    value={agreementTitle}
+                    onChange={(e) => setAgreementTitle(e.target.value)}
+                    placeholder="Physical Activity Readiness & Assumption of Risk Agreement"
+                    className="text-xs"
+                  />
+                </div>
+
+                <div>
+                  <Label className="mb-1 block text-xs font-medium">Agreement & Consent Text</Label>
+                  <textarea
+                    value={agreementText}
+                    onChange={(e) => setAgreementText(e.target.value)}
+                    placeholder="Full agreement text presented to members before payment..."
+                    rows={3}
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isRequiredForPurchase}
+                      onChange={(e) => setIsRequiredForPurchase(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary size-3.5"
+                    />
+                    <span>Required Before Class Booking</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={requiresExplicitConsent}
+                      onChange={(e) => setRequiresExplicitConsent(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary size-3.5"
+                    />
+                    <span>Require Explicit Consent</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isDefaultForAllPrograms}
+                      onChange={(e) => setIsDefaultForAllPrograms(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary size-3.5"
+                    />
+                    <span>Default for All Programs</span>
+                  </label>
+
+                  <div>
+                    <Label className="mb-1 block text-[11px] font-medium text-muted-foreground">Reassessment Validity (Days)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={reassessmentDays}
+                      onChange={(e) => setReassessmentDays(parseInt(e.target.value) || 365)}
+                      className="text-xs h-8"
+                    />
+                  </div>
+                </div>
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0 pt-2">

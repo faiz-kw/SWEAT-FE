@@ -86,6 +86,9 @@ export interface MembershipEntitlement {
 export interface MembershipBranchHistory {
   id: string;
   membership: string;
+  membership_number?: string | null;
+  member_id?: string | null;
+  member_name?: string | null;
   from_branch?: string | null;
   from_branch_name?: string | null;
   to_branch: string;
@@ -94,6 +97,7 @@ export interface MembershipBranchHistory {
   reason?: string | null;
   effective_at: string;
   changed_by_user?: string | null;
+  changed_by_name?: string | null;
   created_at: string;
 }
 
@@ -269,8 +273,47 @@ export interface Membership {
   activated_at?: string | null;
   cancelled_at?: string | null;
   legacy_reference?: string | null;
+  parq_status?: 'PENDING' | 'COMPLETED' | 'WAIVED';
+  parq_form?: string | null;
+  parq_form_title?: string | null;
+  parq_submission?: string | null;
+  parq_completed_at?: string | null;
   contract_snapshot?: MembershipContractSnapshot;
   entitlements?: MembershipEntitlement[];
   created_at: string;
   updated_at: string;
+}
+
+
+export interface ParqRequirementResponse {
+  membership_id: string;
+  membership_number: string;
+  program_name: string;
+  package_name: string;
+  parq_status: 'PENDING' | 'COMPLETED' | 'WAIVED';
+  parq_completed_at?: string | null;
+  is_configured: boolean;
+  form?: any;
+  submission?: {
+    id: string;
+    form_title: string;
+    form_version: number;
+    submitted_at: string;
+    signature_date?: string | null;
+    signer_identity?: string | null;
+    signature_data?: string | null;
+    agreement_accepted: boolean;
+    agreement_title: string;
+    agreement_text_snapshot: string;
+    form_snapshot?: any;
+  } | null;
+}
+
+export interface SignParqPayload {
+  agreement_accepted: boolean;
+  signature_data: string;
+  answers: Array<{
+    question_id: string;
+    value: any;
+  }>;
 }

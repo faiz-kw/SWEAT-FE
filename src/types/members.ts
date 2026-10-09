@@ -232,16 +232,39 @@ export interface MemberRefund {
 
 export interface MemberIntakeSubmission {
   id: string;
+  form_id?: string;
   form_title: string;
+  form_version?: number;
+  form_type?: string;
   submitted_at: string;
   status?: string;
+  program_name?: string | null;
+  order_number?: string | null;
+  membership_number?: string | null;
+  agreement_accepted?: boolean;
+  agreement_accepted_at?: string | null;
+  agreement_title?: string;
+  agreement_text_snapshot?: string;
+  accepted_by_name?: string | null;
+  signer_type?: string;
+  channel?: string;
+  submitted_by?: string;
+  signature_data?: string | null;
+  signature_date?: string | null;
+  signer_identity?: string | null;
   sensitive_data_restricted?: boolean;
   answers: Array<{
     question_id: string;
     question_text: string;
     question_type: string;
+    category?: string;
+    is_sensitive?: boolean;
     answer: string;
+    boolean_value?: boolean | null;
+    numeric_value?: number | null;
+    text_value?: string | null;
   }>;
+  form_snapshot?: any;
 }
 
 export interface Member360Data {
@@ -343,6 +366,21 @@ export interface Member360Data {
     refunds: MemberRefund[];
   };
   health_and_forms: {
+    submissions: MemberIntakeSubmission[];
+  };
+  par_q_form?: {
+    requirements?: Array<{
+      membership_id: string;
+      membership_number: string;
+      program_name: string;
+      package_name: string;
+      membership_status: string;
+      parq_status: 'PENDING' | 'COMPLETED' | 'WAIVED';
+      parq_completed_at?: string | null;
+      form_title: string;
+      form_id?: string | null;
+      submission_id?: string | null;
+    }>;
     submissions: MemberIntakeSubmission[];
   };
 }

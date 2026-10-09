@@ -50,12 +50,43 @@ export const RenewModal: React.FC<{
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
   const [months, setMonths] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE'>('CARD');
+  const [carryForward, setCarryForward] = useState(true);
   const [reason, setReason] = useState('Standard membership renewal');
 
+  const { data: plans = [] } = useQuery({
+    queryKey: ['renewal-plans'],
+    queryFn: () => membersApi.getPlans(),
+  });
+
+  const selectedPlan = useMemo(() => {
+    return plans.find((p: any) => p.package_id === member.package_id) || plans[0];
+  }, [plans, member.package_id]);
+
+  const priceEstimate = useMemo(() => {
+    if (selectedPlan && selectedPlan.price) {
+      return (selectedPlan.price * months);
+    }
+    return 5000 * months;
+  }, [selectedPlan, months]);
+
   const mutation = useMutation({
-    mutationFn: () => membersApi.renewMembership(member.id, { months, reason }),
-    onSuccess: (res) => {
-      toast.success(res.message || 'Membership renewed successfully');
+    mutationFn: () =>
+      membersApi.renewMembership(member.id, {
+        months,
+        package_id: selectedPlan?.package_id || member.package_id,
+        payment_provider: paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY'),
+        payment_method: paymentMethod,
+        payment_amount: priceEstimate,
+        carry_forward: carryForward,
+        reason,
+      }),
+    onSuccess: (res: any) => {
+      if (res.status === 'PENDING_APPROVAL') {
+        toast.info(res.message || 'Renewal submitted for cash approval');
+      } else {
+        toast.success(res.message || 'Membership renewed successfully');
+      }
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
       queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
@@ -75,11 +106,19 @@ export const RenewModal: React.FC<{
             Renew Membership
           </DialogTitle>
           <DialogDescription>
-            Extend {member.name}'s active plan ({member.package_name}).
+            Extend {member.name}'s membership under configured catalog plan.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Current Plan</Label>
+            <div className="font-semibold text-sm">{member.package_name || 'Standard Membership'}</div>
+            <div className="text-xs text-muted-foreground">
+              {member.expiry_date ? `Current Expiry: ${member.expiry_date}` : 'Currently Expired / Inactive'}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>Duration (Months)</Label>
             <div className="grid grid-cols-4 gap-2">
@@ -98,12 +137,48 @@ export const RenewModal: React.FC<{
           </div>
 
           <div className="space-y-2">
+            <Label>Payment Mode</Label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as any)}
+              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+            >
+              <option value="CARD">Credit/Debit Card (POS)</option>
+              <option value="ONLINE">Online Payment (UPI/Gateway)</option>
+              <option value="CASH">Cash (Requires Manager Approval)</option>
+            </select>
+            {paymentMethod === 'CASH' && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                ⚠ Cash renewal creates a provisional contract pending manager approval before entitlement activation.
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 pt-1">
+            <input
+              type="checkbox"
+              id="carry_forward"
+              checked={carryForward}
+              onChange={(e) => setCarryForward(e.target.checked)}
+              className="rounded border-input text-primary focus:ring-primary"
+            />
+            <Label htmlFor="carry_forward" className="text-xs cursor-pointer font-normal">
+              Carry forward remaining sessions ({member.home_sessions_remaining ?? 0} sessions)
+            </Label>
+          </div>
+
+          <div className="space-y-2">
             <Label>Renewal Notes / Reason</Label>
             <Input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. In-gym renewal agreement"
             />
+          </div>
+
+          <div className="p-3 bg-muted/40 rounded-lg flex justify-between items-center text-xs">
+            <span className="text-muted-foreground">Estimated Renewal Total:</span>
+            <span className="font-bold text-base text-foreground">₹{priceEstimate.toLocaleString()}</span>
           </div>
         </div>
 
@@ -583,15 +658,24 @@ export const AdjustEntitlementModal: React.FC<{
   const [unitsDelta, setUnitsDelta] = useState(1);
   const [reasonCode, setReasonCode] = useState('ADMIN_COMPENSATION');
   const [reasonText, setReasonText] = useState('Session credit adjustment');
+  const idempotencyKey = useMemo(() => `adj-${member.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member.id]);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      membersApi.adjustEntitlement(member.id, {
+    mutationFn: () => {
+      if (!reasonText || !reasonText.trim()) {
+        throw new Error('A specific reason is required for session adjustment.');
+      }
+      if (unitsDelta === 0) {
+        throw new Error('Adjustment quantity cannot be zero.');
+      }
+      return membersApi.adjustEntitlement(member.id, {
         entitlement_type: entitlementType,
         units_delta: unitsDelta,
         reason_code: reasonCode,
-        reason_text: reasonText,
-      }),
+        reason_text: reasonText.trim(),
+        idempotency_key: idempotencyKey,
+      });
+    },
     onSuccess: (res) => {
       toast.success(res.message || 'Entitlement adjusted successfully');
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
@@ -1172,3 +1256,128 @@ export const InvoiceDetailModal: React.FC<{
   );
 };
 
+
+
+// ----------------------------------------------------------------------------
+// 10. CHECK-IN MODAL
+// ----------------------------------------------------------------------------
+export const CheckInModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  member: Member;
+}> = ({ isOpen, onClose, member }) => {
+  const queryClient = useQueryClient();
+  const [recordType, setRecordType] = useState<'FACILITY' | 'CLASS'>('FACILITY');
+  const [method, setMethod] = useState<string>('Front Desk');
+  const [consumeSession, setConsumeSession] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      membersApi.checkInMember(member.id, {
+        record_type: recordType,
+        method,
+        consume_session: recordType === 'CLASS' || consumeSession,
+      }),
+    onSuccess: (res: any) => {
+      toast.success(res.message || 'Check-in recorded successfully!');
+      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err.message || 'Check-in failed');
+    },
+  });
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserCheck className="w-5 h-5 text-emerald-500" />
+            Record Member Check-in
+          </DialogTitle>
+          <DialogDescription>
+            Record attendance for {member.name} at {member.home_branch || 'Home Branch'}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-3">
+          <div className="space-y-2">
+            <Label>Check-in Type</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={recordType === 'FACILITY' ? 'default' : 'outline'}
+                className="flex flex-col items-center justify-center p-3 h-auto text-left"
+                onClick={() => {
+                  setRecordType('FACILITY');
+                  setConsumeSession(false);
+                }}
+              >
+                <span className="font-semibold text-xs">Facility Entry</span>
+                <span className="text-[10px] text-muted-foreground mt-0.5">No session consumed</span>
+              </Button>
+              <Button
+                type="button"
+                variant={recordType === 'CLASS' ? 'default' : 'outline'}
+                className="flex flex-col items-center justify-center p-3 h-auto text-left"
+                onClick={() => {
+                  setRecordType('CLASS');
+                  setConsumeSession(true);
+                }}
+              >
+                <span className="font-semibold text-xs">Class Attendance</span>
+                <span className="text-[10px] text-muted-foreground mt-0.5">Deducts 1 session credit</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Check-in Verification Method</Label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+            >
+              <option value="Front Desk">Front Desk Verification</option>
+              <option value="QR">Member App QR Scan</option>
+              <option value="ACCESS_DEVICE">Turnstile / Access Gate</option>
+            </select>
+          </div>
+
+          <div className="p-3 bg-muted/40 rounded-lg text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Home Branch:</span>
+              <span className="font-medium">{member.home_branch || 'Primary Branch'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Session Balance:</span>
+              <span className="font-medium">{member.home_sessions_remaining ?? 'Unlimited'} remaining</span>
+            </div>
+            {recordType === 'FACILITY' ? (
+              <p className="text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
+                ✓ Facility entry preserves session entitlements.
+              </p>
+            ) : (
+              <p className="text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                ℹ 1 session credit will be debited with append-only ledger tracking.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Confirm Check-in
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
