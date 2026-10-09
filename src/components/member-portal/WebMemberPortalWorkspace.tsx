@@ -164,6 +164,10 @@ function WebMemberPortalWorkspaceInner() {
   const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
   const [selectedBranchId, setSelectedBranchId] = React.useState<string>("all");
   const [selectedCategory, setSelectedCategory] = React.useState<string>("all");
+  const [categories, setCategories] = React.useState<any[]>([]);
+  const [isScheduleLoading, setIsScheduleLoading] = React.useState<boolean>(false);
+  const [scheduleError, setScheduleError] = React.useState<string | null>(null);
+  const scheduleReqIdRef = React.useRef<number>(0);
 
   // Modals & Action States
   const [bookingSlotToConfirm, setBookingSlotToConfirm] = React.useState<MobileScheduleOccurrence | null>(null);
@@ -218,13 +222,14 @@ function WebMemberPortalWorkspaceInner() {
       if (showToast) setIsRefreshing(true);
       else setIsLoading(true);
 
-      const [profRes, credRes, bookRes, trainRes, ptRes, branchRes, parqRes] = await Promise.allSettled([
+      const [profRes, credRes, bookRes, trainRes, ptRes, branchRes, catRes, parqRes] = await Promise.allSettled([
         mobileApi.getProfile(),
         mobileApi.getMyCredits(),
         mobileApi.getMyBookings(),
         mobileApi.getTrainers(),
         mobileApi.getPTAppointments(),
         mobileApi.getBranches(),
+          mobileApi.getCategories(),
         mobileApi.getPARQSurvey(),
       ]);
 
@@ -383,8 +388,11 @@ function WebMemberPortalWorkspaceInner() {
     void fetchAllData();
   }, [fetchAllData]);
 
-  // Load Schedule whenever selectedDate or selectedBranchId changes
+  // Load Schedule with rapid-click debounce protection and category resolution
   const fetchSchedule = React.useCallback(async () => {
+    const currentReqId = ++scheduleReqIdRef.current;
+    setIsScheduleLoading(true);
+    setScheduleError(null);
     try {
       const dateStr = format(selectedDate, "yyyy-MM-dd");
       const params: { date: string; branch_id?: string; category?: string } = { date: dateStr };
@@ -396,14 +404,23 @@ function WebMemberPortalWorkspaceInner() {
       }
 
       const res = await mobileApi.getSchedule(params);
+      if (currentReqId !== scheduleReqIdRef.current) {
+        return; // Discard stale response
+      }
+
       if (res.data) {
         const raw = res.data as any;
+        if (raw.categories && Array.isArray(raw.categories) && raw.categories.length > 0) {
+          setCategories(raw.categories);
+        }
         const rawSlots = Array.isArray(raw) ? raw : (raw.slots || []);
         const normalized: MobileScheduleOccurrence[] = rawSlots.map((s: any) => ({
           id: s.id,
           class_definition_id: s.class_id || s.class_definition_id || "",
           class_name: s.class_name,
           category: s.category || "Bootcamp",
+          category_id: s.category_id || "",
+          category_code: s.category_code || "",
           description: s.description || "",
           start_time: s.start_at || s.start_time,
           end_time: s.end_at || s.end_time,
@@ -428,8 +445,15 @@ function WebMemberPortalWorkspaceInner() {
         }));
         setSchedule(normalized);
       }
-    } catch (err) {
-      console.error("Failed to load schedule:", err);
+    } catch (err: any) {
+      if (currentReqId === scheduleReqIdRef.current) {
+        console.error("Failed to load schedule:", err);
+        setScheduleError(err?.data?.detail || err?.message || "Failed to load studio schedule.");
+      }
+    } finally {
+      if (currentReqId === scheduleReqIdRef.current) {
+        setIsScheduleLoading(false);
+      }
     }
   }, [selectedDate, selectedBranchId, selectedCategory]);
 
@@ -471,14 +495,39 @@ function WebMemberPortalWorkspaceInner() {
     return list;
   }, []);
 
-  // Class Categories present in schedule
-  const availableCategories = React.useMemo(() => {
-    const set = new Set<string>();
+  // Authoritative Class Categories for filter bar
+  const displayCategories = React.useMemo(() => {
+    if (categories.length > 0) return categories;
+    const unique = new Map<string, { id: string; name: string }>();
     schedule.forEach((s) => {
-      if (s.category) set.add(s.category);
+      if (s.category && !unique.has(s.category)) {
+        unique.set(s.category, { id: (s as any).category_id || s.category, name: s.category });
+      }
     });
-    return Array.from(set);
-  }, [schedule]);
+    return Array.from(unique.values());
+  }, [categories, schedule]);
+
+  // Defensive client-side filtering guarantees zero format or branch leakage
+  const filteredSchedule = React.useMemo(() => {
+    return schedule.filter((occ) => {
+      if (selectedBranchId !== "all") {
+        if (occ.branch?.id && occ.branch.id !== selectedBranchId) {
+          return false;
+        }
+      }
+      if (selectedCategory !== "all") {
+        const occCatId = (occ as any).category_id;
+        const occCatName = occ.category ? occ.category.trim().toLowerCase() : "";
+        const sel = selectedCategory.trim().toLowerCase();
+        const matchId = occCatId && occCatId.toLowerCase() === sel;
+        const matchName = occCatName === sel;
+        if (!matchId && !matchName) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [schedule, selectedBranchId, selectedCategory]);
 
   // Handler: Book Class
   const handleConfirmBookClass = async () => {
@@ -1108,168 +1157,34 @@ function WebMemberPortalWorkspaceInner() {
             </div>
 
             {/* Category Filter Pills */}
-            {availableCategories.length > 0 && (
+            {displayCategories.length > 0 && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   onClick={() => setSelectedCategory("all")}
                   className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
                     selectedCategory === "all"
-                      ? "bg-foreground text-background border-foreground"
+                      ? "bg-foreground text-background border-foreground shadow-xs"
                       : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   All Formats
                 </button>
-                {availableCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                      selectedCategory === cat
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Schedule Slot Cards List */}
-            {schedule.length === 0 ? (
-              <div className="text-center py-16 px-4 border border-dashed border-border/80 rounded-2xl bg-card/40">
-                <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-foreground">No Classes Scheduled for This Day</h3>
-                <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1">
-                  Try choosing another date above or switch to a different studio branch.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {schedule.map((occ) => {
-                  const startTime = safeFormatDate(occ.start_time, "hh:mm a");
-                  const endTime = safeFormatDate(occ.end_time, "hh:mm a");
-                  const hasBooked = occ.user_has_booking;
-                  const isFull = occ.is_full;
-                  const spots = occ.available_spots;
-
+                {displayCategories.map((cat: any) => {
+                  const catName = typeof cat === 'string' ? cat : cat.name;
+                  const catId = typeof cat === 'string' ? cat : (cat.id || cat.name);
+                  const isSelected = selectedCategory === catName || selectedCategory === catId;
                   return (
-                    <Card
-                      key={occ.id}
-                      className={`border transition-all flex flex-col justify-between ${
-                        hasBooked
-                          ? "border-emerald-500/60 bg-emerald-500/[0.04] shadow-xs"
-                          : isFull
-                          ? "border-border/50 bg-card/50 opacity-80"
-                          : "border-border/70 bg-card hover:border-primary/40 shadow-xs hover:shadow-sm"
+                    <button
+                      key={catId}
+                      onClick={() => setSelectedCategory(catName)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] font-bold uppercase">
-                            {occ.category || "Studio Workout"}
-                          </Badge>
-
-                          {hasBooked ? (
-                            <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-[10px] gap-1">
-                              <CheckCircle2 className="h-3 w-3" /> Booked
-                            </Badge>
-                          ) : isFull ? (
-                            <Badge variant="secondary" className="text-muted-foreground text-[10px] font-semibold">
-                              Full
-                            </Badge>
-                          ) : (
-                            <span className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              {spots} spots left
-                            </span>
-                          )}
-                        </div>
-
-                        <CardTitle className="text-base font-extrabold text-foreground leading-snug">
-                          {occ.class_name}
-                        </CardTitle>
-
-                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground mt-1">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          <span>{startTime} - {endTime}</span>
-                        </div>
-                      </CardHeader>
-
-                      <CardContent className="pt-0 space-y-4">
-                        {/* Trainer Detail Section */}
-                        <div className="flex items-start gap-3 p-2.5 rounded-xl bg-accent/30 border border-border/50">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
-                            {occ.trainer?.name ? occ.trainer.name.slice(0, 1) : "C"}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h5 className="text-xs font-bold text-foreground truncate">
-                              Coach {occ.trainer?.name || "Master Coach"}
-                            </h5>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {occ.trainer?.designation || "Senior Strength Trainer"}
-                            </p>
-                            {occ.trainer?.specialties && Array.isArray(occ.trainer.specialties) && occ.trainer.specialties.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {occ.trainer.specialties.slice(0, 2).map((sp, idx) => (
-                                  <span key={idx} className="text-[9px] bg-background/80 px-1.5 py-0.5 rounded text-muted-foreground font-medium">
-                                    {sp}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Location / Room */}
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary" />
-                            {occ.branch?.name || "Main Studio"}
-                          </span>
-                          <span className="text-[11px] font-medium text-foreground">
-                            {occ.is_included_in_plan ? "1 Pass Credit" : "Specialty Upgrade"}
-                          </span>
-                        </div>
-
-                        {/* Action Buttons */}
-                        {hasBooked ? (
-                          <div className="flex items-center gap-2 pt-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const found = bookings.find((b) => b.occurrence_id === occ.id && b.status === "CONFIRMED");
-                                if (found) {
-                                  setRescheduleBookingTarget(found);
-                                  setRescheduleNewOccurrenceId("");
-                                } else {
-                                  setActiveTab("bookings");
-                                }
-                              }}
-                              className="w-full text-xs font-semibold"
-                            >
-                              Reschedule Slot
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            disabled={isFull || remainingCredits <= 0}
-                            onClick={() => setBookingSlotToConfirm(occ)}
-                            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-1.5"
-                          >
-                            <CalendarCheck className="h-3.5 w-3.5" />
-                            {remainingCredits <= 0
-                              ? "No Credits Left"
-                              : isFull
-                              ? "Class Full"
-                              : "Book with 1 Credit"}
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
+                      {catName}
+                    </button>
                   );
                 })}
               </div>
