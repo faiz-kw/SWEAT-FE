@@ -36,6 +36,8 @@ export interface MobileScheduleOccurrence {
   class_definition_id: string;
   class_name: string;
   category: string;
+  category_id?: string;
+  category_code?: string;
   description: string;
   start_time: string;
   end_time: string;
@@ -108,6 +110,13 @@ export interface MobileTrainer {
   bio: string;
   specialties: string[];
   experience_years?: number;
+}
+
+export interface MobileClassCategory {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
 }
 
 export interface MobileBranch {
