@@ -15,5 +15,6 @@ export * from "../api/endpoints/discountsApi";
 export * from "../api/endpoints/membershipsApi";
 export * from "../api/endpoints/rewardsApi";
 export * from "../api/endpoints/workforceApi";
+export * from "../api/endpoints/wodApi";
 export * from "./store";
 export * from "./repo";

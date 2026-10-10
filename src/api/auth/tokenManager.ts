@@ -179,6 +179,7 @@ export function isDemoMode(): boolean {
 
 const ACCESS_TOKEN_KEY = 'pos_access_token';
 const USER_PROFILE_KEY = 'pos_user_profile';
+const EXPLICIT_LOGOUT_KEY = 'pos_explicit_logout';
 /**
  * Bump this version whenever the stored profile shape changes.
  * Old caches will be discarded automatically and re-fetched from /me/.
@@ -193,36 +194,76 @@ const PROFILE_SCHEMA_VERSION = 3;
 let _accessToken: string | null = null;
 let _refreshPromise: Promise<string | null> | null = null;
 
-/** Save the access token received after login or token refresh (in memory ONLY). */
+/** Save the access token received after login or token refresh. */
 export function setAccessToken(token: string): void {
   _accessToken = token;
-  // Security hardening: clean up any legacy localStorage entry
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.setItem(ACCESS_TOKEN_KEY, token);
+      window.localStorage?.setItem(ACCESS_TOKEN_KEY, token);
+      window.localStorage?.removeItem(EXPLICIT_LOGOUT_KEY);
+      window.sessionStorage?.removeItem(EXPLICIT_LOGOUT_KEY);
     }
   } catch {}
 }
 
-/** Read the current access token from memory only. Returns null if not logged in. */
+/** Read the current access token. Falls back to storage if in-memory copy was reset by page reload. Returns null if not logged in. */
 export function getAccessToken(): string | null {
-  if (!_accessToken) return null;
-  const payload = decodeToken(_accessToken);
-  if (payload && payload.exp * 1000 > Date.now()) {
-    return _accessToken;
+  if (_accessToken) {
+    const payload = decodeToken(_accessToken);
+    if (payload && payload.exp * 1000 > Date.now()) {
+      return _accessToken;
+    }
+    _accessToken = null;
   }
-  _accessToken = null;
+
+  // Fallback to persisted storage on reload / direct navigation
+  try {
+    if (typeof window !== 'undefined') {
+      const stored =
+        window.sessionStorage?.getItem(ACCESS_TOKEN_KEY) ||
+        window.localStorage?.getItem(ACCESS_TOKEN_KEY);
+      if (stored) {
+        const payload = decodeToken(stored);
+        if (payload && payload.exp * 1000 > Date.now()) {
+          _accessToken = stored;
+          return stored;
+        } else {
+          window.sessionStorage?.removeItem(ACCESS_TOKEN_KEY);
+          window.localStorage?.removeItem(ACCESS_TOKEN_KEY);
+        }
+      }
+    }
+  } catch {}
+
   return null;
 }
 
 /** Clear the token on logout or session expiry. */
-export function clearAccessToken(): void {
+export function clearAccessToken(markLoggedOut = false): void {
   _accessToken = null;
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.removeItem(ACCESS_TOKEN_KEY);
+      window.localStorage?.removeItem(ACCESS_TOKEN_KEY);
+      if (markLoggedOut) {
+        window.localStorage?.setItem(EXPLICIT_LOGOUT_KEY, '1');
+        window.sessionStorage?.setItem(EXPLICIT_LOGOUT_KEY, '1');
+      }
     }
   } catch {}
+}
+
+export function isExplicitlyLoggedOut(): boolean {
+  try {
+    if (typeof window !== 'undefined') {
+      return (
+        window.sessionStorage?.getItem(EXPLICIT_LOGOUT_KEY) === '1' ||
+        window.localStorage?.getItem(EXPLICIT_LOGOUT_KEY) === '1'
+      );
+    }
+  } catch {}
+  return false;
 }
 
 /**
@@ -230,6 +271,9 @@ export function clearAccessToken(): void {
  * Ensures concurrent requests share a single refresh network call.
  */
 export async function refreshAccessToken(): Promise<string | null> {
+  if (isExplicitlyLoggedOut()) {
+    return null;
+  }
   if (_refreshPromise) {
     return _refreshPromise;
   }
@@ -363,10 +407,27 @@ export function getCurrentUser(): AuthUser | null {
 
   // Build base user from JWT claims
   const hasTenant = !!payload.tid;
-  const isSuperAdmin = !hasTenant && (!!(payload.is_superuser) || payload.role === 'Super Admin' || (_userProfile as any)?.user_type === 'platform');
-  const userType: 'platform' | 'tenant' = (_userProfile as any)?.user_type ?? (isSuperAdmin ? 'platform' : 'tenant');
+  const isSuperAdmin =
+    !hasTenant &&
+    (!!payload.is_superuser ||
+      payload.role === 'Super Admin' ||
+      payload.role === 'SUPER_ADMIN' ||
+      _userProfile?.userType === 'platform' ||
+      (_userProfile as any)?.user_type === 'platform');
+  const userType: 'platform' | 'tenant' =
+    _userProfile?.userType ??
+    (_userProfile as any)?.user_type ??
+    (isSuperAdmin ? 'platform' : 'tenant');
   const allowedLocationIds = payload.loc || [];
-  const isOrgWide = isSuperAdmin || allowedLocationIds.includes('*') || allowedLocationIds.length === 0 || payload.role === 'ORG_ADMIN' || (_userProfile as any)?.is_org_wide || (_userProfile as any)?.roles?.some((r: any) => r.scope === 'ORG' || r.code === 'ORG_ADMIN');
+  const isOrgWide =
+    isSuperAdmin ||
+    allowedLocationIds.includes('*') ||
+    allowedLocationIds.length === 0 ||
+    payload.role === 'ORG_ADMIN' ||
+    payload.role === 'Organization Administrator' ||
+    !!_userProfile?.isOrgWide ||
+    !!(_userProfile as any)?.is_org_wide ||
+    !!_userProfile?.roles?.some((r: any) => r.scope === 'ORG' || r.code === 'ORG_ADMIN' || r.code === 'TENANT_ADMIN');
 
   const resolvedRole =
     _userProfile?.role ||
@@ -401,7 +462,7 @@ export function getCurrentUser(): AuthUser | null {
     firstName: _userProfile?.firstName ?? '',
     lastName: _userProfile?.lastName ?? '',
     email: _userProfile?.email ?? '',
-    fullName: _userProfile?.fullName ?? (_userProfile?.firstName ? `${_userProfile.firstName} ${_userProfile.lastName || ''}`.trim() : payload.sub),
+    fullName: _userProfile?.fullName ?? (_userProfile?.firstName ? `${_userProfile.firstName} ${_userProfile.lastName || ''}`.trim() : ''),
     initials: _userProfile?.initials ?? (payload.sub ? payload.sub.slice(0, 2).toUpperCase() : 'AD'),
     branding: _userProfile?.branding ?? null,
     isImpersonating: !!payload.is_impersonating,
@@ -429,6 +490,7 @@ export function getCurrentUser(): AuthUser | null {
  * If the refresh cookie is missing or expired: Returns false (user stays logged out).
  */
 export async function refreshAndHydrateSession(): Promise<boolean> {
+  if (isExplicitlyLoggedOut()) return false;
   // Demo mode — always "authenticated", no refresh needed
   if (_demoMode) return true;
 

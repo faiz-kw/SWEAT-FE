@@ -33,6 +33,7 @@ export interface Collections {
   nutritionPlans: Row[];
   products: Row[];
   invoices: Row[];
+  payments: Row[];
   complaints: Row[];
   campaigns: Row[];
   communications: Row[];
@@ -522,6 +523,94 @@ export function deleteRecords(key: CollectionKey, ids: string[]) {
   }
 }
 
+export function loadCollection(key: CollectionKey, locationId?: string) {
+  if (key === "leads") {
+    fetchLeads(locationId)
+      .then((rows) => {
+        setCollectionRows("leads", rows);
+      })
+      .catch(() => {});
+  } else if (key === "members") {
+    fetchMembers(locationId)
+      .then((rows) => {
+        setCollectionRows("members", rows);
+      })
+      .catch(() => {});
+  } else if (key === "plans") {
+    fetchPlans()
+      .then((rows) => {
+        setCollectionRows("plans", rows);
+      })
+      .catch(() => {});
+  } else if (key === "classes") {
+    fetchClasses(locationId)
+      .then((rows) => {
+        setCollectionRows("classes", rows);
+      })
+      .catch(() => {});
+  } else if (key === "bookings") {
+    fetchBookings(locationId)
+      .then((rows) => {
+        setCollectionRows("bookings", rows);
+      })
+      .catch(() => {});
+  } else if (key === "trainers") {
+    fetchTrainers()
+      .then((rows) => {
+        setCollectionRows("trainers", rows);
+      })
+      .catch(() => {});
+  } else if (key === "assessments") {
+    fetchAssessments()
+      .then((rows) => {
+        setCollectionRows("assessments", rows);
+      })
+      .catch(() => {});
+  } else if (key === "programs") {
+    fetchPrograms()
+      .then((rows) => {
+        setCollectionRows("programs", rows);
+      })
+      .catch(() => {});
+  } else if (key === "nutritionPlans") {
+    fetchNutritionPlans()
+      .then((rows) => {
+        setCollectionRows("nutritionPlans", rows);
+      })
+      .catch(() => {});
+  } else if (key === "products") {
+    fetchFoodDatabase()
+      .then((rows) => {
+        setCollectionRows("products", rows);
+      })
+      .catch(() => {});
+  } else if (key === "invoices") {
+    fetchInvoices(locationId)
+      .then((rows) => {
+        setCollectionRows("invoices", rows);
+      })
+      .catch(() => {});
+  } else if (key === "payments") {
+    fetchPayments()
+      .then((rows) => {
+        setCollectionRows("payments", rows);
+      })
+      .catch(() => {});
+  } else if (key === "coupons") {
+    fetchCoupons()
+      .then((rows) => {
+        setCollectionRows("coupons", rows);
+      })
+      .catch(() => {});
+  } else if (key === "integrations") {
+    fetchIntegrationStatus()
+      .then((rows) => {
+        setCollectionRows("integrations", rows);
+      })
+      .catch(() => {});
+  }
+}
+
 /** Reactive read of one collection, scoped by tenant + location. */
 export function useCollection(key: CollectionKey, locationId?: string): Row[] {
   const v = React.useSyncExternalStore(
@@ -531,91 +620,7 @@ export function useCollection(key: CollectionKey, locationId?: string): Row[] {
   );
 
   React.useEffect(() => {
-    if (key === "leads") {
-      fetchLeads(locationId)
-        .then((rows) => {
-          setCollectionRows("leads", rows);
-        })
-        .catch(() => {});
-    } else if (key === "members") {
-      fetchMembers(locationId)
-        .then((rows) => {
-          setCollectionRows("members", rows);
-        })
-        .catch(() => {});
-    } else if (key === "plans") {
-      fetchPlans()
-        .then((rows) => {
-          setCollectionRows("plans", rows);
-        })
-        .catch(() => {});
-    } else if (key === "classes") {
-      fetchClasses(locationId)
-        .then((rows) => {
-          setCollectionRows("classes", rows);
-        })
-        .catch(() => {});
-    } else if (key === "bookings") {
-      fetchBookings(locationId)
-        .then((rows) => {
-          setCollectionRows("bookings", rows);
-        })
-        .catch(() => {});
-    } else if (key === "trainers") {
-      fetchTrainers()
-        .then((rows) => {
-          setCollectionRows("trainers", rows);
-        })
-        .catch(() => {});
-    } else if (key === "assessments") {
-      fetchAssessments()
-        .then((rows) => {
-          setCollectionRows("assessments", rows);
-        })
-        .catch(() => {});
-    } else if (key === "programs") {
-      fetchPrograms()
-        .then((rows) => {
-          setCollectionRows("programs", rows);
-        })
-        .catch(() => {});
-    } else if (key === "nutritionPlans") {
-      fetchNutritionPlans()
-        .then((rows) => {
-          setCollectionRows("nutritionPlans", rows);
-        })
-        .catch(() => {});
-    } else if (key === "products") {
-      fetchFoodDatabase()
-        .then((rows) => {
-          setCollectionRows("products", rows);
-        })
-        .catch(() => {});
-    } else if (key === "invoices") {
-      fetchInvoices(locationId)
-        .then((rows) => {
-          setCollectionRows("invoices", rows);
-        })
-        .catch(() => {});
-    } else if (key === "payments") {
-      fetchPayments()
-        .then((rows) => {
-          setCollectionRows("payments", rows);
-        })
-        .catch(() => {});
-    } else if (key === "coupons") {
-      fetchCoupons()
-        .then((rows) => {
-          setCollectionRows("coupons", rows);
-        })
-        .catch(() => {});
-    } else if (key === "integrations") {
-      fetchIntegrationStatus()
-        .then((rows) => {
-          setCollectionRows("integrations", rows);
-        })
-        .catch(() => {});
-    }
+    loadCollection(key, locationId);
   }, [key, locationId]);
 
   return React.useMemo(() => {

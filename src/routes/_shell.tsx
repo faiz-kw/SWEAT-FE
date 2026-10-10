@@ -100,6 +100,8 @@ function ShellLayout() {
   // they get bounced back to the dashboard with an Access Denied alert.
   React.useEffect(() => {
     if (isLoading || !user) return;
+    // Wait until profile hydration (/auth/me/) completes before enforcing module/permission guards
+    if (!user.isSuperAdmin && !user.fullName) return;
 
     // Members should only access the member workspace
     if (isMemberUser(user)) {
@@ -121,10 +123,10 @@ function ShellLayout() {
       }
     }
 
-    // Administration (/admin/*) is STRICTLY Organization Admin or Platform Super Admin only
-    if (pathname.startsWith("/admin")) {
+    // Administration (/admin/*) and WOD Content Library (/wod/*) are STRICTLY Organization Admin or Platform Super Admin only
+    if (pathname.startsWith("/admin") || pathname.startsWith("/wod")) {
       if (!isSuper && !isOrganizationAdmin(user)) {
-        toast.error("Access denied: Administration is restricted to organization administrators.");
+        toast.error("Access denied: This module is restricted to organization administrators.");
         void navigate({ to: "/" });
         return;
       }
@@ -139,15 +141,22 @@ function ShellLayout() {
     );
     if (!section) return; // Unknown route — let router 404
 
-    // Find the specific nav item that matches this path
-    const navItem = section.items.find(
-      (item) => item.to !== "/" && (pathname === item.to || pathname.startsWith(item.to + "/"))
-    );
+    // Find the specific nav item that matches this path (exact match first, then longest prefix match)
+    const navItem =
+      section.items.find((item) => item.to !== "/" && pathname === item.to) ??
+      [...section.items]
+        .filter((item) => item.to !== "/" && pathname.startsWith(item.to + "/"))
+        .sort((a, b) => b.to.length - a.to.length)[0];
     if (!navItem) return;
 
-    // Guard items restricted to super admins
+    // Guard items restricted to super admins or organization admins
     if (navItem.visibility === "superadmin_only" || section.visibility === "superadmin_only") {
       toast.error("Access denied: You do not have permission to view this administration page.");
+      void navigate({ to: "/" });
+      return;
+    }
+    if ((navItem.visibility === "admin_only" || section.visibility === "admin_only") && !isOrganizationAdmin(user)) {
+      toast.error("Access denied: You do not have permission to view this administrator page.");
       void navigate({ to: "/" });
       return;
     }

@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Activity,
   Layers,
+  ChevronLeft,
   ChevronRight,
   Sparkles,
   UserPlus,
@@ -105,6 +106,7 @@ export function TrainersWorkspace() {
 
   const [activeTab, setActiveTab] = React.useState<'directory' | 'classes' | 'availability'>('directory');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
@@ -113,6 +115,19 @@ export function TrainersWorkspace() {
   const [isApprovalsModalOpen, setIsApprovalsModalOpen] = React.useState(false);
   const [isAllottedClassesOpen, setIsAllottedClassesOpen] = React.useState(false);
   const [directoryBranchId, setDirectoryBranchId] = React.useState<string>('ALL');
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(20);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [statusFilter, debouncedSearch, directoryBranchId, pageSize]);
 
   // Pending Leave Requests count for Admin badge
   const { data: pendingLeaveRequests = [] } = useQuery({
@@ -174,22 +189,28 @@ export function TrainersWorkspace() {
   const [eligibleList, setEligibleList] = React.useState<EligibleTrainer[] | null>(null);
   const [isScanningEligible, setIsScanningEligible] = React.useState(false);
 
-  // Fetch Trainers from Real API (auto-syncs staff with trainer role and filters by branch)
+  // Fetch Trainers from Real API (paginated, auto-syncs staff with trainer role and filters by branch)
   const {
-    data: trainers = [],
+    data: trainersPage,
     isLoading,
     isError,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['trainers', statusFilter, searchQuery, directoryBranchId],
+    queryKey: ['trainers', statusFilter, debouncedSearch, directoryBranchId, page, pageSize],
     queryFn: () =>
-      workforceApi.getTrainers({
+      workforceApi.getTrainersPaginated({
         trainer_status: statusFilter,
-        search: searchQuery || undefined,
+        search: debouncedSearch || undefined,
         branch_id: directoryBranchId === 'ALL' ? undefined : directoryBranchId,
+        page,
+        page_size: pageSize,
       }),
   });
+
+  const trainers = trainersPage?.results || [];
+  const totalTrainers = trainersPage?.count ?? trainers.length;
+  const totalPages = trainersPage?.total_pages || Math.max(1, Math.ceil(totalTrainers / pageSize));
 
   // Auto-detect trainer profile belonging to logged in user
   const currentTrainer = React.useMemo(() => {
@@ -409,7 +430,7 @@ export function TrainersWorkspace() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              {isTrainer ? 'My Operational Profile' : `Trainer Directory (${trainers.length})`}
+              {isTrainer ? 'My Operational Profile' : `Trainer Directory (${totalTrainers})`}
             </button>
             <button
               onClick={() => setActiveTab('classes')}
@@ -457,7 +478,7 @@ export function TrainersWorkspace() {
               <div className="relative flex-1 min-w-[200px] sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search code or bio..."
+                  placeholder="Search name, code, email or bio..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 h-9 text-xs sm:text-sm"
@@ -1030,6 +1051,83 @@ export function TrainersWorkspace() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Pagination Bar */}
+                <div className="mt-4 rounded-xl border border-border/60 bg-card px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>
+                      Showing{' '}
+                      <span className="font-semibold text-foreground">
+                        {totalTrainers === 0 ? 0 : (page - 1) * pageSize + 1}
+                      </span>
+                      –
+                      <span className="font-semibold text-foreground">
+                        {Math.min(page * pageSize, totalTrainers)}
+                      </span>{' '}
+                      of <span className="font-semibold text-foreground">{totalTrainers}</span> trainers
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span>Rows:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="h-7 rounded-md border border-border/60 bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        {[10, 20, 50, 100].map((sz) => (
+                          <option key={sz} value={sz}>
+                            {sz} / page
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="h-8 px-2.5 text-xs"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                      Prev
+                    </Button>
+                    <div className="flex items-center gap-1 px-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum = i + 1;
+                        if (totalPages > 5) {
+                          if (page <= 3) pageNum = i + 1;
+                          else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                          else pageNum = page - 2 + i;
+                        }
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setPage(pageNum)}
+                            className={`h-8 min-w-[32px] px-2 rounded-md text-xs font-semibold transition-colors ${
+                              page === pageNum
+                                ? 'bg-primary text-primary-foreground shadow-2xs'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="h-8 px-2.5 text-xs"
+                    >
+                      Next
+                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

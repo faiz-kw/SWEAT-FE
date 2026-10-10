@@ -215,7 +215,7 @@ export function getFilteredNav(
     if (vis === "admin_only" && !hasAdminAccess) return false;
 
     // 2. Check section permission if specified
-    if (section.permission && !hasPermission(user, section.permission)) {
+    if (section.permission && !hasAdminAccess && !hasPermission(user, section.permission)) {
       return false;
     }
 
@@ -242,8 +242,8 @@ export function getFilteredNav(
           }
         }
 
-        // 3. Check granular effective user permission
-        if (item.permission && !hasPermission(user, item.permission)) {
+        // 3. Check granular effective user permission (Org Admins & Super Admins have full access to enabled modules)
+        if (item.permission && !hasAdminAccess && !hasPermission(user, item.permission)) {
           return false;
         }
 
@@ -314,7 +314,8 @@ export const NAV: NavSection[] = [
       { label: "Personal Training", to: "/ops/personal-training", permission: "ops.personal-training.view" },
       { label: "Assessments", to: "/ops/assessments", permission: "performance.analytics.view" },
       { label: "Trainers", to: "/ops/trainers", permission: "ops.trainers.view" },
-      { label: "Programs", to: "/ops/programs", permission: "core.settings.view" },
+      { label: "Programs", to: "/ops/programs", permission: "ops.classes.view" },
+      { label: "WOD Content Library", to: "/wod/content-library", visibility: "admin_only" },
     ],
   },
   {

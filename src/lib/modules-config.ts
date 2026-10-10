@@ -216,9 +216,30 @@ const CATALOG_MODULE_IDS = new Set(FEATURE_MODULES_CATALOG.map((m) => m.id));
 
 /** Canonical path aliases for submodules whose route path differs from DB submodule_code */
 const SUBMODULE_PATH_ALIASES: Record<string, string[]> = {
+  "/members": ["/members", "/members/client-360", "/members/memberships", "/members/directory"],
+  "/members/client-360": ["/members/client-360", "/members", "/members/memberships"],
+  "/crm/dashboard": ["/crm/dashboard", "/crm/leads", "/crm/pipeline"],
+  "/crm/activities": ["/crm/activities", "/crm/leads", "/crm/follow-ups"],
+  "/crm/coupons": ["/crm/coupons", "/crm/campaigns", "/crm/offers", "/crm/leads"],
+  "/crm/campaigns": ["/crm/campaigns", "/crm/coupons", "/crm/leads"],
   "/crm/setup": ["/crm/setup", "/crm/settings"],
   "/crm/settings": ["/crm/setup", "/crm/settings"],
-  "/members": ["/members", "members", "/members/client-360"],
+  "/ops/programs": ["/ops/programs", "/coaching/program-builder", "/core/settings", "/ops/classes"],
+  "/wod/content-library": ["/wod/content-library", "/ops/classes", "/ops/programs", "/core/settings"],
+  "/ops/assessments": ["/ops/assessments", "/performance/assessments", "/performance/analytics"],
+  "/performance/assessments": ["/performance/assessments", "/performance/analytics", "/performance/workouts"],
+  "/performance/intelligence": ["/performance/intelligence", "/performance/analytics", "/performance/workouts"],
+  "/performance/progress": ["/performance/progress", "/performance/workouts", "/performance/pr-tracker"],
+  "/performance/recovery": ["/performance/recovery", "/performance/wearables", "/performance/workouts"],
+  "/performance/movement": ["/performance/movement", "/performance/workouts", "/performance/analytics"],
+  "/marketing/audiences": ["/marketing/audiences", "/marketing/campaigns", "/marketing/lead-magnets"],
+  "/marketing/communication": ["/marketing/communication", "/marketing/campaigns"],
+  "/marketing/templates": ["/marketing/templates", "/marketing/campaigns"],
+  "/inventory/suppliers": ["/inventory/suppliers", "/inventory/purchases", "/inventory/products"],
+  "/inventory/movement": ["/inventory/movement", "/inventory/stock", "/inventory/products"],
+  "/cs/retention": ["/cs/retention", "/cs/member-health", "/cs/at-risk"],
+  "/ai/group-tracking": ["/ai/group-tracking", "/ai/live-sessions", "/ai/coach"],
+  "/ai/ml-admin": ["/ai/ml-admin", "/ai/business-intelligence", "/ai/coach"],
 };
 
 /**
@@ -229,7 +250,7 @@ export function getSubmodulePathsForModule(moduleId: string): string[] {
   if (!mod) return [];
   const paths = mod.submodules.map((s) => s.to);
   if (moduleId === "crm") {
-    return Array.from(new Set([...paths, "/crm/settings"]));
+    return Array.from(new Set([...paths, "/crm/settings", "/crm/dashboard", "/crm/campaigns"]));
   }
   return paths;
 }
@@ -261,10 +282,15 @@ export function isSubmoduleAllowed(
   // null / undefined = super admin / no restriction — allow everything
   if (enabledModules === null || enabledModules === undefined) return true;
 
-  // Wildcard — allow everything
-  if (enabledModules.includes("*") || enabledModules.includes("all")) return true;
+  const normalizedSet = new Set(enabledModules.map((m) => String(m).toLowerCase().trim()));
 
-  const candidatePaths = SUBMODULE_PATH_ALIASES[submodulePath] || [submodulePath];
+  // Wildcard — allow everything
+  if (normalizedSet.has("*") || normalizedSet.has("all")) return true;
+
+  const lowerSubPath = submodulePath.toLowerCase().trim();
+  const candidatePaths = (SUBMODULE_PATH_ALIASES[lowerSubPath] || SUBMODULE_PATH_ALIASES[submodulePath] || [submodulePath]).map((p) =>
+    p.toLowerCase().trim()
+  );
 
   // Root module path match (e.g. "/members" when parentModuleId is "members")
   if (parentModuleId && (submodulePath === `/${parentModuleId}` || submodulePath === parentModuleId)) {
@@ -274,30 +300,39 @@ export function isSubmoduleAllowed(
   }
 
   // Direct submodule path match (including canonical aliases)
-  if (candidatePaths.some((p) => enabledModules.includes(p))) return true;
+  if (candidatePaths.some((p) => normalizedSet.has(p))) return true;
+
+  const lowerParentId = parentModuleId?.toLowerCase().trim();
 
   // If the parent module ID is in the FEATURE_MODULES_CATALOG
-  if (parentModuleId && CATALOG_MODULE_IDS.has(parentModuleId)) {
+  if (lowerParentId && CATALOG_MODULE_IDS.has(lowerParentId)) {
     // Parent module ID itself is in the list (e.g. "crm" means all CRM submodules)
-    if (enabledModules.includes(parentModuleId)) {
-      const parentSubmodules = getSubmodulePathsForModule(parentModuleId);
+    if (normalizedSet.has(lowerParentId)) {
+      const parentSubmodules = getSubmodulePathsForModule(lowerParentId).map((p) => p.toLowerCase().trim());
       // If no granular submodule overrides exist, all submodules of this module are allowed
-      const hasGranularOverrides = enabledModules.some((item) =>
-        parentSubmodules.includes(item) ||
-        (SUBMODULE_PATH_ALIASES[item] && SUBMODULE_PATH_ALIASES[item].some((alt) => parentSubmodules.includes(alt)))
+      const hasGranularOverrides = Array.from(normalizedSet).some(
+        (item) =>
+          item.startsWith(`/${lowerParentId}/`) ||
+          parentSubmodules.includes(item)
       );
       if (!hasGranularOverrides) return true;
-      // Granular overrides exist — only allow if explicitly listed
-      return candidatePaths.some((p) => enabledModules.includes(p));
+      // If this specific route is not a catalog submodule item itself, allow it when the parent module is enabled
+      if (!parentSubmodules.includes(lowerSubPath) && !SUBMODULE_PATH_ALIASES[lowerSubPath]) {
+        return true;
+      }
+      // Granular overrides exist — allow if any candidate path is listed
+      return candidatePaths.some((p) => normalizedSet.has(p));
     }
-    // Module is in catalog but NOT in the tenant's provisioned list — deny
-    return false;
+    // Also allow if any submodule under this parent module is explicitly enabled and matches candidatePaths
+    return candidatePaths.some((p) => normalizedSet.has(p));
   }
 
-  // Nav section is NOT in the FEATURE_MODULES_CATALOG (e.g. "coaching", "support",
-  // "performance", "marketing", "automation", "reports").
-  // Check if any enabled entry is a path-prefix match for the item.
-  if (enabledModules.some((entry) => entry.startsWith("/") && candidatePaths.some((cp) => cp.startsWith(entry)))) {
+  // Nav section is NOT in the FEATURE_MODULES_CATALOG:
+  // Check if parent section ID or any path-prefix match is enabled
+  if (lowerParentId && normalizedSet.has(lowerParentId)) {
+    return true;
+  }
+  if (Array.from(normalizedSet).some((entry) => entry.startsWith("/") && candidatePaths.some((cp) => cp.startsWith(entry)))) {
     return true;
   }
 

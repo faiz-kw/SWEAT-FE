@@ -20,6 +20,7 @@ import {
   History,
   Tag,
   Check,
+  ChevronLeft,
   ChevronRight,
   Shield,
   Layers,
@@ -76,7 +77,45 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     return initialTab;
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [dateFilterMode, setDateFilterMode] = useState<'all' | 'today' | 'custom' | 'range'>('all');
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [fromDate, setFromDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [toDate, setToDate] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  const todayIsoStr = React.useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [activeTab, debouncedSearch, statusFilter, dateFilterMode, selectedDate, fromDate, toDate, pageSize]);
 
   // Selected Booking & Action Modals
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -132,18 +171,51 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [bookingCloseUnit, setBookingCloseUnit] = useState<'MINUTES' | 'HOURS'>('MINUTES');
   const [policyError, setPolicyError] = useState<string | null>(null);
 
-  // Queries
+  const effectiveStatusParam =
+    activeTab === 'waitlist'
+      ? 'WAITLISTED'
+      : statusFilter === 'ALL'
+      ? undefined
+      : statusFilter;
+
+  // Paginated Bookings Query
   const {
-    data: bookings = [],
+    data: paginatedBookings,
     isLoading: loadingBookings,
     refetch: refetchBookings,
   } = useQuery({
-    queryKey: ['bookings', statusFilter],
+    queryKey: [
+      'bookings',
+      effectiveStatusParam,
+      debouncedSearch,
+      dateFilterMode,
+      selectedDate,
+      fromDate,
+      toDate,
+      page,
+      pageSize,
+    ],
     queryFn: () =>
-      bookingsApi.getBookings({
-        status: statusFilter === 'ALL' ? undefined : statusFilter,
+      bookingsApi.getBookingsPaginated({
+        status: effectiveStatusParam,
+        search: debouncedSearch || undefined,
+        occurrence_date:
+          dateFilterMode === 'today'
+            ? todayIsoStr
+            : dateFilterMode === 'custom'
+            ? selectedDate
+            : undefined,
+        from_date: dateFilterMode === 'range' && fromDate ? fromDate : undefined,
+        to_date: dateFilterMode === 'range' && toDate ? toDate : undefined,
+        page,
+        page_size: pageSize,
       }),
   });
+
+  const bookings = paginatedBookings?.results || [];
+  const totalMatchingBookings = paginatedBookings?.count ?? bookings.length;
+  const totalPages = paginatedBookings?.total_pages ?? 1;
+  const bookingSummary = paginatedBookings?.summary;
 
   const {
     data: policies = [],
@@ -161,12 +233,14 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     enabled: isCreateModalOpen,
   });
 
-  // Query scheduled occurrences when Create or Reschedule modal is open (eligibility-aware when member & membership are selected)
+  // Query upcoming scheduled occurrences when Create or Reschedule modal is open
+  const todayIso = React.useMemo(() => new Date().toISOString().split('T')[0], []);
   const { data: scheduledOccurrences = [], isLoading: loadingOccurrences } = useQuery({
-    queryKey: ['scheduled-occurrences', selectedMembershipId, selectedMember?.id],
+    queryKey: ['scheduled-occurrences', selectedMembershipId, selectedMember?.id, todayIso],
     queryFn: () =>
       classesApi.getOccurrences({
         status: 'SCHEDULED',
+        from_date: todayIso,
         membership_id: selectedMembershipId || undefined,
         user_profile_id: selectedMember?.id || undefined,
       }),
@@ -346,24 +420,15 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     },
   });
 
-  const filteredBookings = bookings.filter((b) => {
-    const term = searchTerm.toLowerCase();
-    return (
-      b.booking_number?.toLowerCase().includes(term) ||
-      b.user_profile_name?.toLowerCase().includes(term) ||
-      b.occurrence_title?.toLowerCase().includes(term) ||
-      b.branch_name?.toLowerCase().includes(term)
-    );
-  });
+  const filteredBookings = bookings;
+  const waitlistBookings = activeTab === 'waitlist' ? bookings : bookings.filter((b) => b.status === 'WAITLISTED');
 
-  const waitlistBookings = bookings.filter((b) => b.status === 'WAITLISTED');
-
-  // KPI Metrics Calculation
-  const totalBookings = bookings.length;
-  const confirmedCount = bookings.filter((b) => b.status === 'CONFIRMED').length;
-  const waitlistCount = waitlistBookings.length;
-  const attendedCount = bookings.filter((b) => b.status === 'ATTENDED').length;
-  const noShowCount = bookings.filter((b) => b.status === 'NO_SHOW').length;
+  // KPI Metrics Calculation (Backed by server-side aggregate summary across all records)
+  const totalBookings = bookingSummary?.total_count ?? totalMatchingBookings;
+  const confirmedCount = bookingSummary?.confirmed_count ?? bookings.filter((b) => b.status === 'CONFIRMED').length;
+  const waitlistCount = bookingSummary?.waitlisted_count ?? waitlistBookings.length;
+  const attendedCount = bookingSummary?.attended_count ?? bookings.filter((b) => b.status === 'ATTENDED').length;
+  const noShowCount = bookingSummary?.no_show_count ?? bookings.filter((b) => b.status === 'NO_SHOW').length;
 
   const getStatusBadge = (status: BookingStatus | string) => {
     switch (status) {
@@ -490,7 +555,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            Active Bookings ({bookings.length})
+            Active Bookings ({activeTab === 'bookings' ? totalMatchingBookings : totalBookings})
           </button>
           <button
             onClick={() => setActiveTab('waitlist')}
@@ -520,23 +585,106 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
         {activeTab === 'bookings' && (
           <div className="space-y-4">
             {/* Filters Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search booking #, member name, class title, branch..."
-                  className="pl-9 bg-background text-xs sm:text-sm"
-                />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                <div className="relative min-w-[200px] flex-1 max-w-sm">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search booking #, member name, class title, branch..."
+                    className="h-8 pl-9 bg-background text-xs"
+                  />
+                </div>
+
+                {/* Date Filter Mode Tabs */}
+                <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('all')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'all'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All Dates
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('today')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'today'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('custom')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'custom'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Pick Date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('range')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'range'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Date Range
+                  </button>
+                </div>
+
+                {dateFilterMode === 'custom' && (
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                    />
+                  </div>
+                )}
+
+                {dateFilterMode === 'range' && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                      title="From Date"
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                      title="To Date"
+                    />
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Status:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="h-8 bg-background border border-border rounded-lg px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="CONFIRMED">Confirmed</option>
@@ -825,6 +973,84 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Footer Bar */}
+              {totalMatchingBookings > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-border bg-muted/20 text-xs">
+                  <div className="flex items-center gap-3 text-muted-foreground">
+                    <span>
+                      Showing{' '}
+                      <strong className="text-foreground">
+                        {(page - 1) * pageSize + 1}
+                      </strong>
+                      –
+                      <strong className="text-foreground">
+                        {Math.min(page * pageSize, totalMatchingBookings)}
+                      </strong>{' '}
+                      of <strong className="text-foreground">{totalMatchingBookings}</strong> bookings
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="hidden sm:inline">Rows:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || loadingBookings}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Prev
+                    </Button>
+
+                    <div className="flex items-center gap-1 px-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+                        const startPage = Math.max(1, Math.min(page - 2, totalPages - 4));
+                        const pageNum = startPage + idx;
+                        if (pageNum > totalPages) return null;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setPage(pageNum)}
+                            className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                              page === pageNum
+                                ? 'bg-primary text-primary-foreground shadow-2xs'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages || loadingBookings}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      Next
+                      <ChevronRight className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -843,7 +1069,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   </p>
                 </div>
                 <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 self-start sm:self-auto">
-                  {waitlistBookings.length} In Queue
+                  {waitlistCount} In Queue
                 </span>
               </div>
 
@@ -852,60 +1078,93 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   No active waitlisted members currently in queue across sessions.
                 </div>
               ) : (
-                <div className="divide-y divide-border/60">
-                  {waitlistBookings.map((b) => (
-                    <div
-                      key={b.id}
-                      className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/30 px-2 rounded-lg transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center font-mono font-bold text-amber-600 dark:text-amber-400 text-sm shrink-0">
-                          #{b.waitlist_position || 1}
+                <>
+                  <div className="divide-y divide-border/60">
+                    {waitlistBookings.map((b) => (
+                      <div
+                        key={b.id}
+                        className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/30 px-2 rounded-lg transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center font-mono font-bold text-amber-600 dark:text-amber-400 text-sm shrink-0">
+                            #{b.waitlist_position || 1}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-foreground text-sm">
+                              {b.user_profile_name || 'Member'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {b.occurrence_title} · {b.occurrence_date} ({b.branch_name}) · Reserved at{' '}
+                              {new Date(b.booked_at).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-semibold text-foreground text-sm">
-                            {b.user_profile_name || 'Member'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {b.occurrence_title} · {b.occurrence_date} ({b.branch_name}) · Reserved at{' '}
-                            {new Date(b.booked_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => promoteMutation.mutate(b.occurrence)}
+                              disabled={promoteMutation.isPending}
+                              className="text-xs h-8 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 gap-1.5"
+                            >
+                              <ArrowUpRight className="size-3.5" />
+                              Promote to Confirmed
+                            </Button>
+                          )}
+                          {(canDelete || canEdit) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedBooking(b);
+                                setCancelReasonText('Removed from waitlist queue');
+                                setIsCancelModalOpen(true);
+                              }}
+                              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+                            >
+                              Remove
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => promoteMutation.mutate(b.occurrence)}
-                            disabled={promoteMutation.isPending}
-                            className="text-xs h-8 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 gap-1.5"
-                          >
-                            <ArrowUpRight className="size-3.5" />
-                            Promote to Confirmed
-                          </Button>
-                        )}
-                        {(canDelete || canEdit) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedBooking(b);
-                              setCancelReasonText('Removed from waitlist queue');
-                              setIsCancelModalOpen(true);
-                            }}
-                            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-                          >
-                            Remove
-                          </Button>
-                        )}
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-4 border-t border-border text-xs">
+                      <span className="text-muted-foreground">
+                        Page <strong className="text-foreground">{page}</strong> of{' '}
+                        <strong className="text-foreground">{totalPages}</strong> ({totalMatchingBookings} waitlisted)
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={page <= 1 || loadingBookings}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          className="h-7 px-2.5 text-xs gap-1"
+                        >
+                          <ChevronLeft className="size-3.5" />
+                          Prev
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={page >= totalPages || loadingBookings}
+                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                          className="h-7 px-2.5 text-xs gap-1"
+                        >
+                          Next
+                          <ChevronRight className="size-3.5" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>

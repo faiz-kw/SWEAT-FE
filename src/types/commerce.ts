@@ -181,12 +181,89 @@ export interface CommerceSummary {
   total_orders: number;
   settled_orders: number;
   pending_orders: number;
+  cancelled_orders?: number;
   total_settled_amount: string;
   total_outstanding_amount: string;
+  cancelled_amount?: string;
   gross_revenue: string;
   refunded_amount: string;
+  refund_count?: number;
+  pending_refunds_amount?: string;
   net_revenue: string;
   cash_collected: string;
+  cash_txn_count?: number;
   online_collected: string;
+  online_txn_count?: number;
   pending_approval_cash_amount: string;
+  tax_collected?: string;
+  discount_given?: string;
+  subtotal_revenue?: string;
+  payment_mode_breakdown?: Array<{
+    mode: string;
+    category: 'CASH' | 'ONLINE';
+    count: number;
+    amount: string;
+  }>;
+  monthly_cash_flow?: Array<{
+    month: string;
+    gross_inflow: string;
+    cash_inflow: string;
+    online_inflow: string;
+    refunded: string;
+    net_cash_flow: string;
+    txn_count: number;
+  }>;
+  top_packages?: Array<{
+    id?: string;
+    name: string;
+    program_name?: string;
+    orders_count: number;
+    revenue: string;
+  }>;
+  branch_breakdown?: Array<{
+    id: string;
+    name: string;
+    total_orders: number;
+    paid_orders: number;
+    pending_orders: number;
+    revenue: string;
+    cash_revenue: string;
+    online_revenue: string;
+    outstanding: string;
+  }>;
+  program_breakdown?: Array<{
+    id: string;
+    name: string;
+    category: string;
+    total_orders: number;
+    paid_orders: number;
+    revenue: string;
+  }>;
+  sales_user_breakdown?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    total_orders: number;
+    paid_orders: number;
+    pending_orders: number;
+    cancelled_orders: number;
+    conversion_rate: number;
+    revenue: string;
+  }>;
+  trainer_breakdown?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    referrals_joined: number;
+    total_referrals: number;
+    conversion_rate: number;
+    revenue: string;
+  }>;
+  filter_options?: {
+    branches: Array<{ id: string; name: string }>;
+    programs: Array<{ id: string; name: string; category_name?: string }>;
+    packages: Array<{ id: string; name: string; program_id?: string; program_name?: string }>;
+    sales_users: Array<{ id: string; name: string; email: string }>;
+    trainers: Array<{ id: string; name: string; email: string }>;
+  };
 }

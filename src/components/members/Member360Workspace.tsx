@@ -556,6 +556,14 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       {overview.contact.gender || '—'} {overview.contact.age ? `(${overview.contact.age} yrs)` : ''}
                     </span>
                   </div>
+                  {(overview.contact as any)?.date_of_birth && (
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-muted-foreground">Date of Birth</span>
+                      <span className="font-medium text-foreground font-mono">
+                        {(overview.contact as any).date_of_birth}
+                      </span>
+                    </div>
+                  )}
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Emergency Contact</span>
                     <span className="font-medium text-foreground">{overview.contact.emergency_contact || 'None specified'}</span>

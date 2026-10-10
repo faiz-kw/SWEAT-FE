@@ -25,6 +25,7 @@ export interface ClassTemplate {
   description?: string;
   category?: string;
   category_name?: string;
+  category_code?: string;
   program?: string;
   program_name?: string;
   default_duration_minutes: number;
@@ -45,6 +46,12 @@ export interface ClassScheduleRule {
   id: string;
   class_template: string;
   template_name?: string;
+  class_name?: string;
+  category?: string;
+  category_name?: string;
+  category_code?: string;
+  program?: string;
+  program_name?: string;
   branch: string;
   branch_name?: string;
   days_of_week: number[]; // 1=Mon .. 7=Sun
@@ -74,6 +81,11 @@ export interface ClassOccurrence {
   class_template: string;
   template_name?: string;
   class_name?: string;
+  category?: string;
+  category_name?: string;
+  category_code?: string;
+  program?: string;
+  program_name?: string;
   schedule_rule?: string;
   branch: string;
   branch_name?: string;

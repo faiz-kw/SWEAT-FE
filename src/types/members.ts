@@ -292,7 +292,8 @@ export interface Member360Data {
       email: string;
       phone: string;
       gender: string;
-      age: number;
+      age: number | null;
+      date_of_birth?: string | null;
       joined_at: string;
       emergency_contact: string;
       acquisition_source: string;

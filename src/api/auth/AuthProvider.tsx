@@ -142,6 +142,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // On Mount: Restore Session from Refresh Cookie
   // ---------------------------------------------------------------
   // ---------------------------------------------------------------
+  // Helper: Fetch & populate /me/ profile with state update
+  // ---------------------------------------------------------------
+  const fetchPromiseRef = React.useRef<Promise<void> | null>(null);
+
+  const fetchAndSetProfile = React.useCallback(async (): Promise<void> => {
+    if (!isAuthenticated()) return;
+    if (fetchPromiseRef.current) {
+      return fetchPromiseRef.current;
+    }
+
+    const run = (async () => {
+      try {
+        const meRes = await api.get<MeApiResponse>('/auth/me/');
+        const me = meRes.data;
+        const nameParts = [me.first_name, me.last_name].filter(Boolean);
+        const rawName = me.full_name || nameParts.join(' ') || me.email.split('@')[0] || 'Admin';
+        const fullName: string = rawName;
+        const initials = nameParts.length >= 2
+          ? `${nameParts[0]!.charAt(0)}${nameParts[1]!.charAt(0)}`.toUpperCase()
+          : fullName.slice(0, 2).toUpperCase();
+
+        const rawLocs = (me as any).allowed_locations_list || me.allowed_locations || (me as any).allowed_branches || [];
+        const locations = Array.isArray(rawLocs)
+          ? rawLocs
+              .map((l: any, idx: number) => {
+                if (!l) return null;
+                if (typeof l === "string") {
+                  return { id: l, name: `Location ${idx + 1}`, city: "Bengaluru" };
+                }
+                return {
+                  id: l.id || `LOC-00${idx + 1}`,
+                  name: l.name || "Studio Branch",
+                  city: l.city || "Bengaluru",
+                  ...(l.address ? { address: l.address } : {}),
+                };
+              })
+              .filter(Boolean) as LocationInfo[]
+          : [];
+
+        const userRole = me.role || me.roles?.[0]?.name || me.roles?.[0]?.code || (me.is_superuser ? 'Super Admin' : 'Member');
+        const isSuperAdminUser = (!me.tenant_id) && (me.is_superuser || userRole === 'Super Admin' || me.user_type === 'platform');
+        const enabledModules = isSuperAdminUser
+          ? null
+          : (me.enabled_modules ?? []);
+
+        const newBranding = me.branding ?? (me as any).branding ?? null;
+
+        setUserProfile({
+          role: userRole,
+          roles: me.roles || [],
+          permissions: me.permissions || [],
+          userType: me.user_type || (isSuperAdminUser ? 'platform' : 'tenant'),
+          isOrgWide: !!me.is_org_wide || isSuperAdminUser,
+          firstName: me.first_name,
+          lastName: me.last_name,
+          email: me.email,
+          tenantName: me.tenant_name || (isSuperAdminUser ? 'Global Platform HQ' : 'Tenant Organization'),
+          locations,
+          fullName,
+          initials,
+          branding: newBranding,
+          // Enforce module access: null = unrestricted (super admin), list = tenant provisioned
+          enabledModules,
+        });
+
+        // Always update React state so all consumers (Sidebar, Shell, Nav) re-render with hydrated modules & permissions
+        const updatedUser = getCurrentUser();
+        if (updatedUser) {
+          setUser((prev) => {
+            if (
+              prev &&
+              prev.userId === updatedUser.userId &&
+              prev.role === updatedUser.role &&
+              prev.isSuperAdmin === updatedUser.isSuperAdmin &&
+              prev.isOrgWide === updatedUser.isOrgWide &&
+              prev.firstName === updatedUser.firstName &&
+              prev.lastName === updatedUser.lastName &&
+              prev.email === updatedUser.email &&
+              prev.tenantName === updatedUser.tenantName &&
+              JSON.stringify(prev.roles) === JSON.stringify(updatedUser.roles) &&
+              JSON.stringify(prev.permissions) === JSON.stringify(updatedUser.permissions) &&
+              JSON.stringify(prev.enabledModules) === JSON.stringify(updatedUser.enabledModules) &&
+              JSON.stringify(prev.branding) === JSON.stringify(updatedUser.branding) &&
+              JSON.stringify(prev.locations) === JSON.stringify(updatedUser.locations)
+            ) {
+              return prev;
+            }
+            return { ...updatedUser };
+          });
+        }
+      } catch {
+        // /me/ failed (network, etc.) — still logged in, just missing profile details
+      } finally {
+        fetchPromiseRef.current = null;
+      }
+    })();
+
+    fetchPromiseRef.current = run;
+    return run;
+  }, []);
+
+  // ---------------------------------------------------------------
   // On Mount: Restore Session from Refresh Cookie
   // ---------------------------------------------------------------
   React.useEffect(() => {
@@ -152,7 +254,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If already authenticated and profile is hydrated (from _shell.tsx beforeLoad)
         if (isAuthenticated()) {
           const existing = getCurrentUser();
-          if (existing?.fullName) {
+          const hasHydratedProfile = Boolean(
+            existing?.fullName &&
+            (existing.isSuperAdmin || (existing.enabledModules && existing.enabledModules.length > 0))
+          );
+          if (hasHydratedProfile && existing) {
             if (isMounted && !didTimeout) {
               setUser(existing);
               setIsLoading(false);
@@ -161,6 +267,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             void fetchAndSetProfile();
             return;
           }
+          // Token is in memory (e.g. just logged in or refreshed in _shell.tsx), wait for profile hydration
+          await fetchAndSetProfile();
+          if (isMounted && !didTimeout) {
+            setUser(getCurrentUser());
+            setIsLoading(false);
+          }
+          return;
         }
 
         // Otherwise, execute combined refresh and profile hydration
@@ -204,97 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       clearTimeout(watchdog);
     };
-  }, []); // runs only once, on mount
-
-  // ---------------------------------------------------------------
-  // Helper: Fetch & populate /me/ profile with state update
-  // ---------------------------------------------------------------
-  const isFetchingRef = React.useRef(false);
-
-  const fetchAndSetProfile = React.useCallback(async (): Promise<void> => {
-    if (isFetchingRef.current) return;
-    if (!isAuthenticated()) return;
-    isFetchingRef.current = true;
-    try {
-      const meRes = await api.get<MeApiResponse>('/auth/me/');
-      const me = meRes.data;
-      const nameParts = [me.first_name, me.last_name].filter(Boolean);
-      const rawName = me.full_name || nameParts.join(' ') || me.email.split('@')[0] || 'Admin';
-      const fullName: string = rawName;
-      const initials = nameParts.length >= 2
-        ? `${nameParts[0]!.charAt(0)}${nameParts[1]!.charAt(0)}`.toUpperCase()
-        : fullName.slice(0, 2).toUpperCase();
-
-      const rawLocs = (me as any).allowed_locations_list || me.allowed_locations || (me as any).allowed_branches || [];
-      const locations = Array.isArray(rawLocs)
-        ? rawLocs
-            .map((l: any, idx: number) => {
-              if (!l) return null;
-              if (typeof l === "string") {
-                return { id: l, name: `Location ${idx + 1}`, city: "Bengaluru" };
-              }
-              return {
-                id: l.id || `LOC-00${idx + 1}`,
-                name: l.name || "Studio Branch",
-                city: l.city || "Bengaluru",
-                ...(l.address ? { address: l.address } : {}),
-              };
-            })
-            .filter(Boolean) as LocationInfo[]
-        : [];
-
-      const userRole = me.role || me.roles?.[0]?.name || me.roles?.[0]?.code || (me.is_superuser ? 'Super Admin' : 'Member');
-      const isSuperAdminUser = (!me.tenant_id) && (me.is_superuser || userRole === 'Super Admin' || me.user_type === 'platform');
-      const enabledModules = isSuperAdminUser
-        ? null
-        : (me.enabled_modules ?? []);
-
-      const current = getCurrentUser();
-      const newBranding = me.branding ?? (me as any).branding ?? null;
-      const hasChanged =
-        !current ||
-        current.role !== userRole ||
-        current.firstName !== me.first_name ||
-        current.lastName !== me.last_name ||
-        current.email !== me.email ||
-        current.tenantName !== (me.tenant_name || '') ||
-        JSON.stringify(current.roles) !== JSON.stringify(me.roles ?? []) ||
-        JSON.stringify(current.permissions) !== JSON.stringify(me.permissions ?? []) ||
-        JSON.stringify(current.enabledModules) !== JSON.stringify(enabledModules) ||
-        JSON.stringify(current.branding) !== JSON.stringify(newBranding) ||
-        JSON.stringify(current.locations) !== JSON.stringify(locations);
-
-      if (hasChanged) {
-        setUserProfile({
-          role: userRole,
-          roles: me.roles || [],
-          permissions: me.permissions || [],
-          userType: me.user_type || (isSuperAdminUser ? 'platform' : 'tenant'),
-          isOrgWide: !!me.is_org_wide || isSuperAdminUser,
-          firstName: me.first_name,
-          lastName: me.last_name,
-          email: me.email,
-          tenantName: me.tenant_name || (isSuperAdminUser ? 'Global Platform HQ' : 'Tenant Organization'),
-          locations,
-          fullName,
-          initials,
-          branding: newBranding,
-          // Enforce module access: null = unrestricted (super admin), list = tenant provisioned
-          enabledModules,
-        });
-
-        // Update React state so all consumers (Sidebar, Shell, Nav) re-render immediately!
-        const updatedUser = getCurrentUser();
-        if (updatedUser) {
-          setUser({ ...updatedUser });
-        }
-      }
-    } catch {
-      // /me/ failed (network, etc.) — still logged in, just missing profile details
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, []);
+  }, [fetchAndSetProfile]);
 
   // ---------------------------------------------------------------
   // Real-time listeners: BroadcastChannel, Storage, CustomEvent, Focus & Visibility
@@ -395,6 +418,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       payload.tenant_slug = credentials.tenant_slug.trim().toLowerCase();
     }
     const response = await api.post<LoginApiResponse & { default_route?: string; user_type?: string }>('/auth/login/', payload);
+    clearUserProfile();
     setAccessToken(response.data.access);
     // Fetch full profile so name/locations are immediately available
     await fetchAndSetProfile();
@@ -416,19 +440,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Even if that call fails, we still clear the local state — the user is logged out.
    */
   async function logout(): Promise<void> {
+    const currentToken = getCurrentUser();
+    const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
+
+    // Immediately clear all local auth state, mark explicit logout, and purge query cache
+    queryClient.clear();
+    clearAccessToken(true);
+    clearUserProfile();
+    setUser(null);
+
     try {
-      // Tell the backend to blacklist the refresh token cookie
-      await api.post('/auth/logout/', {});
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('pos_auth_sync');
+        bc.postMessage({ type: 'LOGOUT', userId: currentToken?.userId });
+        bc.close();
+      }
+    } catch {}
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      await fetch(`${BASE_URL.replace(/\/+$/, '')}/auth/logout/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        keepalive: true,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
     } catch {
-      // Backend call failed — still proceed with local logout
+      // Backend call failed or timed out — still proceed with local logout
     } finally {
-      // CRITICAL: Clear all TanStack Query cache to guarantee zero cross-tenant data leakage
-      queryClient.clear();
-      clearAccessToken();
-      clearUserProfile();
-      setUser(null);
-      // Hard redirect to /login — clears in-memory token on page reload
-      // and prevents the back button from returning to the dashboard.
       window.location.replace('/login');
     }
   }

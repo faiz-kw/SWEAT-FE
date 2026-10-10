@@ -13,13 +13,31 @@
 import { useAuth } from '@/contexts';
 import type { AuthUser } from '@/services';
 
+function isUserOrgOrSuperAdmin(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  if (user.userType === 'platform' && !user.tenantId) return true;
+  if (user.isOrgWide) return true;
+  const roleStr = (user.role || '').toUpperCase().trim();
+  if (['ORG_ADMIN', 'ORGANIZATION ADMINISTRATOR', 'TENANT_ADMIN', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(roleStr)) {
+    return true;
+  }
+  return Boolean(
+    user.roles?.some((r) => {
+      const code = (r.code || '').toUpperCase().trim();
+      const scope = (r.scope || '').toUpperCase().trim();
+      return scope === 'ORG' || code === 'ORG_ADMIN' || code === 'TENANT_ADMIN';
+    })
+  );
+}
+
 /**
  * Pure evaluation function for permission code matching.
  *
  * Rules:
  * 1. If no permissionCode requested -> true
  * 2. If user is null/undefined or loading -> false (Fail-closed)
- * 3. If user.isSuperAdmin -> true
+ * 3. If user is Super Admin or Organization Admin -> true
  * 4. If user.permissions has '*' -> true
  * 5. If user.permissions has exact code -> true
  * 6. If user.permissions has wildcard prefix (e.g. 'ops.*' or 'ops.trainers.*') -> true
@@ -30,7 +48,7 @@ export function hasPermission(
 ): boolean {
   if (!permissionCode) return true;
   if (!user) return false;
-  if (user.isSuperAdmin) return true;
+  if (isUserOrgOrSuperAdmin(user)) return true;
 
   const perms = user.permissions || [];
   if (perms.length === 0) return false;
@@ -58,7 +76,7 @@ export function hasAnyPermission(
 ): boolean {
   if (!permissionCodes || permissionCodes.length === 0) return true;
   if (!user) return false;
-  if (user.isSuperAdmin) return true;
+  if (isUserOrgOrSuperAdmin(user)) return true;
 
   const validCodes = permissionCodes.filter((c): c is string => Boolean(c));
   if (validCodes.length === 0) return true;
@@ -75,7 +93,7 @@ export function hasAllPermissions(
 ): boolean {
   if (!permissionCodes || permissionCodes.length === 0) return true;
   if (!user) return false;
-  if (user.isSuperAdmin) return true;
+  if (isUserOrgOrSuperAdmin(user)) return true;
 
   const validCodes = permissionCodes.filter((c): c is string => Boolean(c));
   if (validCodes.length === 0) return true;

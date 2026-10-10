@@ -33,6 +33,8 @@ import {
   MapPin,
   Filter,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
@@ -94,11 +96,16 @@ export const ClassesWorkspace: React.FC = () => {
   const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
   const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
-  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom'>('today');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('today');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sessionsPage, setSessionsPage] = useState<number>(1);
+  const [sessionsPageSize, setSessionsPageSize] = useState<number>(20);
+  const [rulesPage, setRulesPage] = useState<number>(1);
+  const [rulesPageSize, setRulesPageSize] = useState<number>(18);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
     const year = d.getFullYear();
@@ -106,7 +113,83 @@ export const ClassesWorkspace: React.FC = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   });
+  const [sessionFromDate, setSessionFromDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [sessionToDate, setSessionToDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [ruleDateFilterMode, setRuleDateFilterMode] = useState<'all' | 'today' | 'custom' | 'range'>('all');
+  const [ruleSelectedDate, setRuleSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [ruleFromDate, setRuleFromDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [ruleToDate, setRuleToDate] = useState<string>('');
+  const [ruleDayOfWeek, setRuleDayOfWeek] = useState<string>('ALL');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+
+  const getCategoryBadgeStyle = (categoryName?: string, categoryCode?: string) => {
+    const token = `${categoryCode || ''} ${categoryName || ''}`.toUpperCase();
+    if (token.includes('BOOTCAMP')) {
+      return 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 font-bold';
+    }
+    if (token.includes('PILATES')) {
+      return 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30 font-bold';
+    }
+    return 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30 font-semibold';
+  };
+
+  // Debounce search term & reset pagination
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setSessionsPage(1);
+      setRulesPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset pagination when filters change
+  React.useEffect(() => {
+    setSessionsPage(1);
+    setRulesPage(1);
+  }, [
+    dateFilterMode,
+    selectedDate,
+    sessionFromDate,
+    sessionToDate,
+    ruleDateFilterMode,
+    ruleSelectedDate,
+    ruleFromDate,
+    ruleToDate,
+    ruleDayOfWeek,
+    selectedStatusFilter,
+    selectedCheckInFilter,
+    selectedBranchFilter,
+    selectedCategoryFilter,
+    locationId,
+    primaryTab,
+  ]);
 
   // Reset local branch filter when global location changes
   React.useEffect(() => {
@@ -270,20 +353,71 @@ export const ClassesWorkspace: React.FC = () => {
     queryFn: () => classesApi.getTemplates(),
   });
 
-  const { data: rules = [], isLoading: loadingRules, refetch: refetchRules } = useQuery({
-    queryKey: ['class-schedule-rules', effectiveBranchFilter],
-    queryFn: () => classesApi.getScheduleRules(effectiveBranchFilter),
-  });
-
-  const { data: occurrences = [], isLoading: loadingOccurrences, refetch: refetchOccurrences } = useQuery({
-    queryKey: ['class-occurrences', dateFilterMode, selectedDate, effectiveBranchFilter],
-    queryFn: () => classesApi.getOccurrences({
-      occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
-      from_date: dateFilterMode === 'week' ? todayStr : undefined,
-      to_date: dateFilterMode === 'week' ? weekEndStr : undefined,
+  const { data: paginatedRules, isLoading: loadingRules, refetch: refetchRules } = useQuery({
+    queryKey: [
+      'class-schedule-rules',
+      effectiveBranchFilter,
+      selectedCategoryFilter,
+      primaryTab === 'rules' ? selectedStatusFilter : 'ALL',
+      primaryTab === 'rules' ? debouncedSearch : '',
+      primaryTab === 'rules' ? ruleDateFilterMode : 'all',
+      primaryTab === 'rules' ? ruleSelectedDate : '',
+      primaryTab === 'rules' ? ruleFromDate : '',
+      primaryTab === 'rules' ? ruleToDate : '',
+      primaryTab === 'rules' ? ruleDayOfWeek : 'ALL',
+      rulesPage,
+      rulesPageSize,
+    ],
+    queryFn: () => classesApi.getScheduleRulesPaginated({
       branch_id: effectiveBranchFilter,
+      category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
+      status: primaryTab === 'rules' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
+      date: primaryTab === 'rules'
+        ? (ruleDateFilterMode === 'today' ? todayStr : ruleDateFilterMode === 'custom' ? ruleSelectedDate : undefined)
+        : undefined,
+      from_date: primaryTab === 'rules' && ruleDateFilterMode === 'range' && ruleFromDate ? ruleFromDate : undefined,
+      to_date: primaryTab === 'rules' && ruleDateFilterMode === 'range' && ruleToDate ? ruleToDate : undefined,
+      day_of_week: primaryTab === 'rules' && ruleDayOfWeek !== 'ALL' ? ruleDayOfWeek : undefined,
+      search: primaryTab === 'rules' && debouncedSearch ? debouncedSearch : undefined,
+      page: rulesPage,
+      page_size: rulesPageSize,
     }),
   });
+  const rules = paginatedRules?.results ?? [];
+  const totalRulesCount = paginatedRules?.count ?? rules.length;
+  const totalRulesPages = Math.max(1, Math.ceil(totalRulesCount / rulesPageSize));
+
+  const { data: paginatedOccurrences, isLoading: loadingOccurrences, refetch: refetchOccurrences } = useQuery({
+    queryKey: [
+      'class-occurrences',
+      dateFilterMode,
+      selectedDate,
+      sessionFromDate,
+      sessionToDate,
+      effectiveBranchFilter,
+      selectedCategoryFilter,
+      primaryTab === 'sessions' ? selectedStatusFilter : 'ALL',
+      primaryTab === 'sessions' ? selectedCheckInFilter : 'ALL',
+      primaryTab === 'sessions' ? debouncedSearch : '',
+      sessionsPage,
+      sessionsPageSize,
+    ],
+    queryFn: () => classesApi.getOccurrencesPaginated({
+      occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
+      from_date: dateFilterMode === 'week' ? todayStr : (dateFilterMode === 'range' && sessionFromDate ? sessionFromDate : undefined),
+      to_date: dateFilterMode === 'week' ? weekEndStr : (dateFilterMode === 'range' && sessionToDate ? sessionToDate : undefined),
+      branch_id: effectiveBranchFilter,
+      category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
+      status: primaryTab === 'sessions' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
+      check_in_status: primaryTab === 'sessions' && selectedCheckInFilter !== 'ALL' ? selectedCheckInFilter : undefined,
+      search: primaryTab === 'sessions' && debouncedSearch ? debouncedSearch : undefined,
+      page: sessionsPage,
+      page_size: sessionsPageSize,
+    }),
+  });
+  const occurrences = paginatedOccurrences?.results ?? [];
+  const totalSessionsCount = paginatedOccurrences?.count ?? occurrences.length;
+  const totalSessionsPages = Math.max(1, Math.ceil(totalSessionsCount / sessionsPageSize));
 
   // KPI Specific Queries (Branch-Aware via global Studio Branch selection)
   const {
@@ -300,12 +434,16 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   const {
-    data: allRulesForBranch = [],
+    data: rulesKpiData,
     isLoading: loadingAllRulesForBranch,
     refetch: refetchRulesForBranch,
   } = useQuery({
     queryKey: ['class-schedule-rules-kpi', globalBranchId],
-    queryFn: () => classesApi.getScheduleRules(globalBranchId),
+    queryFn: () => classesApi.getScheduleRulesPaginated({
+      branch_id: globalBranchId,
+      page: 1,
+      page_size: 1,
+    }),
   });
 
   const {
@@ -332,9 +470,7 @@ export const ClassesWorkspace: React.FC = () => {
     }).length;
   }, [templates, globalBranchId, allBranchAvailabilities]);
 
-  const activeRecurringRulesCount = React.useMemo(() => {
-    return allRulesForBranch.filter((r) => r.status === 'ACTIVE').length;
-  }, [allRulesForBranch]);
+  const activeRecurringRulesCount = rulesKpiData?.summary?.active_count ?? paginatedRules?.summary?.active_count ?? 0;
 
   const todayConfirmedBookings = React.useMemo(() => {
     return todayOccurrences.reduce((acc, occ) => acc + (occ.booking_count ?? 0), 0);
@@ -1062,45 +1198,13 @@ export const ClassesWorkspace: React.FC = () => {
       (tpl.category_name || '').toLowerCase().includes(term) ||
       (tpl.program_name || '').toLowerCase().includes(term);
     const matchesStatus = selectedStatusFilter === 'ALL' || tpl.status === selectedStatusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesCategory = selectedCategoryFilter === 'ALL' || tpl.category === selectedCategoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
-  const filteredOccurrences = occurrences.filter((occ) => {
-    const term = searchTerm.toLowerCase();
-    const name = (occ.template_name || occ.class_name || '').toLowerCase();
-    const branch = (occ.branch_name || '').toLowerCase();
-    const trainerNames = [
-      ...(occ.trainers || []).map((t) => (t.trainer_name || t.trainer_code || '').toLowerCase()),
-      ...(occ.assigned_trainers || []).map((t) => (t.trainer_name || t.trainer_code || '').toLowerCase())
-    ].join(' ');
+  const filteredOccurrences = occurrences;
 
-    const matchesSearch = !term || name.includes(term) || branch.includes(term) || trainerNames.includes(term);
-    const matchesBranch = !selectedBranchFilter || occ.branch === selectedBranchFilter;
-    const matchesStatus = selectedStatusFilter === 'ALL' || occ.status === selectedStatusFilter;
-
-    const isCheckedIn = Boolean(
-      occ.trainer_checked_in ||
-      occ.trainer_check_in_details?.checked_in ||
-      (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
-      (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
-    );
-    const matchesCheckIn =
-      selectedCheckInFilter === 'ALL' ||
-      (selectedCheckInFilter === 'CHECKED_IN' && isCheckedIn) ||
-      (selectedCheckInFilter === 'PENDING' && !isCheckedIn);
-
-    return matchesSearch && matchesBranch && matchesStatus && matchesCheckIn;
-  });
-
-  const filteredRules = rules.filter((r) => {
-    const term = searchTerm.toLowerCase();
-    const name = r.template_name || r.class_name || '';
-    const branch = r.branch_name || '';
-    const matchesSearch = !term || name.toLowerCase().includes(term) || branch.toLowerCase().includes(term);
-    const matchesBranch = !selectedBranchFilter || r.branch === selectedBranchFilter;
-    const matchesStatus = selectedStatusFilter === 'ALL' || r.status === selectedStatusFilter;
-    return matchesSearch && matchesBranch && matchesStatus;
-  });
+  const filteredRules = rules;
 
   const filteredContent = contentItems.filter((item) => {
     const term = searchTerm.toLowerCase();
@@ -1134,9 +1238,9 @@ export const ClassesWorkspace: React.FC = () => {
               Operations · Classes
             </span>
             <span className="text-muted-foreground text-xs">
-              {primaryTab === 'sessions' && `${occurrences.length} Session${occurrences.length === 1 ? '' : 's'} Scheduled`}
+              {primaryTab === 'sessions' && `${totalSessionsCount} Session${totalSessionsCount === 1 ? '' : 's'} Scheduled`}
               {primaryTab === 'setup' && `${templates.length} Templates · ${categories.length} Categories`}
-              {primaryTab === 'rules' && `${rules.length} Recurring Rule${rules.length === 1 ? '' : 's'}`}
+              {primaryTab === 'rules' && `${totalRulesCount} Recurring Rule${totalRulesCount === 1 ? '' : 's'}`}
             </span>
           </div>
         }
@@ -1286,7 +1390,7 @@ export const ClassesWorkspace: React.FC = () => {
             }`}
           >
             <Calendar className="size-3.5" />
-            <span>Sessions ({occurrences.length})</span>
+            <span>Sessions ({totalSessionsCount})</span>
           </button>
 
           <button
@@ -1326,9 +1430,81 @@ export const ClassesWorkspace: React.FC = () => {
             }`}
           >
             <RotateCw className="size-3.5" />
-            <span>Recurring Rules ({rules.length})</span>
+            <span>Recurring Rules ({totalRulesCount})</span>
           </button>
         </div>
+
+        {/* Class Type Quick Filter Bar (Pilates vs Bootcamp differentiation) */}
+        {!showTrainerCheckins && !showContentStudio && !(primaryTab === 'setup' && setupSubTab === 'categories') && categories.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 px-3.5 py-2.5 bg-card border border-border rounded-xl shadow-2xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1.5 flex items-center gap-1">
+                <Filter className="size-3 text-primary" />
+                Class Type:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryFilter('ALL')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                  selectedCategoryFilter === 'ALL'
+                    ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                    : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                All Types
+              </button>
+              {categories
+                .filter((cat) => cat.status === 'ACTIVE')
+                .map((cat) => {
+                  const isSelected = selectedCategoryFilter === cat.id;
+                  const isBootcamp = `${cat.code} ${cat.name}`.toUpperCase().includes('BOOTCAMP');
+                  const isPilates = `${cat.code} ${cat.name}`.toUpperCase().includes('PILATES');
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategoryFilter(isSelected ? 'ALL' : cat.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                        isSelected
+                          ? isBootcamp
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
+                            : isPilates
+                            ? 'bg-violet-600 text-white border-violet-600 shadow-2xs'
+                            : 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                          : isBootcamp
+                          ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/20'
+                          : isPilates
+                          ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/20'
+                          : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <span
+                        className={`size-2 rounded-full ${
+                          isSelected
+                            ? 'bg-white'
+                            : isBootcamp
+                            ? 'bg-orange-500'
+                            : isPilates
+                            ? 'bg-violet-500'
+                            : 'bg-sky-500'
+                        }`}
+                      />
+                      <span>{cat.name}</span>
+                    </button>
+                  );
+                })}
+            </div>
+            {selectedCategoryFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryFilter('ALL')}
+                className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline cursor-pointer"
+              >
+                Clear Type Filter
+              </button>
+            )}
+          </div>
+        )}
 
         {/* VIEW: TRAINER ATTENDANCE & CHECK-INS (Exposed from Sessions) */}
         {primaryTab === 'sessions' && showTrainerCheckins && (
@@ -1389,8 +1565,8 @@ export const ClassesWorkspace: React.FC = () => {
             {/* Helper Info below sub-tabs */}
             <p className="text-xs text-muted-foreground">
               {setupSubTab === 'templates'
-                ? 'Define reusable class types such as Reformer Fundamentals.'
-                : 'Group classes into categories such as Pilates or Strength.'}
+                ? 'Define reusable class types under Sweat Pilates or Sweat Bootcamp.'
+                : 'Group classes into categories such as Sweat Pilates or Sweat Bootcamp.'}
             </p>
 
             {/* Sub-tab: Categories */}
@@ -1446,15 +1622,14 @@ export const ClassesWorkspace: React.FC = () => {
                   <div key={cat.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
                     <div>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                          <Tag className="size-3.5 text-primary" />
-                          <span>Category</span>
-                        </div>
+                        <Badge variant="outline" className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(cat.name, cat.code)}`}>
+                          {cat.name}
+                        </Badge>
                         <Badge variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'} className={cat.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
                           {cat.status}
                         </Badge>
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mt-2">{cat.name}</h3>
+                      <h3 className="text-base font-semibold text-foreground mt-2.5">{cat.name}</h3>
                       {cat.description && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cat.description}</p>
                       )}
@@ -1519,6 +1694,16 @@ export const ClassesWorkspace: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <select
+                      value={selectedCategoryFilter}
+                      onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    >
+                      <option value="ALL">All Class Types</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <select
                       value={selectedStatusFilter}
                       onChange={(e) => setSelectedStatusFilter(e.target.value)}
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
@@ -1555,29 +1740,33 @@ export const ClassesWorkspace: React.FC = () => {
                 {filteredTemplates.map((tpl) => (
                   <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
                     <div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                          <Award className="size-3.5 text-primary" />
-                          <span>Class Template</span>
-                        </div>
+                      <div className="flex items-center justify-between gap-2">
+                        {tpl.category_name ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(tpl.category_name, tpl.category_code)}`}
+                          >
+                            {tpl.category_name}
+                          </Badge>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                            <Award className="size-3.5 text-primary" />
+                            <span>Class Template</span>
+                          </div>
+                        )}
                         <Badge variant={tpl.status === 'ACTIVE' ? 'default' : 'secondary'} className={tpl.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
                           {tpl.status}
                         </Badge>
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mt-2">{tpl.name}</h3>
+                      <h3 className="text-base font-semibold text-foreground mt-2.5">{tpl.name}</h3>
                       {tpl.description && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tpl.description}</p>
                       )}
 
                       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                        {tpl.category_name && (
-                          <span className="bg-muted px-2 py-0.5 rounded text-muted-foreground border border-border">
-                            Cat: {tpl.category_name}
-                          </span>
-                        )}
                         {tpl.program_name && (
-                          <span className="bg-muted px-2 py-0.5 rounded text-muted-foreground border border-border">
-                            Prog: {tpl.program_name}
+                          <span className="bg-muted px-2 py-0.5 rounded text-foreground font-medium border border-border">
+                            Program: {tpl.program_name}
                           </span>
                         )}
                         <span className="bg-muted px-2 py-0.5 rounded text-muted-foreground border border-border">
@@ -1682,18 +1871,134 @@ export const ClassesWorkspace: React.FC = () => {
         {primaryTab === 'rules' && (
           <div className="space-y-4 mt-4">
             <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-                  <div className="relative min-w-[200px] flex-1 max-w-xs">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      placeholder="Search rules by class or branch..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-8 pl-8 text-xs bg-background"
-                    />
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                  <div className="flex flex-wrap items-center gap-2 flex-1">
+                    <div className="relative min-w-[200px] flex-1 max-w-xs">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Search rules by class, type, or branch..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-8 pl-8 text-xs bg-background"
+                      />
+                    </div>
+
+                    {/* Date Filter Mode Tabs for Recurring Rules */}
+                    <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setRuleDateFilterMode('all')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          ruleDateFilterMode === 'all'
+                            ? 'bg-background text-foreground shadow-2xs font-semibold'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        All Dates
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleDateFilterMode('today')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          ruleDateFilterMode === 'today'
+                            ? 'bg-background text-foreground shadow-2xs font-semibold'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleDateFilterMode('custom')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          ruleDateFilterMode === 'custom'
+                            ? 'bg-background text-foreground shadow-2xs font-semibold'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Pick Date
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleDateFilterMode('range')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          ruleDateFilterMode === 'range'
+                            ? 'bg-background text-foreground shadow-2xs font-semibold'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Date Range
+                      </button>
+                    </div>
+
+                    {/* Single Date Picker (checks validity window + weekday recurrence) */}
+                    {ruleDateFilterMode === 'custom' && (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
+                        <Input
+                          type="date"
+                          value={ruleSelectedDate}
+                          onChange={(e) => setRuleSelectedDate(e.target.value)}
+                          className="h-8 bg-background w-auto text-xs"
+                          title="Filter recurring rules active on this date & weekday"
+                        />
+                      </div>
+                    )}
+
+                    {/* Date Range Pickers */}
+                    {ruleDateFilterMode === 'range' && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Input
+                          type="date"
+                          value={ruleFromDate}
+                          onChange={(e) => setRuleFromDate(e.target.value)}
+                          className="h-8 bg-background w-auto text-xs"
+                          title="Valid From"
+                        />
+                        <span className="text-xs text-muted-foreground">to</span>
+                        <Input
+                          type="date"
+                          value={ruleToDate}
+                          onChange={(e) => setRuleToDate(e.target.value)}
+                          className="h-8 bg-background w-auto text-xs"
+                          title="Valid Until"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Class Type Filter */}
+                    <select
+                      value={selectedCategoryFilter}
+                      onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                      title="Filter by class type (Pilates / Bootcamp)"
+                    >
+                      <option value="ALL">All Class Types</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Day of Week Filter */}
+                    <select
+                      value={ruleDayOfWeek}
+                      onChange={(e) => setRuleDayOfWeek(e.target.value)}
+                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                      title="Filter by recurring weekday"
+                    >
+                      <option value="ALL">All Days</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                      <option value="7">Sunday</option>
+                    </select>
+
                     <select
                       value={selectedBranchFilter}
                       onChange={(e) => setSelectedBranchFilter(e.target.value)}
@@ -1739,8 +2044,12 @@ export const ClassesWorkspace: React.FC = () => {
                 ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredRules.map((rule) => {
-                  const className = rule.class_name || rule.template_name || (templates.find((t) => t.id === rule.class_template)?.name) || 'Class Schedule';
+                  const matchedTpl = templates.find((t) => t.id === rule.class_template);
+                  const className = rule.class_name || rule.template_name || matchedTpl?.name || 'Class Schedule';
                   const branchName = rule.branch_name || (branches.find((b) => b.id === rule.branch)?.name) || 'Studio Branch';
+                  const categoryName = rule.category_name || matchedTpl?.category_name;
+                  const categoryCode = rule.category_code || matchedTpl?.category_code;
+                  const programName = rule.program_name || matchedTpl?.program_name;
 
                   return (
                     <div
@@ -1751,12 +2060,27 @@ export const ClassesWorkspace: React.FC = () => {
                         {/* Card Header */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h4 className="text-sm font-semibold text-foreground truncate" title={className}>
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                              {categoryName && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-2 py-0 ${getCategoryBadgeStyle(categoryName, categoryCode)}`}
+                                >
+                                  {categoryName}
+                                </Badge>
+                              )}
+                              {programName && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/60 truncate max-w-[160px]">
+                                  {programName}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-sm font-bold text-foreground truncate" title={className}>
                               {className}
                             </h4>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                               <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                              <span className="truncate">{branchName}</span>
+                              <span className="truncate font-medium text-foreground/80">{branchName}</span>
                             </div>
                           </div>
                           <Badge
@@ -1895,6 +2219,88 @@ export const ClassesWorkspace: React.FC = () => {
                 })}
               </div>
             )}
+
+            {/* Recurring Rules Pagination Controls */}
+            {!loadingRules && totalRulesCount > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card px-4 py-3 rounded-xl border border-border shadow-xs">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>
+                    Showing{' '}
+                    <span className="font-semibold text-foreground">
+                      {Math.min((rulesPage - 1) * rulesPageSize + 1, totalRulesCount)}
+                    </span>
+                    –
+                    <span className="font-semibold text-foreground">
+                      {Math.min(rulesPage * rulesPageSize, totalRulesCount)}
+                    </span>{' '}
+                    of <span className="font-semibold text-foreground">{totalRulesCount}</span> rules
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span>Per page:</span>
+                    <select
+                      value={rulesPageSize}
+                      onChange={(e) => {
+                        setRulesPageSize(Number(e.target.value));
+                        setRulesPage(1);
+                      }}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      {[9, 18, 36, 72].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRulesPage((p) => Math.max(1, p - 1))}
+                    disabled={rulesPage <= 1 || loadingRules}
+                    className="h-7 px-2.5 text-xs gap-1"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    Prev
+                  </Button>
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, totalRulesPages) }, (_, idx) => {
+                      let pageNum = idx + 1;
+                      if (totalRulesPages > 5) {
+                        const start = Math.max(1, Math.min(rulesPage - 2, totalRulesPages - 4));
+                        pageNum = start + idx;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setRulesPage(pageNum)}
+                          className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                            rulesPage === pageNum
+                              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRulesPage((p) => Math.min(totalRulesPages, p + 1))}
+                    disabled={rulesPage >= totalRulesPages || loadingRules}
+                    className="h-7 px-2.5 text-xs gap-1"
+                  >
+                    Next
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
             </div>
           </div>
         )}
@@ -1910,7 +2316,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Search class, branch, or trainer..."
+                    placeholder="Search class, type, branch, or trainer..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="h-8 pl-8 text-xs bg-background"
@@ -1922,7 +2328,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('today')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
                       dateFilterMode === 'today'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1933,7 +2339,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('week')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
                       dateFilterMode === 'week'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1944,13 +2350,35 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('custom')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
                       dateFilterMode === 'custom'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Custom Date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('range')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'range'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Date Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilterMode('all')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      dateFilterMode === 'all'
+                        ? 'bg-background text-foreground shadow-2xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All Dates
                   </button>
                 </div>
 
@@ -1966,6 +2394,40 @@ export const ClassesWorkspace: React.FC = () => {
                     />
                   </div>
                 )}
+
+                {/* Date Range Inputs */}
+                {dateFilterMode === 'range' && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Input
+                      type="date"
+                      value={sessionFromDate}
+                      onChange={(e) => setSessionFromDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                      title="From Date"
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="date"
+                      value={sessionToDate}
+                      onChange={(e) => setSessionToDate(e.target.value)}
+                      className="h-8 bg-background w-auto text-xs"
+                      title="To Date"
+                    />
+                  </div>
+                )}
+
+                {/* Class Type Filter */}
+                <select
+                  value={selectedCategoryFilter}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  title="Filter by class type (Pilates / Bootcamp)"
+                >
+                  <option value="ALL">All Class Types</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
 
                 {/* Branch Filter */}
                 <select
@@ -2047,7 +2509,7 @@ export const ClassesWorkspace: React.FC = () => {
                 </div>
                 <h3 className="text-base font-semibold text-foreground">No Class Sessions Found</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  {searchTerm || selectedBranchFilter || selectedStatusFilter !== 'ALL' || selectedCheckInFilter !== 'ALL'
+                  {searchTerm || selectedBranchFilter || selectedCategoryFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || selectedCheckInFilter !== 'ALL'
                     ? "No sessions match the selected filters. Try broadening your search or resetting filters."
                     : `No sessions scheduled for the selected timeframe. Generate sessions from recurring rules or schedule a one-off session.`}
                 </p>
@@ -2065,6 +2527,7 @@ export const ClassesWorkspace: React.FC = () => {
                     <thead>
                       <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
                         <th className="py-3 px-4">Class Session</th>
+                        <th className="py-3 px-4">Class Type</th>
                         <th className="py-3 px-4">Branch</th>
                         <th className="py-3 px-4">Date & Time</th>
                         <th className="py-3 px-4">Assigned Trainer</th>
@@ -2077,6 +2540,10 @@ export const ClassesWorkspace: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {filteredOccurrences.map((occ) => {
+                        const matchedTpl = templates.find((t) => t.id === occ.class_template);
+                        const categoryName = occ.category_name || matchedTpl?.category_name;
+                        const categoryCode = occ.category_code || matchedTpl?.category_code;
+                        const programName = occ.program_name || matchedTpl?.program_name;
                         const isCompleted = occ.status === 'COMPLETED';
                         const isCancelled = occ.status === 'CANCELLED';
                         const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
@@ -2093,7 +2560,6 @@ export const ClassesWorkspace: React.FC = () => {
                           ...(occ.assigned_trainers || []),
                         ];
                         const hasTrainer = allTrainers.length > 0;
-                        const leadTrainer = allTrainers[0];
 
                         const startTimeFormatted = occ.start_at
                           ? formatTime12h(occ.start_at.slice(11, 16))
@@ -2125,11 +2591,32 @@ export const ClassesWorkspace: React.FC = () => {
                               </div>
                             </td>
 
+                            {/* Class Type (Pilates / Bootcamp) */}
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              {categoryName ? (
+                                <div className="flex flex-col items-start gap-0.5">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-2 py-0.5 ${getCategoryBadgeStyle(categoryName, categoryCode)}`}
+                                  >
+                                    {categoryName}
+                                  </Badge>
+                                  {programName && (
+                                    <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                                      {programName}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
+
                             {/* Branch */}
                             <td className="py-3 px-4">
                               <span className="inline-flex items-center gap-1 font-medium text-foreground text-xs">
                                 <MapPin className="size-3 text-primary shrink-0" />
-                                <span className="truncate max-w-[130px]">{occ.branch_name || 'Main Branch'}</span>
+                                <span className="truncate max-w-[150px]">{occ.branch_name || 'Main Branch'}</span>
                               </span>
                             </td>
 
@@ -2249,10 +2736,10 @@ export const ClassesWorkspace: React.FC = () => {
                                   size="sm"
                                   onClick={() => setAttendanceModalOccurrence(occ)}
                                   className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
-                                  title="View confirmed and waitlisted member roster"
+                                  title="Record or inspect attendance and member bookings"
                                 >
                                   <Users className="size-3" />
-                                  <span>View Roster</span>
+                                  <span>Attendance & Bookings</span>
                                 </Button>
 
                                 {canEdit && (
@@ -2283,9 +2770,10 @@ export const ClassesWorkspace: React.FC = () => {
               /* ==================== CARDS VIEW ==================== */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredOccurrences.map((occ) => {
-                  const isCompleted = occ.status === 'COMPLETED';
-                  const isCancelled = occ.status === 'CANCELLED';
-                  const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
+                  const matchedTpl = templates.find((t) => t.id === occ.class_template);
+                  const categoryName = occ.category_name || matchedTpl?.category_name;
+                  const categoryCode = occ.category_code || matchedTpl?.category_code;
+                  const programName = occ.program_name || matchedTpl?.program_name;
 
                   const isCheckedIn = Boolean(
                     occ.trainer_checked_in ||
@@ -2319,15 +2807,28 @@ export const ClassesWorkspace: React.FC = () => {
                         {/* Header */}
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                              {occ.delivery_mode}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {categoryName && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-2 py-0.5 ${getCategoryBadgeStyle(categoryName, categoryCode)}`}
+                                >
+                                  {categoryName}
+                                </Badge>
+                              )}
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                {occ.delivery_mode}
+                              </span>
+                            </div>
                             <h3 className="text-base font-semibold text-foreground mt-2">
                               {occ.template_name || occ.class_name || 'Class Session'}
                             </h3>
                             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                               <MapPin className="size-3 text-primary shrink-0" />
-                              <span>{occ.branch_name || 'Branch Session'}</span>
+                              <span className="font-medium text-foreground/80">{occ.branch_name || 'Branch Session'}</span>
+                              {programName && (
+                                <span className="text-[11px] text-muted-foreground">· {programName}</span>
+                              )}
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -2405,7 +2906,7 @@ export const ClassesWorkspace: React.FC = () => {
                           className="flex-1 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                         >
                           <Users className="size-3.5" />
-                          <span>View Roster</span>
+                          <span>Attendance & Bookings</span>
                         </Button>
                         {canEdit && (
                           <Button
@@ -2434,6 +2935,88 @@ export const ClassesWorkspace: React.FC = () => {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Sessions Pagination Controls */}
+            {!loadingOccurrences && totalSessionsCount > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card px-4 py-3 rounded-xl border border-border shadow-xs">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>
+                    Showing{' '}
+                    <span className="font-semibold text-foreground">
+                      {Math.min((sessionsPage - 1) * sessionsPageSize + 1, totalSessionsCount)}
+                    </span>
+                    –
+                    <span className="font-semibold text-foreground">
+                      {Math.min(sessionsPage * sessionsPageSize, totalSessionsCount)}
+                    </span>{' '}
+                    of <span className="font-semibold text-foreground">{totalSessionsCount}</span> sessions
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span>Per page:</span>
+                    <select
+                      value={sessionsPageSize}
+                      onChange={(e) => {
+                        setSessionsPageSize(Number(e.target.value));
+                        setSessionsPage(1);
+                      }}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      {[10, 20, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSessionsPage((p) => Math.max(1, p - 1))}
+                    disabled={sessionsPage <= 1 || loadingOccurrences}
+                    className="h-7 px-2.5 text-xs gap-1"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    Prev
+                  </Button>
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, totalSessionsPages) }, (_, idx) => {
+                      let pageNum = idx + 1;
+                      if (totalSessionsPages > 5) {
+                        const start = Math.max(1, Math.min(sessionsPage - 2, totalSessionsPages - 4));
+                        pageNum = start + idx;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setSessionsPage(pageNum)}
+                          className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                            sessionsPage === pageNum
+                              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSessionsPage((p) => Math.min(totalSessionsPages, p + 1))}
+                    disabled={sessionsPage >= totalSessionsPages || loadingOccurrences}
+                    className="h-7 px-2.5 text-xs gap-1"
+                  >
+                    Next
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
               </div>
             )}
           </div>

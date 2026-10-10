@@ -171,6 +171,80 @@ function toArray<T>(data: any): T[] {
 
 // ── USERS ─────────────────────────────────────────────────────────────
 
+export interface PaginatedUsersResponse {
+  results: AdminUserRow[];
+  count: number;
+  total_pages: number;
+  current_page: number;
+  page_size: number;
+  summary?: {
+    total_count?: number;
+    active_count?: number;
+    inactive_count?: number;
+    invited_count?: number;
+  };
+}
+
+export async function fetchUsersPaginatedApi(paramsInput?: {
+  page?: number;
+  page_size?: number;
+  role?: string;
+  department?: string;
+  location?: string;
+  status?: string;
+  search?: string;
+  tenantId?: string;
+}): Promise<PaginatedUsersResponse> {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
+  let isPlatform = false;
+  try {
+    if (token) {
+      const parsed = JSON.parse(token);
+      if (parsed.userType === "platform" || (!parsed.tenantId && parsed.isSuperAdmin)) {
+        isPlatform = true;
+      }
+    }
+  } catch {}
+
+  const page = paramsInput?.page || 1;
+  const pageSize = paramsInput?.page_size || 20;
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+  if (paramsInput?.role && paramsInput.role !== "all") params.set("role", paramsInput.role);
+  if (paramsInput?.department && paramsInput.department !== "all") params.set("department", paramsInput.department);
+  if (paramsInput?.location && paramsInput.location !== "all") params.set("location", paramsInput.location);
+  if (paramsInput?.status && paramsInput.status !== "all") params.set("status", paramsInput.status);
+  if (paramsInput?.search && paramsInput.search.trim()) params.set("search", paramsInput.search.trim());
+
+  const tenantId = paramsInput?.tenantId;
+  let url = `/tenant/users/?${params.toString()}`;
+  if (isPlatform) {
+    if (tenantId && tenantId !== "all") {
+      url = `/platform/tenants/${tenantId}/staff/?${params.toString()}`;
+    } else {
+      url = `/platform/platform-users/?${params.toString()}`;
+    }
+  } else if (tenantId && tenantId !== "all") {
+    params.set("tenant", tenantId);
+    url = `/tenant/users/?${params.toString()}`;
+  }
+
+  const res = await api.get<any>(url);
+  const data = res.data;
+  const results = toArray<AdminUserRow>(data);
+  const count = typeof data?.count === "number" ? data.count : results.length;
+  const totalPages = typeof data?.total_pages === "number" ? data.total_pages : Math.max(1, Math.ceil(count / pageSize));
+  return {
+    results,
+    count,
+    total_pages: totalPages,
+    current_page: data?.current_page || page,
+    page_size: data?.page_size || pageSize,
+    summary: data?.summary,
+  };
+}
+
 export async function fetchUsersApi(role?: string, location?: string, search?: string, tenantId?: string): Promise<AdminUserRow[]> {
   const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
   let isPlatform = false;

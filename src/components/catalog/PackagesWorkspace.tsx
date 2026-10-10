@@ -166,7 +166,7 @@ export const PackagesWorkspace: React.FC = () => {
     if (isAuthLoading || !user) return false;
     if (user.isSuperAdmin) return true;
     const perms = user.permissions || [];
-    return perms.includes('core.settings.edit') || perms.includes('*');
+    return perms.includes('core.settings.edit') || perms.includes('ops.classes.edit') || perms.includes('*');
   }, [user, isAuthLoading]);
 
   const requirePermission = (actionDesc: string): boolean => {
@@ -1245,102 +1245,120 @@ export const PackagesWorkspace: React.FC = () => {
 
             {/* Cards grid */}
             {!isProgramCategoriesLoading && filteredProgramCategories.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProgramCategories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className={`p-4 sm:p-5 bg-card border rounded-2xl space-y-3 shadow-xs transition flex flex-col justify-between ${
-                      cat.status === 'INACTIVE'
-                        ? 'border-border/40 opacity-60'
-                        : 'border-border/60 hover:border-primary/40'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
-                        <div className="space-y-1 min-w-0">
-                          <h4 className="text-base font-semibold text-foreground break-words" title={cat.name}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredProgramCategories.map((cat) => {
+                  const catPrograms = programs.filter((p) => p.category === cat.id);
+                  const catPackagesCount = catPrograms.reduce(
+                    (acc, p) => acc + (packagesByProgram.get(p.id)?.length || 0),
+                    0
+                  );
+                  return (
+                    <div
+                      key={cat.id}
+                      className={`p-5 bg-card border rounded-2xl space-y-3.5 shadow-xs transition flex flex-col justify-between ${
+                        cat.status === 'INACTIVE'
+                          ? 'border-border/40 opacity-60'
+                          : 'border-border/70 hover:border-primary/40'
+                      }`}
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <h4 className="text-base font-bold text-foreground leading-snug">
                             {cat.name}
                           </h4>
-                          <Badge variant="outline" className="text-[11px] font-mono font-semibold uppercase">
-                            {cat.code || 'NO_CODE'}
-                          </Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge
+                              variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'}
+                              className="text-[11px] shrink-0"
+                            >
+                              {cat.status}
+                            </Badge>
+                            {hasCatalogPermission && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
+                                  onClick={() => startEditProgramCategory(cat)}
+                                  title="Edit program category"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`w-7 h-7 shrink-0 ${
+                                    cat.status === 'ACTIVE'
+                                      ? 'text-amber-500 hover:text-amber-600'
+                                      : 'text-emerald-500 hover:text-emerald-600'
+                                  }`}
+                                  onClick={() => {
+                                    toggleProgramCategoryStatusMutation.mutate({
+                                      id: cat.id,
+                                      currentStatus: cat.status,
+                                    });
+                                  }}
+                                  title={cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                >
+                                  {cat.status === 'ACTIVE' ? (
+                                    <ToggleRight className="w-4 h-4" />
+                                  ) : (
+                                    <ToggleLeft className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="w-7 h-7 text-muted-foreground hover:text-destructive shrink-0"
+                                  onClick={() => {
+                                    setProgramCategoryToDelete(cat);
+                                    setDeleteCatError(null);
+                                  }}
+                                  title="Delete program category"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-wrap justify-end shrink-0">
-                          <Badge
-                            variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'}
-                            className="text-xs shrink-0"
-                          >
-                            {cat.status}
-                          </Badge>
-                          {hasCatalogPermission && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="w-7 h-7 text-muted-foreground hover:text-foreground shrink-0"
-                                onClick={() => startEditProgramCategory(cat)}
-                                title="Edit program category"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={`w-7 h-7 shrink-0 ${
-                                  cat.status === 'ACTIVE'
-                                    ? 'text-amber-500 hover:text-amber-600'
-                                    : 'text-emerald-500 hover:text-emerald-600'
-                                }`}
-                                onClick={() => {
-                                  toggleProgramCategoryStatusMutation.mutate({
-                                    id: cat.id,
-                                    currentStatus: cat.status,
-                                  });
-                                }}
-                                title={cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                              >
-                                {cat.status === 'ACTIVE' ? (
-                                  <ToggleRight className="w-4 h-4" />
-                                ) : (
-                                  <ToggleLeft className="w-4 h-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="w-7 h-7 text-muted-foreground hover:text-destructive shrink-0"
-                                onClick={() => {
-                                  setProgramCategoryToDelete(cat);
-                                  setDeleteCatError(null);
-                                }}
-                                title="Delete program category"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </>
-                          )}
+
+                        {cat.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed" title={cat.description}>
+                            {cat.description}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-3 pt-1 text-xs">
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md">
+                            <Layers className="w-3.5 h-3.5" />
+                            {catPrograms.length} {catPrograms.length === 1 ? 'Program' : 'Programs'}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 font-medium text-foreground bg-muted px-2.5 py-1 rounded-md">
+                            <PackageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                            {catPackagesCount} {catPackagesCount === 1 ? 'Package' : 'Packages'}
+                          </span>
                         </div>
                       </div>
-                      {cat.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 break-words" title={cat.description}>
-                          {cat.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1 font-medium text-primary">
-                          <Layers className="w-3.5 h-3.5" />
-                          {cat.programs_count ?? 0} {cat.programs_count === 1 ? 'Program' : 'Programs'}
-                        </span>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
+                        <span>Display Order #{cat.display_order}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setProgFilterCategory(cat.id);
+                            setActiveTab('programs');
+                          }}
+                          className="h-7 px-2.5 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 gap-1"
+                        >
+                          <span>View Programs</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50 flex-wrap gap-1">
-                      <span>Display order: {cat.display_order}</span>
-                      <span className="text-[10px] text-muted-foreground/60">
-                        Updated {new Date(cat.updated_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1350,42 +1368,85 @@ export const PackagesWorkspace: React.FC = () => {
         {/* TAB 1: PROGRAMS & NESTED PACKAGES */}
         {/* ========================================================================= */}
         {activeTab === 'programs' && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Search and Filters toolbar */}
-            <div className="flex flex-col gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
-              <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3 bg-card p-4 rounded-xl border border-border/60 shadow-xs">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Search programs by name, code, type, description, or package..."
+                    placeholder="Search programs or packages by name, category, sessions, or price..."
                     value={progSearchQuery}
                     onChange={(e) => setProgSearchQuery(e.target.value)}
                     className="pl-9 text-sm"
                   />
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setExpandedProgramIds(new Set(filteredPrograms.map((p) => p.id)))}
+                    className="h-9 text-xs gap-1.5"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Expand All Packages</span>
+                  </Button>
+                  {expandedProgramIds.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedProgramIds(new Set())}
+                      className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Collapse All</span>
+                    </Button>
+                  )}
+                </div>
               </div>
 
+              {/* Quick Category Pills */}
+              {programCategories.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 pb-1 border-b border-border/40">
+                  <button
+                    type="button"
+                    onClick={() => setProgFilterCategory('ALL')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      progFilterCategory === 'ALL'
+                        ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                        : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    All Categories ({programs.length})
+                  </button>
+                  {programCategories.map((cat) => {
+                    const count = programs.filter((p) => p.category === cat.id).length;
+                    const isSelected = progFilterCategory === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setProgFilterCategory(isSelected ? 'ALL' : cat.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                            : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {cat.name} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Filter Controls Row */}
-              <div className="flex items-center gap-2.5 flex-wrap pt-1 text-xs">
+              <div className="flex items-center gap-2.5 flex-wrap pt-0.5 text-xs">
                 <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
                   <Filter className="w-3.5 h-3.5" />
                   <span>Filters:</span>
                 </div>
-
-                {/* Category Filter */}
-                <select
-                  value={progFilterCategory}
-                  onChange={(e) => setProgFilterCategory(e.target.value)}
-                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="ALL">All Categories</option>
-                  {programCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
 
                 {/* Delivery Mode Filter */}
                 <select
@@ -1471,7 +1532,7 @@ export const PackagesWorkspace: React.FC = () => {
             {isProgramsLoading && (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-32 bg-muted/40 rounded-2xl border border-border/60 animate-pulse p-5" />
+                  <div key={i} className="h-24 bg-muted/40 rounded-2xl border border-border/60 animate-pulse p-5" />
                 ))}
               </div>
             )}
@@ -1508,7 +1569,7 @@ export const PackagesWorkspace: React.FC = () => {
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
                   {progSearchQuery || progFilterCategory !== 'ALL' || progFilterBranch !== 'ALL' || progFilterDeliveryMode !== 'ALL' || progFilterStatus !== 'ALL' || progFilterTrialOnly
                     ? 'No program matched your active search and filter criteria. Try resetting filters.'
-                    : 'Programs group packages and classes (e.g. Strength, Pilates, Personal Training). Create your first Program to begin adding packages.'}
+                    : 'Programs group packages and classes (e.g. Bootcamp, Pilates, Personal Training). Create your first Program to begin adding packages.'}
                 </p>
                 {!progSearchQuery && progFilterCategory === 'ALL' && progFilterBranch === 'ALL' && progFilterDeliveryMode === 'ALL' && progFilterStatus === 'ALL' && !progFilterTrialOnly && hasCatalogPermission && (
                   <Button
@@ -1532,514 +1593,652 @@ export const PackagesWorkspace: React.FC = () => {
               </div>
             )}
 
-            {/* Programs List with Nested Packages */}
+            {/* Programs Grouped by Category with Clean Readable Rows & Tabular Packages */}
             {!isProgramsLoading && !isProgramsError && filteredPrograms.length > 0 && (
-              <div className="space-y-4">
-                {filteredPrograms.map((prog) => {
-                  const catLabel = getProgramCategoryLabel(prog);
-                  const progPkgs = packagesByProgram.get(prog.id) || [];
-                  const isExpanded = expandedProgramIds.has(prog.id);
+              <div className="space-y-6">
+                {(() => {
+                  // Group filteredPrograms by Category for clean visual hierarchy
+                  const groupsMap = new Map<string, { catId: string; catName: string; order: number; list: Program[] }>();
+                  for (const prog of filteredPrograms) {
+                    const catObj = programCategories.find((c) => c.id === prog.category);
+                    const catId = catObj?.id || prog.category || 'uncategorized';
+                    const catName = catObj?.name || getProgramCategoryLabel(prog);
+                    const order = catObj?.display_order ?? 999;
+                    const existing = groupsMap.get(catId);
+                    if (existing) {
+                      existing.list.push(prog);
+                    } else {
+                      groupsMap.set(catId, { catId, catName, order, list: [prog] });
+                    }
+                  }
+                  const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => a.order - b.order);
 
-                  return (
-                    <div
-                      key={prog.id}
-                      className={`bg-card border rounded-2xl transition-all shadow-xs overflow-hidden ${
-                        prog.status === 'INACTIVE'
-                          ? 'border-border/40 opacity-75'
-                          : 'border-border/70 hover:border-primary/40'
-                      }`}
-                    >
-                      {/* Program Header */}
-                      <div className="p-4 sm:p-5 bg-card space-y-3.5">
-                        {/* Top: Title & Badges */}
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base sm:text-lg font-bold text-foreground break-words" title={prog.name}>
-                              {prog.name}
-                            </h3>
-                            <Badge variant="outline" className="text-xs font-mono font-semibold uppercase shrink-0">
-                              {prog.code || 'NO_CODE'}
+                  return sortedGroups.map((group) => {
+                    const totalGroupPackages = group.list.reduce(
+                      (sum, p) => sum + (packagesByProgram.get(p.id)?.length || 0),
+                      0
+                    );
+
+                    return (
+                      <div key={group.catId} className="space-y-3">
+                        {/* Category Group Header */}
+                        <div className="flex items-center justify-between gap-3 px-1">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="w-2 h-5 rounded-full bg-primary inline-block" />
+                            <h2 className="text-sm sm:text-base font-bold text-foreground tracking-tight">
+                              {group.catName}
+                            </h2>
+                            <Badge variant="secondary" className="text-xs font-medium">
+                              {group.list.length} {group.list.length === 1 ? 'Program' : 'Programs'}
                             </Badge>
-                            <Badge variant="outline" className="text-xs font-medium shrink-0" title={catLabel}>
-                              {catLabel}
+                            <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
+                              {totalGroupPackages} {totalGroupPackages === 1 ? 'Package' : 'Packages'}
                             </Badge>
-                            {(() => {
-                              const dm = getDeliveryModeBadge(prog.delivery_mode);
-                              return (
-                                <Badge variant="outline" className={`text-xs shrink-0 ${dm.className}`}>
-                                  {dm.label}
-                                </Badge>
-                              );
-                            })()}
-                            <Badge
-                              variant={prog.status === 'ACTIVE' ? 'default' : 'secondary'}
-                              className={`text-xs shrink-0 ${
-                                prog.status === 'ARCHIVED'
-                                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 font-semibold'
-                                  : ''
-                              }`}
-                            >
-                              {prog.status}
-                            </Badge>
-                            {prog.trial_allowed && (
-                              <Badge variant="outline" className="text-[11px] text-emerald-600 border-emerald-500/30 bg-emerald-500/5 shrink-0">
-                                Trials Allowed
-                              </Badge>
-                            )}
                           </div>
 
-                          {prog.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 break-words">
-                              {prog.description}
-                            </p>
+                          {hasCatalogPermission && group.catId !== 'uncategorized' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setProgFormError(null);
+                                setNewProgName('');
+                                setNewProgCode('');
+                                setNewProgDesc('');
+                                setNewProgCategory(group.catId);
+                                setNewProgDeliveryMode('GROUP_CLASS');
+                                setNewProgDisplayOrder(0);
+                                setNewProgTrial(true);
+                                setNewProgBranchIds([]);
+                                setIsNewProgramOpen(true);
+                              }}
+                              className="h-7 px-2.5 text-xs text-primary hover:bg-primary/10 gap-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Program in {group.catName}</span>
+                            </Button>
                           )}
                         </div>
 
-                        {/* Middle: Metadata & Branch Availability */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-muted-foreground pt-0.5">
-                          {/* Branch Availability Chips */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 shrink-0">
-                              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                              <span>Branches:</span>
-                            </span>
-                            {prog.available_branches && prog.available_branches.length > 0 ? (
-                              prog.available_branches.map((b) => (
-                                <Badge
-                                  key={b.id}
-                                  variant="secondary"
-                                  className="text-[10px] font-normal py-0.5 px-2 bg-muted/80 text-foreground border border-border/50"
+                        {/* Programs in this Category */}
+                        <div className="bg-card border border-border/70 rounded-2xl shadow-xs divide-y divide-border/60 overflow-hidden">
+                          {group.list.map((prog) => {
+                            const progPkgs = (packagesByProgram.get(prog.id) || []).slice().sort((a, b) => {
+                              const va = a.active_version || (a as any).latest_version;
+                              const vb = b.active_version || (b as any).latest_version;
+                              const pa = Number(va?.prices?.[0]?.sale_price ?? va?.prices?.[0]?.base_price ?? 0);
+                              const pb = Number(vb?.prices?.[0]?.sale_price ?? vb?.prices?.[0]?.base_price ?? 0);
+                              return pa - pb;
+                            });
+                            const isExpanded = expandedProgramIds.has(prog.id);
+                            const dm = getDeliveryModeBadge(prog.delivery_mode);
+                            const availBranches = prog.available_branches || [];
+                            const isAllBranches = branches.length > 0 && availBranches.length >= branches.length;
+
+                            return (
+                              <div
+                                key={prog.id}
+                                className={`transition-colors ${
+                                  prog.status === 'INACTIVE' ? 'opacity-75 bg-muted/10' : 'bg-card'
+                                }`}
+                              >
+                                {/* Program Row Header */}
+                                <div
+                                  className="p-4 sm:px-5 sm:py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-muted/20 transition-colors cursor-pointer"
+                                  onClick={() => toggleProgramExpanded(prog.id)}
                                 >
-                                  {b.name}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-[10px] text-amber-500/90 italic">
-                                Not assigned to any branch (unavailable)
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Quick Stats: Packages count & display order */}
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                            <span className="flex items-center gap-1 font-medium text-foreground">
-                              <PackageIcon className="w-3.5 h-3.5 text-primary" />
-                              {progPkgs.length} {progPkgs.length === 1 ? 'Package' : 'Packages'}
-                            </span>
-                            {prog.display_order !== undefined && (
-                              <span className="text-[11px]">Order: {prog.display_order}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Bottom Actions Bar */}
-                        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {hasCatalogPermission && (
-                              <>
-                                {prog.status === 'ARCHIVED' ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => restoreProgramMutation.mutate(prog.id)}
-                                    disabled={restoreProgramMutation.isPending}
-                                    className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
-                                  >
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                    <span>Restore</span>
-                                  </Button>
-                                ) : (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => openAddPackageForProgram(prog.id)}
-                                      className="text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                                    >
-                                      <Plus className="w-3.5 h-3.5" />
-                                      <span>Add Package</span>
-                                    </Button>
-
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => startEditProgram(prog)}
-                                      className="text-xs h-8 text-muted-foreground hover:text-foreground gap-1.5"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                      <span>Edit</span>
-                                    </Button>
-
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        toggleProgramStatusMutation.mutate({
-                                          id: prog.id,
-                                          currentStatus: prog.status,
-                                        });
+                                  {/* Left: Expand icon + Program Title + Delivery Mode & Branches */}
+                                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleProgramExpanded(prog.id);
                                       }}
-                                      className={`text-xs h-8 gap-1.5 ${
-                                        prog.status === 'ACTIVE'
-                                          ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
-                                          : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
+                                      className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
+                                        isExpanded
+                                          ? 'bg-primary text-primary-foreground border-primary'
+                                          : 'bg-muted/60 text-muted-foreground border-border/60 hover:text-foreground'
                                       }`}
+                                      title={isExpanded ? 'Collapse packages' : 'Expand packages'}
                                     >
-                                      {prog.status === 'ACTIVE' ? (
-                                        <>
-                                          <ToggleRight className="w-4 h-4" />
-                                          <span>Deactivate</span>
-                                        </>
+                                      {isExpanded ? (
+                                        <ChevronUp className="w-4 h-4" />
                                       ) : (
-                                        <>
-                                          <ToggleLeft className="w-4 h-4" />
-                                          <span>Activate</span>
-                                        </>
+                                        <ChevronDown className="w-4 h-4" />
                                       )}
-                                    </Button>
+                                    </button>
 
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setProgramToArchive(prog);
-                                        setArchiveProgError(null);
-                                      }}
-                                      className="text-xs h-8 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 gap-1.5 px-2.5"
-                                      title="Archive"
-                                    >
-                                      <Archive className="w-3.5 h-3.5" />
-                                      <span>Archive</span>
-                                    </Button>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </div>
-
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => toggleProgramExpanded(prog.id)}
-                            className="text-xs h-8 gap-1.5 px-3 ml-auto sm:ml-0"
-                          >
-                            <span>{isExpanded ? 'Hide Packages' : 'View Packages'}</span>
-                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 ml-0.5 bg-background/60">
-                              {progPkgs.length}
-                            </Badge>
-                            {isExpanded ? (
-                              <ChevronUp className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Nested Packages Container */}
-                      {isExpanded && (
-                        <div className="border-t border-border/60 bg-muted/20 p-4 sm:p-5 space-y-3">
-                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            <span>Packages for {prog.name} ({progPkgs.length})</span>
-                          </div>
-
-                          {progPkgs.length === 0 ? (
-                            <div className="p-6 text-center bg-card/60 border border-dashed border-border/80 rounded-xl space-y-2">
-                              <PackageIcon className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-                              <p className="text-xs text-muted-foreground">No packages created under this program yet.</p>
-                              {hasCatalogPermission && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openAddPackageForProgram(prog.id)}
-                                  className="h-7 text-xs gap-1 mt-1"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>Add First Package</span>
-                                </Button>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                              {progPkgs.map((pkg) => {
-                                const activeVer = pkg.active_version || (pkg as any).latest_version;
-                                const firstPrice = activeVer?.prices?.[0];
-                                const homeEnt = activeVer?.entitlements?.find(
-                                  (e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION'
-                                );
-                                const crossEnt = activeVer?.entitlements?.find(
-                                  (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
-                                );
-
-                                return (
-                                  <div
-                                    key={pkg.id}
-                                    className="bg-card hover:bg-card/95 border border-border/80 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between shadow-xs transition-all space-y-3"
-                                  >
-                                    <div className="space-y-3">
-                                      {/* Package Header */}
-                                      <div className="space-y-1.5">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <div className="min-w-0 flex-1">
-                                            <h4 className="text-sm font-bold text-foreground truncate" title={pkg.name}>
-                                              {pkg.name}
-                                            </h4>
-                                            {pkg.code && (
-                                              <span className="inline-block mt-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border/50" title="Backend-managed system code">
-                                                {pkg.code}
-                                              </span>
-                                            )}
-                                          </div>
+                                    <div className="space-y-1.5 min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-base font-bold text-foreground leading-snug">
+                                          {prog.name}
+                                        </h3>
+                                        <Badge variant="outline" className={`text-[11px] shrink-0 ${dm.className}`}>
+                                          {dm.label}
+                                        </Badge>
+                                        <Badge
+                                          variant={prog.status === 'ACTIVE' ? 'default' : 'secondary'}
+                                          className={`text-[11px] shrink-0 ${
+                                            prog.status === 'ACTIVE'
+                                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                              : prog.status === 'ARCHIVED'
+                                              ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30'
+                                              : ''
+                                          }`}
+                                        >
+                                          {prog.status}
+                                        </Badge>
+                                        {prog.trial_allowed && (
                                           <Badge
-                                            variant={pkg.status === 'ACTIVE' ? 'default' : pkg.status === 'ARCHIVED' ? 'destructive' : 'secondary'}
-                                            className={`text-[10px] font-semibold tracking-wider shrink-0 ${
-                                              pkg.status === 'ACTIVE'
-                                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
-                                                : pkg.status === 'ARCHIVED'
-                                                ? 'bg-destructive/15 text-destructive border-destructive/30'
-                                                : 'bg-muted text-muted-foreground border-border/60'
-                                            }`}
+                                            variant="outline"
+                                            className="text-[11px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 shrink-0"
                                           >
-                                            {pkg.status}
+                                            Trials Allowed
                                           </Badge>
-                                        </div>
-
-                                        {/* Branch Availability Chips */}
-                                        {pkg.available_branches && pkg.available_branches.length > 0 && (
-                                          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                            <Building2 className="w-3 h-3 text-muted-foreground/70 shrink-0" />
-                                            <span className="text-[10px] text-muted-foreground font-medium">Branches:</span>
-                                            <div className="flex items-center gap-1 flex-wrap">
-                                              {pkg.available_branches.map((b) => (
-                                                <span
-                                                  key={b.id}
-                                                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-foreground/90 border border-border/40 font-medium"
-                                                >
-                                                  {b.name}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
                                         )}
                                       </div>
 
-                                      {/* Active Version & Commercial Details */}
-                                      {activeVer ? (
-                                        <div className="p-3 bg-muted/30 dark:bg-muted/15 rounded-xl border border-border/60 space-y-2.5">
-                                          {/* Version Indicator & Duration */}
-                                          <div className="flex items-center justify-between text-xs pb-2 border-b border-border/40">
-                                            <div className="flex items-center gap-1.5 font-medium text-foreground">
-                                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                              <span className="font-semibold text-[11px]">v{activeVer.version_number}</span>
-                                              <span className="text-[10px] text-muted-foreground">Current</span>
-                                            </div>
-                                            <span className="text-[10px] font-semibold text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border/50">
-                                              {activeVer.duration_value} {activeVer.duration_unit ? activeVer.duration_unit.charAt(0).toUpperCase() + activeVer.duration_unit.slice(1).toLowerCase() : 'Month'}{Number(activeVer.duration_value) > 1 ? 's' : ''}
+                                      {/* Branches summary */}
+                                      <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+                                        <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
+                                          <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                                          {availBranches.length === 0 ? (
+                                            <span className="text-amber-500 italic">No branches assigned</span>
+                                          ) : isAllBranches ? (
+                                            <span title={availBranches.map((b) => b.name).join(', ')}>
+                                              All Branches ({availBranches.length})
                                             </span>
-                                          </div>
-
-                                          {/* Primary Price */}
-                                          {firstPrice && (
-                                            <div className="flex items-baseline justify-between gap-2">
-                                              <div className="flex items-baseline gap-1.5">
-                                                <span className="text-lg font-bold text-foreground tracking-tight">
-                                                  {formatCurrency(firstPrice.total_price || firstPrice.sale_price, firstPrice.currency || 'INR')}
-                                                </span>
-                                                <span className="text-[10px] text-muted-foreground font-medium">
-                                                  {firstPrice.prices_include_tax ? 'Tax incl.' : '+ Tax'}
-                                                </span>
-                                              </div>
-                                              {firstPrice.display_price && Number(firstPrice.display_price) > Number(firstPrice.sale_price) && (
-                                                <span className="text-[11px] text-muted-foreground/60 line-through">
-                                                  {formatCurrency(firstPrice.display_price, firstPrice.currency || 'INR')}
-                                                </span>
-                                              )}
-                                            </div>
+                                          ) : (
+                                            availBranches.map((b) => b.name).join(' · ')
                                           )}
-
-                                          {/* Entitlements Grid */}
-                                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/40">
-                                            <div className="bg-background/80 dark:bg-background/40 rounded-lg p-2 border border-border/40 flex flex-col justify-between">
-                                              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                                Home Studio
-                                              </span>
-                                              <span className="text-xs font-semibold text-foreground mt-0.5">
-                                                {homeEnt?.is_unlimited ? 'Unlimited' : `${formatSessionCount(homeEnt?.allocated_units)} sessions`}
-                                              </span>
-                                            </div>
-
-                                            <div className="bg-background/80 dark:bg-background/40 rounded-lg p-2 border border-border/40 flex flex-col justify-between">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                                  Cross Branch
-                                                </span>
-                                              </div>
-                                              <div className="flex items-baseline justify-between mt-0.5">
-                                                <span className="text-xs font-semibold text-foreground">
-                                                  {crossEnt ? (crossEnt.is_unlimited ? 'Unlimited' : `${formatSessionCount(crossEnt.allocated_units)} sessions`) : 'None'}
-                                                </span>
-                                                {crossEnt?.extra_unit_price && Number(crossEnt.extra_unit_price) > 0 && (
-                                                  <span className="text-[10px] text-muted-foreground font-medium ml-1">
-                                                    +{formatCurrency(crossEnt.extra_unit_price, 'INR')}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                                          <Clock className="w-4 h-4 shrink-0" />
-                                          <span className="font-medium">Draft state (no active version)</span>
-                                        </div>
-                                      )}
+                                        </span>
+                                        {prog.description && (
+                                          <>
+                                            <span className="text-border">•</span>
+                                            <span className="line-clamp-1 text-muted-foreground max-w-xl" title={prog.description}>
+                                              {prog.description}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
+                                  </div>
 
-                                    {/* Package Actions Bar */}
-                                    <div className="pt-2.5 border-t border-border/50 flex flex-col gap-2">
-                                      <div className="flex items-center justify-between gap-1">
-                                        <div className="flex items-center gap-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setHistoryPackage(pkg)}
-                                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1.5 font-medium"
-                                            title="View immutable version history"
-                                          >
-                                            <History className="w-3.5 h-3.5" />
-                                            <span>Versions</span>
-                                          </Button>
+                                  {/* Right: Packages Counter & Actions */}
+                                  <div
+                                    className="flex items-center gap-2 flex-wrap sm:justify-end shrink-0 pl-10 lg:pl-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Button
+                                      variant={isExpanded ? 'default' : 'secondary'}
+                                      size="sm"
+                                      onClick={() => toggleProgramExpanded(prog.id)}
+                                      className="h-8 text-xs gap-1.5 px-3 font-semibold"
+                                    >
+                                      <PackageIcon className="w-3.5 h-3.5" />
+                                      <span>
+                                        {progPkgs.length} {progPkgs.length === 1 ? 'Package' : 'Packages'}
+                                      </span>
+                                      {isExpanded ? (
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      )}
+                                    </Button>
 
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setAuditPackage(pkg)}
-                                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1.5 font-medium"
-                                            title="View audit logs"
-                                          >
-                                            <Activity className="w-3.5 h-3.5" />
-                                            <span>Audit</span>
-                                          </Button>
-                                        </div>
-
-                                        {hasCatalogPermission && (
+                                    {hasCatalogPermission && (
+                                      <>
+                                        {prog.status === 'ARCHIVED' ? (
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => {
-                                              setSelectedPackage(pkg);
-                                              setNewVerName(`${pkg.name} v${(activeVer?.version_number ?? 0) + 1}`);
-                                              setNewVerDurationVal(activeVer?.duration_value ?? 6);
-                                              setNewVerDurationUnit(activeVer?.duration_unit ?? 'MONTH');
-                                              const td = activeVer?.total_days ?? 180;
-                                              setNewVerTotalDays(td);
-                                              setNewVerValidity(td);
-                                              setNewVerSalePrice(firstPrice?.sale_price ? String(Math.round(Number(firstPrice.sale_price))) : '');
-                                              setNewVerDisplayPrice(firstPrice?.display_price ? String(Math.round(Number(firstPrice.display_price))) : '');
-                                              setNewVerTaxPercentage(firstPrice?.tax_percent ? String(Math.round(parseFloat(String(firstPrice.tax_percent)))) : '18');
-                                              setNewVerTaxIncluded(firstPrice?.prices_include_tax ?? true);
-                                              setNewVerHomeUnlimited(Boolean(homeEnt?.is_unlimited));
-                                              setNewVerMaxSessions(homeEnt?.allocated_units ? String(Math.round(Number(homeEnt.allocated_units))) : '');
-                                              setNewVerCrossUnlimited(Boolean(crossEnt?.is_unlimited));
-                                              setNewVerPassportSessions(crossEnt?.allocated_units ? String(Math.round(Number(crossEnt.allocated_units))) : '');
-                                              setNewVerPassportCost(crossEnt?.extra_unit_price ? String(Math.round(Number(crossEnt.extra_unit_price))) : '');
-                                              setNewVerShowWeb(activeVer?.show_on_web ?? true);
-                                              setNewVerShowApp(activeVer?.show_on_app ?? true);
-                                              setNewVerPublishNow(false);
-                                              setIsNewVersionOpen(true);
-                                            }}
-                                            className="h-7 text-xs px-2 text-primary border-primary/25 hover:bg-primary/5 hover:border-primary/40 gap-1 font-medium"
-                                            title="Create new version snapshot"
+                                            onClick={() => restoreProgramMutation.mutate(prog.id)}
+                                            disabled={restoreProgramMutation.isPending}
+                                            className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                                           >
-                                            <Plus className="w-3.5 h-3.5" />
-                                            <span>New Version</span>
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                            <span>Restore</span>
                                           </Button>
-                                        )}
-                                      </div>
+                                        ) : (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => openAddPackageForProgram(prog.id)}
+                                              className="text-xs h-8 gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              <span>Add Package</span>
+                                            </Button>
 
-                                      {hasCatalogPermission && (
-                                        <div className="flex items-center justify-between pt-1 border-t border-border/30 text-xs">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => startEditPackage(pkg)}
-                                            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
-                                            title="Edit package settings"
-                                          >
-                                            <Pencil className="w-3 h-3" />
-                                            <span>Edit</span>
-                                          </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => startEditProgram(prog)}
+                                              className="text-xs h-8 px-2.5 text-muted-foreground hover:text-foreground gap-1"
+                                              title="Edit Program"
+                                            >
+                                              <Pencil className="w-3.5 h-3.5" />
+                                              <span className="hidden sm:inline">Edit</span>
+                                            </Button>
 
-                                          <div className="flex items-center gap-1">
                                             <Button
                                               variant="ghost"
                                               size="sm"
                                               onClick={() => {
-                                                togglePackageStatusMutation.mutate({
-                                                  id: pkg.id,
-                                                  newStatus: pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                                toggleProgramStatusMutation.mutate({
+                                                  id: prog.id,
+                                                  currentStatus: prog.status,
                                                 });
                                               }}
-                                              className={`h-6 text-[11px] px-2 gap-1 ${
-                                                pkg.status === 'ACTIVE'
+                                              className={`text-xs h-8 px-2.5 gap-1 ${
+                                                prog.status === 'ACTIVE'
                                                   ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
                                                   : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
                                               }`}
-                                              title={pkg.status === 'ACTIVE' ? 'Deactivate package' : 'Activate package'}
+                                              title={prog.status === 'ACTIVE' ? 'Deactivate Program' : 'Activate Program'}
                                             >
-                                              {pkg.status === 'ACTIVE' ? (
-                                                <>
-                                                  <ToggleRight className="w-3.5 h-3.5" />
-                                                  <span>Deactivate</span>
-                                                </>
+                                              {prog.status === 'ACTIVE' ? (
+                                                <ToggleRight className="w-4 h-4" />
                                               ) : (
-                                                <>
-                                                  <ToggleLeft className="w-3.5 h-3.5" />
-                                                  <span>Activate</span>
-                                                </>
+                                                <ToggleLeft className="w-4 h-4" />
                                               )}
                                             </Button>
 
-                                            {pkg.status !== 'ARCHIVED' ? (
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => {
-                                                  setPackageToArchive(pkg);
-                                                  setArchivePkgError(null);
-                                                }}
-                                                className="h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive gap-1"
-                                                title="Archive package"
-                                              >
-                                                <Archive className="w-3 h-3" />
-                                                <span>Archive</span>
-                                              </Button>
-                                            ) : (
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => restorePackageMutation.mutate(pkg.id)}
-                                                className="h-6 text-[11px] px-2 text-emerald-600 hover:text-emerald-700 gap-1"
-                                                title="Restore archived package"
-                                              >
-                                                <RotateCcw className="w-3 h-3" />
-                                                <span>Restore</span>
-                                              </Button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                setProgramToArchive(prog);
+                                                setArchiveProgError(null);
+                                              }}
+                                              className="text-xs h-8 px-2 text-muted-foreground hover:text-amber-600"
+                                              title="Archive Program"
+                                            >
+                                              <Archive className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                                </div>
+
+                                {/* Nested Packages Table */}
+                                {isExpanded && (
+                                  <div className="border-t border-border/60 bg-muted/15 px-4 py-3.5 sm:px-6">
+                                    {progPkgs.length === 0 ? (
+                                      <div className="p-6 text-center bg-card border border-dashed border-border/80 rounded-xl space-y-2">
+                                        <PackageIcon className="w-7 h-7 text-muted-foreground/40 mx-auto" />
+                                        <p className="text-xs text-muted-foreground">
+                                          No packages configured for {prog.name} yet.
+                                        </p>
+                                        {hasCatalogPermission && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => openAddPackageForProgram(prog.id)}
+                                            className="h-7 text-xs gap-1 mt-1"
+                                          >
+                                            <Plus className="w-3.5 h-3.5" />
+                                            <span>Add First Package</span>
+                                          </Button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-2xs">
+                                        <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                                          <thead>
+                                            <tr className="border-b border-border/60 bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                              <th className="py-2.5 px-4">Package / Session Tier</th>
+                                              <th className="py-2.5 px-3">Sessions Included</th>
+                                              <th className="py-2.5 px-3">Validity</th>
+                                              <th className="py-2.5 px-3">Passport (Cross-Branch)</th>
+                                              <th className="py-2.5 px-3">Price</th>
+                                              <th className="py-2.5 px-3">Status</th>
+                                              <th className="py-2.5 px-4 text-right">Actions</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border/50">
+                                            {progPkgs.map((pkg) => {
+                                              const activeVer = pkg.active_version || (pkg as any).latest_version;
+                                              const firstPrice = activeVer?.prices?.[0];
+                                              const ents: any[] = activeVer?.entitlements || [];
+                                              const homeEnt =
+                                                ents.find((e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION') ||
+                                                ents.find((e: any) => e.entitlement_type === 'CLASS_SESSION') ||
+                                                ents.find((e: any) => e.entitlement_type === 'PERSONAL_TRAINING_SESSION') ||
+                                                ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS') ||
+                                                ents[0];
+                                              const crossEnt = ents.find(
+                                                (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
+                                              );
+                                              const cfgPassportSessions = Number(
+                                                homeEnt?.configuration?.max_passport_sessions ?? 0
+                                              );
+
+                                              // Clean display name (strip redundant program name prefix if present)
+                                              let displayPkgName = pkg.name || 'Unnamed Package';
+                                              const dashIdx = displayPkgName.indexOf(' - ');
+                                              if (dashIdx > 0) {
+                                                const prefix = displayPkgName.slice(0, dashIdx).trim().toLowerCase();
+                                                const pNameLow = (prog.name || '').trim().toLowerCase();
+                                                if (
+                                                  prefix === pNameLow ||
+                                                  pNameLow.includes(prefix) ||
+                                                  prefix.includes(pNameLow) ||
+                                                  prefix.includes('virtual personal training') ||
+                                                  prefix.includes('personal training with team') ||
+                                                  prefix.includes('1:1 with team')
+                                                ) {
+                                                  displayPkgName = displayPkgName.slice(dashIdx + 3).trim();
+                                                }
+                                              }
+
+                                              const isTrialPkg =
+                                                Boolean((activeVer as any)?.is_trial) ||
+                                                Boolean((activeVer as any)?.is_trial_package) ||
+                                                displayPkgName.toLowerCase().includes('trial');
+
+                                              const validityDays =
+                                                activeVer?.validity_days || activeVer?.total_days || activeVer?.duration_value;
+
+                                              return (
+                                                <tr
+                                                  key={pkg.id}
+                                                  className="hover:bg-muted/25 transition-colors"
+                                                >
+                                                  {/* 1. Package Name */}
+                                                  <td className="py-3 px-4 font-semibold text-foreground">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                      <span className="text-sm font-bold text-foreground">
+                                                        {displayPkgName}
+                                                      </span>
+                                                      {isTrialPkg && (
+                                                        <Badge
+                                                          variant="outline"
+                                                          className="text-[10px] py-0 px-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10"
+                                                        >
+                                                          Trial
+                                                        </Badge>
+                                                      )}
+                                                      {activeVer && (
+                                                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                                          v{activeVer.version_number}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    {displayPkgName !== pkg.name && (
+                                                      <p className="text-[11px] font-normal text-muted-foreground mt-0.5">
+                                                        {pkg.name}
+                                                      </p>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 2. Sessions Included */}
+                                                  <td className="py-3 px-3">
+                                                    {homeEnt ? (
+                                                      <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs">
+                                                        {homeEnt.is_unlimited
+                                                          ? 'Unlimited Sessions'
+                                                          : `${formatSessionCount(homeEnt.allocated_units)} ${
+                                                              Number(homeEnt.allocated_units) === 1 ? 'Session' : 'Sessions'
+                                                            }`}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-muted-foreground text-xs">—</span>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 3. Validity */}
+                                                  <td className="py-3 px-3 text-xs font-medium text-foreground">
+                                                    {validityDays ? (
+                                                      <span>
+                                                        {validityDays} {Number(validityDays) === 1 ? 'Day' : 'Days'}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-muted-foreground">—</span>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 4. Passport / Cross-Branch */}
+                                                  <td className="py-3 px-3 text-xs">
+                                                    {crossEnt ? (
+                                                      <span className="font-medium text-foreground">
+                                                        {crossEnt.is_unlimited
+                                                          ? 'Unlimited'
+                                                          : `${formatSessionCount(crossEnt.allocated_units)} Sessions`}
+                                                      </span>
+                                                    ) : cfgPassportSessions > 0 ? (
+                                                      <span className="font-medium text-foreground">
+                                                        {cfgPassportSessions} {cfgPassportSessions === 1 ? 'Session' : 'Sessions'}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-muted-foreground">—</span>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 5. Price */}
+                                                  <td className="py-3 px-3">
+                                                    {firstPrice ? (
+                                                      <div className="space-y-0.5">
+                                                        <div className="flex items-baseline gap-1.5">
+                                                          <span className="text-sm font-bold text-foreground">
+                                                            {formatCurrency(
+                                                              firstPrice.total_price || firstPrice.sale_price,
+                                                              firstPrice.currency || 'INR'
+                                                            )}
+                                                          </span>
+                                                          {firstPrice.display_price &&
+                                                            Number(firstPrice.display_price) >
+                                                              Number(firstPrice.sale_price) && (
+                                                              <span className="text-[11px] text-muted-foreground line-through">
+                                                                {formatCurrency(
+                                                                  firstPrice.display_price,
+                                                                  firstPrice.currency || 'INR'
+                                                                )}
+                                                              </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="block text-[10px] text-muted-foreground">
+                                                          {firstPrice.prices_include_tax
+                                                            ? 'Incl. tax'
+                                                            : `+ ${Math.round(Number(firstPrice.tax_percent || 5))}% GST`}
+                                                        </span>
+                                                      </div>
+                                                    ) : (
+                                                      <span className="text-xs text-muted-foreground">No price</span>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 6. Status */}
+                                                  <td className="py-3 px-3">
+                                                    <Badge
+                                                      variant={
+                                                        pkg.status === 'ACTIVE'
+                                                          ? 'default'
+                                                          : pkg.status === 'ARCHIVED'
+                                                          ? 'destructive'
+                                                          : 'secondary'
+                                                      }
+                                                      className={`text-[10px] font-semibold ${
+                                                        pkg.status === 'ACTIVE'
+                                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                                          : ''
+                                                      }`}
+                                                    >
+                                                      {pkg.status}
+                                                    </Badge>
+                                                  </td>
+
+                                                  {/* 7. Actions */}
+                                                  <td className="py-3 px-4 text-right">
+                                                    <div className="flex items-center justify-end gap-1 flex-wrap">
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setHistoryPackage(pkg)}
+                                                        className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1"
+                                                        title="View version history"
+                                                      >
+                                                        <History className="w-3.5 h-3.5" />
+                                                        <span>Versions</span>
+                                                      </Button>
+
+                                                      {hasCatalogPermission && (
+                                                        <>
+                                                          <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                              setSelectedPackage(pkg);
+                                                              setNewVerName(
+                                                                `${pkg.name} v${(activeVer?.version_number ?? 0) + 1}`
+                                                              );
+                                                              setNewVerDurationVal(activeVer?.duration_value ?? 6);
+                                                              setNewVerDurationUnit(
+                                                                activeVer?.duration_unit ?? 'MONTH'
+                                                              );
+                                                              const td = activeVer?.total_days ?? 180;
+                                                              setNewVerTotalDays(td);
+                                                              setNewVerValidity(td);
+                                                              setNewVerSalePrice(
+                                                                firstPrice?.sale_price
+                                                                  ? String(Math.round(Number(firstPrice.sale_price)))
+                                                                  : ''
+                                                              );
+                                                              setNewVerDisplayPrice(
+                                                                firstPrice?.display_price
+                                                                  ? String(Math.round(Number(firstPrice.display_price)))
+                                                                  : ''
+                                                              );
+                                                              setNewVerTaxPercentage(
+                                                                firstPrice?.tax_percent
+                                                                  ? String(
+                                                                      Math.round(
+                                                                        parseFloat(String(firstPrice.tax_percent))
+                                                                      )
+                                                                    )
+                                                                  : '18'
+                                                              );
+                                                              setNewVerTaxIncluded(
+                                                                firstPrice?.prices_include_tax ?? true
+                                                              );
+                                                              setNewVerHomeUnlimited(Boolean(homeEnt?.is_unlimited));
+                                                              setNewVerMaxSessions(
+                                                                homeEnt?.allocated_units
+                                                                  ? String(Math.round(Number(homeEnt.allocated_units)))
+                                                                  : ''
+                                                              );
+                                                              setNewVerCrossUnlimited(Boolean(crossEnt?.is_unlimited));
+                                                              setNewVerPassportSessions(
+                                                                crossEnt?.allocated_units
+                                                                  ? String(Math.round(Number(crossEnt.allocated_units)))
+                                                                  : cfgPassportSessions > 0
+                                                                  ? String(cfgPassportSessions)
+                                                                  : ''
+                                                              );
+                                                              setNewVerPassportCost(
+                                                                crossEnt?.extra_unit_price
+                                                                  ? String(Math.round(Number(crossEnt.extra_unit_price)))
+                                                                  : ''
+                                                              );
+                                                              setNewVerShowWeb(activeVer?.show_on_web ?? true);
+                                                              setNewVerShowApp(activeVer?.show_on_app ?? true);
+                                                              setNewVerPublishNow(false);
+                                                              setIsNewVersionOpen(true);
+                                                            }}
+                                                            className="h-7 text-xs px-2 text-primary border-primary/25 hover:bg-primary/5 gap-1"
+                                                            title="Create new pricing/session version"
+                                                          >
+                                                            <Plus className="w-3 h-3" />
+                                                            <span>New Version</span>
+                                                          </Button>
+
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => startEditPackage(pkg)}
+                                                            className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
+                                                            title="Edit package"
+                                                          >
+                                                            <Pencil className="w-3.5 h-3.5" />
+                                                          </Button>
+
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                              togglePackageStatusMutation.mutate({
+                                                                id: pkg.id,
+                                                                newStatus:
+                                                                  pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                                              });
+                                                            }}
+                                                            className={`h-7 text-xs px-2 ${
+                                                              pkg.status === 'ACTIVE'
+                                                                ? 'text-amber-600 dark:text-amber-400'
+                                                                : 'text-emerald-600 dark:text-emerald-400'
+                                                            }`}
+                                                            title={
+                                                              pkg.status === 'ACTIVE'
+                                                                ? 'Deactivate package'
+                                                                : 'Activate package'
+                                                            }
+                                                          >
+                                                            {pkg.status === 'ACTIVE' ? (
+                                                              <ToggleRight className="w-4 h-4" />
+                                                            ) : (
+                                                              <ToggleLeft className="w-4 h-4" />
+                                                            )}
+                                                          </Button>
+
+                                                          {pkg.status !== 'ARCHIVED' ? (
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              onClick={() => {
+                                                                setPackageToArchive(pkg);
+                                                                setArchivePkgError(null);
+                                                              }}
+                                                              className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
+                                                              title="Archive package"
+                                                            >
+                                                              <Archive className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                          ) : (
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              onClick={() => restorePackageMutation.mutate(pkg.id)}
+                                                              className="h-7 text-xs px-2 text-emerald-600"
+                                                              title="Restore package"
+                                                            >
+                                                              <RotateCcw className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                          )}
+                                                        </>
+                                                      )}
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>

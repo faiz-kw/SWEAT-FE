@@ -45,6 +45,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 import { toast } from 'sonner';
+import { CashFlowReportPanel } from './CashFlowReportPanel';
 
 export type FinanceTab =
   | 'orders'
@@ -70,7 +71,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [paymentSubView, setPaymentSubView] = useState<'all' | 'cash_report'>('all');
-  const [cashReportDate, setCashReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [cashReportDate, setCashReportDate] = useState<string>('all');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
@@ -1185,85 +1186,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
         {/* TAB 5: REVENUE ANALYTICS */}
         {activeTab === 'revenue' && (
           <div className="space-y-6 animate-in fade-in duration-150">
-            {/* Top Revenue KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Gross Revenue</span>
-                <span className="text-lg font-bold text-foreground block mt-1">₹{grossRevenue.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 block">All collections</span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Total Refunds</span>
-                <span className="text-lg font-bold text-rose-600 block mt-1">₹{refundedAmount.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-muted-foreground mt-1 block">Processed returns</span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Net Revenue</span>
-                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 block mt-1">₹{netRevenue.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-muted-foreground mt-1 block">Gross minus refunds</span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Cash Collected</span>
-                <span className="text-lg font-bold text-amber-600 dark:text-amber-400 block mt-1">₹{cashCollected.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-muted-foreground mt-1 block">Approved cash only</span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Online Collected</span>
-                <span className="text-lg font-bold text-blue-600 dark:text-blue-400 block mt-1">₹{onlineCollected.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-muted-foreground mt-1 block">Razorpay instruments</span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card">
-                <span className="text-xs text-muted-foreground block">Pending Cash</span>
-                <span className="text-lg font-bold text-muted-foreground block mt-1">₹{pendingCashAmount.toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 block">Not recognized revenue</span>
-              </div>
-            </div>
-
-            {/* Split & Insights */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl border border-border bg-card space-y-3">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Banknote className="size-4 text-primary" /> Payment Method Collection Split
-                </h4>
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Online (Razorpay):</span>
-                    <span className="font-semibold text-foreground">
-                      ₹{onlineCollected.toLocaleString('en-IN')} (
-                      {grossRevenue > 0 ? Math.round((onlineCollected / grossRevenue) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden flex">
-                    <div
-                      className="bg-blue-600 h-full"
-                      style={{ width: `${grossRevenue > 0 ? (onlineCollected / grossRevenue) * 100 : 0}%` }}
-                    />
-                    <div
-                      className="bg-amber-600 h-full"
-                      style={{ width: `${grossRevenue > 0 ? (cashCollected / grossRevenue) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">In-Studio Cash (Approved):</span>
-                    <span className="font-semibold text-foreground">
-                      ₹{cashCollected.toLocaleString('en-IN')} (
-                      {grossRevenue > 0 ? Math.round((cashCollected / grossRevenue) * 100) : 0}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-xl border border-border bg-card space-y-3">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <ShieldCheck className="size-4 text-emerald-600" /> Revenue Integrity Policy
-                </h4>
-                <div className="text-xs text-muted-foreground space-y-1.5">
-                  <p>• Only <strong>approved cash</strong> and <strong>verified Razorpay payments</strong> feed recognized revenue.</p>
-                  <p>• Pending cash transactions await manager sign-off and are excluded from revenue totals.</p>
-                  <p>• Partial installment payments immediately recognize the exact collected portion.</p>
-                </div>
-              </div>
-            </div>
+            <CashFlowReportPanel />
 
             {/* Live Transactions Audit Ledger */}
             <div className="p-5 rounded-xl border border-border bg-card space-y-3">

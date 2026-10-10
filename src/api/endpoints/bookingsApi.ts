@@ -10,6 +10,22 @@ import {
   AttendancePenaltyRule,
 } from '../types/bookings';
 
+export interface PaginatedBookingsResponse {
+  results: Booking[];
+  count: number;
+  total_pages: number;
+  current_page: number;
+  page_size: number;
+  summary?: {
+    total_count?: number;
+    confirmed_count?: number;
+    waitlisted_count?: number;
+    attended_count?: number;
+    no_show_count?: number;
+    cancelled_count?: number;
+  };
+}
+
 export const bookingsApi = {
   // Bookings
   getBookings: async (params?: {
@@ -17,9 +33,40 @@ export const bookingsApi = {
     branch_id?: string;
     occurrence_id?: string;
     user_id?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<Booking[]> => {
     const res = await api.get('/tenant/bookings/', { params });
     return res.data.results || res.data;
+  },
+
+  getBookingsPaginated: async (params?: {
+    status?: string;
+    branch_id?: string;
+    occurrence_id?: string;
+    user_id?: string;
+    search?: string;
+    from_date?: string;
+    to_date?: string;
+    occurrence_date?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedBookingsResponse> => {
+    const res = await api.get('/tenant/bookings/', { params: params as any });
+    const data: any = res.data;
+    const results: Booking[] = Array.isArray(data) ? data : (data?.results || []);
+    const pageSize = params?.page_size || data?.page_size || 20;
+    const count = typeof data?.count === 'number' ? data.count : results.length;
+    const totalPages = typeof data?.total_pages === 'number' ? data.total_pages : Math.max(1, Math.ceil(count / pageSize));
+    return {
+      results,
+      count,
+      total_pages: totalPages,
+      current_page: data?.current_page || params?.page || 1,
+      page_size: pageSize,
+      summary: data?.summary,
+    };
   },
 
   getBookableMembers: async (search?: string): Promise<any[]> => {

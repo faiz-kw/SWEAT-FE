@@ -11,7 +11,7 @@ import { useModuleNavigate } from "@/modules/navigate";
 import { moduleDef } from "@/modules/registry";
 import { timeOf } from "@/modules/related";
 import { inferFields, pickStatusKey, pickTitleKey } from "@/modules/schema";
-import { snapshot, useStoreVersion, type Row } from "@/services/store";
+import { loadCollection, snapshot, useStoreVersion, type CollectionKey, type Row } from "@/services/store";
 
 interface ModuleCard {
   label: string;
@@ -31,7 +31,7 @@ function buildCard(label: string, to: string, locationId: string): ModuleCard | 
   );
   if (def.preset) rows = rows.filter(def.preset.test);
 
-  const fields = inferFields(rows);
+  const fields = inferFields(rows, def.collection);
   const statusKey = pickStatusKey(fields);
   const titleKey = pickTitleKey(fields);
 
@@ -69,28 +69,43 @@ function buildCard(label: string, to: string, locationId: string): ModuleCard | 
 export function SectionOverview({ sectionId }: { sectionId: string }) {
   const { locationId } = useApp();
   const { user } = useAuth();
-  useStoreVersion();
+  const v = useStoreVersion();
   const go = useModuleNavigate();
 
   const isSuperAdmin = !!(user?.isSuperAdmin) || user?.role === "Super Admin";
   const isOrgAdmin = isOrganizationAdmin(user);
 
   const sections = React.useMemo(() => {
-    const filtered = getFilteredNav(isSuperAdmin, isOrgAdmin);
+    const filtered = getFilteredNav(user, isSuperAdmin, null, isOrgAdmin);
     return (sectionId === "all" ? filtered : filtered.filter((s) => s.id === sectionId)).filter(
       (s) => s.id !== "dashboard"
     );
-  }, [sectionId, isSuperAdmin, isOrgAdmin]);
+  }, [user, sectionId, isSuperAdmin, isOrgAdmin]);
+
+  React.useEffect(() => {
+    const keys = new Set<CollectionKey>();
+    for (const s of sections) {
+      for (const item of s.items) {
+        const def = moduleDef(item.to);
+        if (def) keys.add(def.collection);
+      }
+    }
+    for (const k of keys) {
+      loadCollection(k, locationId);
+    }
+  }, [sections, locationId]);
 
   const cards = React.useMemo(
-    () =>
-      sections.map((s) => ({
+    () => {
+      void v;
+      return sections.map((s) => ({
         section: s,
         modules: s.items
           .map((i) => buildCard(i.label, i.to, locationId))
           .filter((c): c is ModuleCard => c !== null),
-      })),
-    [sections, locationId],
+      }));
+    },
+    [sections, locationId, v],
   );
 
   const title = sectionId === "all" ? "Module Overviews" : (sections[0]?.label ?? "Overview");

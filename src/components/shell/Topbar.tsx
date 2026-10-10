@@ -643,6 +643,10 @@ export function Topbar() {
                 <DropdownMenuItem
                   id="logout-btn"
                   className="text-xs text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer rounded-lg py-1.5"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    void logout();
+                  }}
                   onClick={() => void logout()}
                 >
                   <LogOut className="mr-2 size-3.5" />

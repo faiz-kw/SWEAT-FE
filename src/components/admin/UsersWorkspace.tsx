@@ -25,6 +25,8 @@ import {
   Eye,
   EyeOff,
   Copy,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -52,6 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   fetchUsersApi,
+  fetchUsersPaginatedApi,
   toggleUserActiveApi,
   inviteUserApi,
   resendUserInviteApi,
@@ -157,12 +160,37 @@ export function UsersWorkspace() {
 
   // Filters
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [departmentFilter, setDepartmentFilter] = React.useState("all");
   const [branchFilter, setBranchFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [selectedTenantId, setSelectedTenantId] = React.useState<string>("all");
   const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
+
+  // Pagination State
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(20);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [totalPages, setTotalPages] = React.useState(1);
+  const [summaryCounts, setSummaryCounts] = React.useState<{
+    total_count?: number;
+    active_count?: number;
+    inactive_count?: number;
+    invited_count?: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, roleFilter, departmentFilter, branchFilter, statusFilter, selectedTenantId, scopeFilter, pageSize]);
 
   // User Creation & Invite Modal State
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
@@ -275,42 +303,57 @@ export function UsersWorkspace() {
     }
   }, [currentUser?.isOrgWide, branches, branchFilter]);
 
-  // Load Data
-  const loadData = React.useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
+  // Load Reference Metadata (Roles, Branches, Departments, Tenants)
+  const hasLoadedMetaRef = React.useRef<string | null>(null);
+  const loadMetadata = React.useCallback(async (force = false) => {
+    const metaKey = isPlatformAdmin ? `platform:${selectedTenantId}` : "tenant";
+    if (!force && hasLoadedMetaRef.current === metaKey) return;
     try {
       if (isPlatformAdmin) {
-        // Platform Mode: Fetch across platform and optionally all tenants
-        const [fetchedUsers, fetchedRoles, fetchedLocations, fetchedTenants] = await Promise.all([
-          fetchUsersApi(
-            roleFilter === "all" ? undefined : roleFilter,
-            undefined,
-            undefined,
-            selectedTenantId === "all" ? undefined : selectedTenantId
-          ),
+        const [fetchedRoles, fetchedLocations, fetchedTenants] = await Promise.all([
           fetchRolesApi(selectedTenantId === "all" ? undefined : selectedTenantId),
           fetchLocationsApi(selectedTenantId === "all" ? undefined : selectedTenantId),
           fetchTenantsForDropdownApi(),
         ]);
-
-        setUsers(fetchedUsers);
         setRoles(fetchedRoles);
         setBranches(fetchedLocations);
         setTenants(fetchedTenants);
       } else {
-        // Tenant Mode: Strictly fetch tenant users, tenant roles, tenant departments, and tenant branches
-        const [fetchedUsers, fetchedRoles, fetchedBranches, fetchedDepts] = await Promise.all([
-          fetchUsersApi(),
+        const [fetchedRoles, fetchedBranches, fetchedDepts] = await Promise.all([
           fetchRolesApi(),
           fetchBranchesApi(),
           fetchDepartmentsApi(),
         ]);
-
-        setUsers(fetchedUsers);
         setRoles(fetchedRoles);
         setBranches(fetchedBranches);
         setDepartments(fetchedDepts);
+      }
+      hasLoadedMetaRef.current = metaKey;
+    } catch {}
+  }, [isPlatformAdmin, selectedTenantId]);
+
+  // Load Paginated Users Data
+  const loadData = React.useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      await loadMetadata();
+      const paginated = await fetchUsersPaginatedApi({
+        page,
+        page_size: pageSize,
+        role: roleFilter === "all" ? undefined : roleFilter,
+        department: !isPlatformAdmin && departmentFilter !== "all" ? departmentFilter : undefined,
+        location: branchFilter === "all" ? undefined : branchFilter,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        search: debouncedSearch || undefined,
+        tenantId: isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined,
+      });
+
+      setUsers(paginated.results);
+      setTotalCount(paginated.count);
+      setTotalPages(paginated.total_pages);
+      if (paginated.summary) {
+        setSummaryCounts(paginated.summary);
       }
     } catch (err: any) {
       const msg = extractApiError(err, "Failed to load user records from database");
@@ -319,7 +362,18 @@ export function UsersWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatformAdmin, roleFilter, selectedTenantId]);
+  }, [
+    loadMetadata,
+    isPlatformAdmin,
+    page,
+    pageSize,
+    roleFilter,
+    departmentFilter,
+    branchFilter,
+    statusFilter,
+    debouncedSearch,
+    selectedTenantId,
+  ]);
 
   React.useEffect(() => {
     loadData();
@@ -546,15 +600,26 @@ export function UsersWorkspace() {
   };
 
   // ── Metrics Calculation ──────────────────────────────────────────────────
-  const totalUsersCount = users.length;
-  const activeCount = users.filter((u) => u.is_active || u.status === "Active" || u.status === "ACTIVE").length;
-  const inactiveCount = users.filter((u) => (!u.is_active && u.status !== "Invited" && u.status !== "INVITED") || u.status === "Inactive" || u.status === "INACTIVE").length;
-  const pendingCount = users.filter((u) => u.status === "Invited" || u.status === "INVITED").length;
+  const totalUsersCount = summaryCounts?.total_count ?? totalCount ?? users.length;
+  const activeCount =
+    summaryCounts?.active_count ??
+    users.filter((u) => u.is_active || u.status === "Active" || u.status === "ACTIVE").length;
+  const inactiveCount =
+    summaryCounts?.inactive_count ??
+    users.filter(
+      (u) =>
+        (!u.is_active && u.status !== "Invited" && u.status !== "INVITED") ||
+        u.status === "Inactive" ||
+        u.status === "INACTIVE"
+    ).length;
+  const pendingCount =
+    summaryCounts?.invited_count ??
+    users.filter((u) => u.status === "Invited" || u.status === "INVITED").length;
 
   const platformUsersCount = React.useMemo(() => users.filter(isPlatformAccount).length, [users]);
-  const tenantUsersCount = totalUsersCount - platformUsersCount;
+  const tenantUsersCount = Math.max(0, totalUsersCount - platformUsersCount);
 
-  // ── Filtering logic ──────────────────────────────────────────────────────
+  // ── Filtering logic (server-side filtered in Tenant mode; scope filter in Platform mode) ──
   const filteredUsers = React.useMemo(() => {
     return users.filter((u) => {
       if (isPlatformAdmin) {
@@ -567,78 +632,9 @@ export function UsersWorkspace() {
         const userTypeLower = ((u as any).user_type || "").toLowerCase();
         if (rLower === "member" || userTypeLower === "member") return false;
       }
-
-      // Search matching
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const nameStr = `${u.first_name || ""} ${u.last_name || ""} ${u.full_name || ""}`.toLowerCase();
-        const emailStr = (u.email || "").toLowerCase();
-        const phoneStr = u.phone || "";
-        const roleStr = (u.role || u.role_name || "").toLowerCase();
-        const deptStr = (u.department || "").toLowerCase();
-        const branchStr = (u.active_location_name || "").toLowerCase();
-
-        const match =
-          nameStr.includes(q) ||
-          emailStr.includes(q) ||
-          phoneStr.includes(q) ||
-          roleStr.includes(q) ||
-          deptStr.includes(q) ||
-          branchStr.includes(q);
-
-        if (!match) return false;
-      }
-
-      // Role filter
-      if (roleFilter !== "all") {
-        const roleObj = roles.find((r) => r.id === roleFilter || r.name === roleFilter);
-        const targetRoleId = roleObj ? roleObj.id : roleFilter;
-        const targetRoleName = (roleObj ? roleObj.name : roleFilter).toLowerCase();
-
-        const userRoleId = (u as any).role_id;
-        const userRole = (u.role || u.role_name || "").toLowerCase();
-
-        const matchesRoleId = userRoleId && userRoleId === targetRoleId;
-        const matchesRoleName = userRole && userRole === targetRoleName;
-        const matchesMultiRoles = Array.isArray((u as any).roles) && (u as any).roles.some(
-          (r: any) => r.id === targetRoleId || r.name?.toLowerCase() === targetRoleName
-        );
-
-        if (!matchesRoleId && !matchesRoleName && !matchesMultiRoles) return false;
-      }
-
-      // Department filter (Tenant mode)
-      if (!isPlatformAdmin && departmentFilter !== "all") {
-        if (u.department !== departmentFilter) return false;
-      }
-
-      // Branch filter
-      if (branchFilter !== "all") {
-        const branchObj = branches.find((b) => b.id === branchFilter || b.name === branchFilter);
-        const targetId = branchObj ? branchObj.id : branchFilter;
-        const targetName = (branchObj ? branchObj.name : branchFilter).toLowerCase();
-
-        const userBranchId = u.active_location_id || (u as any).home_branch || (u as any).branch_id;
-        const userBranchName = (u.active_location_name || (u as any).home_branch_name || "").toLowerCase();
-
-        const matchesId = userBranchId && userBranchId === targetId;
-        const matchesName = userBranchName && userBranchName === targetName;
-        const matchesAccessList = Array.isArray(u.branch_access) && u.branch_access.some(
-          (ba: any) => (ba.branch_id === targetId || ba.branch_name?.toLowerCase() === targetName) && ba.enabled
-        );
-
-        if (!matchesId && !matchesName && !matchesAccessList) return false;
-      }
-
-      // Status filter
-      if (statusFilter !== "all") {
-        const normStatus = (u.status || (u.is_active ? "Active" : "Inactive")).toLowerCase();
-        if (normStatus !== statusFilter.toLowerCase()) return false;
-      }
-
       return true;
     });
-  }, [users, isPlatformAdmin, scopeFilter, search, roleFilter, departmentFilter, branchFilter, statusFilter]);
+  }, [users, isPlatformAdmin, scopeFilter]);
 
   return (
     <>
@@ -1267,6 +1263,82 @@ export function UsersWorkspace() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Pagination Footer Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border bg-card text-xs">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <span>
+                  Showing{" "}
+                  <strong className="text-foreground">
+                    {totalCount === 0 ? 0 : (page - 1) * pageSize + 1}
+                  </strong>
+                  –
+                  <strong className="text-foreground">
+                    {Math.min(page * pageSize, totalCount || filteredUsers.length)}
+                  </strong>{" "}
+                  of <strong className="text-foreground">{totalCount || filteredUsers.length}</strong> staff members
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="hidden sm:inline">Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="h-7 px-2.5 text-xs gap-1"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Prev
+                </Button>
+
+                <div className="flex items-center gap-1 px-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+                    const startPage = Math.max(1, Math.min(page - 2, totalPages - 4));
+                    const pageNum = startPage + idx;
+                    if (pageNum > totalPages) return null;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => setPage(pageNum)}
+                        className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                          page === pageNum
+                            ? "bg-primary text-primary-foreground shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-7 px-2.5 text-xs gap-1"
+                >
+                  Next
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
             </div>
           </>
         )}

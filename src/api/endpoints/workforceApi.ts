@@ -17,6 +17,9 @@ export interface PaginatedResponse<T> {
   count: number;
   next: string | null;
   previous: string | null;
+  total_pages?: number;
+  current_page?: number;
+  page_size?: number;
   results: T[];
 }
 
@@ -26,6 +29,8 @@ export const workforceApi = {
     trainer_status?: string;
     search?: string;
     branch_id?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<TrainerProfile[]> => {
     const query = new URLSearchParams();
     if (params?.trainer_status && params.trainer_status !== 'ALL') {
@@ -37,6 +42,10 @@ export const workforceApi = {
     if (params?.search) {
       query.append('search', params.search);
     }
+    if (params?.page) {
+      query.append('page', String(params.page));
+    }
+    query.append('page_size', String(params?.page_size ?? 200));
     const qStr = query.toString();
     const endpoint = `/tenant/trainer-profiles/${qStr ? `?${qStr}` : ''}`;
     const res = await api.get<PaginatedResponse<TrainerProfile> | TrainerProfile[]>(endpoint);
@@ -44,6 +53,46 @@ export const workforceApi = {
       return res.data;
     }
     return res.data.results ?? [];
+  },
+
+  getTrainersPaginated: async (params?: {
+    trainer_status?: string;
+    search?: string;
+    branch_id?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<TrainerProfile>> => {
+    const query = new URLSearchParams();
+    if (params?.trainer_status && params.trainer_status !== 'ALL') {
+      query.append('trainer_status', params.trainer_status);
+    }
+    if (params?.branch_id && params.branch_id !== 'ALL' && params.branch_id !== '') {
+      query.append('branch_id', params.branch_id);
+    }
+    if (params?.search) {
+      query.append('search', params.search);
+    }
+    if (params?.page) {
+      query.append('page', String(params.page));
+    }
+    if (params?.page_size) {
+      query.append('page_size', String(params.page_size));
+    }
+    const qStr = query.toString();
+    const endpoint = `/tenant/trainer-profiles/${qStr ? `?${qStr}` : ''}`;
+    const res = await api.get<PaginatedResponse<TrainerProfile> | TrainerProfile[]>(endpoint);
+    if (Array.isArray(res.data)) {
+      return {
+        count: res.data.length,
+        next: null,
+        previous: null,
+        total_pages: 1,
+        current_page: 1,
+        page_size: res.data.length,
+        results: res.data,
+      };
+    }
+    return res.data;
   },
 
   getTrainer: async (id: string): Promise<TrainerProfile> => {

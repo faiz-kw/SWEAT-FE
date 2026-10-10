@@ -70,6 +70,42 @@ export const classesApi = {
     return res.data?.results || res.data || [];
   },
 
+  async getScheduleRulesPaginated(params?: {
+    branch_id?: string;
+    category_id?: string;
+    category_code?: string;
+    status?: string;
+    date?: string;
+    from_date?: string;
+    to_date?: string;
+    day_of_week?: string | number;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    results: ClassScheduleRule[];
+    count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+    summary?: { total_count?: number; active_count?: number; inactive_count?: number };
+  }> {
+    const res = await api.get<any>('/tenant/class-schedule-rules/', { params: params as any });
+    const data = res.data;
+    const results: ClassScheduleRule[] = Array.isArray(data) ? data : (data?.results || []);
+    const pageSize = params?.page_size || data?.page_size || 24;
+    const count = typeof data?.count === 'number' ? data.count : results.length;
+    const totalPages = typeof data?.total_pages === 'number' ? data.total_pages : Math.max(1, Math.ceil(count / pageSize));
+    return {
+      results,
+      count,
+      total_pages: totalPages,
+      current_page: data?.current_page || params?.page || 1,
+      page_size: pageSize,
+      summary: data?.summary,
+    };
+  },
+
   async createScheduleRule(data: Partial<ClassScheduleRule>): Promise<ClassScheduleRule> {
     const res = await api.post<ClassScheduleRule>('/tenant/class-schedule-rules/', data);
     return res.data;
@@ -95,6 +131,8 @@ export const classesApi = {
   // --- Class Occurrences ---
   async getOccurrences(filters?: {
     branch_id?: string;
+    category_id?: string;
+    category_code?: string;
     occurrence_date?: string;
     status?: string;
     trainer_id?: string;
@@ -102,9 +140,50 @@ export const classesApi = {
     to_date?: string;
     membership_id?: string;
     user_profile_id?: string;
+    search?: string;
+    check_in_status?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<ClassOccurrence[]> {
     const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
     return res.data?.results || res.data || [];
+  },
+
+  async getOccurrencesPaginated(filters?: {
+    branch_id?: string;
+    category_id?: string;
+    category_code?: string;
+    occurrence_date?: string;
+    status?: string;
+    trainer_id?: string;
+    from_date?: string;
+    to_date?: string;
+    membership_id?: string;
+    user_profile_id?: string;
+    search?: string;
+    check_in_status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    results: ClassOccurrence[];
+    count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+  }> {
+    const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
+    const data = res.data;
+    const results: ClassOccurrence[] = Array.isArray(data) ? data : (data?.results || []);
+    const pageSize = filters?.page_size || data?.page_size || 20;
+    const count = typeof data?.count === 'number' ? data.count : results.length;
+    const totalPages = typeof data?.total_pages === 'number' ? data.total_pages : Math.max(1, Math.ceil(count / pageSize));
+    return {
+      results,
+      count,
+      total_pages: totalPages,
+      current_page: data?.current_page || filters?.page || 1,
+      page_size: pageSize,
+    };
   },
 
   async getBookingsForOccurrence(occurrenceId: string): Promise<any[]> {
