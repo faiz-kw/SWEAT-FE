@@ -313,7 +313,7 @@ export function MemberParqSigningModal({
 
                       {/* Question input control based on type */}
                       {q.question_type === 'BOOLEAN' ? (
-                        <div className="flex items-center gap-2 pt-1">
+                        <div className="flex items-center gap-2 pt-1 max-w-xs">
                           <button
                             type="button"
                             onClick={() => setAnswers((prev) => ({ ...prev, [qId]: true }))}
@@ -337,31 +337,97 @@ export function MemberParqSigningModal({
                             No
                           </button>
                         </div>
-                      ) : q.question_type === 'SINGLE_CHOICE' || q.question_type === 'CHOICE' ? (
+                      ) : q.question_type === 'SINGLE_SELECT' || q.question_type === 'SINGLE_CHOICE' || q.question_type === 'CHOICE' ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                          {(q.options || []).map((opt: any) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setAnswers((prev) => ({ ...prev, [qId]: opt.value }))}
-                              className={`py-1.5 px-3 rounded-lg text-xs text-left font-medium border transition-all ${
-                                currentVal === opt.value
-                                  ? 'bg-primary/10 text-primary border-primary font-semibold'
-                                  : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                              }`}
-                            >
-                              {opt.label || opt.value}
-                            </button>
-                          ))}
+                          {(q.options || []).map((opt: any) => {
+                            const optVal = opt.value ?? opt.label ?? opt.option_text ?? opt;
+                            const optLabel = opt.label ?? opt.option_text ?? opt.value ?? opt;
+                            const isSelected = currentVal === optVal;
+                            return (
+                              <button
+                                key={optVal}
+                                type="button"
+                                onClick={() => setAnswers((prev) => ({ ...prev, [qId]: optVal }))}
+                                className={`py-1.5 px-3 rounded-lg text-xs text-left font-medium border transition-all ${
+                                  isSelected
+                                    ? 'bg-primary/10 text-primary border-primary font-semibold shadow-xs'
+                                    : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                {optLabel}
+                              </button>
+                            );
+                          })}
                         </div>
+                      ) : q.question_type === 'MULTI_SELECT' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {(q.options || []).map((opt: any) => {
+                            const optVal = opt.value ?? opt.label ?? opt.option_text ?? opt;
+                            const optLabel = opt.label ?? opt.option_text ?? opt.value ?? opt;
+                            const arr = Array.isArray(currentVal) ? currentVal : [];
+                            const isChecked = arr.includes(optVal);
+                            return (
+                              <button
+                                key={optVal}
+                                type="button"
+                                onClick={() => {
+                                  const updated = isChecked
+                                    ? arr.filter((x: string) => x !== optVal)
+                                    : [...arr, optVal];
+                                  setAnswers((prev) => ({ ...prev, [qId]: updated }));
+                                }}
+                                className={`py-1.5 px-3 rounded-lg text-xs text-left font-medium border transition-all ${
+                                  isChecked
+                                    ? 'bg-primary/10 text-primary border-primary font-semibold shadow-xs'
+                                    : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                {isChecked ? "? " : ""}{optLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : q.question_type === 'DATE' ? (
+                        <input
+                          type="date"
+                          value={currentVal ?? ''}
+                          onChange={(e) => setAnswers((prev) => ({ ...prev, [qId]: e.target.value }))}
+                          className="w-full sm:w-64 text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
                       ) : q.question_type === 'NUMBER' ? (
                         <input
                           type="number"
                           value={currentVal ?? ''}
                           onChange={(e) => setAnswers((prev) => ({ ...prev, [qId]: e.target.value }))}
                           placeholder="Enter numeric value..."
+                          className="w-full sm:w-64 text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      ) : q.question_type === 'LONG_TEXT' ? (
+                        <textarea
+                          rows={3}
+                          value={currentVal ?? ''}
+                          onChange={(e) => setAnswers((prev) => ({ ...prev, [qId]: e.target.value }))}
+                          placeholder="Your answer..."
                           className="w-full text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         />
+                      ) : q.question_type === 'PHOTO' ? (
+                        <div className="space-y-1.5">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = () => setAnswers((prev) => ({ ...prev, [qId]: reader.result }));
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                          />
+                          <p className="text-[11px] text-muted-foreground">Optional photo attachment (camera or file upload)</p>
+                        </div>
                       ) : (
                         <input
                           type="text"
@@ -370,8 +436,7 @@ export function MemberParqSigningModal({
                           placeholder="Your answer..."
                           className="w-full text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         />
-                      )}
-                    </div>
+                      )}</div>
                   );
                 })}
               </div>

@@ -26,6 +26,8 @@ import {
   Check,
   Flame,
   Zap,
+  PenTool,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -206,6 +208,10 @@ function WebMemberPortalWorkspaceInner() {
     primary_fitness_goal: "Core strength, athletic endurance and injury prevention",
   });
   const [isParqSubmitting, setIsParqSubmitting] = React.useState<boolean>(false);
+  const parqCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [parqHasSignature, setParqHasSignature] = React.useState<boolean>(false);
+  const [parqIsDrawing, setParqIsDrawing] = React.useState<boolean>(false);
+  const [parqConsentAccepted, setParqConsentAccepted] = React.useState<boolean>(true);
 
   // Profile Edit State
   const [profileForm, setProfileForm] = React.useState({
@@ -360,6 +366,13 @@ function WebMemberPortalWorkspaceInner() {
             phone: b.phone || "",
           }))
         );
+      }
+
+      if (catRes.status === "fulfilled" && catRes.value?.data) {
+        const rawCats = Array.isArray(catRes.value.data) ? catRes.value.data : [];
+        if (rawCats.length > 0) {
+          setCategories(rawCats);
+        }
       }
 
       if (parqRes.status === "fulfilled" && parqRes.value?.data) {
@@ -641,22 +654,76 @@ function WebMemberPortalWorkspaceInner() {
     e.preventDefault();
     setIsParqSubmitting(true);
     try {
-      const res = await mobileApi.submitPARQSurvey(parqFormResponses);
-      toast.success(res.data.message || "PAR-Q Health Questionnaire submitted successfully!");
+      let signatureData = "";
+      if (parqCanvasRef.current && parqHasSignature) {
+        signatureData = parqCanvasRef.current.toDataURL("image/png");
+      }
+
+      const res = await mobileApi.submitPARQSurvey({
+        answers: parqFormResponses,
+        par_q: parqFormResponses,
+        agreement_accepted: parqConsentAccepted,
+        signature_data: signatureData || undefined,
+      });
+
       if (parqSurvey) {
         setParqSurvey({
           ...parqSurvey,
-          is_completed: true,
-          is_cleared: res.data.is_cleared,
-          status_badge: res.data.is_cleared ? "PAR-Q Cleared" : "Under Review",
+          is_cleared: true,
+          status_badge: "PAR-Q Cleared",
           saved_responses: parqFormResponses,
         });
       }
+      toast.success(res.data?.detail || "PAR-Q health assessment saved and cleared!");
     } catch (err: any) {
-      toast.error(err?.data?.detail || "Failed to submit PAR-Q form.");
+      console.error("Failed to submit PAR-Q:", err);
+      toast.error(err.response?.data?.detail || err.message || "Failed to update PAR-Q. Please verify required fields.");
     } finally {
       setIsParqSubmitting(false);
     }
+  };
+
+  const clearParqSignature = () => {
+    const canvas = parqCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setParqHasSignature(false);
+  };
+
+  const startParqDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    setParqIsDrawing(true);
+    const canvas = parqCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const drawParq = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!parqIsDrawing) return;
+    const canvas = parqCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setParqHasSignature(true);
+  };
+
+  const stopParqDraw = () => {
+    setParqIsDrawing(false);
   };
 
   // Handler: Update Profile
@@ -1671,10 +1738,10 @@ function WebMemberPortalWorkspaceInner() {
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                   <HeartPulse className="h-5 w-5 text-emerald-500" />
-                  Physical Activity Readiness Questionnaire (PAR-Q)
+                  {parqSurvey?.form_name || "Physical Activity Readiness Questionnaire (PAR-Q)"}
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Standard safety diagnostic required for high-intensity training, bootcamp and private coaching.
+                  Authoritative health and exercise readiness assessment ? Version {parqSurvey?.version_number || 1}
                 </p>
               </div>
 
@@ -1686,138 +1753,242 @@ function WebMemberPortalWorkspaceInner() {
                 }`}
               >
                 <ShieldCheck className="h-4 w-4" />
-                {parqSurvey?.status_badge || "PAR-Q Cleared"}
+                {parqSurvey?.status_badge || (isParqCleared ? "PAR-Q Cleared" : "PAR-Q Pending")}
               </Badge>
             </div>
 
             <Card className="border-border/70 bg-card shadow-xs">
               <CardHeader className="border-b border-border/40 pb-4">
                 <CardTitle className="text-base font-bold text-foreground">
-                  Medical Readiness Self-Assessment
+                  Readiness Self-Assessment & Studio Onboarding
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Please answer each question honestly to ensure safe and effective exercise programming.
+                  Please answer each question honestly to ensure safe and personalized exercise programming.
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
-                <form onSubmit={handleSubmitPARQ} className="space-y-6">
-                  {/* 7 PAR-Q Diagnostic Questions */}
-                  <div className="space-y-4">
-                    {[
-                      {
-                        id: "heart_condition",
-                        text: "1. Has your doctor ever said that you have a heart condition and that you should only do physical activity recommended by a doctor?",
-                      },
-                      {
-                        id: "chest_pain_activity",
-                        text: "2. Do you feel pain in your chest when you do physical activity?",
-                      },
-                      {
-                        id: "chest_pain_past_month",
-                        text: "3. In the past month, have you had chest pain when you were not doing physical activity?",
-                      },
-                      {
-                        id: "dizziness_balance",
-                        text: "4. Do you lose your balance because of dizziness or do you ever lose consciousness?",
-                      },
-                      {
-                        id: "bone_joint_problem",
-                        text: "5. Do you have a bone or joint problem (e.g. back, knee, shoulder) that could be made worse by a change in your physical activity?",
-                      },
-                      {
-                        id: "blood_pressure_meds",
-                        text: "6. Is your doctor currently prescribing drugs (for example, water pills) for your blood pressure or heart condition?",
-                      },
-                      {
-                        id: "other_reason",
-                        text: "7. Do you know of any other reason why you should not do physical activity?",
-                      },
-                    ].map((q) => {
-                      const val = parqFormResponses[q.id] || "no";
-                      return (
-                        <div
-                          key={q.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/60 bg-accent/10"
-                        >
-                          <span className="text-xs font-medium text-foreground max-w-2xl">
-                            {q.text}
-                          </span>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <label className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer">
+                <form onSubmit={handleSubmitPARQ} className="space-y-8">
+                  {/* Dynamic Questions rendering from backend */}
+                  {parqSurvey?.questions && parqSurvey.questions.length > 0 ? (
+                    <div className="space-y-6">
+                      {parqSurvey.questions.map((q: any) => {
+                        const qId = q.id;
+                        const val = parqFormResponses[qId];
+
+                        return (
+                          <div
+                            key={qId}
+                            className="p-4 rounded-xl border border-border/70 bg-accent/5 hover:bg-accent/10 transition-colors space-y-3"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <label className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
+                                <span className="font-mono text-muted-foreground mr-1.5">Q{q.order}.</span>
+                                {q.text}
+                                {q.is_required ? (
+                                  <span className="text-rose-500 ml-1 font-bold">*</span>
+                                ) : (
+                                  <span className="text-muted-foreground font-normal text-xs ml-1.5">(Optional)</span>
+                                )}
+                              </label>
+                              {q.is_sensitive && (
+                                <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0 self-start sm:self-center">
+                                  Protected Health Info
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Control based on question type */}
+                            {q.type === 'BOOLEAN' ? (
+                              <div className="flex items-center gap-2 pt-1 max-w-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false }))}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                    val === false || val === 'no'
+                                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
+                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  No
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true }))}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                    val === true || val === 'yes'
+                                      ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  Yes
+                                </button>
+                              </div>
+                            ) : q.type === 'SINGLE_SELECT' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                                {(q.options || []).map((opt: any) => {
+                                  const isSelected = val === opt.value || val === opt.label;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: opt.value }))}
+                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all ${
+                                        isSelected
+                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
+                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                      }`}
+                                    >
+                                      {opt.label || opt.value}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : q.type === 'MULTI_SELECT' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                                {(q.options || []).map((opt: any) => {
+                                  const currentArr = Array.isArray(val) ? val : [];
+                                  const isChecked = currentArr.includes(opt.value);
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = isChecked
+                                          ? currentArr.filter((x: string) => x !== opt.value)
+                                          : [...currentArr, opt.value];
+                                        setParqFormResponses((prev) => ({ ...prev, [qId]: updated }));
+                                      }}
+                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all ${
+                                        isChecked
+                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
+                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                      }`}
+                                    >
+                                      {isChecked ? "? " : ""}{opt.label || opt.value}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : q.type === 'DATE' ? (
                               <input
-                                type="radio"
-                                name={q.id}
-                                value="no"
-                                checked={val === "no"}
-                                onChange={() => setParqFormResponses((prev) => ({ ...prev, [q.id]: "no" }))}
-                                className="accent-primary"
+                                type="date"
+                                value={val || ''}
+                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                               />
-                              No
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-amber-500">
+                            ) : q.type === 'NUMBER' ? (
                               <input
-                                type="radio"
-                                name={q.id}
-                                value="yes"
-                                checked={val === "yes"}
-                                onChange={() => setParqFormResponses((prev) => ({ ...prev, [q.id]: "yes" }))}
-                                className="accent-amber-500"
+                                type="number"
+                                value={val || ''}
+                                placeholder="Enter value..."
+                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                               />
-                              Yes
-                            </label>
+                            ) : (
+                              <input
+                                type="text"
+                                value={val || ''}
+                                placeholder="Your answer..."
+                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      Loading authoritative questionnaire...
+                    </div>
+                  )}
+
+                  {/* Legal Agreement & Declaration Section */}
+                  <div className="border-t border-border/40 pt-6 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-foreground">
+                        {parqSurvey?.agreement_title || "Physical Activity Readiness & Assumption of Risk Agreement"}
+                      </h4>
+                    </div>
+
+                    <div className="rounded-xl border border-border/80 bg-muted/20 p-4 max-h-40 overflow-y-auto text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
+                      {parqSurvey?.agreement_text ||
+                        "Your health and well-being are always our top priority. If at any point during your workout you feel unwell or experience discomfort, pause and seek medical advice. Consulting a healthcare professional before starting any new fitness program is recommended. While our trainers provide expert guidance, Sweat Fit Wellness and its trainers cannot be held liable for any health-related incidents.\n\nBy signing below, you certify that the answers given above are true and complete to the best of your knowledge."}
+                    </div>
+
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={parqConsentAccepted}
+                        onChange={(e) => setParqConsentAccepted(e.target.checked)}
+                        className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4"
+                      />
+                      <div className="text-xs">
+                        <span className="font-semibold text-foreground">
+                          I explicitly confirm that I have reviewed, understood, and agree to the Physical Activity Readiness terms above.
+                        </span>
+                        <p className="text-muted-foreground text-[11px] mt-0.5">
+                          I acknowledge that completing this assessment is mandatory before booking classes.
+                        </p>
+                      </div>
+                    </label>
                   </div>
 
-                  {/* Biometrics & Emergency Contact */}
-                  <div className="border-t border-border/40 pt-6">
-                    <h4 className="text-sm font-bold text-foreground mb-4">
-                      Emergency Contact & Primary Fitness Goal
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="em_name" className="text-xs">Emergency Contact Name</Label>
-                        <Input
-                          id="em_name"
-                          value={parqFormResponses.emergency_contact_name || ""}
-                          onChange={(e) => setParqFormResponses((prev) => ({ ...prev, emergency_contact_name: e.target.value }))}
-                          placeholder="e.g. Anita Sen"
-                          className="text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="em_phone" className="text-xs">Emergency Contact Phone</Label>
-                        <Input
-                          id="em_phone"
-                          value={parqFormResponses.emergency_contact_phone || ""}
-                          onChange={(e) => setParqFormResponses((prev) => ({ ...prev, emergency_contact_phone: e.target.value }))}
-                          placeholder="+91 98200 44556"
-                          className="text-xs"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 space-y-1.5">
-                        <Label htmlFor="fit_goal" className="text-xs">Primary Fitness & Lifestyle Focus</Label>
-                        <Input
-                          id="fit_goal"
-                          value={parqFormResponses.primary_fitness_goal || ""}
-                          onChange={(e) => setParqFormResponses((prev) => ({ ...prev, primary_fitness_goal: e.target.value }))}
-                          placeholder="e.g. Athletic Conditioning, Core Stability, Mobility"
-                          className="text-xs"
-                        />
+                  {/* Digital Signature Canvas Area */}
+                  <div className="border-t border-border/40 pt-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
+                        <PenTool className="h-4 w-4 text-primary" />
+                        <span>Member Digital Signature</span>
+                        <span className="text-muted-foreground font-normal text-xs">(Touch or mouse)</span>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearParqSignature}
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Clear & Redraw</span>
+                      </Button>
+                    </div>
+
+                    <div className="relative rounded-2xl border-2 border-dashed border-border bg-white dark:bg-zinc-950 overflow-hidden shadow-inner">
+                      <canvas
+                        ref={parqCanvasRef}
+                        onMouseDown={startParqDraw}
+                        onMouseMove={drawParq}
+                        onMouseUp={stopParqDraw}
+                        onMouseLeave={stopParqDraw}
+                        onTouchStart={startParqDraw}
+                        onTouchMove={drawParq}
+                        onTouchEnd={stopParqDraw}
+                        className="w-full h-32 block cursor-crosshair touch-none"
+                      />
+                      {!parqHasSignature && (
+                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3 text-muted-foreground/60 select-none">
+                          <PenTool className="w-5 h-5 mb-1 opacity-40" />
+                          <p className="text-xs font-medium">Draw your digital signature here using mouse, touch, or stylus</p>
+                          <p className="text-[10px] opacity-75">Touch-screen devices fully supported</p>
+                        </div>
+                      )}
+                      <div className="pointer-events-none absolute bottom-2 left-4 right-4 border-b border-muted-foreground/20 flex justify-between text-[10px] text-muted-foreground/50 pb-0.5">
+                        <span>Sign above this line</span>
+                        <span>{parqHasSignature ? "? Signature Captured" : "Signature Optional for Profile Update"}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-4">
+                  <div className="flex justify-end pt-4 border-t border-border/40">
                     <Button
                       type="submit"
-                      disabled={isParqSubmitting}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-2"
+                      disabled={isParqSubmitting || !parqConsentAccepted}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs"
                     >
                       <ShieldCheck className="h-4 w-4" />
-                      {isParqSubmitting ? "Submitting..." : "Save & Update PAR-Q Clearance"}
+                      {isParqSubmitting ? "Submitting..." : "Save & Confirm PAR-Q Clearance"}
                     </Button>
                   </div>
                 </form>

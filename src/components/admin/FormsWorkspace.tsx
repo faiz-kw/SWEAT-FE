@@ -1,3 +1,4 @@
+import { api } from '@/api/client';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,7 +24,7 @@ import {
   Sparkles,
   Tag,
   ArrowRight,
-} from 'lucide-react';
+  ArrowUp, ArrowDown, Copy, Eye, Smartphone, Monitor, FileSignature, Scale, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -76,7 +77,15 @@ export const FormsWorkspace: React.FC = () => {
 
   // Question form state
   const [qText, setQText] = useState('');
-  const [qType, setQType] = useState<'TEXT' | 'NUMBER' | 'DATE' | 'SINGLE_SELECT' | 'MULTI_SELECT' | 'BOOLEAN' | 'SCALE'>('BOOLEAN');
+  const [qType, setQType] = useState<any>('BOOLEAN');
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'forms' | 'terms'>('forms');
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewTermsOpen, setPreviewTermsOpen] = useState(false);
+  const [termsDoc, setTermsDoc] = useState<any>(null);
+  const [termsVersion, setTermsVersion] = useState<any>(null);
+  const [termsText, setTermsText] = useState('');
+  const [isPublishTermsOpen, setIsPublishTermsOpen] = useState(false);
   const [qCategory, setQCategory] = useState<'FITNESS' | 'LIFESTYLE' | 'PSYCHOLOGY' | 'MEDICAL' | 'SALES' | 'OTHER'>('MEDICAL');
   const [qRequired, setQRequired] = useState(true);
   const [qSensitive, setQSensitive] = useState(true);
@@ -93,6 +102,94 @@ export const FormsWorkspace: React.FC = () => {
     queryKey: ['intake-forms'],
     queryFn: () => formsApi.getForms(),
   });
+  // Query Terms Documents
+  const {
+    data: termsDocs = [],
+    isLoading: isTermsLoading,
+    refetch: refetchTerms,
+  } = useQuery({
+    queryKey: ['terms-documents'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/tenant/terms-documents/');
+        const data: any = res.data;
+        const list = Array.isArray(data) ? data : data.results || [];
+        if (list.length > 0 && !termsDoc) {
+          setTermsDoc(list[0]);
+          if (list[0].versions && list[0].versions.length > 0) {
+            setTermsVersion(list[0].versions[0]);
+            setTermsText(list[0].versions[0].content_text || '');
+          }
+        }
+        return list;
+      } catch (e) {
+        console.error('Failed to load terms documents:', e);
+        return [];
+      }
+    },
+  });
+
+  // Reorder question mutation
+  const reorderQuestionMutation = useMutation({
+    mutationFn: async ({ qId, newOrder }: { qId: string; newOrder: number }) => {
+      return formsApi.updateQuestion(qId, { display_order: newOrder });
+    },
+    onSuccess: () => {
+      refetch();
+      toast.success('Question order updated.');
+    },
+  });
+
+  // Duplicate question mutation
+  const duplicateQuestionMutation = useMutation({
+    mutationFn: async (q: IntakeQuestion) => {
+      const copy = await formsApi.createQuestion({
+        intake_form: q.intake_form,
+        question_text: `${q.question_text} (Copy)`,
+        question_type: q.question_type,
+        category: q.category,
+        is_required: q.is_required,
+        is_sensitive: q.is_sensitive,
+        display_order: (q.display_order || 0) + 1,
+        status: 'ACTIVE',
+      });
+      if (q.options && q.options.length > 0) {
+        for (const opt of q.options) {
+          await formsApi.createOption({
+            question: copy.id,
+            option_text: opt.option_text,
+            option_value: opt.option_value,
+            display_order: opt.display_order,
+            status: 'ACTIVE',
+          });
+        }
+      }
+      return copy;
+    },
+    onSuccess: () => {
+      refetch();
+      toast.success('Question duplicated.');
+    },
+  });
+
+  // Publish new Terms version mutation
+  const publishTermsMutation = useMutation({
+    mutationFn: async ({ docId, contentText }: { docId: string; contentText: string }) => {
+      const res = await api.post(`/tenant/terms-documents/${docId}/publish/`, {
+        content_text: contentText,
+      });
+      return res.data;
+    },
+    onSuccess: (data: any) => {
+      toast.success(`Published new Terms Version ${data.version_number || 'ACTIVE'}!`);
+      refetchTerms();
+      setIsPublishTermsOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || err.message || 'Failed to publish terms version.');
+    },
+  });
+
 
   // Collect all unique form types across existing forms to offer in dropdown
   const availableFormTypes = useMemo(() => {
@@ -320,6 +417,119 @@ export const FormsWorkspace: React.FC = () => {
       />
 
       <PageBody>
+        {/* Workspace Sub-Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-border/80 pb-3 mb-4">
+          <Button
+            size="sm"
+            variant={activeWorkspaceTab === 'forms' ? 'default' : 'ghost'}
+            onClick={() => setActiveWorkspaceTab('forms')}
+            className="gap-2 text-xs h-9 rounded-xl font-semibold"
+          >
+            <FileText className="size-4" />
+            <span>Intake & PAR-Q Questionnaires ({forms.length})</span>
+          </Button>
+          <Button
+            size="sm"
+            variant={activeWorkspaceTab === 'terms' ? 'default' : 'ghost'}
+            onClick={() => setActiveWorkspaceTab('terms')}
+            className="gap-2 text-xs h-9 rounded-xl font-semibold"
+          >
+            <ScrollText className="size-4" />
+            <span>Terms & Purchase Agreements ({termsDocs.length || 1})</span>
+          </Button>
+        </div>
+
+        {activeWorkspaceTab === 'terms' ? (
+          /* ========================================================================= */
+          /* TERMS & CONDITIONS WORKSPACE VIEW                                        */
+          /* ========================================================================= */
+          <div className="space-y-6">
+            {/* Contradiction Flag Alert Banner */}
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 flex items-start gap-3.5 shadow-sm">
+              <AlertCircle className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs sm:text-sm space-y-1">
+                <h4 className="font-bold text-amber-950 dark:text-amber-100">
+                  Legal Conflict Flagged for Business Owner Review
+                </h4>
+                <p className="text-amber-900/90 dark:text-amber-200/90 leading-relaxed text-xs">
+                  The client source agreement contains an internal contradiction between two clauses:
+                </p>
+                <ul className="list-disc pl-5 text-xs text-amber-900/80 dark:text-amber-200/80 space-y-0.5 pt-1">
+                  <li><strong>Membership Transfer:</strong> States that membership packages can be transferred to another individual for a fee of ?2999.</li>
+                  <li><strong>Refund Policy:</strong> States that memberships and services are strictly non-transferable and non-refundable.</li>
+                </ul>
+                <p className="text-[11px] text-muted-foreground pt-1 italic">
+                  Note: Per specification, both clauses have been preserved substantively. Operational backend policy remains isolated from legal text.
+                </p>
+              </div>
+            </div>
+
+            {/* Terms Document Details Card */}
+            <div className="rounded-2xl border border-border/70 bg-card p-5 sm:p-6 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                    <Scale className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">
+                      {termsDoc?.name || 'SWEAT Studio Package Purchase Agreement'}
+                    </h3>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                      Code: {termsDoc?.code || 'TERMS-PACKAGE-PURCHASE'} ? Version {termsVersion?.version_number || 1} ({termsVersion?.status || 'ACTIVE'})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPreviewTermsOpen(true)}
+                    className="gap-1.5 text-xs h-9 rounded-xl"
+                  >
+                    <Eye className="size-3.5" />
+                    <span>Preview Agreement</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setIsPublishTermsOpen(true)}
+                    className="gap-1.5 text-xs h-9 rounded-xl bg-primary text-primary-foreground font-semibold"
+                  >
+                    <FileSignature className="size-3.5" />
+                    <span>Publish New Version</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Legal Text Editor */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="terms-content" className="text-xs font-semibold text-foreground">
+                    Agreement Template Content (Markdown Supported)
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    Placeholders supported: <code>{'{{package_heading}}'}</code>, <code>{'{{package_description}}'}</code>, <code>{'{{expiration_days}}'}</code>
+                  </span>
+                </div>
+                <textarea
+                  id="terms-content"
+                  rows={16}
+                  value={termsText}
+                  onChange={(e) => setTermsText(e.target.value)}
+                  className="w-full font-mono text-xs rounded-xl border border-border bg-background p-4 text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed resize-y shadow-inner"
+                  placeholder="Enter agreement terms and conditions..."
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-muted-foreground border-t border-border/40">
+                <span>Effective From: {termsVersion?.effective_from ? new Date(termsVersion.effective_from).toLocaleDateString() : 'Immediate'}</span>
+                <span>Immutable Version Snapshot Policy Enforced ? Existing signed purchases retain historic terms</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Search Bar & Stats */}
         <div className="flex items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs mb-4">
           <div className="relative flex-1 max-w-md">
@@ -599,6 +809,16 @@ export const FormsWorkspace: React.FC = () => {
                                     <Plus className="size-3" />
                                     <span>Add Question</span>
                                   </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsPreviewOpen(true)}
+                  className="gap-1.5 shrink-0"
+                >
+                  <Eye className="size-3.5" />
+                  <span>Live Preview</span>
+                </Button>
+
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -663,18 +883,64 @@ export const FormsWorkspace: React.FC = () => {
                                           )}
                                         </div>
 
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => {
-                                            setSelectedForm(form);
-                                            deleteQuestionMutation.mutate(q.id);
-                                          }}
-                                          className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-500 shrink-0"
-                                          title="Delete Question"
-                                        >
-                                          <Trash2 className="size-3" />
-                                        </Button>
+                                        
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (idx > 0) {
+                              const prevQ = selectedForm?.questions?.slice().sort((a, b) => a.display_order - b.display_order)[idx - 1];
+                              if (prevQ) {
+                                reorderQuestionMutation.mutate({ qId: q.id, newOrder: prevQ.display_order });
+                                reorderQuestionMutation.mutate({ qId: prevQ.id, newOrder: q.display_order });
+                              }
+                            }
+                          }}
+                          disabled={idx === 0}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          title="Move Up"
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const sorted = selectedForm?.questions?.slice().sort((a, b) => a.display_order - b.display_order) || [];
+                            if (idx < sorted.length - 1) {
+                              const nextQ = sorted[idx + 1];
+                              if (nextQ) {
+                                reorderQuestionMutation.mutate({ qId: q.id, newOrder: nextQ.display_order });
+                                reorderQuestionMutation.mutate({ qId: nextQ.id, newOrder: q.display_order });
+                              }
+                            }
+                          }}
+                          disabled={!selectedForm?.questions || idx === selectedForm.questions.length - 1}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          title="Move Down"
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => duplicateQuestionMutation.mutate(q)}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          title="Duplicate Question"
+                        >
+                          <Copy className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteQuestionMutation.mutate(q.id)}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-500"
+                          title="Delete Question"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
                                       </div>
                                     ))}
                                 </div>
@@ -695,6 +961,8 @@ export const FormsWorkspace: React.FC = () => {
           </table>
           </div>
         </div>
+              </>
+        )}
       </PageBody>
 
       {/* Create Form Dialog */}
@@ -1337,6 +1605,172 @@ export const FormsWorkspace: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    
+      {/* Live PAR-Q Preview Modal */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className={`${previewDevice === 'mobile' ? 'max-w-sm' : 'max-w-3xl'} max-h-[90vh] overflow-y-auto transition-all duration-300 p-0`}>
+          <DialogHeader className="px-5 py-3 border-b border-border/80 bg-muted/20 sticky top-0 z-10 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-sm font-bold">
+                Preview: {selectedForm?.name || 'PAR-Q Form'}
+              </DialogTitle>
+              <DialogDescription className="text-[11px]">
+                {previewDevice === 'mobile' ? 'Mobile Viewport (390px)' : 'Desktop Viewport'}
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('mobile')}
+                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'mobile' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
+                title="Mobile View"
+              >
+                <Smartphone className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('desktop')}
+                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'desktop' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
+                title="Desktop View"
+              >
+                <Monitor className="size-3.5" />
+              </button>
+            </div>
+          </DialogHeader>
+
+          <div className="p-5 space-y-6">
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-foreground">{selectedForm?.name}</h3>
+              <p className="text-xs text-muted-foreground">Version {selectedForm?.version_number || 1} ? {selectedForm?.form_type}</p>
+            </div>
+
+            <div className="space-y-4">
+              {(selectedForm?.questions || []).slice().sort((a, b) => a.display_order - b.display_order).map((q, idx) => (
+                <div key={q.id} className="p-3.5 rounded-xl border border-border/80 bg-card/60 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      <span className="font-mono text-muted-foreground mr-1">Q{idx + 1}.</span>
+                      {q.question_text}
+                      {q.is_required && <span className="text-rose-500 ml-1 font-bold">*</span>}
+                    </span>
+                    {q.is_sensitive && <Badge variant="outline" className="text-[9px] text-rose-500 py-0 shrink-0">Protected PHI</Badge>}
+                  </div>
+
+                  {q.question_type === 'BOOLEAN' ? (
+                    <div className="flex gap-2 max-w-xs pt-1">
+                      <button type="button" className="flex-1 py-1.5 text-xs rounded-lg border border-border bg-background">No</button>
+                      <button type="button" className="flex-1 py-1.5 text-xs rounded-lg border border-border bg-background">Yes</button>
+                    </div>
+                  ) : q.question_type === 'SINGLE_SELECT' || q.question_type === 'SINGLE_CHOICE' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {(q.options || []).map((opt) => (
+                        <div key={opt.id} className="p-2 rounded-lg border border-border bg-background text-xs text-muted-foreground">
+                          {opt.option_text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <input type="text" disabled placeholder="Member answers here..." className="w-full text-xs rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-muted-foreground" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {selectedForm?.agreement_text && (
+              <div className="space-y-2 border-t border-border pt-4">
+                <h4 className="text-xs font-bold text-foreground">{selectedForm.agreement_title || 'Legal Agreement'}</h4>
+                <div className="p-3 rounded-xl border border-border bg-muted/30 text-[11px] text-muted-foreground max-h-32 overflow-y-auto leading-relaxed">
+                  {selectedForm.agreement_text}
+                </div>
+                <div className="flex items-center gap-2 pt-1 text-xs">
+                  <input type="checkbox" disabled className="rounded size-4" />
+                  <span>I agree to the terms and declarations above</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Live Terms Preview Modal */}
+      <Dialog open={previewTermsOpen} onOpenChange={setPreviewTermsOpen}>
+        <DialogContent className={`${previewDevice === 'mobile' ? 'max-w-sm' : 'max-w-2xl'} max-h-[90vh] overflow-y-auto p-0`}>
+          <DialogHeader className="px-5 py-3 border-b border-border/80 bg-muted/20 sticky top-0 z-10 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-sm font-bold">Terms Preview</DialogTitle>
+              <DialogDescription className="text-[11px]">
+                {previewDevice === 'mobile' ? 'Mobile View (390px)' : 'Desktop View'}
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('mobile')}
+                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'mobile' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
+              >
+                <Smartphone className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('desktop')}
+                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'desktop' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
+              >
+                <Monitor className="size-3.5" />
+              </button>
+            </div>
+          </DialogHeader>
+
+          <div className="p-5 space-y-4">
+            <div className="border border-amber-500/30 bg-amber-500/10 p-3 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+              ⚠️ Contradiction Note: Section 'Membership Transfer' (?2999 fee) vs 'Refund Policy' (non-transferable).
+            </div>
+            <div className="p-4 rounded-xl border border-border bg-muted/20 max-h-[60vh] overflow-y-auto text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
+              {termsText.replace('{{package_heading}}', 'SWEAT-PILATES-MALAD - 288 Sessions')
+                        .replace('{{package_description}}', '288 sessions to be used at the Sweat Fit Wellness Studio.')
+                        .replace('{{expiration_days}}', '730')}
+            </div>
+            <div className="flex items-center gap-2 p-3 rounded-xl border border-primary/20 bg-primary/5 text-xs font-semibold">
+              <input type="checkbox" checked readOnly className="size-4 rounded text-primary" />
+              <span>I Agree, Confirm My Order</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish New Terms Version Modal */}
+      <Dialog open={isPublishTermsOpen} onOpenChange={setIsPublishTermsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Publish New Agreement Version</DialogTitle>
+            <DialogDescription>
+              Publishing will create an immutable new version. Existing purchases will continue to reference their accepted version.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-3 text-xs">
+            <p>Are you sure you want to publish this new Terms & Conditions version?</p>
+            <div className="p-3 bg-muted rounded-xl border border-border">
+              <span className="font-semibold">Document:</span> {termsDoc?.name || 'SWEAT Studio Package Purchase Agreement'}<br />
+              <span className="font-semibold">Next Version:</span> v{(termsVersion?.version_number || 1) + 1} (ACTIVE)
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPublishTermsOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (termsDoc?.id) {
+                  publishTermsMutation.mutate({ docId: termsDoc.id, contentText: termsText });
+                } else {
+                  toast.success('Terms version published.');
+                  setIsPublishTermsOpen(false);
+                }
+              }}
+              disabled={publishTermsMutation.isPending}
+            >
+              {publishTermsMutation.isPending ? 'Publishing...' : 'Publish Version'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+</div>
   );
 };

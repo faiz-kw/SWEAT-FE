@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import {
   ArrowRight, ArrowLeft, Check, CheckCircle2, Loader2, Package, CreditCard,
   Tag, Calendar, Sparkles, AlertTriangle, ShieldCheck, X, Zap, UserCheck, Star, Clock,
-} from 'lucide-react';
+  PenTool, RotateCcw, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -741,6 +741,8 @@ function PaymentStep({
 
 function ReviewStep({
   lead, quote, paymentProvider, paymentAmount, startDate, couponCode,
+  canvasRef, consentAccepted, onConsentChange, hasSignature, onClearSignature,
+  onStartDraw, onDraw, onStopDraw,
 }: {
   lead: Lead;
   quote: ConversionQuote;
@@ -748,6 +750,14 @@ function ReviewStep({
   paymentAmount: string;
   startDate: string;
   couponCode: string;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  consentAccepted: boolean;
+  onConsentChange: (accepted: boolean) => void;
+  hasSignature: boolean;
+  onClearSignature: () => void;
+  onStartDraw: (e: any) => void;
+  onDraw: (e: any) => void;
+  onStopDraw: () => void;
 }) {
   const p = quote.pricing;
   const providerLabel = PROVIDER_METADATA[paymentProvider]?.label ?? paymentProvider;
@@ -758,24 +768,26 @@ function ReviewStep({
   }, 0);
   const sessionsBadge = isUnlimited ? 'Unlimited Sessions' : totalSessions > 0 ? `${totalSessions} Sessions` : null;
 
+  const pkgName = cleanPackageDisplayName(quote.package_version.name, (quote as any).package?.name);
+  const validityDays = quote.package_version.validity_days || quote.package_version.total_days || 730;
+
   const rows: { label: string; value: string; highlight?: boolean }[] = [
-    { label: 'Lead', value: `${lead.first_name} ${lead.last_name}` },
-    { label: 'Phone', value: lead.phone_normalized ?? '—' },
+    { label: 'Member / Prospect', value: `${lead.first_name} ${lead.last_name}` },
+    { label: 'Phone', value: lead.phone_normalized ?? '?' },
     { label: 'Program', value: quote.program.name },
-    { label: 'Package', value: cleanPackageDisplayName(quote.package_version.name, (quote as any).package?.name) },
+    { label: 'Selected Package', value: pkgName },
     ...(sessionsBadge ? [{ label: 'Sessions Included', value: sessionsBadge, highlight: true }] : []),
-    ...((quote.package_version.validity_days || quote.package_version.total_days) ? [{
-      label: 'Validity',
-      value: `${quote.package_version.validity_days || quote.package_version.total_days} Days`,
-    }] : []),
-    ...(couponCode ? [{ label: 'Coupon', value: couponCode }] : []),
+    [{ label: 'Expiration Validity', value: `${validityDays} Days from Start Date` }][0],
+    ...(couponCode ? [{ label: 'Coupon Applied', value: couponCode }] : []),
     { label: 'Total Payable', value: formatCurrency(p.total_payable, p.currency), highlight: true },
     { label: 'Payment to Record', value: `${formatCurrency(paymentAmount, p.currency)} via ${providerLabel}`, highlight: true },
-    { label: 'Start Date', value: startDate || 'Today' },
+    { label: 'Package Start Date', value: startDate || 'Immediate / Today' },
   ];
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-xl bg-card border border-border divide-y divide-border shadow-sm">
+    <div className="space-y-6">
+      {/* 1. Commercial Summary Table */}
+      <div className="rounded-2xl bg-card border border-border divide-y divide-border shadow-xs">
         {rows.map((r) => (
           <div key={r.label} className="flex items-center justify-between px-4 py-2.5 text-xs sm:text-sm">
             <span className="text-muted-foreground">{r.label}</span>
@@ -783,21 +795,153 @@ function ReviewStep({
           </div>
         ))}
       </div>
-      <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 flex items-start gap-3">
-        <ShieldCheck size={18} className="text-primary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mb-1">Commercial Conversion Finalization</p>
+
+      {/* 2. Terms & Conditions Agreement Section */}
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+          <Scale className="w-5 h-5 text-primary" />
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Do you agree to our terms?</h3>
+            <p className="text-[11px] text-muted-foreground">SWEAT Studio Package Purchase Agreement ? Version 1 (Active)</p>
+          </div>
+        </div>
+
+        {/* Dynamic Package Heading & Description */}
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 space-y-1">
+          <h4 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wide">
+            {pkgName} {sessionsBadge && `- ${sessionsBadge}`}
+          </h4>
           <p className="text-xs text-muted-foreground">
-            Confirming will atomically record the payment transaction, activate membership entitlements, issue an invoice,
-            and transition this lead to <strong>CONVERTED</strong>.
+            {totalSessions > 0 ? `${totalSessions} sessions` : 'Sessions'} to be used at the Sweat Fit Wellness Studio.
+            The {validityDays} day expiration period starts from the start date of your package.
           </p>
+        </div>
+
+        {/* Contradiction Flag Alert (Section 4.4) */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-900 dark:text-amber-200">
+          <strong>Important Agreement Notice:</strong> Membership Transfer allows transfer for a ?2999 fee, while Refund Policy confirms memberships are non-transferable and non-refundable. Both legal clauses are preserved as provided.
+        </div>
+
+        {/* Scrollable Substantive Terms & Conditions Clauses */}
+        <div className="rounded-xl border border-border/80 bg-muted/20 p-4 max-h-56 sm:max-h-64 overflow-y-auto text-xs text-foreground/90 leading-relaxed space-y-3 font-sans shadow-inner">
+          <div>
+            <h5 className="font-bold text-foreground">Introduction</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              We are pleased to have you with us at Sweat Pilates, a product of Sweat Fit Wellness marketed as Sweat Pilates. At Sweat Pilates we prioritise your fitness goals, safety & comfort. Below mentioned terms & conditions to bring you the best experience at any given time.
+              <br /><em>Note: Sweat Fit Wellness is mentioned as Sweat in most of the places in this document.</em>
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Agreeing</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Agreeing to all the terms & conditions of Sweat Fit Wellness before purchasing or taking any services from Sweat Fit Wellness is of utmost importance. By agreeing to terms & conditions you are agreeing that you have understood & agree to all the mentioned terms.
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Results</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Your results are an outcome of your lifestyle where Sweat can become an utmost important aspect to bring them into reality by providing correct guidance & information but implementation stays fully at your responsibility. As you continue your journey with the Sweat Pilates program, workouts that once felt difficult may become easier as your body adapts and gets stronger. Our program evolves with you by introducing new variations and intensity levels to keep you challenged and progressing.
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Pre Exercise Questionnaire</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Your health and well-being are always our top priority. If at any point during your workout you feel unwell or experience discomfort, pause and seek medical advice. Consulting a healthcare professional before starting any new fitness program is recommended. While our trainers provide expert guidance, Sweat Fit Wellness and its trainers cannot be held liable for any health-related incidents.
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Class Booking, Attendance & Cancellation</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              You can book classes up to 30 days in advance and reserve spots in up to 7 classes at a time. Cancellations within 24 hours of scheduled class may result in deduction of the session from your package. Please arrive 10?15 minutes early. If a member is not scanned in by exact start time, the system will automatically release the reserved spot as an attended session.
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Membership Transfer & Refund Policy</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Membership packages can be transferred to another individual for a fee of ?2999. Memberships and services are non-transferable and non-refundable. Access to Sweat premises requires an active booking. Kids and pets are discouraged inside premises for safety reasons. Support: support@sweatfitwellness.com.
+            </p>
+          </div>
+
+          <div>
+            <h5 className="font-bold text-foreground">Closing Declaration</h5>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              By signing this agreement you have confirmed that you have understood and agreed to the T&C of this package.
+            </p>
+          </div>
+        </div>
+
+        {/* 3. Explicit Agreement Consent Checkbox (Starts UNCHECKED) */}
+        <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={consentAccepted}
+            onChange={(e) => onConsentChange(e.target.checked)}
+            className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4"
+          />
+          <div className="text-xs">
+            <span className="font-bold text-foreground">
+              By signing this agreement you have confirmed that you have understood and agreed to the T&C of this package.
+            </span>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Consent and signature are required before this purchase can be processed.
+            </p>
+          </div>
+        </label>
+
+        {/* 4. Digital Signature Capture Area */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <label className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
+              <PenTool className="w-4 h-4 text-primary" />
+              <span>Personal Digital Signature</span>
+              <span className="text-rose-500 font-bold">*</span>
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClearSignature}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear & Redraw</span>
+            </Button>
+          </div>
+
+          <div className="relative rounded-2xl border-2 border-dashed border-border bg-white dark:bg-zinc-950 overflow-hidden shadow-inner">
+            <canvas
+              ref={canvasRef}
+              onMouseDown={onStartDraw}
+              onMouseMove={onDraw}
+              onMouseUp={onStopDraw}
+              onMouseLeave={onStopDraw}
+              onTouchStart={onStartDraw}
+              onTouchMove={onDraw}
+              onTouchEnd={onStopDraw}
+              className="w-full h-32 block cursor-crosshair touch-none"
+            />
+            {!hasSignature && (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3 text-muted-foreground/60 select-none">
+                <PenTool className="w-5 h-5 mb-1 opacity-40" />
+                <p className="text-xs font-medium">Draw member digital signature here (touch or mouse)</p>
+                <p className="text-[10px] opacity-75">Touch-screen and stylus supported</p>
+              </div>
+            )}
+            <div className="pointer-events-none absolute bottom-2 left-4 right-4 border-b border-muted-foreground/20 flex justify-between text-[10px] text-muted-foreground/50 pb-0.5">
+              <span>Sign above this line</span>
+              <span>{hasSignature ? '? Signature Captured' : 'Signature Required to Proceed'}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
-// ─── Step 5: Success ──────────────────────────────────────────────────────────
 
 function SuccessStep({ result, lead, onClose }: { result: ConversionResult; lead: Lead; onClose: () => void }) {
   if (result.status === 'PENDING_APPROVAL') {
@@ -965,6 +1109,10 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const rzpInstanceRef = useRef<any>(null);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const termsCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [termsConsentAccepted, setTermsConsentAccepted] = useState(false);
+  const [termsHasSignature, setTermsHasSignature] = useState(false);
+  const [termsIsDrawing, setTermsIsDrawing] = useState(false);
 
   // Ensure Razorpay container and document.body maintain pointer-events auto and maximum z-index during checkout
   useEffect(() => {
@@ -1006,7 +1154,50 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
     };
   }, []);
 
-  const handleCancelRazorpay = useCallback(() => {
+  
+  const clearTermsSignature = () => {
+    const canvas = termsCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setTermsHasSignature(false);
+  };
+
+  const startTermsDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    setTermsIsDrawing(true);
+    const canvas = termsCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const drawTerms = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!termsIsDrawing) return;
+    const canvas = termsCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setTermsHasSignature(true);
+  };
+
+  const stopTermsDraw = () => {
+    setTermsIsDrawing(false);
+  };
+const handleCancelRazorpay = useCallback(() => {
     setIsProcessingPayment(false);
     rzpInstanceRef.current = null;
     const rzpContainer = document.querySelector('.razorpay-container');
@@ -1191,13 +1382,35 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
       setStep(4);
     } else if (step === 4) {
       if (!selectedVersionId || !selectedBranchId || !paymentProvider || !paymentAmount) return;
+
+      if (!termsConsentAccepted) {
+        toast.error('You must explicitly agree to the Terms & Conditions before confirming.');
+        setError('Please check the Terms & Conditions agreement box.');
+        return;
+      }
+
+      if (!termsHasSignature || !termsCanvasRef.current) {
+        toast.error('Member digital signature is required.');
+        setError('Please draw your digital signature before confirming.');
+        return;
+      }
+
+      const sigData = termsCanvasRef.current.toDataURL('image/png');
+      if (!sigData || sigData.length < 100) {
+        toast.error('Valid drawn signature required.');
+        return;
+      }
+
+      if (!selectedVersionId || !selectedBranchId || !paymentProvider || !paymentAmount) return;
       const payload: ConversionPayload = {
         package_version_id: selectedVersionId,
         branch_id: selectedBranchId,
         payment_provider: paymentProvider,
         payment_amount: paymentAmount,
         idempotency_key: idempotencyKey,
-      };
+        signature_data: sigData,
+        agreement_accepted: true,
+      } as any;
       if (appliedCoupon) payload.coupon_code = appliedCoupon;
       if (startDate) payload.start_date = startDate;
 
@@ -1246,7 +1459,9 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                 order_id: checkoutOrder.order_id,
                 is_partial_payment: isPartialPayment,
                 idempotency_key: response.razorpay_order_id,
-              };
+                signature_data: sigData,
+                agreement_accepted: true,
+              } as any;
               convertMutation.mutate(completePayload);
               setIsProcessingPayment(false);
             },
@@ -1396,6 +1611,14 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                   paymentAmount={paymentAmount}
                   startDate={startDate}
                   couponCode={appliedCoupon}
+                  canvasRef={termsCanvasRef}
+                  consentAccepted={termsConsentAccepted}
+                  onConsentChange={setTermsConsentAccepted}
+                  hasSignature={termsHasSignature}
+                  onClearSignature={clearTermsSignature}
+                  onStartDraw={startTermsDraw}
+                  onDraw={drawTerms}
+                  onStopDraw={stopTermsDraw}
                 />
               )}
 
@@ -1440,11 +1663,11 @@ export function ConversionWizard({ lead, open, onOpenChange, onConverted }: Conv
                 isConverting || isProcessingPayment || isApplyingCoupon || isFetchingQuote ||
                 (step === 1 && !selectedVersionId) ||
                 (step === 3 && (!paymentProvider || !paymentAmount)) ||
-                (step === 4 && !canRecordPayment)
+                (step === 4 && (!canRecordPayment || !termsConsentAccepted || !termsHasSignature))
               }
               className={`rounded-xl h-10 px-5 gap-2 font-semibold transition-all shadow-sm ${
                 step === 4
-                  ? canRecordPayment
+                  ? (canRecordPayment && termsConsentAccepted && termsHasSignature)
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                     : 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
                   : 'bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200'

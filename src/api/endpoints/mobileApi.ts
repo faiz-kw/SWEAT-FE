@@ -119,6 +119,15 @@ export interface MobileClassCategory {
   description?: string;
 }
 
+export interface MobileClassCategory {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  display_order?: number;
+  class_count?: number;
+}
+
 export interface MobileBranch {
   id: string;
   name: string;
@@ -167,6 +176,9 @@ export const mobileApi = {
 
   // Branches & Studios
   getBranches: () => api.get<MobileBranch[]>('/mobile/branches/'),
+
+  // Class Categories / Formats
+  getCategories: () => api.get<MobileClassCategory[]>('/mobile/categories/'),
 
   // Class Schedule & Booking
   getSchedule: (params?: { date?: string; branch_id?: string; category?: string }) =>

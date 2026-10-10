@@ -218,6 +218,7 @@ const CATALOG_MODULE_IDS = new Set(FEATURE_MODULES_CATALOG.map((m) => m.id));
 const SUBMODULE_PATH_ALIASES: Record<string, string[]> = {
   "/crm/setup": ["/crm/setup", "/crm/settings"],
   "/crm/settings": ["/crm/setup", "/crm/settings"],
+  "/members": ["/members", "members", "/members/client-360"],
 };
 
 /**
@@ -264,6 +265,13 @@ export function isSubmoduleAllowed(
   if (enabledModules.includes("*") || enabledModules.includes("all")) return true;
 
   const candidatePaths = SUBMODULE_PATH_ALIASES[submodulePath] || [submodulePath];
+
+  // Root module path match (e.g. "/members" when parentModuleId is "members")
+  if (parentModuleId && (submodulePath === `/${parentModuleId}` || submodulePath === parentModuleId)) {
+    if (enabledModules.includes(parentModuleId) || enabledModules.includes(`/${parentModuleId}`)) {
+      return true;
+    }
+  }
 
   // Direct submodule path match (including canonical aliases)
   if (candidatePaths.some((p) => enabledModules.includes(p))) return true;
