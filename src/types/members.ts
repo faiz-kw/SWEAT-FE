@@ -71,6 +71,11 @@ export interface Member {
   risk_level?: string;
   attendance_count_30d: number;
   last_visit: string;
+  parq_status?: 'COMPLETED' | 'PENDING' | 'WAIVED';
+  parq_completed_at?: string | null;
+  parq_sub_count?: number;
+  parq_has_edits?: boolean;
+  parq_version?: number;
   active_plan?: {
     id: string;
     plan_name: string;

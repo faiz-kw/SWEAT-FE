@@ -11,6 +11,8 @@ import {
   Sparkles,
   QrCode,
   CheckCircle2,
+  History,
+  FileText,
   RefreshCw,
   XCircle,
   ArrowRight,
@@ -649,6 +651,55 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
+  // Setup high-DPI canvas buffer for 100% pinpoint drawing accuracy
+  const setupParqCanvas = React.useCallback(() => {
+    const canvas = parqCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.strokeStyle = "#0f172a";
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (activeTab === "parq") {
+      const timer = setTimeout(setupParqCanvas, 80);
+      window.addEventListener("resize", setupParqCanvas);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener("resize", setupParqCanvas);
+      };
+    }
+  }, [activeTab, setupParqCanvas]);
+
+  // Exact canvas coordinate mapping factoring in display bounds and buffer scaling
+  const getParqCanvasCoords = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    canvas: HTMLCanvasElement
+  ) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
+    const clientY = "touches" in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
+
+    const scaleX = canvas.width / (rect.width || 1);
+    const scaleY = canvas.height / (rect.height || 1);
+
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
+
   // Handler: Submit PAR-Q Form
   const handleSubmitPARQ = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -666,15 +717,8 @@ function WebMemberPortalWorkspaceInner() {
         signature_data: signatureData || undefined,
       });
 
-      if (parqSurvey) {
-        setParqSurvey({
-          ...parqSurvey,
-          is_cleared: true,
-          status_badge: "PAR-Q Cleared",
-          saved_responses: parqFormResponses,
-        });
-      }
       toast.success(res.data?.detail || "PAR-Q health assessment saved and cleared!");
+      await fetchAllData();
     } catch (err: any) {
       console.error("Failed to submit PAR-Q:", err);
       toast.error(err.response?.data?.detail || err.message || "Failed to update PAR-Q. Please verify required fields.");
@@ -693,16 +737,17 @@ function WebMemberPortalWorkspaceInner() {
   };
 
   const startParqDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    setParqIsDrawing(true);
     const canvas = parqCanvasRef.current;
     if (!canvas) return;
+    if (canvas.width === 0 || canvas.height === 0) {
+      setupParqCanvas();
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    const { x, y } = getParqCanvasCoords(e, canvas);
     ctx.beginPath();
     ctx.moveTo(x, y);
+    setParqIsDrawing(true);
   };
 
   const drawParq = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -711,11 +756,12 @@ function WebMemberPortalWorkspaceInner() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const { x, y } = getParqCanvasCoords(e, canvas);
     const rect = canvas.getBoundingClientRect();
-    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.lineWidth = 2;
+    const scaleX = canvas.width / (rect.width || 1);
+    ctx.lineWidth = 2.5 * scaleX;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.strokeStyle = "#0f172a";
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -1757,6 +1803,73 @@ function WebMemberPortalWorkspaceInner() {
               </Badge>
             </div>
 
+            {/* PAR-Q Health Clearance on File Banner */}
+            {(isParqCleared || parqSurvey?.submission) && (
+              <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <ShieldCheck className="h-5 w-5 text-emerald-500 shrink-0" />
+                      <h3 className="font-bold text-sm sm:text-base text-foreground">
+                        PAR-Q Health Clearance on File
+                      </h3>
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
+                        Active Clearance
+                      </Badge>
+                      {Boolean(parqSurvey?.submission?.is_edit || (parqSurvey?.submission?.submission_count && parqSurvey.submission.submission_count > 1)) && (
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] font-mono gap-1">
+                          <History className="h-3 w-3" />
+                          <span>Revision #{parqSurvey?.submission?.revision_number || parqSurvey?.submission?.submission_count || 2}</span>
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Your completed medical readiness responses and verified digital signature are on file.
+                    </p>
+                  </div>
+
+                  {parqSurvey?.submission?.submitted_at && (
+                    <div className="text-right text-xs text-muted-foreground font-mono shrink-0">
+                      Last Completed: {new Date(parqSurvey.submission.submitted_at).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
+                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Signer Identity</span>
+                    <span className="font-semibold text-foreground">{parqSurvey?.submission?.signer_identity || profile?.name || "Member"}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
+                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Form Version</span>
+                    <span className="font-semibold text-foreground font-mono">
+                      v{parqSurvey?.version_number || 1} ? {parqSurvey?.questions?.length || 15} Questions
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
+                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Booking Eligibility</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Cleared for All Workouts
+                    </span>
+                  </div>
+                </div>
+
+                {parqSurvey?.submission?.signature_data && (
+                  <div className="pt-2 border-t border-emerald-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium text-muted-foreground">Signed Digital Signature:</span>
+                      <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-2xs">
+                        <img src={parqSurvey.submission.signature_data} alt="Member Signature" className="h-8 max-w-[140px] object-contain" />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Need to update your health answers? Modify the questionnaire below and click update. Changes will be recorded in studio compliance logs.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <Card className="border-border/70 bg-card shadow-xs">
               <CardHeader className="border-b border-border/40 pb-4">
                 <CardTitle className="text-base font-bold text-foreground">
@@ -1773,12 +1886,15 @@ function WebMemberPortalWorkspaceInner() {
                     <div className="space-y-6">
                       {parqSurvey.questions.map((q: any) => {
                         const qId = q.id;
-                        const val = parqFormResponses[qId];
+                        const val = parqFormResponses[qId] ?? parqFormResponses[`q_${q.order}`] ?? parqFormResponses[String(q.order)];
+                        const hasAnswer = val !== undefined && val !== null && val !== '';
 
                         return (
                           <div
                             key={qId}
-                            className="p-4 rounded-xl border border-border/70 bg-accent/5 hover:bg-accent/10 transition-colors space-y-3"
+                            className={`p-4 rounded-xl border transition-colors space-y-3 ${
+                              hasAnswer ? 'border-primary/20 bg-primary/[0.02]' : 'border-border/70 bg-accent/5'
+                            }`}
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                               <label className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
@@ -1790,11 +1906,19 @@ function WebMemberPortalWorkspaceInner() {
                                   <span className="text-muted-foreground font-normal text-xs ml-1.5">(Optional)</span>
                                 )}
                               </label>
-                              {q.is_sensitive && (
-                                <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0 self-start sm:self-center">
-                                  Protected Health Info
-                                </Badge>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {hasAnswer && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <span>Answer on file</span>
+                                  </span>
+                                )}
+                                {q.is_sensitive && (
+                                  <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0">
+                                    Protected Health Info
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
 
                             {/* Control based on question type */}
@@ -1802,9 +1926,9 @@ function WebMemberPortalWorkspaceInner() {
                               <div className="flex items-center gap-2 pt-1 max-w-xs">
                                 <button
                                   type="button"
-                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false }))}
+                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false, [`q_${q.order}`]: false }))}
                                   className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    val === false || val === 'no'
+                                    val === false || val === 'no' || val === 'NO' || val === 'false'
                                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
                                       : 'bg-background hover:bg-muted text-muted-foreground border-border'
                                   }`}
@@ -1813,9 +1937,9 @@ function WebMemberPortalWorkspaceInner() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true }))}
+                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true, [`q_${q.order}`]: true }))}
                                   className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    val === true || val === 'yes'
+                                    val === true || val === 'yes' || val === 'YES' || val === 'true'
                                       ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
                                       : 'bg-background hover:bg-muted text-muted-foreground border-border'
                                   }`}
@@ -1981,14 +2105,23 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-4 border-t border-border/40">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/40">
+                    <p className="text-[11px] text-muted-foreground text-center sm:text-left">
+                      {isParqCleared
+                        ? "Editing responses will update your member health file and generate an updated revision log in studio records."
+                        : "Submitting clears your health assessment requirement and unlocks studio class bookings."}
+                    </p>
                     <Button
                       type="submit"
                       disabled={isParqSubmitting || !parqConsentAccepted}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs shrink-0 w-full sm:w-auto"
                     >
                       <ShieldCheck className="h-4 w-4" />
-                      {isParqSubmitting ? "Submitting..." : "Save & Confirm PAR-Q Clearance"}
+                      {isParqSubmitting
+                        ? "Saving..."
+                        : isParqCleared
+                        ? "Update PAR-Q Responses (Save Revisions)"
+                        : "Save & Confirm PAR-Q Clearance"}
                     </Button>
                   </div>
                 </form>

@@ -22,6 +22,7 @@ import {
   ArrowRight,
   Filter,
   CheckCircle2,
+  History,
   Snowflake,
   AlertTriangle,
   DollarSign,
@@ -196,10 +197,10 @@ export const MemberDirectoryWorkspace: React.FC = () => {
     },
   });
 
-  const handleOpen360 = (memberId: string) => {
+  const handleOpen360 = (memberId: string, initialTab?: string) => {
     navigate({
       to: '/members/client-360',
-      search: { memberId } as never,
+      search: { memberId, tab: initialTab } as never,
     });
   };
 
@@ -466,6 +467,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                     <th className="py-2.5 px-3 whitespace-nowrap">Home Branch</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">Current Package</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">Status</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">PAR-Q</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">Expiry Date</th>
                     <th className="py-2.5 px-3 text-center whitespace-nowrap">Sessions Left</th>
                     <th className="py-2.5 px-3 text-right whitespace-nowrap">Outstanding</th>
@@ -521,6 +523,44 @@ export const MemberDirectoryWorkspace: React.FC = () => {
 
                         <td className="py-3 px-3 whitespace-nowrap">
                           {getStatusBadge(member.membership_status)}
+                        </td>
+
+                        <td
+                          className="py-3 px-3 whitespace-nowrap"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpen360(member.id, 'parq_form');
+                          }}
+                        >
+                          {member.parq_status === 'COMPLETED' ? (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                  <span>Cleared</span>
+                                </span>
+                                {Boolean(member.parq_has_edits || (member.parq_sub_count && member.parq_sub_count > 1)) && (
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                                    title={`${member.parq_sub_count} PAR-Q submissions/edits on record. Click to view audit logs.`}
+                                  >
+                                    <History className="w-2.5 h-2.5" />
+                                    <span>{member.parq_sub_count} logs</span>
+                                  </span>
+                                )}
+                              </div>
+                              {member.parq_completed_at && (
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {new Date(member.parq_completed_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              <AlertTriangle className="w-3 h-3 text-amber-500" />
+                              <span>Pending</span>
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-3 text-xs whitespace-nowrap">
@@ -605,7 +645,20 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      {getStatusBadge(member.membership_status)}
+                      <div className="flex flex-col items-end gap-1">
+                        {getStatusBadge(member.membership_status)}
+                        {member.parq_status === 'COMPLETED' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            PAR-Q Cleared {Boolean(member.parq_has_edits || (member.parq_sub_count && member.parq_sub_count > 1)) && `(${member.parq_sub_count} logs)`}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-medium">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            PAR-Q Pending
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="bg-muted/40 rounded-lg p-2.5 grid grid-cols-2 gap-2 text-xs">

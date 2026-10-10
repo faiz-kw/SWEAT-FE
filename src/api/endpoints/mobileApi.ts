@@ -157,12 +157,30 @@ export interface PARQQuestion {
 }
 
 export interface PARQSurveyResponse {
-  survey_id: string;
+  survey_id?: string;
+  form_id?: string;
+  form_name?: string;
+  version_number?: number;
+  agreement_title?: string;
+  agreement_text?: string;
   is_completed: boolean;
   is_cleared: boolean;
   status_badge: string;
   saved_responses: Record<string, any>;
-  questions: PARQQuestion[];
+  questions: any[];
+  sections?: any[];
+  submission?: {
+    id: string;
+    submitted_at?: string | null;
+    signer_identity?: string;
+    signature_data?: string | null;
+    form_name?: string;
+    version_number?: number;
+    submission_count?: number;
+    is_edit?: boolean;
+    revision_number?: number;
+    agreement_accepted?: boolean;
+  } | null;
 }
 
 export const mobileApi = {
@@ -230,9 +248,9 @@ export const mobileApi = {
 
   // PAR-Q Health Questionnaire
   getPARQSurvey: () => api.get<PARQSurveyResponse>('/mobile/onboarding-survey/'),
-  submitPARQSurvey: (responses: Record<string, any>) =>
-    api.post<{ detail: string; is_cleared: boolean; message: string }>(
-      '/mobile/onboarding-survey/',
-      { responses }
+  submitPARQSurvey: (payload: Record<string, any>) =>
+    api.post<{ detail: string; is_cleared: boolean; message?: string; submission_id?: string; is_edit?: boolean; revision_number?: number }>(
+      '/mobile/onboarding/submit/',
+      payload
     ),
 };

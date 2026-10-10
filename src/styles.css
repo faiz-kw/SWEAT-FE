@@ -273,3 +273,28 @@ section[aria-label*="Notifications"] {
 [data-sonner-toast] button {
   pointer-events: auto !important;
 }
+
+/* Modern Minimalist Scrollbars (Zero Windows 95 arrow buttons) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0.02 250 / 25%);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0.02 250 / 45%);
+}
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.5 0.02 250 / 25%) transparent;
+}

@@ -1832,6 +1832,20 @@ const MemberHealthFormsSection: React.FC<{
           <span>Signed Submission Records ({submissions.length})</span>
         </h4>
 
+        {submissions.length > 1 && (
+          <div className="p-3.5 bg-blue-500/5 border border-blue-500/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-blue-700 dark:text-blue-300">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-blue-500 shrink-0" />
+              <span>
+                <strong>{submissions.length} PAR-Q submissions & revision logs recorded.</strong> All historical edits, answers, and digital signatures are retained in immutable studio audit logs.
+              </span>
+            </div>
+            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+              Latest Edit: {new Date(submissions[0].submitted_at).toLocaleDateString()}
+            </span>
+          </div>
+        )}
+
         {submissions.length > 0 ? (
           submissions.map((sub, sIdx) => {
             const isLatest = sIdx === 0;
@@ -1857,6 +1871,12 @@ const MemberHealthFormsSection: React.FC<{
                       {isLatest && (
                         <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">
                           Latest Submission
+                        </Badge>
+                      )}
+                      {Boolean((sub as any).is_edit || (sub as any).metadata?.is_edit || ((sub as any).revision_number && (sub as any).revision_number > 1)) && (
+                        <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 font-mono gap-1">
+                          <History className="w-3 h-3" />
+                          <span>Member Revision #{(sub as any).revision_number || (sub as any).metadata?.revision_number || 2}</span>
                         </Badge>
                       )}
                     </div>
