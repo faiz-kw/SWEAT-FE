@@ -2,10 +2,15 @@ import { api } from '../client';
 
 export type MetaDiscoveredPage = {
   id: string;
+  page_id?: string;
+  connection_id?: string;
   name: string;
+  page_name?: string;
   category?: string;
   tasks?: string[];
   is_active?: boolean;
+  is_subscribed_to_webhooks?: boolean;
+  subscribed_at?: string | null;
 };
 
 export type MetaFormQuestion = {
@@ -166,9 +171,27 @@ export const metaLeadsApi = {
     (await api.post<{ success: boolean; message: string; connection: MetaConnectionDetails }>('/tenant/meta-lead-mappings/oauth_callback/', { code, state })).data,
   connection: async () => (await api.get<{ is_connected: boolean; connection: MetaConnectionDetails | null; pages: MetaDiscoveredPage[] }>('/tenant/meta-lead-mappings/connection/')).data,
   disconnect: async () => (await api.post<{ success: boolean; message: string }>('/tenant/meta-lead-mappings/disconnect/', {})).data,
-  pages: async () => (await api.get<{ pages: MetaDiscoveredPage[] }>('/tenant/meta-lead-mappings/pages/')).data,
-  forms: async (pageId: string) => (await api.get<{ forms: MetaDiscoveredForm[] }>(`/tenant/meta-lead-mappings/forms/?page_id=${encodeURIComponent(pageId)}`)).data,
-  formFields: async (formId: string) => (await api.get<{ form: { id: string; name: string; questions: MetaFormQuestion[] } }>(`/tenant/meta-lead-mappings/form_fields/?form_id=${encodeURIComponent(formId)}`)).data,
+  pages: async () => {
+    const res = (await api.get<{ pages?: MetaDiscoveredPage[]; results?: MetaDiscoveredPage[] }>('/tenant/meta-lead-mappings/pages/')).data;
+    return {
+      pages: res.pages || res.results || [],
+      results: res.results || res.pages || [],
+    };
+  },
+  forms: async (pageId: string) => {
+    const res = (await api.get<{ forms?: MetaDiscoveredForm[]; results?: MetaDiscoveredForm[] }>(`/tenant/meta-lead-mappings/forms/?page_id=${encodeURIComponent(pageId)}`)).data;
+    return {
+      forms: res.forms || res.results || [],
+      results: res.results || res.forms || [],
+    };
+  },
+  formFields: async (formId: string) => {
+    const res = (await api.get<{ form?: { id: string; name: string; questions: MetaFormQuestion[] }; results?: { id: string; name: string; questions: MetaFormQuestion[] } }>(`/tenant/meta-lead-mappings/form_fields/?form_id=${encodeURIComponent(formId)}`)).data;
+    return {
+      form: res.form || res.results || { id: formId, name: '', questions: [] },
+      results: res.results || res.form || { id: formId, name: '', questions: [] },
+    };
+  },
   mappings: async (page = 1) => (await api.get<Page<MetaMapping>>('/tenant/meta-lead-mappings/', { params: { page } })).data,
   save: async (payload: MappingInput, id?: string) => id
     ? (await api.patch<MetaMapping>(`/tenant/meta-lead-mappings/${id}/`, payload)).data

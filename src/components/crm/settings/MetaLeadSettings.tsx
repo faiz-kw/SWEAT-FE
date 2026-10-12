@@ -92,8 +92,15 @@ function isTestMapping(mapping: MetaMapping): boolean {
 
 // Check if mapping is a verified live mapping linked to an authorized discovered page
 function isLiveMapping(mapping: MetaMapping, meta: MetaMetadata): boolean {
-  if (isTestMapping(mapping)) return false;
-  if (meta.pages && meta.pages.some((p) => p.id === mapping.page_id)) {
+  if (
+    meta.pages &&
+    meta.pages.some(
+      (p) =>
+        (p.page_id && p.page_id === mapping.page_id) ||
+        p.id === mapping.page_id ||
+        (p.connection_id && p.connection_id === mapping.page_id)
+    )
+  ) {
     return true;
   }
   return false;
@@ -216,6 +223,17 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
   const refreshAll = () => client.invalidateQueries({ queryKey: queryKeyBase });
 
+  const isRefreshing = metadataQuery.isFetching || mappingsQuery.isFetching || importsQuery.isFetching;
+
+  const handleManualRefresh = async () => {
+    try {
+      await client.invalidateQueries({ queryKey: queryKeyBase });
+      toast.success('Facebook connection & lead forms refreshed');
+    } catch {
+      toast.error('Failed to refresh status');
+    }
+  };
+
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, is_active, version }: { id: string; is_active: boolean; version: number }) =>
       metaLeadsApi.toggleActive(id, is_active, version),
@@ -290,7 +308,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const filteredMappings = allMappings.filter((m) => {
     if (formSearch.trim()) {
       const q = formSearch.toLowerCase();
-      const pageName = meta.pages?.find((p) => p.id === m.page_id)?.name?.toLowerCase() || '';
+      const matchedPage = meta.pages?.find(
+        (p) =>
+          (p.page_id && p.page_id === m.page_id) ||
+          p.id === m.page_id ||
+          (p.connection_id && p.connection_id === m.page_id)
+      );
+      const pageName = (matchedPage?.page_name || matchedPage?.name || '')?.toLowerCase();
       const branchName =
         m.branch_mode === 'FIXED'
           ? meta.branches.find((b) => b.id === m.branch)?.name?.toLowerCase() || ''
@@ -442,11 +466,12 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => void refreshAll()}
-                title="Refresh connection status"
+                disabled={isRefreshing}
+                onClick={() => void handleManualRefresh()}
+                title={isRefreshing ? 'Refreshing connection status...' : 'Refresh connection status'}
                 className="h-9 w-9 text-muted-foreground hover:text-foreground shrink-0"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
               </Button>
             </div>
 
@@ -722,7 +747,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {paginatedMappings.map((mapping) => {
-              const pageName = meta.pages?.find((p) => p.id === mapping.page_id)?.name;
+              const matchedPage = meta.pages?.find(
+                (p) =>
+                  (p.page_id && p.page_id === mapping.page_id) ||
+                  p.id === mapping.page_id ||
+                  (p.connection_id && p.connection_id === mapping.page_id)
+              );
+              const pageName = matchedPage?.page_name || matchedPage?.name;
               const branchName =
                 mapping.branch_mode === 'FIXED'
                   ? meta.branches.find((b) => b.id === mapping.branch)?.name || 'Default branch'
@@ -1579,6 +1610,7 @@ function MappingEditor({
   const [discoveredForms, setDiscoveredForms] = React.useState<MetaDiscoveredForm[]>([]);
   const [discoveredQuestions, setDiscoveredQuestions] = React.useState<MetaFormQuestion[]>([]);
   const [isLoadingForms, setIsLoadingForms] = React.useState(false);
+  const [formsError, setFormsError] = React.useState<string | null>(null);
   const [isManualQuestionEntry, setIsManualQuestionEntry] = React.useState(false);
   const [versionConflict, setVersionConflict] = React.useState<string | null>(null);
 
@@ -1586,15 +1618,21 @@ function MappingEditor({
   React.useEffect(() => {
     if (pageId) {
       setIsLoadingForms(true);
+      setFormsError(null);
       metaLeadsApi
         .forms(pageId)
         .then((res) => {
-          if (res.forms) setDiscoveredForms(res.forms);
+          const formsList = res.forms || (res as { results?: MetaDiscoveredForm[] }).results || [];
+          setDiscoveredForms(formsList);
         })
-        .catch(() => {
+        .catch((err) => {
           setDiscoveredForms([]);
+          setFormsError(formatError(err) || 'Failed to load lead forms from Meta.');
         })
         .finally(() => setIsLoadingForms(false));
+    } else {
+      setDiscoveredForms([]);
+      setFormsError(null);
     }
   }, [pageId]);
 
@@ -1801,11 +1839,15 @@ function MappingEditor({
                 required
               >
                 <option value="">Select a Facebook Page</option>
-                {metadata.pages.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                {metadata.pages.map((p) => {
+                  const targetPageId = p.page_id || p.id;
+                  const targetPageLabel = p.page_name || p.name || `Page ${targetPageId}`;
+                  return (
+                    <option key={p.connection_id || targetPageId} value={targetPageId}>
+                      {targetPageLabel}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <Input
@@ -1821,7 +1863,12 @@ function MappingEditor({
 
           <label className={`${labelClass} sm:col-span-2`}>
             <span>Facebook Lead Form:</span>
-            {discoveredForms.length > 0 ? (
+            {isLoadingForms ? (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                <span>Loading available lead forms from Meta...</span>
+              </div>
+            ) : discoveredForms.length > 0 ? (
               <select
                 className={controlClass}
                 value={formId}
@@ -1836,17 +1883,26 @@ function MappingEditor({
                 ))}
               </select>
             ) : (
-              <Input
-                value={formId}
-                onChange={(e) => setFormId(e.target.value.replace(/\D/g, ''))}
-                placeholder="Enter Facebook Form ID (digits only)"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                required
-              />
-            )}
-            {isLoadingForms && (
-              <span className="text-[11px] text-muted-foreground">Loading forms for page...</span>
+              <div className="space-y-1.5">
+                <Input
+                  value={formId}
+                  onChange={(e) => setFormId(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter Facebook Form ID (digits only)"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  required
+                />
+                {pageId && !formsError && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No active lead forms were found for this Page on Meta. You can enter a Facebook Form ID manually above.
+                  </p>
+                )}
+                {formsError && (
+                  <p className="text-[11px] text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 inline shrink-0" /> {formsError}. You can enter a Form ID manually above.
+                  </p>
+                )}
+              </div>
             )}
           </label>
         </div>
