@@ -44,10 +44,12 @@ import {
   Lock,
   Shield,
   AlertCircle,
+  Bot,
+  PhoneCall,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { crmApi } from '@/api/endpoints/crmApi';
+import { crmApi, type InitiateLeadCallResponse } from '@/api/endpoints/crmApi';
 import { formatBranchOptionLabel, formatBranchAddressOnly, formatBranchTitle } from '@/lib/crmLabels';
 import { ConversionWizard } from './ConversionWizard';
 import { BookTrialModal } from './BookTrialModal';
@@ -207,6 +209,10 @@ export function LeadDetailModal({
   const [isRescheduleOpen, setIsRescheduleOpen] = React.useState(false);
   const [cancellingTrialId, setCancellingTrialId] = React.useState<string | null>(null);
   const [cancelReason, setCancelReason] = React.useState('Prospect requested cancellation');
+
+  // AI Calling state
+  const [isCallModalOpen, setIsCallModalOpen] = React.useState(false);
+  const [activeCallSession, setActiveCallSession] = React.useState<InitiateLeadCallResponse | null>(null);
 
   // Synchronize form when lead changes
   React.useEffect(() => {
@@ -698,6 +704,57 @@ export function LeadDetailModal({
     },
   });
 
+  // Call with AI Mutation
+  const callMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentLead?.id) throw new Error('Lead ID is missing');
+      return await crmApi.initiateLeadCall(currentLead.id);
+    },
+    onSuccess: (data: InitiateLeadCallResponse) => {
+      setActiveCallSession(data);
+      setIsCallModalOpen(false);
+      if (data.is_duplicate) {
+        toast.info(`Active call session retrieved (${data.status})`, {
+          description: `Session: ${data.call_session_id.substring(0, 8)}... • ${data.recipient_phone}`,
+        });
+      } else {
+        toast.success(`AI Call initiated successfully (${data.status})`, {
+          description: `Session: ${data.call_session_id.substring(0, 8)}... • ${data.recipient_phone}`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+    onError: (err: any) => {
+      const errData = err.data || err.response?.data;
+      const errCode = errData?.code;
+      const errMsg = errData?.error || errData?.detail || err.message || 'Failed to initiate outbound call';
+
+      if (err.status === 409 || errCode === 'CALL_ALREADY_IN_PROGRESS') {
+        toast.warning('Call Already In Progress', {
+          description: errMsg,
+        });
+      } else if (err.status === 503 || errCode === 'MIGRATION_PENDING') {
+        toast.error('Voice Service Unavailable', {
+          description: 'Database migration 0055 is pending for this tenant.',
+        });
+      } else if (err.status === 504 || errCode === 'TIMEOUT') {
+        toast.error('Provider Gateway Timeout', {
+          description: 'Sarvam voice service timed out. You may safely retry.',
+        });
+      } else if (errCode === 'UNCONFIGURED') {
+        toast.error('Integration Not Configured', {
+          description: errMsg,
+        });
+      } else {
+        toast.error('Failed to Initiate Call', {
+          description: errMsg,
+        });
+      }
+    },
+  });
+
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) {
@@ -977,6 +1034,48 @@ export function LeadDetailModal({
                         Move Stage
                       </Button>
                     )}
+                    {/* Call with AI Action */}
+                    {canEdit && (() => {
+                      const isDncOrOptedOut = Boolean(
+                        currentLead.do_not_contact ||
+                        (currentLead as any).is_opted_out ||
+                        (currentLead.consent_sms === false && currentLead.consent_whatsapp === false)
+                      );
+                      const cleanPhoneDigits = (currentLead.phone_normalized || (currentLead as any).phone || '').replace(/\D/g, '');
+                      const hasValidPhone = cleanPhoneDigits.length >= 10;
+                      const isCallInProgress = Boolean(
+                        activeCallSession && ['QUEUED', 'INITIATED', 'RINGING', 'CONNECTED'].includes(activeCallSession.status)
+                      );
+                      const canCallWithAi = hasValidPhone && !isDncOrOptedOut && !isCallInProgress;
+
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsCallModalOpen(true)}
+                          disabled={!canCallWithAi || callMutation.isPending}
+                          className={`h-7 px-2.5 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer ${
+                            !canCallWithAi ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          title={
+                            !hasValidPhone
+                              ? 'A valid 10-digit phone number is required to call'
+                              : isDncOrOptedOut
+                              ? 'Lead is marked Do Not Contact or has opted out'
+                              : isCallInProgress
+                              ? 'A call is already in progress for this lead'
+                              : 'Initiate manual outbound AI call via Sarvam'
+                          }
+                        >
+                          {callMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Bot className="w-3 h-3 text-emerald-500" />
+                          )}
+                          <span>Call with AI</span>
+                        </Button>
+                      );
+                    })()}
                     {canEdit && onBookTrialClick && canBookTrial && (
                       <Button
                         variant="outline"
@@ -1039,6 +1138,33 @@ export function LeadDetailModal({
           })()}
 
 
+
+          {/* ACTIVE CALL SESSION BANNER */}
+          {activeCallSession && (
+            <div className="px-4 sm:px-6 py-2 bg-emerald-500/10 border-b border-emerald-500/30 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Bot className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
+                <span>
+                  <strong>AI Call: {activeCallSession.status}</strong> &bull; Session:{' '}
+                  <code className="font-mono text-[11px] bg-background/60 px-1 py-0.5 rounded border border-emerald-500/20">
+                    {activeCallSession.call_session_id.substring(0, 8)}...
+                  </code>
+                  {activeCallSession.provider_attempt_id && (
+                    <span className="text-muted-foreground ml-1">
+                      (Attempt: {activeCallSession.provider_attempt_id})
+                    </span>
+                  )}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveCallSession(null)}
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer underline ml-2"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           {/* CONSOLIDATED 6-TAB BAR */}
           <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pt-1 -mb-1 border-t border-border/40">
@@ -2136,6 +2262,9 @@ export function LeadDetailModal({
                         if (timelineFilter === 'STAGES') return evt.event_type === 'STATUS_CHANGE';
                         if (timelineFilter === 'TRIALS') return evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE';
                         if (timelineFilter === 'FOLLOWUPS') return evt.event_type === 'FOLLOWUP_TASK';
+                        if (timelineFilter === 'COMMUNICATIONS') return evt.event_type === 'COMMUNICATION' || evt.event_type === 'VOICE_CALL';
+                        if (timelineFilter === 'ACTIVITIES') return evt.event_type === 'ACTIVITY';
+                        if (timelineFilter === 'NOTES') return evt.event_type === 'LEAD_NOTE';
                         return true;
                       });
 
@@ -2177,6 +2306,9 @@ export function LeadDetailModal({
                             } else if (evt.event_type === 'COMMUNICATION') {
                               IconComponent = Send;
                               iconBg = 'bg-violet-500/10 text-violet-500';
+                            } else if (evt.event_type === 'VOICE_CALL') {
+                              IconComponent = PhoneCall;
+                              iconBg = 'bg-emerald-500/10 text-emerald-500';
                             }
 
                             return (
@@ -3729,6 +3861,80 @@ export function LeadDetailModal({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* CONFIRMATION MODAL FOR SARVAM AI OUTBOUND CALL */}
+      <Dialog open={isCallModalOpen} onOpenChange={setIsCallModalOpen}>
+        <DialogContent className="max-w-md w-full p-5 sm:p-6 bg-background text-foreground border border-border shadow-2xl rounded-xl">
+          <DialogHeader className="space-y-2">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <Bot className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
+              Initiate Outbound AI Call
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              Confirm outbound conversational voice call to this lead using Sarvam AI.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="my-3 p-3.5 rounded-lg bg-card border border-border/80 space-y-2 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Recipient Name</span>
+              <span className="font-semibold text-foreground">{currentLead.first_name} {currentLead.last_name}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Destination Phone</span>
+              <span className="font-mono font-bold text-foreground">{currentLead.phone_normalized || (currentLead as any).phone || '—'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Voice Provider</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">Sarvam Instant Outbound</span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-700 dark:text-amber-300 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Manual Staff Authorization Required</span>
+            </div>
+            <p>
+              This action initiates a real outbound phone call to the contact. Automatic calling is disabled. Please ensure the lead has provided consent for voice communications.
+            </p>
+          </div>
+
+          <DialogFooter className="mt-4 flex flex-row items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCallModalOpen(false)}
+              disabled={callMutation.isPending}
+              className="h-8 px-3 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => callMutation.mutate()}
+              disabled={callMutation.isPending}
+              className="h-8 px-4 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20 cursor-pointer"
+            >
+              {callMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Initiating Call...</span>
+                </>
+              ) : (
+                <>
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  <span>Confirm & Initiate Call</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

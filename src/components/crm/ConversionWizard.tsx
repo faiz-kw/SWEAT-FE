@@ -14,7 +14,10 @@ import {
   ArrowRight, ArrowLeft, Check, CheckCircle2, Loader2, Package, CreditCard,
   Tag, Sparkles, AlertTriangle, ShieldCheck, X, Zap, Scale,
   Building2, Flame, HeartPulse, Wallet, Phone, Copy, FileText, Calendar, Clock,
-  UserCheck, Receipt } from 'lucide-react';
+  UserCheck, Receipt, ChevronDown, Star, PenTool, RotateCcw, Edit2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { getCurrentUser } from '@/services';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -210,11 +213,11 @@ function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string): s
   return raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
 }
 
-function formatEntitlementLabel(e: { entitlement_type: string; allocated_units?: number | string; is_unlimited?: boolean }): string {
+function formatEntitlementLabel(e: any): string {
   const words = (e.entitlement_type || '')
     .toLowerCase()
     .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
   if (e.is_unlimited) {
     return `Unlimited ${words}`;
@@ -269,11 +272,14 @@ function PackagePickerStep({
 
   const { data: versions = [], isLoading: versionsLoading } = useQuery({
     queryKey: ['catalog-versions', tenantId, branchId, selectedProgram, 'sellable'],
-    queryFn: () => crmApi.getCatalogPackageVersions({
-      branch_id: branchId,
-      program_id: selectedProgram || undefined,
-      sellable_only: true,
-    }),
+    queryFn: () => {
+      const params: { branch_id: string; program_id?: string; sellable_only: boolean } = {
+        branch_id: branchId,
+        sellable_only: true,
+      };
+      if (selectedProgram) params.program_id = selectedProgram;
+      return crmApi.getCatalogPackageVersions(params);
+    },
     staleTime: 2 * 60 * 1000,
     enabled: !!branchId && !!selectedProgram,
   });
@@ -598,7 +604,7 @@ function PricingStep({
             <div className="flex gap-2">
               <Input
                 value={couponCode}
-                onChange={(e) => onCouponChange(e.target.value.toUpperCase())}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onCouponChange(e.target.value.toUpperCase())}
                 placeholder="PROMO CODE"
                 className="bg-background border-border font-mono uppercase text-xs sm:text-sm h-10 tracking-wider"
               />
@@ -853,7 +859,7 @@ function PaymentStep({
               min="0"
               disabled={paymentProvider === 'RAZORPAY'}
               value={paymentAmount}
-              onChange={(e) => onAmountChange(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onAmountChange(e.target.value)}
               className="bg-background border-border pl-8 h-10 text-base font-bold"
               placeholder={quote.pricing.total_payable}
             />
@@ -887,7 +893,7 @@ function PaymentStep({
             <Input
               type="date"
               value={startDate}
-              onChange={(e) => onStartDateChange(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onStartDateChange(e.target.value)}
               className="bg-background border-border pl-10 h-10 text-xs sm:text-sm font-medium"
             />
           </div>
@@ -1743,7 +1749,61 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
-export function ConversionWizard({ lead, open, onOpenChange, onConverted }: ConversionWizardProps) {
+class ConversionWizardErrorBoundary extends React.Component<
+  { children: React.ReactNode; open: boolean; onOpenChange: (open: boolean) => void },
+  { hasError: boolean; error: any }
+> {
+  constructor(props: { children: React.ReactNode; open: boolean; onOpenChange: (open: boolean) => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  override componentDidCatch(error: any, errorInfo: any) {
+    console.error("[ConversionWizard] Render error caught by boundary:", error, errorInfo);
+  }
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <Dialog open={this.props.open} onOpenChange={this.props.onOpenChange}>
+          <DialogContent className="max-w-md text-center p-6 bg-background border border-border">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-destructive flex items-center justify-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Unable to Open Conversion Wizard
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-2">
+                An unexpected error occurred while preparing the member conversion screen.
+              </DialogDescription>
+            </DialogHeader>
+            {this.state.error && (
+              <div className="text-[11px] text-destructive bg-destructive/10 p-2.5 rounded-lg my-2 text-left overflow-auto max-h-32 font-mono">
+                {this.state.error.message || String(this.state.error)}
+              </div>
+            )}
+            <div className="flex justify-center gap-2 mt-4">
+              <Button size="sm" variant="outline" onClick={() => this.props.onOpenChange(false)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export function ConversionWizard(props: ConversionWizardProps) {
+  return (
+    <ConversionWizardErrorBoundary open={props.open} onOpenChange={props.onOpenChange}>
+      <ConversionWizardInner {...props} />
+    </ConversionWizardErrorBoundary>
+  );
+}
+
+function ConversionWizardInner({ lead, open, onOpenChange, onConverted }: ConversionWizardProps) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canRecordPayment = can('finance.payments.create') || can('core.settings.edit');
@@ -1800,8 +1860,8 @@ const handleCancelRazorpay = useCallback(() => {
     if (!isProcessingPayment) return;
     const interval = setInterval(() => {
       const container = document.querySelector('.razorpay-container') as HTMLElement | null;
-      if (container && !container.dataset.hasCloseHandler) {
-        container.dataset.hasCloseHandler = 'true';
+      if (container && !container.dataset['hasCloseHandler']) {
+        container.dataset['hasCloseHandler'] = 'true';
         container.addEventListener('click', (e) => {
           if (e.target === container) {
             handleCancelRazorpay();
@@ -2006,13 +2066,20 @@ const handleCancelRazorpay = useCallback(() => {
             return;
           }
 
-          const checkoutOrder = await crmApi.createCheckoutOrder(lead.id, {
+          const checkoutPayload: {
+            package_version_id: string;
+            branch_id: string;
+            coupon_code?: string;
+            is_partial_payment: boolean;
+            channel: string;
+          } = {
             package_version_id: selectedVersionId,
             branch_id: selectedBranchId,
-            coupon_code: appliedCoupon || undefined,
             is_partial_payment: false,
             channel: 'STAFF',
-          });
+          };
+          if (appliedCoupon) checkoutPayload.coupon_code = appliedCoupon;
+          const checkoutOrder = await crmApi.createCheckoutOrder(lead.id, checkoutPayload);
 
           const options = {
             key: checkoutOrder.key_id,
@@ -2023,8 +2090,8 @@ const handleCancelRazorpay = useCallback(() => {
             order_id: checkoutOrder.razorpay_order_id,
             prefill: checkoutOrder.prefill,
             theme: { color: '#0f172a' },
-            config: checkoutOrder.config,
-            ...(checkoutOrder.config_id ? { config_id: checkoutOrder.config_id } : {}),
+            config: (checkoutOrder as any).config,
+            ...((checkoutOrder as any).config_id ? { config_id: (checkoutOrder as any).config_id } : {}),
             handler: function (response: any) {
               rzpInstanceRef.current = null;
               const rzpContainer = document.querySelector('.razorpay-container');

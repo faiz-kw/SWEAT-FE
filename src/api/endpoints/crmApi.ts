@@ -68,6 +68,22 @@ export interface InAppNotification {
   created_at: string;
 }
 
+export interface InitiateLeadCallPayload {
+  idempotency_key?: string;
+  custom_metadata?: Record<string, any>;
+}
+
+export interface InitiateLeadCallResponse {
+  call_session_id: string;
+  status: 'INITIATED' | 'RINGING' | 'CONNECTED' | 'COMPLETED' | 'FAILED' | string;
+  provider: string;
+  direction: string;
+  recipient_phone: string;
+  provider_attempt_id?: string;
+  started_at?: string;
+  is_duplicate: boolean;
+}
+
 export const crmApi = {
   getLeads: async (params?: {
     current_status?: string;
@@ -225,6 +241,32 @@ export const crmApi = {
     payload: { assigned_to_user_id?: string; claim?: boolean; takeover?: boolean; notes?: string }
   ): Promise<any> => {
     const res = await api.post(`/tenant/leads/${leadId}/assign/`, payload);
+    return res.data;
+  },
+
+  initiateLeadCall: async (
+    leadId: string,
+    payload?: InitiateLeadCallPayload
+  ): Promise<InitiateLeadCallResponse> => {
+    const key =
+      payload?.idempotency_key ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+
+    const headers = new Headers();
+    headers.set('X-Idempotency-Key', key);
+
+    const body = {
+      idempotency_key: key,
+      ...(payload?.custom_metadata ? { custom_metadata: payload.custom_metadata } : {}),
+    };
+
+    const res = await api.post<InitiateLeadCallResponse>(
+      `/tenant/leads/${leadId}/call/`,
+      body,
+      { headers }
+    );
     return res.data;
   },
 

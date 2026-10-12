@@ -1167,8 +1167,11 @@ export interface CatalogPackageVersion {
   duration_value: number;
   duration_unit: string;
   total_days: number | null;
+  validity_days?: number | null;
   effective_price?: string | null;
   currency?: string;
+  prices?: any[];
+  entitlement_definitions?: any[];
 }
 
 // -------------------------------------------------------------------------
