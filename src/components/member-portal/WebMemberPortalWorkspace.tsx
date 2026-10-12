@@ -30,6 +30,9 @@ import {
   Zap,
   PenTool,
   RotateCcw,
+  TrendingUp,
+  CalendarPlus,
+  Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -42,6 +45,7 @@ import {
   MobileTrainer,
   MobileBranch,
   PARQSurveyResponse,
+  MobileMembershipActionOptions,
 } from "@/api/endpoints/mobileApi";
 import { useAuth } from "@/contexts";
 import { Button } from "@/components/ui/button";
@@ -83,10 +87,10 @@ class MemberPortalErrorBoundary extends React.Component<
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
   }
-  componentDidCatch(error: any, errorInfo: any) {
+  override componentDidCatch(error: any, errorInfo: any) {
     console.error("[SWEAT Member Portal] Error caught by boundary:", error, errorInfo);
   }
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -116,6 +120,11 @@ class MemberPortalErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
+
+// Feature flag: Personal Training (PT) visibility in Member Portal
+// Phase 2 requirement: Defer/hide PT navigation, shortcuts, and appointments
+// from member-facing view while keeping backend and admin PT modules fully intact.
+const SHOW_MEMBER_PT = false;
 
 export function WebMemberPortalWorkspace() {
   const [mounted, setMounted] = React.useState(false);
@@ -151,6 +160,13 @@ function WebMemberPortalWorkspaceInner() {
 
   // Core State
   const [activeTab, setActiveTab] = React.useState<string>("overview");
+
+  // Redirect guard: if PT is deferred/hidden and somehow active, redirect to overview
+  React.useEffect(() => {
+    if (!SHOW_MEMBER_PT && activeTab === "pt") {
+      setActiveTab("overview");
+    }
+  }, [activeTab]);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
 
@@ -215,6 +231,22 @@ function WebMemberPortalWorkspaceInner() {
   const [parqIsDrawing, setParqIsDrawing] = React.useState<boolean>(false);
   const [parqConsentAccepted, setParqConsentAccepted] = React.useState<boolean>(true);
 
+  // Membership Self-Service Action Modals State
+  const [membershipActions, setMembershipActions] = React.useState<MobileMembershipActionOptions | null>(null);
+  const [isRenewModalOpen, setIsRenewModalOpen] = React.useState<boolean>(false);
+  const [selectedRenewPackageId, setSelectedRenewPackageId] = React.useState<string>("");
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = React.useState<boolean>(false);
+  const [selectedUpgradePackageId, setSelectedUpgradePackageId] = React.useState<string>("");
+  const [upgradeReason, setUpgradeReason] = React.useState<string>("");
+  const [isExtendModalOpen, setIsExtendModalOpen] = React.useState<boolean>(false);
+  const [extendDays, setExtendDays] = React.useState<number>(14);
+  const [extendReason, setExtendReason] = React.useState<string>("");
+  const [isFreezeModalOpen, setIsFreezeModalOpen] = React.useState<boolean>(false);
+  const [freezeStartDate, setFreezeStartDate] = React.useState<string>("");
+  const [freezeEndDate, setFreezeEndDate] = React.useState<string>("");
+  const [freezeReason, setFreezeReason] = React.useState<string>("");
+  const [isSubmittingAction, setIsSubmittingAction] = React.useState<boolean>(false);
+
   // Profile Edit State
   const [profileForm, setProfileForm] = React.useState({
     first_name: "",
@@ -230,15 +262,16 @@ function WebMemberPortalWorkspaceInner() {
       if (showToast) setIsRefreshing(true);
       else setIsLoading(true);
 
-      const [profRes, credRes, bookRes, trainRes, ptRes, branchRes, catRes, parqRes] = await Promise.allSettled([
+      const [profRes, credRes, bookRes, trainRes, ptRes, branchRes, catRes, parqRes, actionsRes] = await Promise.allSettled([
         mobileApi.getProfile(),
         mobileApi.getMyCredits(),
         mobileApi.getMyBookings(),
         mobileApi.getTrainers(),
         mobileApi.getPTAppointments(),
         mobileApi.getBranches(),
-          mobileApi.getCategories(),
+        mobileApi.getCategories(),
         mobileApi.getPARQSurvey(),
+        mobileApi.getMembershipActions(),
       ]);
 
       if (profRes.status === "fulfilled" && profRes.value?.data) {
@@ -387,6 +420,10 @@ function WebMemberPortalWorkspaceInner() {
         }
       }
 
+      if (actionsRes.status === "fulfilled" && actionsRes.value?.data) {
+        setMembershipActions(actionsRes.value.data as MobileMembershipActionOptions);
+      }
+
       if (showToast) {
         toast.success("Studio data synced with cloud.");
       }
@@ -402,6 +439,72 @@ function WebMemberPortalWorkspaceInner() {
   React.useEffect(() => {
     void fetchAllData();
   }, [fetchAllData]);
+
+  // Action Handlers for Membership Self-Service
+  const handleRenewSubmit = async () => {
+    if (!selectedRenewPackageId) return;
+    try {
+      setIsSubmittingAction(true);
+      const res = await mobileApi.renewMembership({ package_id: selectedRenewPackageId });
+      toast.success(res?.data?.detail || "Renewal order created. Please proceed to payment.");
+      setIsRenewModalOpen(false);
+      await fetchAllData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to initiate renewal.");
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleUpgradeSubmit = async () => {
+    if (!selectedUpgradePackageId) return;
+    try {
+      setIsSubmittingAction(true);
+      const res = await mobileApi.upgradeMembership({ target_package_id: selectedUpgradePackageId, reason: upgradeReason });
+      toast.success(res?.data?.detail || "Upgrade request submitted for studio approval.");
+      setIsUpgradeModalOpen(false);
+      setUpgradeReason("");
+      await fetchAllData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to submit upgrade request.");
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleExtendSubmit = async () => {
+    if (!extendReason.trim()) return;
+    try {
+      setIsSubmittingAction(true);
+      const res = await mobileApi.extendMembership({ days: extendDays, reason: extendReason });
+      toast.success(res?.data?.detail || "Validity extension request submitted.");
+      setIsExtendModalOpen(false);
+      setExtendReason("");
+      await fetchAllData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to request extension.");
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleFreezeSubmit = async () => {
+    if (!freezeStartDate || !freezeEndDate || !freezeReason.trim()) return;
+    try {
+      setIsSubmittingAction(true);
+      const res = await mobileApi.freezeMembership({ freeze_from: freezeStartDate, freeze_until: freezeEndDate, reason: freezeReason });
+      toast.success(res?.data?.detail || "Freeze request submitted for studio approval.");
+      setIsFreezeModalOpen(false);
+      setFreezeReason("");
+      setFreezeStartDate("");
+      setFreezeEndDate("");
+      await fetchAllData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to submit freeze request.");
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
 
   // Load Schedule with rapid-click debounce protection and category resolution
   const fetchSchedule = React.useCallback(async () => {
@@ -680,6 +783,7 @@ function WebMemberPortalWorkspaceInner() {
         window.removeEventListener("resize", setupParqCanvas);
       };
     }
+    return undefined;
   }, [activeTab, setupParqCanvas]);
 
   // Exact canvas coordinate mapping factoring in display bounds and buffer scaling
@@ -906,10 +1010,12 @@ function WebMemberPortalWorkspaceInner() {
                 <CalendarCheck className="h-4 w-4" />
                 My Bookings & Attendance
               </TabsTrigger>
-              <TabsTrigger value="pt" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <Dumbbell className="h-4 w-4" />
-                Personal Training (PT)
-              </TabsTrigger>
+              {SHOW_MEMBER_PT && (
+                <TabsTrigger value="pt" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
+                  <Dumbbell className="h-4 w-4" />
+                  Personal Training (PT)
+                </TabsTrigger>
+              )}
               <TabsTrigger value="passbook" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                 <CreditCard className="h-4 w-4" />
                 Membership & Passbook
@@ -1470,8 +1576,9 @@ function WebMemberPortalWorkspaceInner() {
           </TabsContent>
 
           {/* ========================================================================= */}
-          {/* TAB 4: PERSONAL TRAINING (PT)                                             */}
+          {/* TAB 4: PERSONAL TRAINING (PT) (DEFERRED / HIDDEN)                         */}
           {/* ========================================================================= */}
+          {SHOW_MEMBER_PT && (
           <TabsContent value="pt" className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -1488,7 +1595,7 @@ function WebMemberPortalWorkspaceInner() {
                 <Button
                   size="sm"
                   onClick={() => {
-                    setPtTrainerToBook(trainers[0]);
+                    setPtTrainerToBook(trainers[0] || null);
                     setPtBookingForm({
                       date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
                       time: "10:00",
@@ -1630,6 +1737,7 @@ function WebMemberPortalWorkspaceInner() {
               </div>
             </div>
           </TabsContent>
+          )}
 
           {/* ========================================================================= */}
           {/* TAB 5: MEMBERSHIP & PASSBOOK                                              */}
@@ -1774,6 +1882,196 @@ function WebMemberPortalWorkspaceInner() {
                 </CardContent>
               </Card>
             </div>
+            {/* Membership Self-Service & Lifecycle Management */}
+            <div className="space-y-4 pt-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-border/40 pt-6">
+                <div>
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Membership Management & Self-Service
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Renew your contract, upgrade workout packages, request validity extensions, or freeze membership.
+                  </p>
+                </div>
+                {membershipActions?.active_membership && (
+                  <Badge variant="outline" className="text-xs font-mono self-start sm:self-auto">
+                    {membershipActions.active_membership.package_name} ({membershipActions.active_membership.status})
+                  </Badge>
+                )}
+              </div>
+
+              {/* Pending Requests Banner */}
+              {membershipActions?.pending_requests && membershipActions.pending_requests.length > 0 && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-500 uppercase tracking-wider">
+                    <Clock className="h-4 w-4" />
+                    <span>Pending Studio Requests ({membershipActions.pending_requests.length})</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {membershipActions.pending_requests.map((req, idx) => (
+                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-foreground bg-card/60 p-2.5 rounded-lg border border-border/50">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">
+                            {req.request_type.replace('_', ' ')}:
+                          </span>
+                          <span className="text-muted-foreground">
+                            {req.payload?.['target_package_name']
+                              ? `Upgrade to ${req.payload['target_package_name']}`
+                              : req.payload?.['days']
+                              ? `Extend by ${req.payload['days']} Days`
+                              : req.payload?.['freeze_from']
+                              ? `Freeze ${req.payload['freeze_from']} to ${req.payload['freeze_until']}`
+                              : req.payload?.['reason'] || 'Request recorded'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/40 font-mono">
+                            {req.status}
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            {new Date(req.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 4 Action Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Renew */}
+                <Card className="border-border/60 bg-card/80 hover:border-emerald-500/40 transition-colors flex flex-col justify-between">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
+                        <RotateCcw className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                        Renewal
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-sm font-bold mt-2">Renew Membership</CardTitle>
+                    <CardDescription className="text-xs">
+                      Renew your current plan or select an eligible renewal package to preserve continuous studio access.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedRenewPackageId(membershipActions?.renew_options?.[0]?.package_id || "");
+                        setIsRenewModalOpen(true);
+                      }}
+                      className="w-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                    >
+                      <span>Renew Package</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* 2. Upgrade */}
+                <Card className="border-border/60 bg-card/80 hover:border-blue-500/40 transition-colors flex flex-col justify-between">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                        <TrendingUp className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/20">
+                        Tier Upgrade
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-sm font-bold mt-2">Upgrade Package</CardTitle>
+                    <CardDescription className="text-xs">
+                      Upgrade to more session credits or an unlimited workout pass with clear credit and price differences.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedUpgradePackageId(membershipActions?.upgrade_options?.[0]?.package_id || "");
+                        setUpgradeReason("");
+                        setIsUpgradeModalOpen(true);
+                      }}
+                      className="w-full text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                    >
+                      <span>Upgrade Tier</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* 3. Extend */}
+                <Card className="border-border/60 bg-card/80 hover:border-indigo-500/40 transition-colors flex flex-col justify-between">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
+                        <CalendarPlus className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
+                        Approval Required
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-sm font-bold mt-2">Extend Validity</CardTitle>
+                    <CardDescription className="text-xs">
+                      Request 7, 14, 21, or 30 days extension on your active package for travel or injury recovery.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setExtendDays(7);
+                        setExtendReason("");
+                        setIsExtendModalOpen(true);
+                      }}
+                      className="w-full text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                    >
+                      <span>Extend Expiry</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* 4. Freeze */}
+                <Card className="border-border/60 bg-card/80 hover:border-sky-500/40 transition-colors flex flex-col justify-between">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2 rounded-lg bg-sky-500/10 text-sky-500">
+                        <Snowflake className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-500 border-sky-500/20">
+                        {membershipActions?.active_membership?.is_frozen ? "Frozen" : "7 - 60 Days"}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-sm font-bold mt-2">Freeze Membership</CardTitle>
+                    <CardDescription className="text-xs">
+                      Temporarily pause your workout pass. Total membership validity is automatically extended upon approval.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button
+                      size="sm"
+                      disabled={membershipActions?.active_membership?.is_frozen}
+                      onClick={() => {
+                        setFreezeStartDate("");
+                        setFreezeEndDate("");
+                        setFreezeReason("");
+                        setIsFreezeModalOpen(true);
+                      }}
+                      className="w-full text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white gap-1.5"
+                    >
+                      <span>{membershipActions?.active_membership?.is_frozen ? "Currently Frozen" : "Freeze Pass"}</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
           </TabsContent>
 
           {/* ========================================================================= */}
@@ -1838,7 +2136,7 @@ function WebMemberPortalWorkspaceInner() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
                     <span className="text-[10px] text-muted-foreground block font-medium uppercase">Signer Identity</span>
-                    <span className="font-semibold text-foreground">{parqSurvey?.submission?.signer_identity || profile?.name || "Member"}</span>
+                    <span className="font-semibold text-foreground">{parqSurvey?.submission?.signer_identity || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Member')}</span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
                     <span className="text-[10px] text-muted-foreground block font-medium uppercase">Form Version</span>
@@ -2515,6 +2813,384 @@ function WebMemberPortalWorkspaceInner() {
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
             >
               {isPtSubmitting ? "Booking..." : "Confirm PT Appointment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: RENEW MEMBERSHIP                                                 */}
+      {/* ========================================================================= */}
+      <Dialog open={isRenewModalOpen} onOpenChange={setIsRenewModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-emerald-500" />
+              Renew Membership Pass
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Select an eligible package to renew your SWEAT training membership.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Select Renewal Package</label>
+              <select
+                value={selectedRenewPackageId}
+                onChange={(e) => setSelectedRenewPackageId(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-lg border border-border bg-card text-foreground"
+              >
+                {membershipActions?.renew_options?.map((opt) => (
+                  <option key={opt.package_id} value={opt.package_id}>
+                    {opt.package_name} — {opt.session_credits} Sessions ({opt.duration_days} Days) — ₹{opt.total_price}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const selectedOpt = membershipActions?.renew_options?.find(
+                (o) => o.package_id === selectedRenewPackageId
+              );
+              if (!selectedOpt) return null;
+              return (
+                <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Entitlement Sessions:</span>
+                    <span className="font-bold text-foreground">{selectedOpt.session_credits} Sessions</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Validity Duration:</span>
+                    <span className="font-semibold text-foreground">{selectedOpt.duration_days} Days</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Base Price:</span>
+                    <span className="font-mono text-foreground">₹{selectedOpt.base_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST Tax ({selectedOpt.tax_percent}%):</span>
+                    <span className="font-mono text-foreground">₹{Math.round(selectedOpt.total_price - selectedOpt.base_price)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-emerald-500">
+                    <span>Total Amount:</span>
+                    <span>₹{selectedOpt.total_price}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-blue-400">Payment & Activation Policy:</p>
+              <p>Initiating renewal creates an order in pending status. Your renewed membership activates upon verified online payment completion.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRenewModalOpen(false)}
+              disabled={isSubmittingAction}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleRenewSubmit}
+              disabled={isSubmittingAction || !selectedRenewPackageId}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {isSubmittingAction ? "Creating Order..." : "Proceed to Renewal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL 7: UPGRADE PACKAGE                                                  */}
+      {/* ========================================================================= */}
+      <Dialog open={isUpgradeModalOpen} onOpenChange={setIsUpgradeModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Upgrade Package Tier
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Upgrade to higher session allocations or unlimited class access.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Select Upgrade Package</label>
+              <select
+                value={selectedUpgradePackageId}
+                onChange={(e) => setSelectedUpgradePackageId(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-lg border border-border bg-card text-foreground"
+              >
+                {membershipActions?.upgrade_options?.map((opt) => (
+                  <option key={opt.package_id} value={opt.package_id}>
+                    {opt.package_name} — +{opt.credits_gain} Credits — Price Diff: ₹{opt.price_difference}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const selectedOpt = membershipActions?.upgrade_options?.find(
+                (o) => o.package_id === selectedUpgradePackageId
+              );
+              if (!selectedOpt) return null;
+              return (
+                <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Plan Price:</span>
+                    <span className="font-mono text-foreground">₹{selectedOpt.current_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Target Plan Price:</span>
+                    <span className="font-mono text-foreground">₹{selectedOpt.total_price}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Additional Session Entitlement:</span>
+                    <span className="font-bold text-emerald-500">+{selectedOpt.credits_gain} Sessions</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-blue-400">
+                    <span>Applicable Price Difference:</span>
+                    <span>₹{selectedOpt.price_difference}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Reason / Comments (Optional)</label>
+              <Input
+                value={upgradeReason}
+                onChange={(e) => setUpgradeReason(e.target.value)}
+                placeholder="e.g. Upgrading from 8 to 16 sessions for more workouts"
+                className="text-xs"
+              />
+            </div>
+
+            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-blue-400">Studio Review Policy:</p>
+              <p>Your upgrade request will be submitted to the studio management team. Upon review, you will receive confirmation and payment instructions for the price difference.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsUpgradeModalOpen(false)}
+              disabled={isSubmittingAction}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleUpgradeSubmit}
+              disabled={isSubmittingAction || !selectedUpgradePackageId}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {isSubmittingAction ? "Submitting..." : "Submit Upgrade Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL 8: EXTEND VALIDITY                                                  */}
+      {/* ========================================================================= */}
+      <Dialog open={isExtendModalOpen} onOpenChange={setIsExtendModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5 text-indigo-500" />
+              Request Validity Extension
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Extend your membership expiration date for travel, medical recovery, or personal reasons.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Select Extension Duration</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[7, 14, 21, 30].map((d) => (
+                  <Button
+                    key={d}
+                    type="button"
+                    variant={extendDays === d ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setExtendDays(d)}
+                    className={`text-xs ${extendDays === d ? "bg-indigo-600 text-white font-bold" : ""}`}
+                  >
+                    +{d} Days
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Current Expiry:</span>
+                <span className="font-semibold text-foreground">
+                  {membershipActions?.active_membership?.end_date || "Active"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Requested Extension:</span>
+                <span className="font-bold text-indigo-400">+{extendDays} Calendar Days</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Reason for Extension <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                value={extendReason}
+                onChange={(e) => setExtendReason(e.target.value)}
+                placeholder="Please describe why an extension is needed (e.g. official travel, injury, medical leave)"
+                className="text-xs min-h-[70px]"
+              />
+            </div>
+
+            <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-indigo-400">Studio Manager Approval:</p>
+              <p>Extension requests do not automatically modify your contract. They are evaluated by the studio manager and applied upon approval.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsExtendModalOpen(false)}
+              disabled={isSubmittingAction}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleExtendSubmit}
+              disabled={isSubmittingAction || !extendReason.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {isSubmittingAction ? "Submitting..." : "Submit Extension Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL 9: FREEZE MEMBERSHIP                                                */}
+      {/* ========================================================================= */}
+      <Dialog open={isFreezeModalOpen} onOpenChange={setIsFreezeModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Snowflake className="h-5 w-5 text-sky-500" />
+              Request Membership Freeze
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Temporarily pause your active workout membership for 7 to 60 days.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Freeze Start Date</label>
+                <Input
+                  type="date"
+                  value={freezeStartDate}
+                  onChange={(e) => setFreezeStartDate(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Freeze End Date</label>
+                <Input
+                  type="date"
+                  value={freezeEndDate}
+                  onChange={(e) => setFreezeEndDate(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+
+            {freezeStartDate && freezeEndDate && (
+              <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-1.5 text-xs">
+                {(() => {
+                  const s = new Date(freezeStartDate);
+                  const e = new Date(freezeEndDate);
+                  const days = Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+                  const isValid = days >= 7 && days <= 60;
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Freeze Duration:</span>
+                        <span className={`font-bold ${isValid ? "text-sky-400" : "text-destructive"}`}>
+                          {days > 0 ? `${days} Days` : "Invalid dates"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Validity Extension:</span>
+                        <span className="font-semibold text-foreground">
+                          {isValid ? `+${days} Days added to contract end` : "Min 7, Max 60 days required"}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Reason for Freeze <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                value={freezeReason}
+                onChange={(e) => setFreezeReason(e.target.value)}
+                placeholder="Reason for pausing your membership (e.g. annual leave, travel, medical condition)"
+                className="text-xs min-h-[70px]"
+              />
+            </div>
+
+            <div className="p-3 bg-sky-500/5 border border-sky-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-sky-400">Freeze Rules & Booking Pause:</p>
+              <p>During the freeze period, class booking reservations will be paused. Once approved, the exact number of frozen days is added to your membership expiry date.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFreezeModalOpen(false)}
+              disabled={isSubmittingAction}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleFreezeSubmit}
+              disabled={isSubmittingAction || !freezeStartDate || !freezeEndDate || !freezeReason.trim()}
+              className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {isSubmittingAction ? "Submitting..." : "Submit Freeze Request"}
             </Button>
           </DialogFooter>
         </DialogContent>

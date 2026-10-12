@@ -183,6 +183,67 @@ export interface PARQSurveyResponse {
   } | null;
 }
 
+export interface MobileMembershipActionOptions {
+  has_membership: boolean;
+  active_membership: {
+    id: string;
+    membership_number: string;
+    package_name: string;
+    status: string;
+    start_date: string | null;
+    end_date: string | null;
+    days_remaining: number;
+    total_sessions: number;
+    remaining_sessions: number;
+    used_sessions: number;
+    is_frozen: boolean;
+  } | null;
+  renew_options: Array<{
+    package_id: string;
+    package_version_id: string;
+    package_name: string;
+    program_name: string;
+    duration_days: number;
+    session_credits: number;
+    base_price: number;
+    tax_percent: number;
+    total_price: number;
+    currency: string;
+    is_current_package: boolean;
+  }>;
+  upgrade_options: Array<{
+    package_id: string;
+    package_version_id: string;
+    package_name: string;
+    program_name: string;
+    duration_days: number;
+    session_credits: number;
+    total_price: number;
+    current_price: number;
+    price_difference: number;
+    credits_gain: number;
+    currency: string;
+  }>;
+  extend_options: {
+    available_days: number[];
+    requires_approval: boolean;
+    policy_note: string;
+  };
+  freeze_options: {
+    min_days: number;
+    max_days: number;
+    requires_approval: boolean;
+    policy_note: string;
+  };
+  pending_requests: Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    created_at: string;
+    payload: Record<string, any>;
+  }>;
+}
+
 export const mobileApi = {
   // Member Profile
   getProfile: () => api.get<MobileMemberProfile>('/mobile/me/'),
@@ -253,4 +314,49 @@ export const mobileApi = {
       '/mobile/onboarding/submit/',
       payload
     ),
+
+  // Membership Self-Service Lifecycle Actions
+  getMembershipActions: () =>
+    api.get<MobileMembershipActionOptions>('/mobile/memberships/actions/'),
+
+  renewMembership: (data: { package_id?: string; package_version_id?: string }) =>
+    api.post<{
+      order_id: string;
+      order_number: string;
+      status: string;
+      total_amount: number;
+      package_name: string;
+      detail: string;
+      requires_payment: boolean;
+      is_active: boolean;
+    }>('/mobile/memberships/renew/', data),
+
+  upgradeMembership: (data: { target_package_id: string; reason?: string }) =>
+    api.post<{
+      detail: string;
+      request_id: string;
+      status: string;
+      target_package_name: string;
+      price_difference: number;
+    }>('/mobile/memberships/upgrade/', data),
+
+  extendMembership: (data: { days: number; reason: string }) =>
+    api.post<{
+      detail: string;
+      request_id: string;
+      status: string;
+      requested_days: number;
+      current_end_date: string | null;
+    }>('/mobile/memberships/extend/', data),
+
+  freezeMembership: (data: { freeze_from: string; freeze_until: string; reason: string }) =>
+    api.post<{
+      detail: string;
+      freeze_id: string;
+      request_id: string;
+      status: string;
+      freeze_from: string;
+      freeze_until: string;
+      days: number;
+    }>('/mobile/memberships/freeze/', data),
 };

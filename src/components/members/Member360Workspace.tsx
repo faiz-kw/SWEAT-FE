@@ -90,15 +90,33 @@ import {
 
 interface Member360WorkspaceProps {
   memberId: string;
+  initialTab?: string;
 }
 
 type TabKey = 'overview' | 'timeline' | 'memberships' | 'bookings' | 'finance' | 'health';
 
-export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId }) => {
+const resolveInitialTab = (tab?: string): TabKey => {
+  if (!tab) return 'overview';
+  const lower = tab.toLowerCase();
+  if (lower === 'parq_form' || lower === 'health' || lower === 'parq') return 'health';
+  if (lower === 'memberships' || lower === 'membership') return 'memberships';
+  if (lower === 'bookings' || lower === 'booking') return 'bookings';
+  if (lower === 'finance' || lower === 'orders') return 'finance';
+  if (lower === 'timeline') return 'timeline';
+  return 'overview';
+};
+
+export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId, initialTab }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveInitialTab(initialTab));
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(resolveInitialTab(initialTab));
+    }
+  }, [initialTab]);
 
   // Modals state
   const [activeModal, setActiveModal] = useState<MembershipLifecycleAction | null>(null);
@@ -2024,16 +2042,16 @@ const MemberHealthFormsSection: React.FC<{
                           </div>
 
                           <div className="pt-0.5">
-                            {ans.question_type === 'BOOLEAN' ? (
+                            {ans.question_type === 'BOOLEAN' || ans.boolean_value !== null ? (
                               <Badge
                                 variant="outline"
                                 className={
-                                  ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true'
-                                    ? 'text-amber-400 border-amber-500/30 bg-amber-500/5'
-                                    : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5'
+                                  ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true' || ans.boolean_value === true
+                                    ? 'text-amber-500 border-amber-500/30 bg-amber-500/10 font-bold'
+                                    : 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10 font-semibold'
                                 }
                               >
-                                {ans.answer?.toUpperCase()}
+                                {ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true' || ans.boolean_value === true ? 'YES' : 'NO'}
                               </Badge>
                             ) : (
                               <span className="font-semibold text-foreground">{ans.answer || '—'}</span>

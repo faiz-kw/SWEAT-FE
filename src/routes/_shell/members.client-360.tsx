@@ -4,12 +4,14 @@ import { Member360Workspace } from "@/components/members/Member360Workspace";
 
 type Member360Search = {
   memberId?: string | undefined;
+  tab?: string | undefined;
 };
 
 export const Route = createFileRoute("/_shell/members/client-360")({
   validateSearch: (search: Record<string, unknown>): Member360Search => {
     return {
       memberId: typeof search["memberId"] === "string" ? (search["memberId"] as string) : undefined,
+      tab: typeof search["tab"] === "string" ? (search["tab"] as string) : undefined,
     };
   },
   head: () => ({
@@ -37,6 +39,6 @@ function Member360RouteComponent() {
     return null;
   }
 
-  return <Member360Workspace memberId={search.memberId.trim()} />;
+  return <Member360Workspace memberId={search.memberId.trim()} initialTab={search.tab} />;
 }
 
