@@ -71,11 +71,14 @@ const labelClass = 'grid gap-1.5 text-sm font-medium';
 
 function formatError(error: unknown): string {
   const e = error as { data?: unknown; response?: { data?: unknown }; message?: string };
-  const data = e.data || e.response?.data;
+  const data = (e.data || e.response?.data) as Record<string, unknown> | undefined;
   if (data && typeof data === 'object') {
-    const messages = Object.entries(data as Record<string, unknown>).map(
-      ([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : String(val)}`
-    );
+    if (typeof data.message === 'string' && data.message.trim()) return data.message;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (typeof data.error === 'string' && data.error.trim()) return data.error;
+    const messages = Object.entries(data)
+      .filter(([key]) => key !== 'results' && key !== 'forms')
+      .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : String(val)}`);
     if (messages.length) return messages.join(' | ');
   }
   return e.message || 'An unexpected error occurred. Please check the logs.';
@@ -1624,6 +1627,7 @@ function MappingEditor({
         .then((res) => {
           const formsList = res.forms || (res as { results?: MetaDiscoveredForm[] }).results || [];
           setDiscoveredForms(formsList);
+          setFormsError(null);
         })
         .catch((err) => {
           setDiscoveredForms([]);

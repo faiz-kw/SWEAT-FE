@@ -179,10 +179,25 @@ export const metaLeadsApi = {
     };
   },
   forms: async (pageId: string) => {
-    const res = (await api.get<{ forms?: MetaDiscoveredForm[]; results?: MetaDiscoveredForm[] }>(`/tenant/meta-lead-mappings/forms/?page_id=${encodeURIComponent(pageId)}`)).data;
+    const res = (await api.get<{
+      forms?: MetaDiscoveredForm[];
+      results?: MetaDiscoveredForm[];
+      error?: string;
+      message?: string;
+      notice?: string;
+    }>(`/tenant/meta-lead-mappings/forms/?page_id=${encodeURIComponent(pageId)}`)).data;
+
+    if (res.error) {
+      const errMessage = res.message || res.error;
+      const err = new Error(errMessage);
+      (err as unknown as { data: typeof res }).data = res;
+      throw err;
+    }
+
     return {
       forms: res.forms || res.results || [],
       results: res.results || res.forms || [],
+      notice: res.notice,
     };
   },
   formFields: async (formId: string) => {
