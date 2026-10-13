@@ -1,6 +1,7 @@
 import * as React from "react";
 import { format, parseISO, addDays, isSameDay } from "date-fns";
 import {
+  Lock,
   Calendar as CalendarIcon,
   Clock,
   MapPin,
@@ -546,6 +547,8 @@ function WebMemberPortalWorkspaceInner() {
           booked_count: s.capacity?.booked_count ?? s.booked_count ?? 0,
           available_spots: s.capacity?.available_seats ?? s.available_spots ?? 10,
           is_full: s.capacity?.is_full ?? s.is_full ?? false,
+          is_waitlist_open: s.capacity?.is_waitlist_open ?? s.can_waitlist ?? false,
+          booking_state: s.booking_state || (s.capacity?.is_full ? "FULL" : "AVAILABLE"),
           status: s.status || "OPEN",
           branch: s.branch || { id: "", name: "SWEAT Studio" },
           trainer: {
@@ -629,17 +632,19 @@ function WebMemberPortalWorkspaceInner() {
   const filteredSchedule = React.useMemo(() => {
     return schedule.filter((occ) => {
       if (selectedBranchId !== "all") {
-        if (occ.branch?.id && occ.branch.id !== selectedBranchId) {
+        if (!occ.branch?.id || occ.branch.id !== selectedBranchId) {
           return false;
         }
       }
       if (selectedCategory !== "all") {
-        const occCatId = (occ as any).category_id;
+        const occCatId = (occ as any).category_id ? String((occ as any).category_id).toLowerCase() : "";
+        const occCatCode = (occ as any).category_code ? String((occ as any).category_code).trim().toLowerCase() : "";
         const occCatName = occ.category ? occ.category.trim().toLowerCase() : "";
         const sel = selectedCategory.trim().toLowerCase();
-        const matchId = occCatId && occCatId.toLowerCase() === sel;
-        const matchName = occCatName === sel;
-        if (!matchId && !matchName) {
+        const matchId = occCatId && occCatId === sel;
+        const matchCode = occCatCode && (occCatCode === sel || occCatCode.includes(sel));
+        const matchName = occCatName === sel || occCatName.includes(sel) || sel.includes(occCatName);
+        if (!matchId && !matchCode && !matchName) {
           return false;
         }
       }
@@ -1395,7 +1400,7 @@ function WebMemberPortalWorkspaceInner() {
                   return (
                     <button
                       key={catId}
-                      onClick={() => setSelectedCategory(catName)}
+                      onClick={() => setSelectedCategory(isSelected ? "all" : catName)}
                       className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap ${
                         isSelected
                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
@@ -1404,6 +1409,221 @@ function WebMemberPortalWorkspaceInner() {
                     >
                       {catName}
                     </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Schedule Slot Cards List & States */}
+            {isScheduleLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Card key={i} className="border border-border/60 bg-card p-5 space-y-4 animate-pulse">
+                    <div className="flex justify-between items-center">
+                      <div className="h-5 w-24 bg-muted rounded-full" />
+                      <div className="h-4 w-16 bg-muted rounded-full" />
+                    </div>
+                    <div className="h-6 w-3/4 bg-muted rounded-md" />
+                    <div className="h-4 w-1/2 bg-muted rounded-md" />
+                    <div className="h-16 bg-muted/40 rounded-xl" />
+                    <div className="h-9 w-full bg-muted rounded-xl" />
+                  </Card>
+                ))}
+              </div>
+            ) : scheduleError ? (
+              <div className="text-center py-12 px-4 border border-rose-500/20 rounded-2xl bg-rose-500/[0.03]">
+                <AlertCircle className="h-10 w-10 text-rose-500 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-foreground">Failed to Load Studio Schedule</h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">
+                  {scheduleError}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void fetchSchedule()}
+                  className="gap-2 text-xs"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry Loading
+                </Button>
+              </div>
+            ) : filteredSchedule.length === 0 ? (
+              <div className="text-center py-16 px-4 border border-dashed border-border/80 rounded-2xl bg-card/40">
+                <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <h3 className="text-base font-semibold text-foreground">No Classes Scheduled for This Day</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                  {selectedBranchId !== "all" || selectedCategory !== "all"
+                    ? "No sessions match your selected branch or format filters. Try resetting filters or choosing another date."
+                    : `There are no group sessions scheduled on ${format(selectedDate, "EEEE, MMMM d")}. Please choose another date above or switch to a different studio branch.`}
+                </p>
+                {(selectedBranchId !== "all" || selectedCategory !== "all") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedBranchId("all");
+                      setSelectedCategory("all");
+                    }}
+                    className="text-xs gap-1.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset All Filters
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                {filteredSchedule.map((occ) => {
+                  const startTime = safeFormatDate(occ.start_time, "hh:mm a");
+                  const endTime = safeFormatDate(occ.end_time, "hh:mm a");
+                  const hasBooked = occ.user_has_booking;
+                  const isFull = occ.is_full;
+                  const spots = occ.available_spots;
+                  const canJoinWaitlist = occ.is_waitlist_open ?? false;
+
+                  return (
+                    <Card
+                      key={occ.id}
+                      className={`border transition-all flex flex-col justify-between ${
+                        hasBooked
+                          ? "border-emerald-500/60 bg-emerald-500/[0.04] shadow-xs"
+                          : isFull
+                          ? "border-border/50 bg-card/50 opacity-90"
+                          : "border-border/70 bg-card hover:border-primary/40 shadow-xs hover:shadow-sm"
+                      }`}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] font-bold uppercase">
+                            {occ.category || "Studio Workout"}
+                          </Badge>
+
+                          {hasBooked ? (
+                            <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-[10px] gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Booked
+                            </Badge>
+                          ) : isFull ? (
+                            <Badge variant="secondary" className={`text-[10px] font-semibold ${canJoinWaitlist ? 'text-amber-600 dark:text-amber-400 border-amber-500/20 bg-amber-500/10' : 'text-muted-foreground'}`}>
+                              {canJoinWaitlist ? "Waitlist Available" : "Full"}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              {spots} spots left
+                            </span>
+                          )}
+                        </div>
+
+                        <CardTitle className="text-base font-extrabold text-foreground leading-snug">
+                          {occ.class_name}
+                        </CardTitle>
+
+                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground mt-1">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>{startTime} - {endTime}</span>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="pt-0 space-y-4">
+                        {/* Trainer Detail Section */}
+                        <div className="flex items-start gap-3 p-2.5 rounded-xl bg-accent/30 border border-border/50">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0 overflow-hidden">
+                            {occ.trainer?.avatar_url ? (
+                              <img src={occ.trainer.avatar_url} alt={occ.trainer.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <span>{occ.trainer?.name ? occ.trainer.name.slice(0, 1) : "C"}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h5 className="text-xs font-bold text-foreground truncate">
+                              Coach {occ.trainer?.name || "SWEAT Coach"}
+                            </h5>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {occ.trainer?.designation || "Senior Strength Trainer"}
+                            </p>
+                            {occ.trainer?.specialties && Array.isArray(occ.trainer.specialties) && occ.trainer.specialties.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {occ.trainer.specialties.slice(0, 2).map((sp, idx) => (
+                                  <span key={idx} className="text-[9px] bg-background/80 px-1.5 py-0.5 rounded text-muted-foreground font-medium">
+                                    {sp}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Location / Room */}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-primary" />
+                            {occ.branch?.name || "Main Studio"}
+                          </span>
+                          <span className="text-[11px] font-medium text-foreground">
+                            {occ.is_included_in_plan ? "1 Pass Credit" : "Specialty Upgrade"}
+                          </span>
+                        </div>
+
+                        {/* Action Buttons */}
+                        {hasBooked ? (
+                          <div className="flex items-center gap-2 pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const found = bookings.find((b) => b.occurrence_id === occ.id && b.status === "CONFIRMED");
+                                if (found) {
+                                  setRescheduleBookingTarget(found);
+                                  setRescheduleNewOccurrenceId("");
+                                } else {
+                                  setActiveTab("bookings");
+                                }
+                              }}
+                              className="w-full text-xs font-semibold"
+                            >
+                              Reschedule Slot
+                            </Button>
+                          </div>
+                        ) : occ.is_included_in_plan === false ? (
+                          <div className="space-y-1.5 w-full">
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 font-medium leading-tight">
+                              <Lock className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{occ.ineligible_reason || "Not included in active pass"}</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                toast.info(occ.ineligible_reason || `Class '${occ.class_name}' is not included in your active plan.`);
+                                setActiveTab("memberships");
+                              }}
+                              className="w-full font-semibold text-xs gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                            >
+                              <Lock className="h-3.5 w-3.5" />
+                              Upgrade Pass to Book
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            disabled={(isFull && !canJoinWaitlist) || remainingCredits <= 0}
+                            onClick={() => setBookingSlotToConfirm(occ)}
+                            className={`w-full font-semibold text-xs gap-1.5 ${
+                              isFull && canJoinWaitlist
+                                ? "bg-amber-500 hover:bg-amber-600 text-white"
+                                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                            }`}
+                          >
+                            <CalendarCheck className="h-3.5 w-3.5" />
+                            {remainingCredits <= 0
+                              ? "No Credits Left"
+                              : isFull
+                              ? (canJoinWaitlist ? "Join Waitlist" : "Class Full")
+                              : "Book with 1 Credit"}
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
                   );
                 })}
               </div>
@@ -2564,10 +2784,32 @@ function WebMemberPortalWorkspaceInner() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs p-3 rounded-lg bg-card border border-border/60">
-                <span className="text-muted-foreground">Passbook Balance After Booking:</span>
-                <span className="font-bold text-emerald-500">{remainingCredits - 1} Sessions</span>
-              </div>
+              {bookingSlotToConfirm.is_included_in_plan === false ? (
+                <div className="p-3.5 rounded-xl border border-destructive/30 bg-destructive/10 space-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 text-destructive font-bold">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>Package Ineligibility</span>
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {bookingSlotToConfirm.ineligible_reason || "This class is not included in your active pass. Please upgrade your package to book."}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-card border border-border/70 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Current Available Balance:</span>
+                    <span className="font-semibold text-foreground">{remainingCredits} {remainingCredits === 1 ? 'Session' : 'Sessions'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Reservation Cost:</span>
+                    <span className="font-semibold text-rose-500">-1 Session</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                    <span className="font-medium text-foreground">Passbook Balance After Booking:</span>
+                    <span className="font-bold text-emerald-500">{Math.max(0, remainingCredits - 1)} {remainingCredits - 1 === 1 ? 'Session' : 'Sessions'}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2580,14 +2822,27 @@ function WebMemberPortalWorkspaceInner() {
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              disabled={isBookingSubmitting}
-              onClick={handleConfirmBookClass}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
-            >
-              {isBookingSubmitting ? "Reserving..." : "Confirm & Reserve Spot"}
-            </Button>
+            {bookingSlotToConfirm?.is_included_in_plan === false ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setBookingSlotToConfirm(null);
+                  setActiveTab("memberships");
+                }}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
+              >
+                View Eligible Packages
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={isBookingSubmitting || remainingCredits <= 0}
+                onClick={handleConfirmBookClass}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
+              >
+                {isBookingSubmitting ? "Reserving..." : "Confirm & Reserve Spot"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

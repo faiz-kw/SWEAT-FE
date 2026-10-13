@@ -60,9 +60,14 @@ export interface MobileScheduleOccurrence {
     specialties: string[];
     experience_years?: number;
   };
-  is_included_in_plan: boolean;
+  is_included_in_plan?: boolean;
+  ineligible_reason?: string | null;
+  allowed_package_name?: string | null;
+  package_name?: string | null;
   user_has_booking: boolean;
   user_booking_id?: string | null;
+  is_waitlist_open?: boolean;
+  booking_state?: string;
 }
 
 export interface MobileBooking {

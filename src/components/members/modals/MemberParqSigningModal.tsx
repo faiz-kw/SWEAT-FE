@@ -239,11 +239,11 @@ export function MemberParqSigningModal({
               <p className="text-sm text-muted-foreground">Loading PAR-Q questionnaire & agreement...</p>
             </div>
           ) : error || !requirement?.is_configured ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-center space-y-2">
-              <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-              <h4 className="text-sm font-semibold text-destructive">Configuration Error</h4>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center space-y-2">
+              <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
+              <h4 className="text-sm font-semibold text-foreground">Questionnaire Temporarily Unavailable</h4>
               <p className="text-xs text-muted-foreground">
-                No active PAR-Q form is configured for this program or organization. Please contact your gym administrator.
+                No active physical readiness questionnaire is currently configured by gym administration for this program. Studio administration must publish the active form before health clearance can be completed.
               </p>
             </div>
           ) : isAlreadyCompleted ? (
