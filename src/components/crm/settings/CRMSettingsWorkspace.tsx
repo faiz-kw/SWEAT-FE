@@ -1149,14 +1149,14 @@ export function CRMSettingsWorkspace() {
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary shrink-0" />
                   <div>
-                    <h4 className="text-xs font-bold text-foreground">Sarvam AI Outbound Voice Calling</h4>
+                    <h4 className="text-xs font-bold text-foreground">Sarvam AI Automated Reminders</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      Automatic voice call reminder 3 hours prior to workout session.
+                      Automatic reminder calls before scheduled workout sessions.
                     </p>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-[10px] bg-muted border-border shrink-0">
-                  Coming in Phase 2
+                  Coming Soon
                 </Badge>
               </div>
 
@@ -1201,7 +1201,7 @@ export function CRMSettingsWorkspace() {
           <div className="bg-card p-4 rounded-xl border border-border/50">
             <h2 className="text-sm font-semibold text-foreground">Connected Outreach Channels</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Secure tenant communication channels. Integration secrets and API tokens are managed at the platform level.
+              Communication channels for contacting leads. Technical connections and numbers are set up by your administrator.
             </p>
           </div>
 
@@ -1224,6 +1224,8 @@ export function CRMSettingsWorkspace() {
                       className={`text-[10px] font-semibold ${
                         chan.status === 'CONNECTED'
                           ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                          : chan.status === 'CONFIGURED'
+                          ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                           : chan.status === 'COMING_SOON'
                           ? 'bg-primary/10 text-primary border-primary/20'
                           : 'bg-muted text-muted-foreground'
@@ -1231,22 +1233,28 @@ export function CRMSettingsWorkspace() {
                     >
                       {chan.status === 'CONNECTED'
                         ? 'Connected'
+                        : chan.status === 'CONFIGURED'
+                        ? 'Setup Needed'
                         : chan.status === 'COMING_SOON'
                         ? 'Coming Soon'
-                        : 'Not Configured'}
+                        : 'Not Set Up'}
                     </Badge>
                   </div>
 
                   <div className="space-y-1.5 pt-2 border-t border-border/40 text-xs">
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Sender Identifier:</span>
-                      <span className="font-mono text-foreground font-medium">{chan.sender_identity}</span>
+                      <span>Sending Number / ID:</span>
+                      <span className="font-mono text-foreground font-medium">
+                        {chan.sender_identity === 'Not configured' || chan.sender_identity === 'Not set'
+                          ? 'Not set up yet'
+                          : chan.sender_identity}
+                      </span>
                     </div>
 
                     <div className="space-y-1 pt-1">
-                      <span className="text-[11px] font-semibold text-muted-foreground">Active Capabilities:</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground">Features:</span>
                       <ul className="space-y-0.5 pl-4 list-disc text-muted-foreground text-[11px]">
-                        {(chan.features || []).map((feat, i) => (
+                        {(chan.capabilities || chan.features || []).map((feat, i) => (
                           <li key={i}>{feat}</li>
                         ))}
                       </ul>

@@ -56,9 +56,9 @@ function AICallingPage() {
         {/* Readiness Banner */}
         <Alert className="border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="font-semibold text-sm">Deployment & Configuration Notice</AlertTitle>
+          <AlertTitle className="font-semibold text-sm">Calling Setup in Progress</AlertTitle>
           <AlertDescription className="text-xs sm:text-sm mt-1 leading-relaxed">
-            The frontend calling interface is active in <strong>Lead 360</strong>. However, the backend database migration (<code className="font-mono bg-muted/60 px-1 py-0.5 rounded text-xs">0055_crm_call_session</code>) and live Sarvam provider telephony credentials are pending production deployment. Attempting calls will safely return standard status codes (<code className="font-mono text-xs">503 Migration Pending</code> or <code className="font-mono text-xs">400 Provider Unconfigured</code>).
+            AI calling controls are ready in <strong>Lead 360</strong>. Telephone line and system connections are currently being set up. You can view lead details and check permissions now, but calls cannot be placed until setup is complete.
           </AlertDescription>
         </Alert>
 
@@ -72,23 +72,23 @@ function AICallingPage() {
                   <Bot className="w-5 h-5" />
                 </div>
                 <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
-                  Manual Trigger Ready
+                  Ready to Use
                 </Badge>
               </div>
-              <CardTitle className="text-base font-semibold mt-3">Manual Lead 360 Calling</CardTitle>
+              <CardTitle className="text-base font-semibold mt-3">Calling a Lead</CardTitle>
               <CardDescription className="text-xs">
-                Staff-directed single outbound calls via Sarvam Voice Agent.
+                How staff can place an individual AI call from the lead profile.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-xs sm:text-sm text-muted-foreground flex-1">
               <p>
-                To initiate an AI call with a lead:
+                Follow these simple steps to start a call:
               </p>
               <ol className="list-decimal list-inside space-y-1.5 text-xs text-foreground/80">
-                <li>Navigate to <strong>CRM &rarr; Leads</strong>.</li>
-                <li>Click on any lead record to open <strong>Lead 360</strong>.</li>
-                <li>Click the <strong>Call with AI</strong> action in the top header.</li>
-                <li>Review the recipient phone number and confirm the call.</li>
+                <li>Go to <strong>CRM &rarr; Leads</strong>.</li>
+                <li>Click on any person to open their profile.</li>
+                <li>Click the <strong>Call with AI</strong> button at the top.</li>
+                <li>Check permission status and confirm before calling.</li>
               </ol>
               <div className="pt-2">
                 <Button
@@ -99,7 +99,7 @@ function AICallingPage() {
                 >
                   <Link to="/crm/leads">
                     <Users className="w-3.5 h-3.5" />
-                    View Leads List
+                    Open Leads List
                   </Link>
                 </Button>
               </div>
@@ -114,26 +114,26 @@ function AICallingPage() {
                   <Clock className="w-5 h-5" />
                 </div>
                 <Badge variant="outline" className="text-xs bg-muted text-muted-foreground">
-                  Per-Lead History Only
+                  Saved on Profile
                 </Badge>
               </div>
-              <CardTitle className="text-base font-semibold mt-3">Call Session History</CardTitle>
+              <CardTitle className="text-base font-semibold mt-3">Call Records &amp; History</CardTitle>
               <CardDescription className="text-xs">
-                Real-time activity logs and lifecycle timeline.
+                Where to review call outcomes and staff notes.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-xs sm:text-sm text-muted-foreground flex-1">
               <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60 text-xs space-y-1 text-muted-foreground">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 text-blue-500" />
-                  Global Call Queue Not Yet Available
+                  Logged Directly on Each Lead
                 </div>
                 <p>
-                  A tenant-wide aggregate call history API is not yet provisioned on the backend. Call history is not fabricated here.
+                  Every call placed is automatically recorded on the person&apos;s activity timeline.
                 </p>
               </div>
               <p className="text-xs">
-                All initiated calls produce verified <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">VOICE_CALL</code> records within each individual contact&apos;s <strong>Unified Timeline</strong> in Lead 360, complete with Session ID, status, and provider attempt reference.
+                Open any lead in <strong>Lead 360</strong> to see call timestamps, AI conversation summaries, and outcomes under their <strong>Timeline</strong> tab.
               </p>
             </CardContent>
           </Card>
@@ -146,65 +146,65 @@ function AICallingPage() {
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30">
-                  Strict Compliance
+                  Protected
                 </Badge>
               </div>
-              <CardTitle className="text-base font-semibold mt-3">Safety & Compliance Guardrails</CardTitle>
+              <CardTitle className="text-base font-semibold mt-3">Call Safety Rules</CardTitle>
               <CardDescription className="text-xs">
-                Protection against unconsented or duplicate calls.
+                Built-in protections to ensure respectful communication.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-xs sm:text-sm text-muted-foreground flex-1">
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground text-xs">No Automatic Calling:</strong>
-                  <span className="text-xs block text-muted-foreground">All calls require manual human initiation. Background or bulk triggers are prohibited.</span>
+                  <strong className="text-foreground text-xs">Permission to Call:</strong>
+                  <span className="text-xs block text-muted-foreground">Calls are only allowed when the person has given permission. Ask before calling.</span>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground text-xs">Consent & DNC Enforcement:</strong>
-                  <span className="text-xs block text-muted-foreground">Opted-out or Do-Not-Contact leads are automatically disabled and rejected.</span>
+                  <strong className="text-foreground text-xs">Do Not Contact Respected:</strong>
+                  <span className="text-xs block text-muted-foreground">Anyone marked Do Not Contact is automatically blocked from receiving calls.</span>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground text-xs">Concurrency & Idempotency:</strong>
-                  <span className="text-xs block text-muted-foreground">Concurrent duplicate calls to the same lead return 409 Conflict; replays are safe.</span>
+                  <strong className="text-foreground text-xs">No Spam or Duplicate Calls:</strong>
+                  <span className="text-xs block text-muted-foreground">Calls require staff initiation and duplicate calls to the same person are prevented.</span>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Technical Architecture & API Details */}
+        {/* Service Details */}
         <Card className="border-border/80 bg-card/60 shadow-xs">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Technical Architecture & Integration Status</CardTitle>
+              <CardTitle className="text-sm font-semibold">Service Details</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
               <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                <span className="text-muted-foreground block text-[11px]">Backend Endpoint</span>
-                <span className="font-mono font-medium text-foreground text-xs">POST /api/v1/tenant/leads/&#123;id&#125;/call/</span>
+                <span className="text-muted-foreground block text-[11px]">Provider</span>
+                <span className="font-semibold text-foreground text-xs">Sarvam AI Voice</span>
               </div>
               <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                <span className="text-muted-foreground block text-[11px]">Required RBAC Permission</span>
-                <span className="font-mono font-medium text-foreground text-xs">crm.leads.edit</span>
+                <span className="text-muted-foreground block text-[11px]">Staff Access</span>
+                <span className="font-medium text-foreground text-xs">Lead Edit Permission</span>
               </div>
               <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                <span className="text-muted-foreground block text-[11px]">Webhook Endpoint</span>
-                <span className="font-mono font-medium text-foreground text-xs">POST /api/v1/communication/webhook/sarvam/</span>
+                <span className="text-muted-foreground block text-[11px]">Call Logging</span>
+                <span className="font-medium text-foreground text-xs">Automatic Timeline Sync</span>
               </div>
               <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                <span className="text-muted-foreground block text-[11px]">Tenant Migration</span>
-                <span className="font-mono font-medium text-amber-600 dark:text-amber-400 text-xs">0055_crm_call_session (Pending)</span>
+                <span className="text-muted-foreground block text-[11px]">Line Status</span>
+                <span className="font-medium text-amber-600 dark:text-amber-400 text-xs">Setup in Progress</span>
               </div>
             </div>
           </CardContent>

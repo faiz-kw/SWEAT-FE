@@ -47,6 +47,8 @@ export interface Lead {
   consent_whatsapp?: boolean;
   consent_email?: boolean;
   consent_sms?: boolean;
+  consent_voice?: boolean;
+  voice_consent?: LeadVoiceConsentInfo | null;
   current_status: LeadStatus;
   assigned_sales_user?: string | null;
   assigned_sales_name?: string | null;
@@ -74,6 +76,15 @@ export interface Lead {
   updated_at: string;
 }
 
+export interface LeadVoiceConsentInfo {
+  status: 'GRANTED' | 'WITHDRAWN' | 'MISSING' | 'UNKNOWN';
+  is_eligible: boolean;
+  reason?: string | null;
+  source?: string | null;
+  recorded_at?: string | null;
+  method?: string | null;
+}
+
 export interface ConvertedMemberRef {
   member_id: string;
   member_number?: string;
@@ -92,6 +103,8 @@ export interface LeadActionEligibility {
   can_view_member_360: boolean;
   is_terminal: boolean;
   terminal_reason?: string | null;
+  can_call_with_ai?: boolean;
+  can_call_with_ai_reason?: string | null;
 }
 
 export type TouchType = 'FIRST_TOUCH' | 'LEAD_CAPTURE' | 'ASSISTED_TOUCH';

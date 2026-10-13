@@ -718,8 +718,8 @@ export function LeadDetailModal({
           description: `Session: ${data.call_session_id.substring(0, 8)}... • ${data.recipient_phone}`,
         });
       } else {
-        toast.success(`AI Call initiated successfully (${data.status})`, {
-          description: `Session: ${data.call_session_id.substring(0, 8)}... • ${data.recipient_phone}`,
+        toast.success('AI Call Started', {
+          description: `Calling ${data.recipient_phone}`,
         });
       }
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
@@ -729,27 +729,33 @@ export function LeadDetailModal({
     onError: (err: any) => {
       const errData = err.data || err.response?.data;
       const errCode = errData?.code;
-      const errMsg = errData?.error || errData?.detail || err.message || 'Failed to initiate outbound call';
+      const errMsg = errData?.error || errData?.detail || err.message || 'Failed to start call';
+
+      console.debug('[AICall] Error detail:', { errCode, errData, err });
 
       if (err.status === 409 || errCode === 'CALL_ALREADY_IN_PROGRESS') {
         toast.warning('Call Already In Progress', {
-          description: errMsg,
+          description: 'A call is already being placed to this person. Please wait a moment.',
         });
       } else if (err.status === 503 || errCode === 'MIGRATION_PENDING') {
-        toast.error('Voice Service Unavailable', {
-          description: 'Database migration 0055 is pending for this tenant.',
+        toast.error('Calling Setup in Progress', {
+          description: 'The calling system is being set up. Please contact your manager or administrator.',
         });
       } else if (err.status === 504 || errCode === 'TIMEOUT') {
-        toast.error('Provider Gateway Timeout', {
-          description: 'Sarvam voice service timed out. You may safely retry.',
+        toast.error('Network Timed Out', {
+          description: 'The phone network took too long to answer. You can try again.',
         });
       } else if (errCode === 'UNCONFIGURED') {
-        toast.error('Integration Not Configured', {
-          description: errMsg,
+        toast.error('Calling Not Set Up', {
+          description: 'AI phone calling is not set up for your gym yet.',
+        });
+      } else if (errCode === 'INVALID_RECIPIENT_OR_CONSENT') {
+        toast.error('Cannot Call Yet', {
+          description: 'This person has not given permission for AI phone calls.',
         });
       } else {
-        toast.error('Failed to Initiate Call', {
-          description: errMsg,
+        toast.error('Could Not Start Call', {
+          description: 'Please try again or contact support if this continues.',
         });
       }
     },
@@ -1038,41 +1044,51 @@ export function LeadDetailModal({
                     {canEdit && (() => {
                       const isDncOrOptedOut = Boolean(
                         currentLead.do_not_contact ||
-                        (currentLead as any).is_opted_out ||
-                        (currentLead.consent_sms === false && currentLead.consent_whatsapp === false)
+                        (currentLead as any).is_opted_out
                       );
                       const cleanPhoneDigits = (currentLead.phone_normalized || (currentLead as any).phone || '').replace(/\D/g, '');
                       const hasValidPhone = cleanPhoneDigits.length >= 10;
                       const isCallInProgress = Boolean(
                         activeCallSession && ['QUEUED', 'INITIATED', 'RINGING', 'CONNECTED'].includes(activeCallSession.status)
                       );
-                      const canCallWithAi = hasValidPhone && !isDncOrOptedOut && !isCallInProgress;
+                      const voiceConsent = currentLead.voice_consent;
+                      const voiceConsentStatus = voiceConsent?.status || (currentLead.consent_voice === true ? 'GRANTED' : currentLead.consent_voice === false ? 'WITHDRAWN' : 'UNKNOWN');
+                      const hasVerifiedConsent = voiceConsentStatus === 'GRANTED' && !isDncOrOptedOut;
 
                       return (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setIsCallModalOpen(true)}
-                          disabled={!canCallWithAi || callMutation.isPending}
-                          className={`h-7 px-2.5 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer ${
-                            !canCallWithAi ? 'opacity-50 cursor-not-allowed' : ''
+                          disabled={!hasValidPhone || isCallInProgress || callMutation.isPending}
+                          className={`h-7 px-2.5 text-xs gap-1.5 font-medium cursor-pointer ${
+                            hasVerifiedConsent
+                              ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                              : 'border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+                          } ${
+                            (!hasValidPhone || isCallInProgress) ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           title={
                             !hasValidPhone
-                              ? 'A valid 10-digit phone number is required to call'
-                              : isDncOrOptedOut
-                              ? 'Lead is marked Do Not Contact or has opted out'
+                              ? 'A valid 10-digit phone number is needed to call'
                               : isCallInProgress
-                              ? 'A call is already in progress for this lead'
-                              : 'Initiate manual outbound AI call via Sarvam'
+                              ? 'A call is already in progress for this person'
+                              : isDncOrOptedOut
+                              ? 'Do Not Contact: This person cannot be called'
+                              : !hasVerifiedConsent
+                              ? 'Permission needed to call (click to view details)'
+                              : 'Call this person with AI'
                           }
                         >
                           {callMutation.isPending ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
-                            <Bot className="w-3 h-3 text-emerald-500" />
+                            <Bot className={`w-3 h-3 ${hasVerifiedConsent ? 'text-emerald-500' : 'text-amber-500'}`} />
                           )}
                           <span>Call with AI</span>
+                          {!hasVerifiedConsent && hasValidPhone && !isCallInProgress && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Permission needed" />
+                          )}
                         </Button>
                       );
                     })()}
@@ -1576,10 +1592,79 @@ export function LeadDetailModal({
                           <span className="text-muted-foreground">Location / Area</span>
                           <span className="text-foreground">{currentLead.area || '—'}</span>
                         </div>
-                        <div className="flex justify-between py-1">
+                        <div className="flex justify-between py-1 border-b border-border/40">
                           <span className="text-muted-foreground">Country</span>
                           <span className="text-foreground">{currentLead.country || 'India'}</span>
                         </div>
+                        {/* Permission to Call Visibility */}
+                        {(() => {
+                          const vc = currentLead.voice_consent;
+                          const vcStatus = vc?.status || (currentLead.consent_voice === true ? 'GRANTED' : currentLead.consent_voice === false ? 'WITHDRAWN' : 'UNKNOWN');
+                          const isDnc = Boolean(currentLead.do_not_contact || (currentLead as any).is_opted_out);
+
+                          let badgeConfig = {
+                            label: 'Not Given',
+                            color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+                            icon: AlertCircle,
+                            help: 'Ask the person for permission before calling.',
+                          };
+
+                          if (isDnc) {
+                            badgeConfig = {
+                              label: 'Do Not Contact',
+                              color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+                              icon: XCircle,
+                              help: 'This person is on the Do Not Contact list.',
+                            };
+                          } else if (vcStatus === 'GRANTED') {
+                            badgeConfig = {
+                              label: 'Given',
+                              color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+                              icon: CheckCircle2,
+                              help: 'Permission recorded. Safe to call.',
+                            };
+                          } else if (vcStatus === 'WITHDRAWN') {
+                            badgeConfig = {
+                              label: 'Withdrawn',
+                              color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+                              icon: XCircle,
+                              help: 'This person asked not to be called.',
+                            };
+                          } else if (vcStatus === 'UNKNOWN') {
+                            badgeConfig = {
+                              label: 'Not Verified',
+                              color: 'bg-muted text-muted-foreground border-border',
+                              icon: AlertTriangle,
+                              help: 'Permission could not be checked.',
+                            };
+                          }
+
+                          const StatusIcon = badgeConfig.icon;
+
+                          return (
+                            <div className="pt-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5">
+                                  <Shield className="w-3.5 h-3.5 text-primary" />
+                                  Permission to Call
+                                </span>
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium border ${badgeConfig.color}`}
+                                  title={badgeConfig.help}
+                                >
+                                  <StatusIcon className="w-3 h-3" />
+                                  {badgeConfig.label}
+                                </span>
+                              </div>
+                              {vc?.recorded_at && vcStatus === 'GRANTED' && (
+                                <div className="mt-1 text-[10px] text-muted-foreground flex items-center justify-between">
+                                  <span>Given on {new Date(vc.recorded_at).toLocaleDateString()}</span>
+                                  {vc.source && <span className="truncate max-w-[130px]">via {vc.source === 'WEB_FORM' ? 'Website form' : vc.source}</span>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -2072,21 +2157,24 @@ export function LeadDetailModal({
                     </div>
                   ) : (
                     <>
-                      {/* CONSENT PROFILE */}
+                      {/* CONTACT PERMISSIONS */}
                       <div className="p-3 rounded-lg bg-muted/40 border border-border text-xs flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-semibold text-muted-foreground">Consent Profile:</span>
+                        <span className="font-semibold text-muted-foreground">Permissions:</span>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className={currentLead?.do_not_contact ? 'bg-rose-500/10 text-rose-500 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'}>
-                            {currentLead?.do_not_contact ? 'DNC Active' : 'Contact Permitted'}
+                            {currentLead?.do_not_contact ? 'Do Not Contact' : 'Contact Allowed'}
+                          </Badge>
+                          <Badge variant="outline" className={currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
+                            Calls: {currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice ? 'Given' : 'Not Given'}
                           </Badge>
                           <Badge variant="outline" className={currentLead?.consent_whatsapp ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                            WhatsApp: {currentLead?.consent_whatsapp ? 'Opted In' : 'No Consent'}
+                            WhatsApp: {currentLead?.consent_whatsapp ? 'Given' : 'Not Given'}
                           </Badge>
                           <Badge variant="outline" className={currentLead?.consent_email ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                            Email: {currentLead?.consent_email ? 'Opted In' : 'No Consent'}
+                            Email: {currentLead?.consent_email ? 'Given' : 'Not Given'}
                           </Badge>
                           <Badge variant="outline" className={currentLead?.consent_sms ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
-                            SMS: {currentLead?.consent_sms ? 'Opted In' : 'No Consent'}
+                            SMS: {currentLead?.consent_sms ? 'Given' : 'Not Given'}
                           </Badge>
                         </div>
                       </div>
@@ -3863,76 +3951,172 @@ export function LeadDetailModal({
       )}
 
       {/* CONFIRMATION MODAL FOR SARVAM AI OUTBOUND CALL */}
+      {/* CONFIRMATION MODAL FOR SARVAM AI OUTBOUND CALL */}
       <Dialog open={isCallModalOpen} onOpenChange={setIsCallModalOpen}>
         <DialogContent className="max-w-md w-full p-5 sm:p-6 bg-background text-foreground border border-border shadow-2xl rounded-xl">
-          <DialogHeader className="space-y-2">
+          <DialogHeader className="space-y-1.5">
             <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
               <Bot className="w-5 h-5" />
             </div>
             <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
-              Initiate Outbound AI Call
+              Call with AI
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              Confirm outbound conversational voice call to this lead using Sarvam AI.
+              Have our AI assistant call this person to answer questions and schedule a visit.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-3 p-3.5 rounded-lg bg-card border border-border/80 space-y-2 text-xs">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Recipient Name</span>
-              <span className="font-semibold text-foreground">{currentLead.first_name} {currentLead.last_name}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Destination Phone</span>
-              <span className="font-mono font-bold text-foreground">{currentLead.phone_normalized || (currentLead as any).phone || '—'}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Voice Provider</span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">Sarvam Instant Outbound</span>
-            </div>
-          </div>
+          {(() => {
+            const vc = currentLead.voice_consent;
+            const vcStatus = vc?.status || (currentLead.consent_voice === true ? 'GRANTED' : currentLead.consent_voice === false ? 'WITHDRAWN' : 'UNKNOWN');
+            const isDnc = Boolean(currentLead.do_not_contact || (currentLead as any).is_opted_out);
+            const hasVerifiedConsent = vcStatus === 'GRANTED' && !isDnc;
 
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-700 dark:text-amber-300 space-y-1">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Manual Staff Authorization Required</span>
-            </div>
-            <p>
-              This action initiates a real outbound phone call to the contact. Automatic calling is disabled. Please ensure the lead has provided consent for voice communications.
-            </p>
-          </div>
+            let consentBadge = {
+              label: 'Not Given',
+              color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+              icon: AlertCircle,
+            };
 
-          <DialogFooter className="mt-4 flex flex-row items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCallModalOpen(false)}
-              disabled={callMutation.isPending}
-              className="h-8 px-3 text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => callMutation.mutate()}
-              disabled={callMutation.isPending}
-              className="h-8 px-4 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-500/20 cursor-pointer"
-            >
-              {callMutation.isPending ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Initiating Call...</span>
-                </>
-              ) : (
-                <>
-                  <PhoneCall className="w-3.5 h-3.5" />
-                  <span>Confirm & Initiate Call</span>
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+            if (isDnc) {
+              consentBadge = {
+                label: 'Do Not Contact',
+                color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+                icon: XCircle,
+              };
+            } else if (vcStatus === 'GRANTED') {
+              consentBadge = {
+                label: 'Given',
+                color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+                icon: CheckCircle2,
+              };
+            } else if (vcStatus === 'WITHDRAWN') {
+              consentBadge = {
+                label: 'Withdrawn',
+                color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+                icon: XCircle,
+              };
+            } else if (vcStatus === 'UNKNOWN') {
+              consentBadge = {
+                label: 'Not Verified',
+                color: 'bg-muted text-muted-foreground border-border',
+                icon: AlertTriangle,
+              };
+            }
+
+            const ConsentIcon = consentBadge.icon;
+
+            return (
+              <>
+                <div className="my-3 p-3.5 rounded-lg bg-card border border-border/80 space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Name</span>
+                    <span className="font-semibold text-foreground">{currentLead.first_name} {currentLead.last_name}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Phone Number</span>
+                    <span className="font-mono font-bold text-foreground">{currentLead.phone_normalized || (currentLead as any).phone || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Calling Service</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Sarvam AI Voice</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-border/40">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-primary" />
+                      Permission to Call
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${consentBadge.color}`}>
+                      <ConsentIcon className="w-3 h-3" />
+                      {consentBadge.label}
+                    </span>
+                  </div>
+
+                  {/* Simple Permission Details (when available) */}
+                  {hasVerifiedConsent && (vc?.source || vc?.recorded_at) && (
+                    <div className="mt-2 pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex justify-between">
+                      <span>Permission Record:</span>
+                      <span className="font-medium text-foreground">
+                        {vc.recorded_at ? new Date(vc.recorded_at).toLocaleDateString() : 'On file'}
+                        {vc.source ? ` (${vc.source === 'WEB_FORM' ? 'Website form' : vc.source})` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Friendly Guidance Banner */}
+                {!hasVerifiedConsent ? (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Cannot Call Yet</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      {isDnc
+                        ? 'This person is on the Do Not Contact list and cannot be called.'
+                        : vcStatus === 'WITHDRAWN'
+                        ? 'This person asked not to receive calls. Please do not call.'
+                        : vcStatus === 'UNKNOWN'
+                        ? 'We cannot verify calling permission right now. Ask the person for permission before calling.'
+                        : 'This person has not given permission for AI phone calls. Ask the person for permission before calling.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Please Confirm Before Calling</span>
+                    </div>
+                    <p>
+                      Permission has been confirmed. Clicking confirm will start an automated AI call to this number.
+                    </p>
+                  </div>
+                )}
+
+                <DialogFooter className="mt-4 flex flex-row items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCallModalOpen(false)}
+                    disabled={callMutation.isPending}
+                    className="h-8 px-3 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => callMutation.mutate()}
+                    disabled={!hasVerifiedConsent || callMutation.isPending}
+                    className={`h-8 px-4 text-xs gap-1.5 font-semibold ${
+                      hasVerifiedConsent
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/20 cursor-pointer'
+                        : 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
+                    }`}
+                    title={!hasVerifiedConsent ? 'Permission needed to call' : 'Start call now'}
+                  >
+                    {callMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Starting Call...</span>
+                      </>
+                    ) : !hasVerifiedConsent ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Permission Needed</span>
+                      </>
+                    ) : (
+                      <>
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        <span>Confirm &amp; Start Call</span>
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </Dialog>
