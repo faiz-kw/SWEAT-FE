@@ -397,6 +397,7 @@ function WebMemberPortalWorkspaceInner() {
             id: b.id || "",
             name: b.name || "SWEAT Studio",
             code: b.code || "SW",
+            location_name: b.location_name || "",
             address: b.address || "",
             city: b.city || "",
             phone: b.phone || "",
@@ -926,7 +927,11 @@ function WebMemberPortalWorkspaceInner() {
                 </div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 font-medium">
                   <MapPin className="h-3 w-3 text-primary" />
-                  {profile?.home_branch?.name || "Bandra West Flagship"}
+                  {profile?.home_branch ? (
+                    branches.find((b) => b.id === profile.home_branch?.id)?.location_name
+                      ? `${profile.home_branch.name} (${branches.find((b) => b.id === profile.home_branch?.id)?.location_name})`
+                      : profile.home_branch.name
+                  ) : "Bandra West Flagship"}
                 </p>
               </div>
             </div>
@@ -1344,7 +1349,7 @@ function WebMemberPortalWorkspaceInner() {
                   <option value="all">All Studio Branches</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name}
+                      {b.name}{b.location_name ? ` (${b.location_name})` : ""}
                     </option>
                   ))}
                 </select>

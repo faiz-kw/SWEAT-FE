@@ -137,6 +137,8 @@ export interface MobileBranch {
   id: string;
   name: string;
   code: string;
+  location_name?: string;
+  location_code?: string;
   address?: string;
   city?: string;
   phone?: string;
