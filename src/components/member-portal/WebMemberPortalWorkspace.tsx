@@ -550,6 +550,11 @@ function WebMemberPortalWorkspaceInner() {
           is_full: s.capacity?.is_full ?? s.is_full ?? false,
           is_waitlist_open: s.capacity?.is_waitlist_open ?? s.can_waitlist ?? false,
           booking_state: s.booking_state || (s.capacity?.is_full ? "FULL" : "AVAILABLE"),
+          has_started: s.has_started ?? false,
+          has_ended: s.has_ended ?? false,
+          is_in_progress: s.is_in_progress ?? false,
+          is_bookable: s.is_bookable ?? true,
+          can_book: s.can_book ?? true,
           status: s.status || "OPEN",
           branch: s.branch || { id: "", name: "SWEAT Studio" },
           trainer: {
@@ -632,6 +637,13 @@ function WebMemberPortalWorkspaceInner() {
   // Defensive client-side filtering guarantees zero format or branch leakage
   const filteredSchedule = React.useMemo(() => {
     return schedule.filter((occ) => {
+      // Defensive check: Ensure slot matches the selected studio-local calendar date
+      if (occ.start_time) {
+        const slotDate = new Date(occ.start_time);
+        if (!isNaN(slotDate.getTime()) && !isSameDay(slotDate, selectedDate)) {
+          return false;
+        }
+      }
       if (selectedBranchId !== "all") {
         if (!occ.branch?.id || occ.branch.id !== selectedBranchId) {
           return false;
@@ -651,7 +663,7 @@ function WebMemberPortalWorkspaceInner() {
       }
       return true;
     });
-  }, [schedule, selectedBranchId, selectedCategory]);
+  }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
 
   // Handler: Book Class
   const handleConfirmBookClass = async () => {
@@ -1486,12 +1498,25 @@ function WebMemberPortalWorkspaceInner() {
                   const spots = occ.available_spots;
                   const canJoinWaitlist = occ.is_waitlist_open ?? false;
 
+                  const nowMs = Date.now();
+                  const startMs = occ.start_time ? new Date(occ.start_time).getTime() : NaN;
+                  const endMs = occ.end_time ? new Date(occ.end_time).getTime() : NaN;
+                  const hasEnded = occ.has_ended === true || occ.booking_state === "ENDED" || (!isNaN(endMs) && endMs <= nowMs);
+                  const hasStarted = occ.has_started === true || occ.booking_state === "IN_PROGRESS" || (!isNaN(startMs) && startMs <= nowMs);
+                  const isInProgress = occ.is_in_progress === true || (hasStarted && !hasEnded);
+
                   return (
                     <Card
                       key={occ.id}
                       className={`border transition-all flex flex-col justify-between ${
                         hasBooked
-                          ? "border-emerald-500/60 bg-emerald-500/[0.04] shadow-xs"
+                          ? (hasEnded
+                              ? "border-emerald-500/40 bg-emerald-500/[0.02]"
+                              : "border-emerald-500/60 bg-emerald-500/[0.04] shadow-xs")
+                          : hasEnded
+                          ? "border-border/40 bg-muted/20 opacity-80"
+                          : isInProgress
+                          ? "border-amber-500/30 bg-amber-500/[0.02]"
                           : isFull
                           ? "border-border/50 bg-card/50 opacity-90"
                           : "border-border/70 bg-card hover:border-primary/40 shadow-xs hover:shadow-sm"
@@ -1506,6 +1531,14 @@ function WebMemberPortalWorkspaceInner() {
                           {hasBooked ? (
                             <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-[10px] gap-1">
                               <CheckCircle2 className="h-3 w-3" /> Booked
+                            </Badge>
+                          ) : hasEnded ? (
+                            <Badge variant="secondary" className="bg-muted text-muted-foreground border-border text-[10px] font-semibold gap-1">
+                              <Clock className="h-3 w-3" /> Class Ended
+                            </Badge>
+                          ) : isInProgress ? (
+                            <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px] font-semibold gap-1">
+                              <Clock className="h-3 w-3" /> In Progress
                             </Badge>
                           ) : isFull ? (
                             <Badge variant="secondary" className={`text-[10px] font-semibold ${canJoinWaitlist ? 'text-amber-600 dark:text-amber-400 border-amber-500/20 bg-amber-500/10' : 'text-muted-foreground'}`}>
@@ -1572,23 +1605,63 @@ function WebMemberPortalWorkspaceInner() {
                         {/* Action Buttons */}
                         {hasBooked ? (
                           <div className="flex items-center gap-2 pt-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const found = bookings.find((b) => b.occurrence_id === occ.id && b.status === "CONFIRMED");
-                                if (found) {
-                                  setRescheduleBookingTarget(found);
-                                  setRescheduleNewOccurrenceId("");
-                                } else {
-                                  setActiveTab("bookings");
-                                }
-                              }}
-                              className="w-full text-xs font-semibold"
-                            >
-                              Reschedule Slot
-                            </Button>
+                            {hasEnded ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                className="w-full text-xs font-semibold bg-muted/40 text-muted-foreground cursor-not-allowed border-border"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                Session Completed
+                              </Button>
+                            ) : isInProgress ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                className="w-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-not-allowed border-amber-500/20"
+                              >
+                                <Clock className="h-3.5 w-3.5" />
+                                Session In Progress
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const found = bookings.find((b) => b.occurrence_id === occ.id && b.status === "CONFIRMED");
+                                  if (found) {
+                                    setRescheduleBookingTarget(found);
+                                    setRescheduleNewOccurrenceId("");
+                                  } else {
+                                    setActiveTab("bookings");
+                                  }
+                                }}
+                                className="w-full text-xs font-semibold"
+                              >
+                                Reschedule Slot
+                              </Button>
+                            )}
                           </div>
+                        ) : hasEnded ? (
+                          <Button
+                            size="sm"
+                            disabled
+                            className="w-full font-semibold text-xs gap-1.5 bg-muted text-muted-foreground cursor-not-allowed border-border"
+                          >
+                            <Clock className="h-3.5 w-3.5" />
+                            Class Ended
+                          </Button>
+                        ) : isInProgress ? (
+                          <Button
+                            size="sm"
+                            disabled
+                            className="w-full font-semibold text-xs gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-not-allowed border-amber-500/20"
+                          >
+                            <Clock className="h-3.5 w-3.5" />
+                            Class in Progress
+                          </Button>
                         ) : occ.is_included_in_plan === false ? (
                           <div className="space-y-1.5 w-full">
                             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 font-medium leading-tight">
@@ -2449,17 +2522,6 @@ function WebMemberPortalWorkspaceInner() {
                               <div className="flex items-center gap-2 pt-1 max-w-xs">
                                 <button
                                   type="button"
-                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false, [`q_${q.order}`]: false }))}
-                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    val === false || val === 'no' || val === 'NO' || val === 'false'
-                                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
-                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                                  }`}
-                                >
-                                  No
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true, [`q_${q.order}`]: true }))}
                                   className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
                                     val === true || val === 'yes' || val === 'YES' || val === 'true'
@@ -2468,6 +2530,17 @@ function WebMemberPortalWorkspaceInner() {
                                   }`}
                                 >
                                   Yes
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false, [`q_${q.order}`]: false }))}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                    val === false || val === 'no' || val === 'NO' || val === 'false'
+                                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
+                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  No
                                 </button>
                               </div>
                             ) : q.type === 'SINGLE_SELECT' ? (
@@ -2560,8 +2633,13 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
 
                     <div className="rounded-xl border border-border/80 bg-muted/20 p-4 max-h-40 overflow-y-auto text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
-                      {parqSurvey?.agreement_text ||
-                        "Your health and well-being are always our top priority. If at any point during your workout you feel unwell or experience discomfort, pause and seek medical advice. Consulting a healthcare professional before starting any new fitness program is recommended. While our trainers provide expert guidance, Sweat Fit Wellness and its trainers cannot be held liable for any health-related incidents.\n\nBy signing below, you certify that the answers given above are true and complete to the best of your knowledge."}
+                      {parqSurvey?.agreement_text ? (
+                        parqSurvey.agreement_text
+                      ) : (
+                        <span className="italic text-muted-foreground/70">
+                          By signing below, you certify that the answers given above are true, complete, and accurate to the best of your knowledge.
+                        </span>
+                      )}
                     </div>
 
                     <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
@@ -2838,16 +2916,31 @@ function WebMemberPortalWorkspaceInner() {
               >
                 View Eligible Packages
               </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={isBookingSubmitting || remainingCredits <= 0}
-                onClick={handleConfirmBookClass}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
-              >
-                {isBookingSubmitting ? "Reserving..." : "Confirm & Reserve Spot"}
-              </Button>
-            )}
+            ) : (() => {
+              const nowMs = Date.now();
+              const isPast = Boolean(
+                bookingSlotToConfirm?.has_ended ||
+                bookingSlotToConfirm?.booking_state === "ENDED" ||
+                (bookingSlotToConfirm?.end_time && new Date(bookingSlotToConfirm.end_time).getTime() <= nowMs) ||
+                bookingSlotToConfirm?.has_started ||
+                bookingSlotToConfirm?.booking_state === "IN_PROGRESS" ||
+                (bookingSlotToConfirm?.start_time && new Date(bookingSlotToConfirm.start_time).getTime() <= nowMs)
+              );
+              return (
+                <Button
+                  size="sm"
+                  disabled={isBookingSubmitting || remainingCredits <= 0 || isPast}
+                  onClick={handleConfirmBookClass}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
+                >
+                  {isBookingSubmitting
+                    ? "Reserving..."
+                    : isPast
+                    ? "Class Has Ended"
+                    : "Confirm & Reserve Spot"}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2883,7 +2976,15 @@ function WebMemberPortalWorkspaceInner() {
                 </Label>
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {schedule
-                    .filter((s) => s.id !== rescheduleBookingTarget.occurrence_id && !s.is_full)
+                    .filter((s) => {
+                      if (s.id === rescheduleBookingTarget.occurrence_id) return false;
+                      if (s.is_full) return false;
+                      if (s.has_ended || s.booking_state === "ENDED") return false;
+                      if (s.has_started || s.booking_state === "IN_PROGRESS") return false;
+                      if (s.start_time && new Date(s.start_time).getTime() <= Date.now()) return false;
+                      if (s.can_book === false) return false;
+                      return true;
+                    })
                     .map((occ) => {
                       const isSelected = rescheduleNewOccurrenceId === occ.id;
                       return (

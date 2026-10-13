@@ -1,5 +1,5 @@
 import { api } from '@/api/client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText,
@@ -23,8 +23,8 @@ import {
   Layers,
   Sparkles,
   Tag,
-  ArrowRight,
-  ArrowUp, ArrowDown, Copy, Eye, Smartphone, Monitor, FileSignature, Scale, ScrollText } from 'lucide-react';
+  ArrowUp, ArrowDown, Copy, Eye, Smartphone, Monitor, FileSignature, Scale, ScrollText,
+  List, ListOrdered, HeartPulse, RotateCcw, PenTool, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -42,12 +42,146 @@ import {
 import { formsApi, IntakeForm, IntakeQuestion } from '@/api/endpoints/formsApi';
 
 const PRESET_FORM_TYPES = [
-  { value: 'PAR_Q', label: 'PAR_Q — Physical Activity Readiness Questionnaire' },
-  { value: 'LIFESTYLE', label: 'LIFESTYLE — Lifestyle & Nutrition Habits' },
-  { value: 'FITNESS', label: 'FITNESS — Fitness Goals & Capabilities' },
-  { value: 'MEDICAL', label: 'MEDICAL — Medical History & Clearance' },
-  { value: 'GENERAL', label: 'GENERAL — General Client Intake' },
+  { value: 'PAR_Q', label: 'Health & Readiness Questionnaire (PAR-Q)' },
+  { value: 'LIFESTYLE', label: 'Lifestyle & Nutrition Habits' },
+  { value: 'FITNESS', label: 'Fitness Goals & Capabilities' },
+  { value: 'MEDICAL', label: 'Medical History & Clearance' },
+  { value: 'GENERAL', label: 'General Member Intake' },
 ];
+
+function getFriendlyFormCategory(type: string) {
+  if (type === 'PAR_Q') return 'Health & Readiness (PAR-Q)';
+  if (type === 'LIFESTYLE') return 'Lifestyle & Nutrition';
+  if (type === 'FITNESS') return 'Fitness Goals';
+  if (type === 'MEDICAL') return 'Medical Clearance';
+  if (type === 'GENERAL') return 'General Member Intake';
+  return type || 'General Intake';
+}
+
+const PreviewSignaturePad: React.FC<{
+  hasSignature: boolean;
+  onSignatureChange: (hasSig: boolean) => void;
+}> = ({ hasSignature, onSignatureChange }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef(false);
+
+  const getCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    canvas.setPointerCapture(e.pointerId);
+    isDrawingRef.current = true;
+    const { x, y } = getCanvasPoint(e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#18181b';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = getCanvasPoint(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    if (!hasSignature) {
+      onSignatureChange(true);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onSignatureChange(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+          <PenTool className="w-3.5 h-3.5 text-primary" />
+          <span>Member Digital Signature</span>
+          <span className="text-rose-500 font-bold">*</span>
+        </label>
+        <div className="flex items-center gap-2">
+          {hasSignature ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+              <CheckCircle2 className="size-3" /> Captured
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">
+              <Clock className="size-3" /> Required
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            disabled={!hasSignature}
+            className="h-6 text-[11px] text-muted-foreground hover:text-foreground gap-1 px-2"
+          >
+            <RotateCcw className="size-3" />
+            <span>Clear</span>
+          </Button>
+        </div>
+      </div>
+      <div className="relative h-28 w-full rounded-xl border border-dashed border-border bg-white dark:bg-zinc-950 overflow-hidden shadow-inner">
+        <canvas
+          ref={canvasRef}
+          width={600}
+          height={200}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{ touchAction: 'none' }}
+          className="w-full h-full block cursor-crosshair touch-none select-none"
+        />
+        {!hasSignature && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3 text-muted-foreground/50 select-none">
+            <p className="text-xs font-medium">Draw signature here with mouse, pen, or finger</p>
+          </div>
+        )}
+        <div className="pointer-events-none absolute bottom-1.5 left-3 right-3 border-b border-muted-foreground/20 flex justify-between text-[9px] text-muted-foreground/50 pb-0.5 select-none">
+          <span>Sign above this line</span>
+          <span>{hasSignature ? '✓ Valid Signature' : 'Draw inside box'}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const FormsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
@@ -81,6 +215,9 @@ export const FormsWorkspace: React.FC = () => {
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'forms' | 'terms'>('forms');
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [testResponses, setTestResponses] = useState<Record<string, any>>({});
+  const [testConsent, setTestConsent] = useState(false);
+  const [testSignature, setTestSignature] = useState(false);
   const [previewTermsOpen, setPreviewTermsOpen] = useState(false);
   const [termsDoc, setTermsDoc] = useState<any>(null);
   const [termsVersion, setTermsVersion] = useState<any>(null);
@@ -92,6 +229,48 @@ export const FormsWorkspace: React.FC = () => {
   const [qOrder, setQOrder] = useState(1);
   const [qOptions, setQOptions] = useState<{ text: string; value: string }[]>([]);
   const [newOptionText, setNewOptionText] = useState('');
+
+  // Rich-text editor ref & formatting helpers matching Image 3 design
+  const termsTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const applyTermsFormat = (format: 'bold' | 'italic' | 'underline' | 'bullet' | 'number' | 'clear' | 'h1' | 'h2' | 'h3' | 'normal') => {
+    const textarea = termsTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selected = text.substring(start, end);
+
+    let replacement = selected;
+    if (format === 'bold') {
+      replacement = selected ? `**${selected}**` : '**bold text**';
+    } else if (format === 'italic') {
+      replacement = selected ? `*${selected}*` : '*italic text*';
+    } else if (format === 'underline') {
+      replacement = selected ? `<u>${selected}</u>` : '<u>underlined text</u>';
+    } else if (format === 'bullet') {
+      replacement = selected ? selected.split('\n').map((l) => `- ${l}`).join('\n') : '- Bullet item\n';
+    } else if (format === 'number') {
+      replacement = selected ? selected.split('\n').map((l, i) => `${i + 1}. ${l}`).join('\n') : '1. Numbered item\n';
+    } else if (format === 'clear') {
+      replacement = selected.replace(/[*_#`<u></u>]/g, '');
+    } else if (format === 'h1') {
+      replacement = `# ${selected || 'Heading 1'}`;
+    } else if (format === 'h2') {
+      replacement = `## ${selected || 'Heading 2'}`;
+    } else if (format === 'h3') {
+      replacement = `### ${selected || 'Heading 3'}`;
+    } else if (format === 'normal') {
+      replacement = selected.replace(/^[#\s]+/, '');
+    }
+
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+    setTermsText(newText);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + replacement.length);
+    }, 10);
+  };
 
   // Queries
   const {
@@ -114,11 +293,13 @@ export const FormsWorkspace: React.FC = () => {
         const res = await api.get('/tenant/terms-documents/');
         const data: any = res.data;
         const list = Array.isArray(data) ? data : data.results || [];
-        if (list.length > 0 && !termsDoc) {
-          setTermsDoc(list[0]);
-          if (list[0].versions && list[0].versions.length > 0) {
-            setTermsVersion(list[0].versions[0]);
-            setTermsText(list[0].versions[0].content_text || '');
+        if (list.length > 0) {
+          const doc = list.find((d: any) => d.code === 'TERMS-PACKAGE-PURCHASE') || list[0];
+          setTermsDoc(doc);
+          const activeVer = doc.active_version || (doc.versions && doc.versions.length > 0 ? doc.versions[0] : null);
+          if (activeVer) {
+            setTermsVersion(activeVer);
+            setTermsText(activeVer.content_text || '');
           }
         }
         return list;
@@ -182,6 +363,10 @@ export const FormsWorkspace: React.FC = () => {
     },
     onSuccess: (data: any) => {
       toast.success(`Published new Terms Version ${data.version_number || 'ACTIVE'}!`);
+      setTermsVersion(data);
+      if (data.content_text) {
+        setTermsText(data.content_text);
+      }
       refetchTerms();
       setIsPublishTermsOpen(false);
     },
@@ -379,14 +564,14 @@ export const FormsWorkspace: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <PageHeader
         title="Forms & Assessments"
-        subtitle="Configure dynamic intake questionnaires, PAR-Q health clearances, and custom compliance forms."
+        subtitle="Manage health readiness forms, PAR-Q questionnaires, and membership agreements for your studio."
         meta={
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
-              Administration · Intake
+              Studio Intake & Compliance
             </span>
             <span className="text-muted-foreground text-xs">
-              <span className="font-semibold text-foreground">{forms.length}</span> form definition(s)
+              <span className="font-semibold text-foreground">{forms.length}</span> Active Forms
             </span>
           </div>
         }
@@ -426,7 +611,7 @@ export const FormsWorkspace: React.FC = () => {
             className="gap-2 text-xs h-9 rounded-xl font-semibold"
           >
             <FileText className="size-4" />
-            <span>Intake & PAR-Q Questionnaires ({forms.length})</span>
+            <span>Health Questionnaires & PAR-Q ({forms.length})</span>
           </Button>
           <Button
             size="sm"
@@ -435,7 +620,7 @@ export const FormsWorkspace: React.FC = () => {
             className="gap-2 text-xs h-9 rounded-xl font-semibold"
           >
             <ScrollText className="size-4" />
-            <span>Terms & Purchase Agreements ({termsDocs.length || 1})</span>
+            <span>Membership Agreements ({termsDocs.length || 1})</span>
           </Button>
         </div>
 
@@ -444,26 +629,6 @@ export const FormsWorkspace: React.FC = () => {
           /* TERMS & CONDITIONS WORKSPACE VIEW                                        */
           /* ========================================================================= */
           <div className="space-y-6">
-            {/* Contradiction Flag Alert Banner */}
-            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 flex items-start gap-3.5 shadow-sm">
-              <AlertCircle className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-xs sm:text-sm space-y-1">
-                <h4 className="font-bold text-amber-950 dark:text-amber-100">
-                  Legal Conflict Flagged for Business Owner Review
-                </h4>
-                <p className="text-amber-900/90 dark:text-amber-200/90 leading-relaxed text-xs">
-                  The client source agreement contains an internal contradiction between two clauses:
-                </p>
-                <ul className="list-disc pl-5 text-xs text-amber-900/80 dark:text-amber-200/80 space-y-0.5 pt-1">
-                  <li><strong>Membership Transfer:</strong> States that membership packages can be transferred to another individual for a fee of ?2999.</li>
-                  <li><strong>Refund Policy:</strong> States that memberships and services are strictly non-transferable and non-refundable.</li>
-                </ul>
-                <p className="text-[11px] text-muted-foreground pt-1 italic">
-                  Note: Per specification, both clauses have been preserved substantively. Operational backend policy remains isolated from legal text.
-                </p>
-              </div>
-            </div>
-
             {/* Terms Document Details Card */}
             <div className="rounded-2xl border border-border/70 bg-card p-5 sm:p-6 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
@@ -473,10 +638,10 @@ export const FormsWorkspace: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-foreground">
-                      {termsDoc?.name || 'SWEAT Studio Package Purchase Agreement'}
+                      {termsDoc?.name || 'Studio Package Purchase Agreement'}
                     </h3>
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                      Code: {termsDoc?.code || 'TERMS-PACKAGE-PURCHASE'} ? Version {termsVersion?.version_number || 1} ({termsVersion?.status || 'ACTIVE'})
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Membership Agreement · Version {termsVersion?.version_number || 1} ({termsVersion?.status === 'ACTIVE' ? 'Active' : termsVersion?.status || 'Active'})
                     </p>
                   </div>
                 </div>
@@ -502,29 +667,172 @@ export const FormsWorkspace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Legal Text Editor */}
+              {/* Legal Text Editor matching Image 3 design */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="terms-content" className="text-xs font-semibold text-foreground">
-                    Agreement Template Content (Markdown Supported)
-                  </Label>
-                  <span className="text-[11px] text-muted-foreground">
-                    Placeholders supported: <code>{'{{package_heading}}'}</code>, <code>{'{{package_description}}'}</code>, <code>{'{{expiration_days}}'}</code>
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <Label htmlFor="terms-content" className="text-xs font-semibold text-foreground">
+                      Agreement Terms & Conditions
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Format text with the toolbar. Package and member details auto-fill in real contracts.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground font-medium">Auto-fill values:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = termsTextareaRef.current;
+                        if (!textarea) return;
+                        const start = textarea.selectionStart;
+                        const text = textarea.value;
+                        const insert = '{{package_heading}}';
+                        setTermsText(text.substring(0, start) + insert + text.substring(start));
+                        setTimeout(() => {
+                          textarea.focus();
+                          textarea.setSelectionRange(start + insert.length, start + insert.length);
+                        }, 10);
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-[11px] font-medium border border-border transition-colors cursor-pointer"
+                      title="Insert package name automatically"
+                    >
+                      + Package Name
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = termsTextareaRef.current;
+                        if (!textarea) return;
+                        const start = textarea.selectionStart;
+                        const text = textarea.value;
+                        const insert = '{{package_description}}';
+                        setTermsText(text.substring(0, start) + insert + text.substring(start));
+                        setTimeout(() => {
+                          textarea.focus();
+                          textarea.setSelectionRange(start + insert.length, start + insert.length);
+                        }, 10);
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-[11px] font-medium border border-border transition-colors cursor-pointer"
+                      title="Insert package details automatically"
+                    >
+                      + Package Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = termsTextareaRef.current;
+                        if (!textarea) return;
+                        const start = textarea.selectionStart;
+                        const text = textarea.value;
+                        const insert = '{{expiration_days}}';
+                        setTermsText(text.substring(0, start) + insert + text.substring(start));
+                        setTimeout(() => {
+                          textarea.focus();
+                          textarea.setSelectionRange(start + insert.length, start + insert.length);
+                        }, 10);
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-[11px] font-medium border border-border transition-colors cursor-pointer"
+                      title="Insert validity days automatically"
+                    >
+                      + Validity Days
+                    </button>
+                  </div>
                 </div>
-                <textarea
-                  id="terms-content"
-                  rows={16}
-                  value={termsText}
-                  onChange={(e) => setTermsText(e.target.value)}
-                  className="w-full font-mono text-xs rounded-xl border border-border bg-background p-4 text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed resize-y shadow-inner"
-                  placeholder="Enter agreement terms and conditions..."
-                />
+
+                {/* Editor Container matching Image 3 */}
+                <div className="rounded-xl border border-border/80 bg-card overflow-hidden shadow-xs focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
+                  {/* Toolbar */}
+                  <div className="flex items-center gap-1.5 border-b border-border/70 bg-muted/40 px-3 py-1.5 flex-wrap">
+                    <select
+                      aria-label="Text Style"
+                      className="text-xs h-7 rounded-md border border-border bg-background px-2 text-foreground focus:outline-none cursor-pointer hover:bg-muted/50 transition-colors font-sans"
+                      onChange={(e) => {
+                        applyTermsFormat(e.target.value as any);
+                        e.target.value = 'normal';
+                      }}
+                      defaultValue="normal"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="h1">Heading 1</option>
+                      <option value="h2">Heading 2</option>
+                      <option value="h3">Heading 3</option>
+                    </select>
+
+                    <div className="h-4 w-px bg-border/80 mx-1" />
+
+                    <button
+                      type="button"
+                      title="Bold (**text**)"
+                      onClick={() => applyTermsFormat('bold')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground text-xs font-black w-6 h-6 flex items-center justify-center transition-colors border border-transparent hover:border-border"
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      title="Italic (*text*)"
+                      onClick={() => applyTermsFormat('italic')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground text-xs italic font-serif w-6 h-6 flex items-center justify-center transition-colors border border-transparent hover:border-border"
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      title="Underline (<u>text</u>)"
+                      onClick={() => applyTermsFormat('underline')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground text-xs underline w-6 h-6 flex items-center justify-center transition-colors border border-transparent hover:border-border"
+                    >
+                      U
+                    </button>
+
+                    <div className="h-4 w-px bg-border/80 mx-1" />
+
+                    <button
+                      type="button"
+                      title="Bulleted List"
+                      onClick={() => applyTermsFormat('bullet')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground w-6 h-6 flex items-center justify-center transition-colors border border-transparent hover:border-border"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Numbered List"
+                      onClick={() => applyTermsFormat('number')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground w-6 h-6 flex items-center justify-center transition-colors border border-transparent hover:border-border"
+                    >
+                      <ListOrdered className="w-3.5 h-3.5" />
+                    </button>
+
+                    <div className="h-4 w-px bg-border/80 mx-1" />
+
+                    <button
+                      type="button"
+                      title="Clear Formatting"
+                      onClick={() => applyTermsFormat('clear')}
+                      className="p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground w-6 h-6 flex items-center justify-center transition-colors font-mono text-xs font-semibold border border-transparent hover:border-border"
+                    >
+                      T<span className="text-[9px]">x</span>
+                    </button>
+                  </div>
+
+                  {/* Clean, Visible Document Body Area matching Image 3 */}
+                  <textarea
+                    ref={termsTextareaRef}
+                    id="terms-content"
+                    rows={16}
+                    value={termsText}
+                    onChange={(e) => setTermsText(e.target.value)}
+                    className="w-full text-xs sm:text-[13px] bg-background p-4 sm:p-5 text-foreground focus:outline-none leading-relaxed resize-y font-sans border-0 shadow-none min-h-[300px]"
+                    placeholder="Enter agreement terms and conditions..."
+                  />
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-muted-foreground border-t border-border/40">
-                <span>Effective From: {termsVersion?.effective_from ? new Date(termsVersion.effective_from).toLocaleDateString() : 'Immediate'}</span>
-                <span>Immutable Version Snapshot Policy Enforced ? Existing signed purchases retain historic terms</span>
+                <span>Effective Date: {termsVersion?.effective_from ? new Date(termsVersion.effective_from).toLocaleDateString() : 'Immediate'}</span>
+                <span>Version History Protected · Edits apply to future purchases only. Previously signed agreements remain safe.</span>
               </div>
             </div>
           </div>
@@ -581,7 +889,9 @@ export const FormsWorkspace: React.FC = () => {
                             <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5 shrink-0">v{form.version_number}</Badge>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                            <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-muted text-foreground border border-border">{form.form_type}</span>
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-muted text-foreground border border-border">
+                              {getFriendlyFormCategory(form.form_type)}
+                            </span>
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${form.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : form.status === 'DRAFT' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-muted text-muted-foreground'}`}>{form.status}</span>
                             <button type="button" onClick={() => toggleExpand(form.id)} className="text-[11px] text-muted-foreground underline decoration-dotted">
                               {qCountM} {qCountM === 1 ? 'question' : 'questions'}
@@ -591,6 +901,17 @@ export const FormsWorkspace: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-3 pl-8">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedForm(form);
+                            setIsPreviewOpen(true);
+                          }}
+                          className="h-7 text-xs gap-1 font-semibold border-primary/40 text-primary hover:bg-primary/10 hover:text-primary cursor-pointer"
+                        >
+                          <Eye className="size-3.5 text-primary" /><span>Preview</span>
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => handleOpenQuestions(form)} className="h-7 text-xs gap-1">
                           <ListPlus className="size-3.5 text-primary" /><span>Builder ({qCountM})</span>
                         </Button>
@@ -658,7 +979,7 @@ export const FormsWorkspace: React.FC = () => {
             <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
               <tr>
                 <th className="px-4 py-3">Form Name & Version</th>
-                <th className="px-4 py-3">Form Type Code</th>
+                <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Questions</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -712,8 +1033,8 @@ export const FormsWorkspace: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-foreground border border-border">
-                            {form.form_type}
+                          <span className="font-medium text-xs px-2.5 py-1 rounded-md bg-muted text-foreground border border-border">
+                            {getFriendlyFormCategory(form.form_type)}
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
@@ -745,6 +1066,19 @@ export const FormsWorkspace: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedForm(form);
+                                setIsPreviewOpen(true);
+                              }}
+                              className="h-7 text-xs gap-1 font-semibold border-primary/40 text-primary hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
+                              title="Preview how this form looks to end users"
+                            >
+                              <Eye className="size-3.5 text-primary" />
+                              <span>Preview</span>
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -1606,89 +1940,294 @@ export const FormsWorkspace: React.FC = () => {
         </DialogContent>
       </Dialog>
     
-      {/* Live PAR-Q Preview Modal */}
+      {/* Live PAR-Q End-User Preview Modal */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className={`${previewDevice === 'mobile' ? 'max-w-sm' : 'max-w-3xl'} max-h-[90vh] overflow-y-auto transition-all duration-300 p-0`}>
-          <DialogHeader className="px-5 py-3 border-b border-border/80 bg-muted/20 sticky top-0 z-10 flex flex-row items-center justify-between">
+        <DialogContent className={`${previewDevice === 'mobile' ? 'max-w-md p-3 sm:p-4' : 'max-w-3xl p-5'} max-h-[92vh] overflow-y-auto transition-all duration-300`}>
+          <DialogHeader className="pb-3 border-b border-border/80 flex flex-row items-center justify-between gap-3">
             <div>
-              <DialogTitle className="text-sm font-bold">
-                Preview: {selectedForm?.name || 'PAR-Q Form'}
+              <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+                <Eye className="size-4 text-primary" />
+                <span>Member Portal Live Preview</span>
               </DialogTitle>
-              <DialogDescription className="text-[11px]">
-                {previewDevice === 'mobile' ? 'Mobile Viewport (390px)' : 'Desktop Viewport'}
+              <DialogDescription className="text-xs">
+                This shows the exact interactive screen and layout members see in their member portal.
               </DialogDescription>
             </div>
-            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+            {/* Viewport switch: Mobile / Desktop */}
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border shrink-0">
               <button
                 type="button"
                 onClick={() => setPreviewDevice('mobile')}
-                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'mobile' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
-                title="Mobile View"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  previewDevice === 'mobile'
+                    ? 'bg-background shadow-xs text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Preview Mobile Screen"
               >
                 <Smartphone className="size-3.5" />
+                <span className="hidden sm:inline">Mobile (390px)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setPreviewDevice('desktop')}
-                className={`p-1.5 rounded text-xs transition-colors ${previewDevice === 'desktop' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground'}`}
-                title="Desktop View"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  previewDevice === 'desktop'
+                    ? 'bg-background shadow-xs text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Preview Desktop Screen"
               >
                 <Monitor className="size-3.5" />
+                <span className="hidden sm:inline">Desktop</span>
               </button>
             </div>
           </DialogHeader>
 
-          <div className="p-5 space-y-6">
-            <div className="space-y-1">
-              <h3 className="font-bold text-sm text-foreground">{selectedForm?.name}</h3>
-              <p className="text-xs text-muted-foreground">Version {selectedForm?.version_number || 1} ? {selectedForm?.form_type}</p>
-            </div>
-
-            <div className="space-y-4">
-              {(selectedForm?.questions || []).slice().sort((a, b) => a.display_order - b.display_order).map((q, idx) => (
-                <div key={q.id} className="p-3.5 rounded-xl border border-border/80 bg-card/60 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">
-                      <span className="font-mono text-muted-foreground mr-1">Q{idx + 1}.</span>
-                      {q.question_text}
-                      {q.is_required && <span className="text-rose-500 ml-1 font-bold">*</span>}
-                    </span>
-                    {q.is_sensitive && <Badge variant="outline" className="text-[9px] text-rose-500 py-0 shrink-0">Protected PHI</Badge>}
+          {(() => {
+            const formToPreview = selectedForm || forms.find((f) => f.form_type === 'PAR_Q' && f.status === 'ACTIVE') || forms[0];
+            return (
+              <div className={previewDevice === 'mobile' ? 'py-2 flex justify-center' : 'py-2'}>
+                <div
+                  className={
+                    previewDevice === 'mobile'
+                      ? 'w-full max-w-[390px] rounded-[36px] border-[5px] border-zinc-800 bg-background shadow-2xl overflow-hidden p-4 sm:p-5 space-y-5'
+                      : 'w-full space-y-6'
+                  }
+                >
+                  {/* Member Portal Status Top Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+                        <HeartPulse className="h-5 w-5 text-emerald-500" />
+                        <span>{formToPreview?.name || 'Physical Activity Readiness Questionnaire (PAR-Q)'}</span>
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Authoritative health and exercise readiness assessment · Version {formToPreview?.version_number || 1}
+                      </p>
+                    </div>
+                    <Badge className="bg-emerald-500 text-white font-semibold text-xs py-1 px-3 gap-1.5 w-fit">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>PAR-Q Active</span>
+                    </Badge>
                   </div>
 
-                  {q.question_type === 'BOOLEAN' ? (
-                    <div className="flex gap-2 max-w-xs pt-1">
-                      <button type="button" className="flex-1 py-1.5 text-xs rounded-lg border border-border bg-background">No</button>
-                      <button type="button" className="flex-1 py-1.5 text-xs rounded-lg border border-border bg-background">Yes</button>
+                  {/* Assessment Card matching Member Portal */}
+                  <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs space-y-6">
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">
+                        Readiness Self-Assessment & Studio Onboarding
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Please answer each question honestly to ensure safe and personalized exercise programming.
+                      </p>
                     </div>
-                  ) : q.question_type === 'SINGLE_SELECT' || q.question_type === 'SINGLE_CHOICE' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      {(q.options || []).map((opt) => (
-                        <div key={opt.id} className="p-2 rounded-lg border border-border bg-background text-xs text-muted-foreground">
-                          {opt.option_text}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <input type="text" disabled placeholder="Member answers here..." className="w-full text-xs rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-muted-foreground" />
-                  )}
-                </div>
-              ))}
-            </div>
 
-            {selectedForm?.agreement_text && (
-              <div className="space-y-2 border-t border-border pt-4">
-                <h4 className="text-xs font-bold text-foreground">{selectedForm.agreement_title || 'Legal Agreement'}</h4>
-                <div className="p-3 rounded-xl border border-border bg-muted/30 text-[11px] text-muted-foreground max-h-32 overflow-y-auto leading-relaxed">
-                  {selectedForm.agreement_text}
-                </div>
-                <div className="flex items-center gap-2 pt-1 text-xs">
-                  <input type="checkbox" disabled className="rounded size-4" />
-                  <span>I agree to the terms and declarations above</span>
+                    {/* Questions List */}
+                    <div className="space-y-4">
+                      {(formToPreview?.questions || []).slice().sort((a, b) => (a.display_order || 0) - (b.display_order || 0)).map((q, idx) => {
+                        const qId = q.id;
+                        const val = testResponses[qId];
+                        const hasAnswer = val !== undefined && val !== null && val !== '';
+
+                        return (
+                          <div
+                            key={qId}
+                            className={`p-3.5 sm:p-4 rounded-xl border transition-colors space-y-2.5 ${
+                              hasAnswer ? 'border-primary/20 bg-primary/[0.02]' : 'border-border/70 bg-accent/5'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                              <label className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
+                                <span className="font-mono text-muted-foreground mr-1.5">Q{idx + 1}.</span>
+                                {q.question_text}
+                                {q.is_required ? (
+                                  <span className="text-rose-500 ml-1 font-bold">*</span>
+                                ) : (
+                                  <span className="text-muted-foreground font-normal text-xs ml-1.5">(Optional)</span>
+                                )}
+                              </label>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {hasAnswer && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <span>Answer on file</span>
+                                  </span>
+                                )}
+                                {q.is_sensitive && (
+                                  <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0">
+                                    Protected Health Info
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Control based on question type */}
+                            {q.question_type === 'BOOLEAN' ? (
+                              <div className="flex items-center gap-2 pt-1 max-w-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setTestResponses((prev) => ({ ...prev, [qId]: true }))}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                                    val === true
+                                      ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTestResponses((prev) => ({ ...prev, [qId]: false }))}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                                    val === false
+                                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
+                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                  }`}
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : q.question_type === 'SINGLE_SELECT' || q.question_type === 'SINGLE_CHOICE' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                {(q.options || []).map((opt) => {
+                                  const isSelected = val === opt.option_value || val === opt.option_text;
+                                  return (
+                                    <button
+                                      key={opt.id || opt.option_value}
+                                      type="button"
+                                      onClick={() => setTestResponses((prev) => ({ ...prev, [qId]: opt.option_value || opt.option_text }))}
+                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
+                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                      }`}
+                                    >
+                                      {opt.option_text}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : q.question_type === 'MULTI_SELECT' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                {(q.options || []).map((opt) => {
+                                  const currentArr = Array.isArray(val) ? val : [];
+                                  const isChecked = currentArr.includes(opt.option_value || opt.option_text);
+                                  return (
+                                    <button
+                                      key={opt.id || opt.option_value}
+                                      type="button"
+                                      onClick={() => {
+                                        const itemVal = opt.option_value || opt.option_text;
+                                        const updated = isChecked
+                                          ? currentArr.filter((x: string) => x !== itemVal)
+                                          : [...currentArr, itemVal];
+                                        setTestResponses((prev) => ({ ...prev, [qId]: updated }));
+                                      }}
+                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all cursor-pointer ${
+                                        isChecked
+                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
+                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                      }`}
+                                    >
+                                      {isChecked ? "✓ " : ""}{opt.option_text}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : q.question_type === 'DATE' ? (
+                              <input
+                                type="date"
+                                value={val || ''}
+                                onChange={(e) => setTestResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            ) : q.question_type === 'NUMBER' ? (
+                              <input
+                                type="number"
+                                value={val || ''}
+                                placeholder="Enter number..."
+                                onChange={(e) => setTestResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={val || ''}
+                                placeholder="Member answers here..."
+                                onChange={(e) => setTestResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
+                                className="w-full text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Legal Agreement & Declaration Section */}
+                    <div className="border-t border-border/60 pt-5 space-y-3.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <h4 className="text-xs sm:text-sm font-bold text-foreground">
+                          {formToPreview?.agreement_title || 'Physical Activity Readiness & Assumption of Risk Agreement'}
+                        </h4>
+                      </div>
+
+                      <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 max-h-36 overflow-y-auto text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
+                        {formToPreview?.agreement_text ||
+                          'By signing below, you certify that the answers given above are true, complete, and accurate to the best of your knowledge.'}
+                      </div>
+
+                      <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={testConsent}
+                          onChange={(e) => setTestConsent(e.target.checked)}
+                          className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4"
+                        />
+                        <div className="text-xs">
+                          <span className="font-semibold text-foreground">
+                            I explicitly confirm that I have reviewed, understood, and agree to the Physical Activity Readiness terms above.
+                          </span>
+                          <p className="text-muted-foreground text-[11px] mt-0.5">
+                            I acknowledge that completing this assessment is mandatory before booking classes.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Signature Capture Pad */}
+                    <div className="border-t border-border/60 pt-5">
+                      <PreviewSignaturePad
+                        hasSignature={testSignature}
+                        onSignatureChange={setTestSignature}
+                      />
+                    </div>
+
+                    {/* Submit Assessment Button */}
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!testConsent) {
+                          toast.error('Please accept the declaration agreement checkbox.');
+                          return;
+                        }
+                        if (!testSignature) {
+                          toast.error('Please provide a digital signature in the box above.');
+                          return;
+                        }
+                        toast.success('Simulation verified! Form completion and signature validation succeed.');
+                      }}
+                      className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shadow-sm gap-2 cursor-pointer"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      <span>Submit Health Assessment & Digital Signature</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1721,17 +2260,15 @@ export const FormsWorkspace: React.FC = () => {
           </DialogHeader>
 
           <div className="p-5 space-y-4">
-            <div className="border border-amber-500/30 bg-amber-500/10 p-3 rounded-xl text-xs text-amber-900 dark:text-amber-200">
-              ⚠️ Contradiction Note: Section 'Membership Transfer' (?2999 fee) vs 'Refund Policy' (non-transferable).
-            </div>
             <div className="p-4 rounded-xl border border-border bg-muted/20 max-h-[60vh] overflow-y-auto text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
-              {termsText.replace('{{package_heading}}', 'SWEAT-PILATES-MALAD - 288 Sessions')
-                        .replace('{{package_description}}', '288 sessions to be used at the Sweat Fit Wellness Studio.')
-                        .replace('{{expiration_days}}', '730')}
+              {termsText
+                .replace(/{{package_heading}}/g, '[Selected Package Name]')
+                .replace(/{{package_description}}/g, '[Package Description & Entitlements]')
+                .replace(/{{expiration_days}}/g, '365')}
             </div>
             <div className="flex items-center gap-2 p-3 rounded-xl border border-primary/20 bg-primary/5 text-xs font-semibold">
               <input type="checkbox" checked readOnly className="size-4 rounded text-primary" />
-              <span>I Agree, Confirm My Order</span>
+              <span>I confirm that I have understood and agree to the terms and conditions.</span>
             </div>
           </div>
         </DialogContent>

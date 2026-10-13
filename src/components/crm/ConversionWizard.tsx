@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { getCurrentUser } from '@/services';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
+import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
 
@@ -1157,6 +1158,76 @@ function SignaturePad({ value, onChange }: SignaturePadProps) {
   );
 }
 
+function parseClausesFromContent(
+  rawText: string | null | undefined,
+  pkgName: string,
+  pkgDesc: string,
+  validityDays: number | string
+) {
+  if (!rawText) return [];
+
+  const interpolated = rawText
+    .replace(/{{package_heading}}/g, pkgName)
+    .replace(/{{package_description}}/g, pkgDesc)
+    .replace(/{{expiration_days}}/g, String(validityDays));
+
+  const lines = interpolated.split('\n');
+  const clauses: { number: number; title: string; body: string }[] = [];
+  let currentTitle = '';
+  let currentBodyLines: string[] = [];
+  let counter = 1;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('### ') || trimmed.startsWith('## ')) {
+      const title = trimmed.replace(/^#+\s+/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+      if (
+        title.toLowerCase().includes('do you agree') ||
+        title === pkgName ||
+        title.includes('{{package_heading}}')
+      ) {
+        continue;
+      }
+      if (currentTitle && currentBodyLines.length > 0) {
+        clauses.push({
+          number: counter++,
+          title: currentTitle,
+          body: currentBodyLines.join('\n').trim(),
+        });
+        currentBodyLines = [];
+      }
+      currentTitle = title;
+    } else if (/^\d+[\.\)]\s+[A-Za-z]/.test(trimmed)) {
+      const match = trimmed.match(/^(\d+)[\.\)]\s+(.*)/);
+      if (match) {
+        if (currentTitle && currentBodyLines.length > 0) {
+          clauses.push({
+            number: counter++,
+            title: currentTitle,
+            body: currentBodyLines.join('\n').trim(),
+          });
+          currentBodyLines = [];
+        }
+        currentTitle = match[2].trim();
+      }
+    } else if (currentTitle) {
+      if (trimmed !== '---') {
+        currentBodyLines.push(line);
+      }
+    }
+  }
+
+  if (currentTitle && currentBodyLines.length > 0) {
+    clauses.push({
+      number: counter++,
+      title: currentTitle,
+      body: currentBodyLines.join('\n').trim(),
+    });
+  }
+
+  return clauses;
+}
+
 // ─── Step 3: Terms & Conditions Agreement ─────────────────────────────────────
 
 function TermsAndConditionsStep({
@@ -1165,12 +1236,16 @@ function TermsAndConditionsStep({
   onConsentChange,
   signatureData,
   onSignatureChange,
+  termsDoc,
+  activeVersion,
 }: {
   quote: ConversionQuote;
   consentAccepted: boolean;
   onConsentChange: (accepted: boolean) => void;
   signatureData: string | null;
   onSignatureChange: (dataUrl: string | null, hasSignature: boolean) => void;
+  termsDoc?: any;
+  activeVersion?: any;
 }) {
   const isUnlimited = quote.entitlements.some((e: any) => e.is_unlimited);
   const totalSessions = quote.entitlements.reduce((acc: number, e: any) => {
@@ -1180,6 +1255,18 @@ function TermsAndConditionsStep({
   const sessionsBadge = isUnlimited ? 'Unlimited Sessions' : totalSessions > 0 ? `${totalSessions} Sessions` : null;
   const pkgName = cleanPackageDisplayName(quote.package_version.name, (quote as any).package?.name);
   const validityDays = quote.package_version.validity_days || quote.package_version.total_days || 730;
+
+  const pkgDesc =
+    (quote as any).package?.description ||
+    (quote as any).package_version?.description ||
+    (totalSessions > 0 ? `${totalSessions} sessions included with this package.` : 'Package entitlements apply upon activation.');
+
+  const clausesList = parseClausesFromContent(
+    activeVersion?.content_text,
+    pkgName,
+    pkgDesc,
+    validityDays
+  );
 
   return (
     <div className="space-y-3.5 sm:space-y-4">
@@ -1191,8 +1278,12 @@ function TermsAndConditionsStep({
               <Scale className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-xs sm:text-sm font-bold text-foreground">Membership Terms & Agreement</h3>
-              <p className="text-[10px] sm:text-[11px] text-muted-foreground">SWEAT Studio Legal Terms · Version 1.0 (Active)</p>
+              <h3 className="text-xs sm:text-sm font-bold text-foreground">
+                {termsDoc?.name || 'Membership Terms & Agreement'}
+              </h3>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+                {termsDoc?.code || 'Legal Terms'} · Version {activeVersion?.version_number ? `${activeVersion.version_number}.0` : '1.0'} ({activeVersion?.status || 'Active'})
+              </p>
             </div>
           </div>
           <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
@@ -1206,7 +1297,7 @@ function TermsAndConditionsStep({
               {pkgName}
             </h4>
             <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-              {totalSessions > 0 ? `${totalSessions} sessions` : 'Sessions'} to be used at the Sweat Fit Wellness Studio.
+              {pkgDesc}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1222,88 +1313,45 @@ function TermsAndConditionsStep({
         </div>
       </div>
 
-      {/* 2. Important Legal Notice */}
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
-        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-        <div className="text-[11px] sm:text-xs leading-relaxed">
-          <strong className="font-semibold inline mr-1">Notice of Agreement Terms:</strong>
-          Membership transfer to another individual is permissible for a ₹2,999 transfer fee. Standard memberships and services remain non-refundable. Both legal clauses apply upon package activation.
+      {/* 2. Document Description / Notice (Driven dynamically from database document) */}
+      {termsDoc?.description && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-foreground/90 flex items-start gap-2.5">
+          <Scale className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <div className="text-[11px] sm:text-xs leading-relaxed">
+            {termsDoc.description}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 3. Scrollable Clauses Reader */}
-      <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 max-h-40 sm:max-h-44 overflow-y-auto text-xs text-foreground/90 leading-relaxed space-y-3 font-sans shadow-inner">
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">1</span>
-            Introduction & Studio Standards
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            We are pleased to have you with us at Sweat Pilates, a product of Sweat Fit Wellness marketed as Sweat Pilates. At Sweat Pilates we prioritise your fitness goals, safety & comfort. Below mentioned terms & conditions to bring you the best experience at any given time.
-            <br /><em>Note: Sweat Fit Wellness is mentioned as Sweat in most of the places in this document.</em>
-          </p>
+      {/* 3. Scrollable Clauses Reader matching Image 1 & 2 */}
+      {clausesList.length > 0 ? (
+        <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 max-h-40 sm:max-h-48 overflow-y-auto text-xs text-foreground/90 leading-relaxed space-y-3 font-sans shadow-inner">
+          {clausesList.map((clause) => (
+            <div key={clause.number}>
+              <h5 className="font-bold text-foreground flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">
+                  {clause.number}
+                </span>
+                <span>{clause.title}</span>
+              </h5>
+              <p className="text-muted-foreground text-[11px] mt-1 pl-5.5 leading-relaxed whitespace-pre-line">
+                {clause.body}
+              </p>
+            </div>
+          ))}
         </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">2</span>
-            Agreement & Acknowledgment
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            Agreeing to all the terms & conditions of Sweat Fit Wellness before purchasing or taking any services from Sweat Fit Wellness is of utmost importance. By agreeing to terms & conditions you are agreeing that you have understood & agree to all the mentioned terms.
-          </p>
+      ) : activeVersion?.content_text ? (
+        <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 max-h-40 sm:max-h-48 overflow-y-auto text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans shadow-inner">
+          {activeVersion.content_text
+            .replace(/{{package_heading}}/g, pkgName)
+            .replace(/{{package_description}}/g, pkgDesc)
+            .replace(/{{expiration_days}}/g, String(validityDays))}
         </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">3</span>
-            Results & Fitness Progression
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            Your results are an outcome of your lifestyle where Sweat can become an utmost important aspect to bring them into reality by providing correct guidance & information but implementation stays fully at your responsibility. As you continue your journey with the Sweat Pilates program, workouts that once felt difficult may become easier as your body adapts and gets stronger. Our program evolves with you by introducing new variations and intensity levels to keep you challenged and progressing.
-          </p>
+      ) : (
+        <div className="rounded-xl border border-border/80 bg-muted/20 p-6 text-center text-xs text-muted-foreground font-sans">
+          Loading agreement terms from database...
         </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">4</span>
-            Pre Exercise Questionnaire & Health Safety
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            Your health and well-being are always our top priority. If at any point during your workout you feel unwell or experience discomfort, pause and seek medical advice. Consulting a healthcare professional before starting any new fitness program is recommended. While our trainers provide expert guidance, Sweat Fit Wellness and its trainers cannot be held liable for any health-related incidents.
-          </p>
-        </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">5</span>
-            Class Booking, Attendance & Cancellation
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            You can book classes up to 30 days in advance and reserve spots in up to 7 classes at a time. Cancellations within 24 hours of scheduled class may result in deduction of the session from your package. Please arrive 10–15 minutes early. If a member is not scanned in by exact start time, the system will automatically release the reserved spot as an attended session.
-          </p>
-        </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">6</span>
-            Membership Transfer & Refund Policy
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            Membership packages can be transferred to another individual for a fee of ₹2,999. Memberships and services are non-transferable and non-refundable. Access to Sweat premises requires an active booking. Kids and pets are discouraged inside premises for safety reasons. Support: support@sweatfitwellness.com.
-          </p>
-        </div>
-
-        <div>
-          <h5 className="font-bold text-foreground flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold">7</span>
-            Closing Declaration
-          </h5>
-          <p className="text-muted-foreground text-[11px] mt-1 pl-5.5">
-            By signing this agreement you have confirmed that you have understood and agreed to the T&C of this package.
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* 4. Explicit Consent Checkbox */}
       <label
@@ -1321,7 +1369,9 @@ function TermsAndConditionsStep({
         />
         <div className="text-xs">
           <span className="font-bold text-foreground block">
-            By signing this agreement you have confirmed that you have understood and agreed to the T&C of this package.
+            {termsDoc?.name
+              ? `I confirm that I have reviewed, understood, and agreed to the ${termsDoc.name}.`
+              : 'I confirm that I have understood and agreed to the terms & conditions of this package.'}
           </span>
           <p className="text-muted-foreground text-[11px] mt-0.5">
             Explicit member consent and digital signature are mandatory before proceeding to payment.
@@ -1813,6 +1863,22 @@ function ConversionWizardInner({ lead, open, onOpenChange, onConverted }: Conver
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState('');
+
+  // Dynamic Terms & Conditions document from backend
+  const { data: termsDoc } = useQuery({
+    queryKey: ['terms-documents', 'active'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/tenant/terms-documents/');
+        const list = Array.isArray(res.data) ? res.data : (res.data as any)?.results || [];
+        return list.find((d: any) => d.code === 'TERMS-PACKAGE-PURCHASE') || list[0] || null;
+      } catch (e) {
+        return null;
+      }
+    },
+    staleTime: 60_000,
+  });
+  const activeTermsVersion = termsDoc?.active_version || (termsDoc?.versions && termsDoc.versions.length > 0 ? termsDoc.versions[0] : null);
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | ''>('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -2052,6 +2118,9 @@ const handleCancelRazorpay = useCallback(() => {
         idempotency_key: idempotencyKey,
         signature_data: sigData,
         agreement_accepted: true,
+        terms_document_version_id: activeTermsVersion?.id || undefined,
+        terms_consent_accepted: true,
+        terms_signature_data: sigData,
       } as any;
       if (appliedCoupon) payload.coupon_code = appliedCoupon;
       if (startDate) payload.start_date = startDate;
@@ -2312,6 +2381,8 @@ const handleCancelRazorpay = useCallback(() => {
                     onConsentChange={setTermsConsentAccepted}
                     signatureData={termsSignatureData}
                     onSignatureChange={handleSignatureChange}
+                    termsDoc={termsDoc}
+                    activeVersion={activeTermsVersion}
                   />
                 )}
                 {step === 4 && quote && (

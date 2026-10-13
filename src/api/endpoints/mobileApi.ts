@@ -68,6 +68,11 @@ export interface MobileScheduleOccurrence {
   user_booking_id?: string | null;
   is_waitlist_open?: boolean;
   booking_state?: string;
+  has_started?: boolean;
+  has_ended?: boolean;
+  is_in_progress?: boolean;
+  is_bookable?: boolean;
+  can_book?: boolean;
 }
 
 export interface MobileBooking {
