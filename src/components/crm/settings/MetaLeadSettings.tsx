@@ -1614,6 +1614,7 @@ function MappingEditor({
   const [discoveredQuestions, setDiscoveredQuestions] = React.useState<MetaFormQuestion[]>([]);
   const [isLoadingForms, setIsLoadingForms] = React.useState(false);
   const [formsError, setFormsError] = React.useState<string | null>(null);
+  const [formFieldsError, setFormFieldsError] = React.useState<string | null>(null);
   const [isManualQuestionEntry, setIsManualQuestionEntry] = React.useState(false);
   const [versionConflict, setVersionConflict] = React.useState<string | null>(null);
 
@@ -1640,21 +1641,48 @@ function MappingEditor({
     }
   }, [pageId]);
 
-  // Load questions when formId changes
+  // --- FIX: PASS PAGE_ID AND HANDLE FORM FIELDS ERROR START ---
+  // WHY: formFields requires page_id to use the correct Facebook Page token and avoid Meta (#10) privilege errors.
+  // FIXES: Calls formFields(formId, pageId) when both are present, sets discovered questions, and captures error state.
+  // IMPACT: Discovered questions populate dropdown options; errors display clear feedback without overwriting rows.
+  // OLD:
+  // // Load questions when formId changes
+  // React.useEffect(() => {
+  //   if (formId) {
+  //     metaLeadsApi
+  //       .formFields(formId)
+  //       .then((res) => {
+  //         if (res.form?.questions && res.form.questions.length > 0) {
+  //           setDiscoveredQuestions(res.form.questions);
+  //         }
+  //       })
+  //       .catch(() => {
+  //         setDiscoveredQuestions([]);
+  //       });
+  //   }
+  // }, [formId]);
   React.useEffect(() => {
-    if (formId) {
+    if (formId && pageId) {
+      setFormFieldsError(null);
       metaLeadsApi
-        .formFields(formId)
+        .formFields(formId, pageId)
         .then((res) => {
-          if (res.form?.questions && res.form.questions.length > 0) {
-            setDiscoveredQuestions(res.form.questions);
+          const qs = res.form?.questions || [];
+          if (qs.length > 0) {
+            setDiscoveredQuestions(qs);
+            setFormFieldsError(null);
           }
         })
-        .catch(() => {
+        .catch((err) => {
           setDiscoveredQuestions([]);
+          setFormFieldsError(formatError(err) || 'Failed to load form questions from Meta.');
         });
+    } else {
+      setDiscoveredQuestions([]);
+      setFormFieldsError(null);
     }
-  }, [formId]);
+  }, [formId, pageId]);
+  // --- FIX: PASS PAGE_ID AND HANDLE FORM FIELDS ERROR END ---
 
   const saveMutation = useMutation({
     mutationFn: (payload: MappingInput) => metaLeadsApi.save(payload, mapping?.id),
@@ -1916,6 +1944,11 @@ function MappingEditor({
       {/* Section 2: Match form answers                                     */}
       {/* ───────────────────────────────────────────────────────────────── */}
       <section className="space-y-4 border-t pt-4">
+        {formFieldsError && (
+          <p className="text-[11px] text-destructive flex items-center gap-1">
+            <AlertCircle className="h-3 w-3 inline shrink-0" /> {formFieldsError}
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">

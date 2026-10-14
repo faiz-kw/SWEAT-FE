@@ -200,13 +200,43 @@ export const metaLeadsApi = {
       notice: res.notice,
     };
   },
-  formFields: async (formId: string) => {
-    const res = (await api.get<{ form?: { id: string; name: string; questions: MetaFormQuestion[] }; results?: { id: string; name: string; questions: MetaFormQuestion[] } }>(`/tenant/meta-lead-mappings/form_fields/?form_id=${encodeURIComponent(formId)}`)).data;
+  // --- FIX: PASS PAGE_ID AND THROW ON ERROR IN FORM_FIELDS START ---
+  // WHY: Backend form_fields requires page_id to target the correct Facebook Page token and returns error envelopes.
+  // FIXES: Passing page_id prevents (#10) privilege errors; throwing on res.error surfaces backend errors to the UI.
+  // IMPACT: Signature updated to formFields(formId: string, pageId?: string); throws structured Error when res.error is present.
+  // OLD:
+  // formFields: async (formId: string) => {
+  //   const res = (await api.get<{ form?: { id: string; name: string; questions: MetaFormQuestion[] }; results?: { id: string; name: string; questions: MetaFormQuestion[] } }>(`/tenant/meta-lead-mappings/form_fields/?form_id=${encodeURIComponent(formId)}`)).data;
+  //   return {
+  //     form: res.form || res.results || { id: formId, name: '', questions: [] },
+  //     results: res.results || res.form || { id: formId, name: '', questions: [] },
+  //   };
+  // },
+  formFields: async (formId: string, pageId?: string) => {
+    const params = new URLSearchParams({ form_id: formId });
+    if (pageId) {
+      params.append('page_id', pageId);
+    }
+    const res = (await api.get<{
+      form?: { id: string; name: string; questions: MetaFormQuestion[] };
+      results?: { id: string; name: string; questions: MetaFormQuestion[] };
+      error?: string;
+      message?: string;
+    }>(`/tenant/meta-lead-mappings/form_fields/?${params.toString()}`)).data;
+
+    if (res.error) {
+      const errMessage = res.message || res.error;
+      const err = new Error(errMessage);
+      (err as unknown as { data: typeof res }).data = res;
+      throw err;
+    }
+
     return {
       form: res.form || res.results || { id: formId, name: '', questions: [] },
       results: res.results || res.form || { id: formId, name: '', questions: [] },
     };
   },
+  // --- FIX: PASS PAGE_ID AND THROW ON ERROR IN FORM_FIELDS END ---
   mappings: async (page = 1) => (await api.get<Page<MetaMapping>>('/tenant/meta-lead-mappings/', { params: { page } })).data,
   save: async (payload: MappingInput, id?: string) => id
     ? (await api.patch<MetaMapping>(`/tenant/meta-lead-mappings/${id}/`, payload)).data
