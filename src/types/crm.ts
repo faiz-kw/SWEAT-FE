@@ -13,6 +13,7 @@ export type LeadStatus =
   | 'HOT_LEAD'
   | 'PAYMENT_PENDING'
   | 'CONVERTED'
+  | 'SUBSCRIBED'
   | 'NOT_INTERESTED'
   | 'LOST';
 

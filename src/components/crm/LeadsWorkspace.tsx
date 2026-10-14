@@ -22,7 +22,10 @@ import {
   CheckCircle2,
   Filter,
   Sparkles,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   MoreVertical,
   Kanban,
   List,
@@ -85,6 +88,7 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgBadge:
   HOT_LEAD: { label: 'Hot Lead', color: 'text-orange-500 border-orange-500/20', bgBadge: 'bg-orange-500/10' },
   PAYMENT_PENDING: { label: 'Payment Pending', color: 'text-yellow-600 border-yellow-500/20', bgBadge: 'bg-yellow-500/10' },
   CONVERTED: { label: 'Converted Member', color: 'text-emerald-500 border-emerald-500/20', bgBadge: 'bg-emerald-500/10' },
+  SUBSCRIBED: { label: 'Subscribed Member', color: 'text-emerald-500 border-emerald-500/20', bgBadge: 'bg-emerald-500/10' },
   NOT_INTERESTED: { label: 'Not Interested', color: 'text-muted-foreground border-border', bgBadge: 'bg-muted' },
   LOST: { label: 'Lost', color: 'text-muted-foreground border-border', bgBadge: 'bg-muted' },
 };
@@ -179,6 +183,13 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
   const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'UNASSIGNED'>('ALL');
   const [viewMode, setViewMode] = React.useState<'LIST' | 'PIPELINE' | 'ATTENTION'>(initialViewMode);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(20);
+
+  // Reset page to 1 whenever any filter or search changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter]);
 
   React.useEffect(() => {
     setViewMode(initialViewMode);
@@ -215,16 +226,18 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   });
 
   const {
-    data: leads = [],
+    data: leadsData = { results: [], count: 0 },
     isLoading,
     isError,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, currentPage, pageSize],
     queryFn: () => {
-      const p: Parameters<typeof crmApi.getLeads>[0] = {
+      const p: Parameters<typeof crmApi.getLeadsPaginated>[0] = {
         current_status: statusFilter,
+        page: currentPage,
+        page_size: pageSize,
       };
       if (searchQuery) p.search = searchQuery;
       if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
@@ -233,10 +246,14 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (branchFilter !== 'ALL') p.branch_id = branchFilter;
       if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
       if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
-      return crmApi.getLeads(p);
+      return crmApi.getLeadsPaginated(p);
     },
     enabled: canView,
   });
+
+  const leads = leadsData.results;
+  const totalLeadsCount = leadsData.count;
+  const totalPages = Math.max(1, Math.ceil(totalLeadsCount / pageSize));
 
   // Deep-link from notification or URL (?lead_id=...)
   const routerLocation = useLocation();
@@ -299,15 +316,33 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     }
   };
 
+  const { data: summaryMetrics, isLoading: isMetricsLoading } = useQuery({
+    queryKey: ['lead-summary-metrics', branchFilter, statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, scopeFilter],
+    queryFn: () => {
+      const p: Record<string, any> = {};
+      if (branchFilter !== 'ALL') p.branch_id = branchFilter;
+      if (statusFilter !== 'ALL') p.current_status = statusFilter;
+      if (searchQuery) p.search = searchQuery;
+      if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
+      if (campaignFilter.trim()) p.campaign = campaignFilter.trim();
+      if (slaFilter !== 'ALL') p.sla_status = slaFilter;
+      if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
+      if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      return crmApi.getLeadSummaryMetrics(p);
+    },
+    enabled: canView,
+    staleTime: 30000,
+  });
+
   const metrics = React.useMemo(() => {
     return {
-      total: leads.length,
-      converted: leads.filter((l) => l.current_status === 'CONVERTED').length,
-      inquiries: leads.filter((l) => ['NEW_LEAD', 'INTERESTED', 'HOT_LEAD'].includes(l.current_status)).length,
-      trials: leads.filter((l) => ['TRIAL_BOOKED', 'TRIAL_CONFIRMED', 'TRIAL_ATTENDED'].includes(l.current_status)).length,
-      slaBreaches: leads.filter((l) => l.sla?.sla_status === 'BREACHED').length,
+      total: summaryMetrics?.total ?? totalLeadsCount,
+      converted: summaryMetrics?.converted ?? 0,
+      inquiries: summaryMetrics?.inquiries ?? 0,
+      trials: summaryMetrics?.trials ?? 0,
+      slaBreaches: summaryMetrics?.sla_breaches ?? 0,
     };
-  }, [leads]);
+  }, [summaryMetrics, totalLeadsCount]);
 
   const { data: metadata } = useQuery({
     queryKey: ['lead-metadata'],
@@ -480,30 +515,30 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           <CRMKpiTile
             label="Total Leads"
             value={metrics.total}
-            isLoading={isLoading}
+            isLoading={isMetricsLoading && isLoading}
             isError={isError}
             hint="All registered prospects"
           />
           <CRMKpiTile
-            label="Active Inquiries"
+            label="Active Enquiries"
             value={metrics.inquiries}
-            isLoading={isLoading}
+            isLoading={isMetricsLoading && isLoading}
             isError={isError}
             badge={{ text: 'In Pipeline', variant: 'info' }}
-            hint="New & Interested"
+            hint="Fresh & Interested"
           />
           <CRMKpiTile
-            label="Trial Engagements"
+            label="Trial"
             value={metrics.trials}
-            isLoading={isLoading}
+            isLoading={isMetricsLoading && isLoading}
             isError={isError}
             badge={{ text: 'Booked / Attended', variant: 'warning' }}
-            hint="Prospect workouts"
+            hint="Trial sessions"
           />
           <CRMKpiTile
-            label="Converted Members"
+            label="Converted"
             value={metrics.converted}
-            isLoading={isLoading}
+            isLoading={isMetricsLoading && isLoading}
             isError={isError}
             badge={{ text: 'Paying', variant: 'positive' }}
             hint="Successful conversions"
@@ -741,8 +776,19 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                   <div className="w-6 h-6 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
                                     {initials}
                                   </div>
-                                  <div className="font-semibold text-xs text-foreground truncate group-hover:text-primary transition-colors">
-                                    {lead.first_name} {lead.last_name}
+                                  <div className="font-semibold text-xs text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                    <span>
+                                      {lead.converted_member?.full_name && !lead.converted_member.full_name.startsWith('Subscriber')
+                                        ? lead.converted_member.full_name
+                                        : lead.first_name === 'Subscriber'
+                                          ? `Subscriber ${lead.last_name}`
+                                          : `${lead.first_name} ${lead.last_name}`}
+                                    </span>
+                                    {(lead.first_name === 'Subscriber' || lead.current_status === 'SUBSCRIBED') && (
+                                      <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded border border-emerald-500/20">
+                                        Member
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <Eye className="w-3.5 h-3.5 text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
@@ -874,9 +920,25 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                 {lead.last_name.substring(0, 1)}
                               </div>
                               <div className="min-w-0">
-                                <div className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors truncate">
-                                  {lead.first_name} {lead.last_name}
+                                <div className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors truncate flex items-center gap-1.5">
+                                  <span>
+                                    {lead.converted_member?.full_name && !lead.converted_member.full_name.startsWith('Subscriber')
+                                      ? lead.converted_member.full_name
+                                      : lead.first_name === 'Subscriber'
+                                        ? `Subscriber ${lead.last_name}`
+                                        : `${lead.first_name} ${lead.last_name}`}
+                                  </span>
+                                  {(lead.first_name === 'Subscriber' || lead.current_status === 'SUBSCRIBED') && (
+                                    <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                                      Member
+                                    </span>
+                                  )}
                                 </div>
+                                {lead.converted_member?.member_number && (
+                                  <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                    {lead.converted_member.member_number}
+                                  </div>
+                                )}
                                 {lead.area && (
                                   <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate" title={lead.area}>
                                     <MapPin className="w-3 h-3 text-muted-foreground/60 shrink-0" />
@@ -1010,6 +1072,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                             {(() => {
                               const isConverted =
                                 lead.current_status === 'CONVERTED' ||
+                                lead.current_status === 'SUBSCRIBED' ||
                                 Boolean(lead.converted_member) ||
                                 (lead.action_eligibility?.can_move_stage === false && lead.action_eligibility?.terminal_reason === 'CONVERTED');
                               const memberId = lead.converted_member?.member_id || lead.converted_user_profile;
@@ -1105,9 +1168,25 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           {lead.last_name.substring(0, 1)}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-sm text-foreground truncate">
-                            {lead.first_name} {lead.last_name}
+                          <div className="font-bold text-sm text-foreground truncate flex items-center gap-1.5">
+                            <span>
+                              {lead.converted_member?.full_name && !lead.converted_member.full_name.startsWith('Subscriber')
+                                ? lead.converted_member.full_name
+                                : lead.first_name === 'Subscriber'
+                                  ? `Subscriber ${lead.last_name}`
+                                  : `${lead.first_name} ${lead.last_name}`}
+                            </span>
+                            {(lead.first_name === 'Subscriber' || lead.current_status === 'SUBSCRIBED') && (
+                              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                                Member
+                              </span>
+                            )}
                           </div>
+                          {lead.converted_member?.member_number && (
+                            <div className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                              {lead.converted_member.member_number}
+                            </div>
+                          )}
                           {locStr ? (
                             <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1 mt-0.5" title={locStr}>
                               <MapPin className="w-3 h-3 text-muted-foreground/60 shrink-0" />
@@ -1197,6 +1276,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                     {(() => {
                       const isConverted =
                         lead.current_status === 'CONVERTED' ||
+                        lead.current_status === 'SUBSCRIBED' ||
                         Boolean(lead.converted_member) ||
                         (lead.action_eligibility?.can_move_stage === false && lead.action_eligibility?.terminal_reason === 'CONVERTED');
                       const memberId = lead.converted_member?.member_id || lead.converted_user_profile;
@@ -1259,6 +1339,84 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 );
               })}
             </div>
+
+            {/* Responsive Pagination Controls */}
+            {totalLeadsCount > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 py-3.5 mt-4 rounded-xl border border-border/70 bg-card/60 text-xs shadow-2xs">
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span>
+                    Showing <span className="font-semibold text-foreground">{((currentPage - 1) * pageSize) + 1}</span> to{' '}
+                    <span className="font-semibold text-foreground">{Math.min(currentPage * pageSize, totalLeadsCount)}</span> of{' '}
+                    <span className="font-semibold text-foreground">{totalLeadsCount.toLocaleString()}</span> leads
+                  </span>
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
+                    <span className="hidden md:inline">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="h-7.5 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                    >
+                      <option value={20}>20 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage <= 1 || isLoading}
+                    className="h-8 w-8 p-0"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1 || isLoading}
+                    className="h-8 px-2.5 gap-1"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline">Previous</span>
+                  </Button>
+
+                  <div className="px-3 py-1 rounded-md bg-muted/60 text-xs font-semibold text-foreground">
+                    Page {currentPage} of {totalPages}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages || isLoading}
+                    className="h-8 px-2.5 gap-1"
+                    title="Next Page"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage >= totalPages || isLoading}
+                    className="h-8 w-8 p-0"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>

@@ -134,6 +134,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const defaultTab = initialTab || (mode === 'offers' ? 'rules' : 'campaigns');
   const [activeTab, setActiveTab] = useState<'campaigns' | 'rules' | 'redemptions' | 'simulator'>(defaultTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   const displayTitle =
     title ||
@@ -337,6 +338,19 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save campaign');
+    },
+  });
+
+  const toggleCampaignStatusMutation = useMutation({
+    mutationFn: ({ campaignId, status }: { campaignId: string; status: string }) => {
+      return discountsApi.updateCampaign(campaignId, { status } as any);
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['discount-campaigns'] });
+      toast.success(`Campaign "${updated.name}" is now ${updated.status}`);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to update campaign status');
     },
   });
 
@@ -691,15 +705,44 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const safeRules = Array.isArray(rules) ? rules : [];
   const safeRedemptions = Array.isArray(redemptions) ? redemptions : [];
 
+  // Status helper check
+  const isCampaignActive = (camp: DiscountCampaign): boolean => {
+    if (camp.computed_status) return camp.computed_status === 'ACTIVE';
+    return camp.status === 'ACTIVE';
+  };
+
+  const isCodeActive = (code: DiscountCode): boolean => {
+    if (code.computed_status) return code.computed_status === 'ACTIVE';
+    return code.status === 'ACTIVE';
+  };
+
+  const activeCampaignsCount = safeCampaigns.filter(isCampaignActive).length;
+  const inactiveCampaignsCount = safeCampaigns.filter(
+    (c) => !isCampaignActive(c) || (c.codes && c.codes.some((code: DiscountCode) => !isCodeActive(code)))
+  ).length;
+
   // Filter campaigns
-  const filteredCampaigns = safeCampaigns.filter(
-    (c) =>
+  const filteredCampaigns = safeCampaigns.filter((c) => {
+    const matchesSearch =
+      !searchTerm ||
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.codes?.some((code: DiscountCode) => code.code.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+      c.codes?.some((code: DiscountCode) => code.code.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const activeCampaignsCount = safeCampaigns.filter((c) => c.status === 'ACTIVE').length;
+    if (!matchesSearch) return false;
+
+    if (statusFilter === 'ACTIVE') {
+      const hasActiveCode = !c.codes || c.codes.length === 0 || c.codes.some(isCodeActive);
+      return isCampaignActive(c) && hasActiveCode;
+    }
+
+    if (statusFilter === 'INACTIVE') {
+      return !isCampaignActive(c) || (c.codes && c.codes.some((code: DiscountCode) => !isCodeActive(code)));
+    }
+
+    return true;
+  });
+
   const totalSavingsIssued = safeRedemptions.reduce(
     (acc, r) => acc + (parseFloat(r.discount_amount || '0') || 0),
     0
@@ -869,26 +912,105 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               searchValue={searchTerm}
               onSearchChange={setSearchTerm}
               searchPlaceholder="Search campaigns or promo codes..."
-              onReset={() => setSearchTerm('')}
-              hasActiveFilters={Boolean(searchTerm)}
-            />
+              onReset={() => {
+                setSearchTerm('');
+                setStatusFilter('ALL');
+              }}
+              hasActiveFilters={Boolean(searchTerm || statusFilter !== 'ALL')}
+              activeFiltersCount={(searchTerm ? 1 : 0) + (statusFilter !== 'ALL' ? 1 : 0)}
+            >
+              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ALL')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer',
+                    statusFilter === 'ALL'
+                      ? 'bg-background text-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  All ({safeCampaigns.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ACTIVE')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5',
+                    statusFilter === 'ACTIVE'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      statusFilter === 'ACTIVE' ? 'bg-white' : 'bg-emerald-500'
+                    )}
+                  />
+                  Active ({activeCampaignsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('INACTIVE')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5',
+                    statusFilter === 'INACTIVE'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      statusFilter === 'INACTIVE' ? 'bg-white' : 'bg-amber-500'
+                    )}
+                  />
+                  Inactive ({inactiveCampaignsCount})
+                </button>
+              </div>
+            </CRMFilterBar>
 
             {loadingCampaigns ? (
               <CRMLoadingState message="Loading discount campaigns..." />
             ) : filteredCampaigns.length === 0 ? (
               <CRMEmptyState
                 icon={Tag}
-                title="No Campaigns Found"
-                description="No discount campaigns match your current filters. Create a promotional voucher campaign to reward prospects and members."
-                actionLabel={canCreate ? '+ Create Campaign' : undefined}
-                onAction={openCreateCampaignModal}
-                canAction={canCreate}
+                title={
+                  statusFilter === 'ACTIVE'
+                    ? 'No Active Coupons Found'
+                    : statusFilter === 'INACTIVE'
+                    ? 'No Inactive Coupons Found'
+                    : 'No Campaigns Found'
+                }
+                description={
+                  statusFilter !== 'ALL' || searchTerm
+                    ? `No discount campaigns or promo codes match your current filter (${statusFilter === 'ACTIVE' ? 'Active only' : statusFilter === 'INACTIVE' ? 'Inactive only' : ''}${searchTerm ? ` "${searchTerm}"` : ''}). Try resetting your filters.`
+                    : 'No discount campaigns match your current filters. Create a promotional voucher campaign to reward prospects and members.'
+                }
+                actionLabel={statusFilter !== 'ALL' || searchTerm ? 'Reset Filters' : canCreate ? '+ Create Campaign' : undefined}
+                onAction={
+                  statusFilter !== 'ALL' || searchTerm
+                    ? () => {
+                        setSearchTerm('');
+                        setStatusFilter('ALL');
+                      }
+                    : openCreateCampaignModal
+                }
+                canAction={Boolean(statusFilter !== 'ALL' || searchTerm || canCreate)}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredCampaigns.map((camp) => {
                   const branchScopeName = branches.find((b) => b.id === camp.configuration?.branch_id)?.name;
                   const packageScopeName = packages.find((p) => p.id === camp.configuration?.package_id)?.name;
+
+                  const campIsActive = isCampaignActive(camp);
+                  const displayedCodes = (camp.codes || []).filter((c: DiscountCode) => {
+                    if (statusFilter === 'ACTIVE') return isCodeActive(c);
+                    if (statusFilter === 'INACTIVE') return !isCodeActive(c);
+                    return true;
+                  });
 
                   return (
                     <div
@@ -897,12 +1019,41 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <Badge
-                            variant={camp.status === 'ACTIVE' ? 'default' : 'secondary'}
-                            className="text-xs"
-                          >
-                            {camp.status}
-                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant={campIsActive ? 'default' : 'secondary'}
+                              className={cn(
+                                'text-xs font-semibold',
+                                campIsActive
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-muted text-muted-foreground'
+                              )}
+                            >
+                              {camp.status}
+                            </Badge>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                title={campIsActive ? 'Deactivate campaign' : 'Activate campaign'}
+                                onClick={() =>
+                                  toggleCampaignStatusMutation.mutate({
+                                    campaignId: camp.id,
+                                    status: campIsActive ? 'PAUSED' : 'ACTIVE',
+                                  })
+                                }
+                                className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                              >
+                                <Power
+                                  className={cn(
+                                    'w-3.5 h-3.5',
+                                    campIsActive
+                                      ? 'text-emerald-500 hover:text-amber-500'
+                                      : 'text-muted-foreground hover:text-emerald-500'
+                                  )}
+                                />
+                              </button>
+                            )}
+                          </div>
                           <span className="text-xs text-primary font-mono font-semibold bg-primary/10 px-2 py-0.5 rounded">
                             {camp.discount_type === 'PERCENTAGE'
                               ? `${formatPercentage(camp.discount_value)}% OFF`
@@ -963,64 +1114,108 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         {/* Associated Codes */}
                         <div className="mt-4 pt-3 border-t border-border/50">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                              Promo Codes ({camp.codes?.length || 0})
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                Promo Codes
+                              </span>
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                {displayedCodes.length}
+                                {camp.codes && camp.codes.length !== displayedCodes.length
+                                  ? ` of ${camp.codes.length}`
+                                  : ''}
+                              </Badge>
+                            </div>
+                            {camp.codes && camp.codes.length > 0 && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  {camp.codes.filter(isCodeActive).length} active
+                                </span>
+                                {camp.codes.some((c: DiscountCode) => !isCodeActive(c)) && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                      {camp.codes.filter((c: DiscountCode) => !isCodeActive(c)).length} inactive
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="space-y-1.5">
-                            {camp.codes && camp.codes.length > 0 ? (
-                              camp.codes.map((c: DiscountCode) => (
-                                <div
-                                  key={c.id}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50 text-xs"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold text-primary">{c.code}</span>
-                                    <Badge
-                                      variant={c.status === 'ACTIVE' ? 'default' : 'secondary'}
-                                      className="text-[10px] px-1.5 py-0 h-4"
-                                    >
-                                      {c.status}
-                                    </Badge>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {c.redemption_count || 0} used
-                                    </span>
-                                  </div>
+                            {displayedCodes.length > 0 ? (
+                              displayedCodes.map((c: DiscountCode) => {
+                                const codeIsActive = isCodeActive(c);
+                                return (
+                                  <div
+                                    key={c.id}
+                                    className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50 text-xs"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold text-primary">{c.code}</span>
+                                      <Badge
+                                        variant={codeIsActive ? 'default' : 'secondary'}
+                                        className={cn(
+                                          'text-[10px] px-1.5 py-0 h-4',
+                                          codeIsActive
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-muted-foreground/20 text-muted-foreground'
+                                        )}
+                                      >
+                                        {c.status}
+                                      </Badge>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {c.redemption_count || 0} used
+                                      </span>
+                                    </div>
 
-                                  <div className="flex items-center gap-1">
-                                    {canEdit && (
-                                      <button
-                                        type="button"
-                                        title={c.status === 'ACTIVE' ? 'Deactivate code' : 'Activate code'}
-                                        onClick={() =>
-                                          toggleCodeStatusMutation.mutate({
-                                            codeId: c.id,
-                                            status: c.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                                          })
-                                        }
-                                        className="p-1 text-muted-foreground hover:text-foreground rounded"
-                                      >
-                                        <Power className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    {canDelete && (
-                                      <button
-                                        type="button"
-                                        title="Delete code"
-                                        onClick={() => {
-                                          if (confirm(`Delete code ${c.code}?`)) {
-                                            deleteCodeMutation.mutate(c.id);
+                                    <div className="flex items-center gap-1">
+                                      {canEdit && (
+                                        <button
+                                          type="button"
+                                          title={codeIsActive ? 'Deactivate code' : 'Activate code'}
+                                          onClick={() =>
+                                            toggleCodeStatusMutation.mutate({
+                                              codeId: c.id,
+                                              status: codeIsActive ? 'INACTIVE' : 'ACTIVE',
+                                            })
                                           }
-                                        }}
-                                        className="p-1 text-muted-foreground hover:text-rose-500 rounded"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
+                                          className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                                        >
+                                          <Power
+                                            className={cn(
+                                              'w-3.5 h-3.5',
+                                              codeIsActive
+                                                ? 'text-emerald-500 hover:text-amber-500'
+                                                : 'text-muted-foreground hover:text-emerald-500'
+                                            )}
+                                          />
+                                        </button>
+                                      )}
+                                      {canDelete && (
+                                        <button
+                                          type="button"
+                                          title="Delete code"
+                                          onClick={() => {
+                                            if (confirm(`Delete code ${c.code}?`)) {
+                                              deleteCodeMutation.mutate(c.id);
+                                            }
+                                          }}
+                                          className="p-1 text-muted-foreground hover:text-rose-500 rounded transition-colors"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))
+                                );
+                              })
+                            ) : camp.codes && camp.codes.length > 0 ? (
+                              <span className="text-xs text-muted-foreground italic">
+                                No {statusFilter.toLowerCase()} codes ({camp.codes.length} hidden by filter)
+                              </span>
                             ) : (
                               <span className="text-xs text-muted-foreground italic">No promo codes generated yet</span>
                             )}

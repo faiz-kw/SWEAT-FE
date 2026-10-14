@@ -53,9 +53,11 @@ import {
   Sparkles,
   ShieldCheck,
   PenTool,
+  Edit3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { EditMemberProfileModal } from './modals/EditMemberProfileModal';
 import type {
   Member360Data,
   TimelineEvent,
@@ -90,7 +92,7 @@ import {
 
 interface Member360WorkspaceProps {
   memberId: string;
-  initialTab?: string;
+  initialTab?: string | undefined;
 }
 
 type TabKey = 'overview' | 'timeline' | 'memberships' | 'bookings' | 'finance' | 'health';
@@ -121,6 +123,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   // Modals state
   const [activeModal, setActiveModal] = useState<MembershipLifecycleAction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
 
   // Fetch Member 360 data
   const {
@@ -213,8 +216,95 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     );
   }
 
-  const { member, header, overview, timeline, memberships, passbook, bookings_and_attendance, finance, health_and_forms, par_q_form } =
-    data360;
+  const member = data360.member || ({} as any);
+  const header = {
+    name: data360.header?.name || member.name || 'Member',
+    member_number: data360.header?.member_number || member.membership_number || member.member_number || '—',
+    status: data360.header?.status || member.membership_status || member.status || 'INACTIVE',
+    home_branch: data360.header?.home_branch || member.home_branch || 'Unassigned',
+    home_branch_id: data360.header?.home_branch_id || member.home_branch_id,
+    current_program: data360.header?.current_program || member.program_name || 'Standard',
+    current_package: data360.header?.current_package || member.package_name || 'None',
+    current_package_version: data360.header?.current_package_version || member.package_version_name || 'v1',
+    expiry_date: data360.header?.expiry_date || member.expiry_date,
+    home_sessions_remaining: data360.header?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0,
+    cross_branch_sessions_remaining: data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0,
+    outstanding_balance: Number(data360.header?.outstanding_balance ?? member.outstanding_balance ?? 0),
+    assigned_trainer: data360.header?.assigned_trainer || member.assigned_trainer || 'Unassigned',
+    alerts: Array.isArray(data360.header?.alerts) ? data360.header.alerts : [],
+    available_actions: Array.isArray(data360.header?.available_actions) ? data360.header.available_actions : [],
+  };
+
+  const overview = {
+    contact: data360.overview?.contact || {
+      full_name: header.name,
+      phone: member.phone || '',
+      email: member.email || '',
+      gender: member.gender || '—',
+      age: member.age,
+      date_of_birth: (member as any)?.date_of_birth,
+      emergency_contact: member.emergency_contact || '',
+      acquisition_source: member.source || 'Direct Walk-in',
+      joined_at: member.joined_at,
+    },
+    home_branch: data360.overview?.home_branch || {
+      id: header.home_branch_id,
+      name: header.home_branch,
+    },
+    current_membership: data360.overview?.current_membership || data360.memberships?.active || null,
+    entitlement_summary: Array.isArray(data360.overview?.entitlement_summary)
+      ? data360.overview.entitlement_summary
+      : (Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : []),
+    outstanding_balance: header.outstanding_balance,
+    next_booking: data360.overview?.next_booking || null,
+    assigned_trainer: header.assigned_trainer,
+    alerts: header.alerts,
+    recent_activities: Array.isArray(data360.overview?.recent_activities)
+      ? data360.overview.recent_activities
+      : (Array.isArray(data360.timeline) ? data360.timeline.slice(0, 5) : []),
+  };
+
+  const timeline = Array.isArray(data360.timeline) ? data360.timeline : [];
+  const memberships = {
+    active: data360.memberships?.active || null,
+    upcoming: Array.isArray(data360.memberships?.upcoming) ? data360.memberships.upcoming : [],
+    history: Array.isArray(data360.memberships?.history) ? data360.memberships.history : [],
+    freezes: Array.isArray(data360.memberships?.freezes) ? data360.memberships.freezes : [],
+    branch_history: Array.isArray(data360.memberships?.branch_history) ? data360.memberships.branch_history : [],
+    status_history: Array.isArray(data360.memberships?.status_history) ? data360.memberships.status_history : [],
+  };
+  const passbook = {
+    balances: Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : [],
+    ledger: Array.isArray(data360.passbook?.ledger) ? data360.passbook.ledger : [],
+  };
+  const bookings_and_attendance = {
+    upcoming_bookings: Array.isArray(data360.bookings_and_attendance?.upcoming_bookings)
+      ? data360.bookings_and_attendance.upcoming_bookings
+      : [],
+    past_bookings: Array.isArray(data360.bookings_and_attendance?.past_bookings)
+      ? data360.bookings_and_attendance.past_bookings
+      : [],
+    attendance_records: Array.isArray(data360.bookings_and_attendance?.attendance_records)
+      ? data360.bookings_and_attendance.attendance_records
+      : [],
+    stats: data360.bookings_and_attendance?.stats || { visits_30d: 0, total_bookings: 0, last_visit: null },
+  };
+  const finance = {
+    summary: data360.finance?.summary || { total_invoiced: 0, total_paid: 0, total_outstanding: 0, total_refunded: 0 },
+    orders: Array.isArray(data360.finance?.orders) ? data360.finance.orders : [],
+    payments: Array.isArray(data360.finance?.payments) ? data360.finance.payments : [],
+    invoices: Array.isArray(data360.finance?.invoices) ? data360.finance.invoices : [],
+    refunds: Array.isArray(data360.finance?.refunds) ? data360.finance.refunds : [],
+  };
+  const health_and_forms = {
+    submissions: Array.isArray(data360.health_and_forms?.submissions) ? data360.health_and_forms.submissions : [],
+  };
+  const par_q_form = {
+    requirements: Array.isArray(data360.par_q_form?.requirements) ? data360.par_q_form.requirements : [],
+    submissions: Array.isArray(data360.par_q_form?.submissions)
+      ? data360.par_q_form.submissions
+      : health_and_forms.submissions,
+  };
 
   // Status Badge Helper
   const getStatusBadge = (status: string) => {
@@ -496,13 +586,13 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-px">
             {[
               { key: 'overview', label: 'Overview', icon: User },
-              { key: 'timeline', label: 'Timeline', icon: History, count: timeline.length },
+              { key: 'timeline', label: 'Timeline', icon: History, count: (timeline || []).length },
               { key: 'memberships', label: 'Memberships & Passbook', icon: Layers },
               {
                 key: 'bookings',
                 label: 'Bookings & Attendance',
                 icon: Calendar,
-                count: bookings_and_attendance.upcoming_bookings.length,
+                count: (bookings_and_attendance?.upcoming_bookings || []).length,
               },
               { key: 'finance', label: 'Finance', icon: CreditCard },
               {
@@ -551,9 +641,21 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             {/* Left Column: Contact & Identity Info */}
             <div className="space-y-6 lg:col-span-1">
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <User className="w-4 h-4 text-primary" /> Identity & Profile
-                </h3>
+                <div className="flex items-center justify-between pb-1 border-b border-border/40">
+                  <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary" /> Identity & Profile
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                    onClick={() => setIsEditProfileOpen(true)}
+                    title="Edit Member Contact & Profile Details"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Profile</span>
+                  </Button>
+                </div>
 
                 <div className="space-y-3 text-sm divide-y divide-border/50">
                   <div className="pt-2 flex justify-between">
@@ -933,6 +1035,23 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           member={member}
         />
       )}
+
+      {isEditProfileOpen && (
+        <EditMemberProfileModal
+          isOpen={isEditProfileOpen}
+          onClose={() => setIsEditProfileOpen(false)}
+          memberId={member.id}
+          initialData={{
+            name: overview.contact.full_name || member.name,
+            phone: overview.contact.phone || member.phone,
+            email: overview.contact.email || member.email,
+            gender: overview.contact.gender || (member as any)?.gender,
+            date_of_birth: (overview.contact as any)?.date_of_birth,
+            emergency_contact: overview.contact.emergency_contact,
+            branch_id: (member as any)?.branch_id || (member as any)?.home_branch_id,
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -1033,7 +1152,7 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
                   <p className="text-xs text-muted-foreground leading-relaxed">{evt.description}</p>
 
                   {/* Metadata display if available */}
-                  {evt.metadata && Object.keys(evt.metadata).length > 0 && (
+                  {evt.metadata && typeof evt.metadata === 'object' && Object.keys(evt.metadata).length > 0 && (
                     <div className="pt-2 flex flex-wrap gap-2 text-[11px] font-mono text-muted-foreground">
                       {Object.entries(evt.metadata).map(([key, val]) => (
                         <span key={key} className="bg-muted/60 px-2 py-0.5 rounded border border-border/40">

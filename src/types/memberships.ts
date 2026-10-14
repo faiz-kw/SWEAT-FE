@@ -121,10 +121,79 @@ export interface MembershipFreeze {
   reason_code?: string | null;
   reason_text?: string | null;
   extend_membership_days?: number | null;
+  fee_per_day?: string | number | null;
+  total_fee?: string | number | null;
+  payment_status?: string | null;
   status: FreezeStatus;
   approved_by_user?: string | null;
+  approved_by_name?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MembershipExtension {
+  id: string;
+  membership: string;
+  days: number;
+  fee_per_day: string;
+  activation_fee: string;
+  total_fee: string;
+  was_expired: boolean;
+  sessions_remaining_at_extension: string;
+  previous_end_date: string;
+  new_end_date: string;
+  reason_text?: string | null;
+  created_by_user?: string | null;
+  created_by_name?: string | null;
+  created_at: string;
+}
+
+export interface MembershipPolicyConfig {
+  id: string;
+  organization?: string;
+  extension_per_day_fee: string | number;
+  extension_activation_fee: string | number;
+  extension_min_days: number;
+  extension_max_days: number;
+  extension_requires_remaining_sessions: boolean;
+  freeze_per_day_fee: string | number;
+  freeze_min_days: number;
+  freeze_max_days: number;
+  freeze_max_count_per_cycle: number;
+  updated_by_user?: string | null;
+  updated_by_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExtensionCalculationResult {
+  membership_id: string;
+  membership_number?: string;
+  status?: string;
+  is_expired: boolean;
+  current_end_date: string;
+  new_end_date: string | null;
+  days: number;
+  fee_per_day: string;
+  activation_fee: string;
+  total_fee: string;
+  remaining_sessions: string;
+  can_extend: boolean;
+  error?: string | null;
+}
+
+export interface FreezeCalculationResult {
+  membership_id: string;
+  membership_number?: string;
+  current_end_date: string;
+  freeze_from: string;
+  freeze_until: string;
+  freeze_days: number;
+  fee_per_day: string;
+  total_fee: string;
+  new_end_date: string;
+  can_freeze: boolean;
+  error?: string | null;
 }
 
 export interface MembershipRenewalPolicy {

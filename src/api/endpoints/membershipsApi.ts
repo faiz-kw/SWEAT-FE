@@ -9,9 +9,13 @@ import {
   MembershipChangePolicy,
   MembershipChangeRequest,
   MembershipBranchHistory,
+  MembershipExtension,
+  MembershipPolicyConfig,
+  ExtensionCalculationResult,
+  FreezeCalculationResult,
   ParqRequirementResponse,
   SignParqPayload,
-} from '../types/memberships';
+} from '../../types/memberships';
 
 export const membershipsApi = {
   // Memberships
@@ -81,6 +85,53 @@ export const membershipsApi = {
     }
   ): Promise<MembershipFreeze> => {
     const res = await api.post(`/tenant/memberships/${membershipId}/freeze/`, data);
+    return res.data;
+  },
+
+  calculateFreeze: async (
+    membershipId: string,
+    data: {
+      freeze_from: string;
+      freeze_until: string;
+    }
+  ): Promise<FreezeCalculationResult> => {
+    const res = await api.post(`/tenant/memberships/${membershipId}/calculate-freeze/`, data);
+    return res.data;
+  },
+
+  calculateExtension: async (
+    membershipId: string,
+    data: {
+      days: number;
+    }
+  ): Promise<ExtensionCalculationResult> => {
+    const res = await api.post(`/tenant/memberships/${membershipId}/calculate-extension/`, data);
+    return res.data;
+  },
+
+  extendMembership: async (
+    membershipId: string,
+    data: {
+      days: number;
+      reason_text?: string;
+    }
+  ): Promise<{ membership: Membership; extension: MembershipExtension; message: string }> => {
+    const res = await api.post(`/tenant/memberships/${membershipId}/extend/`, data);
+    return res.data;
+  },
+
+  getExtensions: async (params?: { membership_id?: string }): Promise<MembershipExtension[]> => {
+    const res = await api.get('/tenant/membership-extensions/', { params });
+    return res.data.results || res.data;
+  },
+
+  getPolicyConfig: async (): Promise<MembershipPolicyConfig> => {
+    const res = await api.get('/tenant/membership-policy-configs/current/');
+    return res.data;
+  },
+
+  updatePolicyConfig: async (data: Partial<MembershipPolicyConfig>): Promise<MembershipPolicyConfig> => {
+    const res = await api.patch('/tenant/membership-policy-configs/current/', data);
     return res.data;
   },
 

@@ -84,22 +84,29 @@ export interface InitiateLeadCallResponse {
   is_duplicate: boolean;
 }
 
+export interface LeadsPaginatedResult {
+  results: Lead[];
+  count: number;
+}
+
+export interface GetLeadsParams {
+  current_status?: string;
+  search?: string;
+  branch_id?: string;
+  lead_source_id?: string;
+  campaign?: string;
+  platform?: string;
+  sla_status?: string;
+  program_id?: string;
+  assigned_sales_user_id?: string;
+  assigned_to_me?: boolean;
+  unassigned?: boolean;
+  page_size?: number;
+  page?: number;
+}
+
 export const crmApi = {
-  getLeads: async (params?: {
-    current_status?: string;
-    search?: string;
-    branch_id?: string;
-    lead_source_id?: string;
-    campaign?: string;
-    platform?: string;
-    sla_status?: string;
-    program_id?: string;
-    assigned_sales_user_id?: string;
-    assigned_to_me?: boolean;
-    unassigned?: boolean;
-    page_size?: number;
-    page?: number;
-  }): Promise<Lead[]> => {
+  getLeadsPaginated: async (params?: GetLeadsParams): Promise<LeadsPaginatedResult> => {
     const query = new URLSearchParams();
     if (params?.assigned_to_me) {
       query.append('assigned_to_me', 'true');
@@ -113,10 +120,10 @@ export const crmApi = {
     if (params?.search) {
       query.append('search', params.search);
     }
-    if (params?.branch_id) {
+    if (params?.branch_id && params.branch_id !== 'ALL') {
       query.append('branch_id', params.branch_id);
     }
-    if (params?.lead_source_id) {
+    if (params?.lead_source_id && params.lead_source_id !== 'ALL') {
       query.append('lead_source_id', params.lead_source_id);
     }
     if (params?.campaign) {
@@ -125,7 +132,7 @@ export const crmApi = {
     if (params?.platform) {
       query.append('platform', params.platform);
     }
-    if (params?.sla_status) {
+    if (params?.sla_status && params.sla_status !== 'ALL') {
       query.append('sla_status', params.sla_status);
     }
     if (params?.program_id) {
@@ -144,9 +151,43 @@ export const crmApi = {
     const endpoint = `/tenant/leads/${qStr ? `?${qStr}` : ''}`;
     const res = await api.get<PaginatedResponse<Lead> | Lead[]>(endpoint);
     if (Array.isArray(res.data)) {
-      return res.data;
+      return { results: res.data, count: res.data.length };
     }
-    return res.data.results ?? [];
+    return {
+      results: res.data.results ?? [],
+      count: typeof res.data.count === 'number' ? res.data.count : (res.data.results?.length ?? 0),
+    };
+  },
+
+  getLeads: async (params?: GetLeadsParams): Promise<Lead[]> => {
+    const res = await crmApi.getLeadsPaginated(params);
+    return res.results;
+  },
+
+  getLeadSummaryMetrics: async (params?: Record<string, any>): Promise<{
+    total: number;
+    inquiries: number;
+    trials: number;
+    converted: number;
+    sla_breaches: number;
+  }> => {
+    const sp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'ALL') {
+          sp.append(k, String(v));
+        }
+      });
+    }
+    const qStr = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await api.get<{
+      total: number;
+      inquiries: number;
+      trials: number;
+      converted: number;
+      sla_breaches: number;
+    }>(`/tenant/leads/summary_metrics/${qStr}`);
+    return res.data;
   },
 
   getLeadTimeline: async (leadId: string, limit = 50): Promise<LeadTimelineEvent[]> => {

@@ -39,6 +39,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { PaymentLinkShareModal } from './PaymentLinkShareModal';
 
 // ----------------------------------------------------------------------------
 // 1. RENEW MEMBERSHIP MODAL
@@ -50,9 +51,10 @@ export const RenewModal: React.FC<{
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
   const [months, setMonths] = useState(1);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE'>('CARD');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [carryForward, setCarryForward] = useState(true);
   const [reason, setReason] = useState('Standard membership renewal');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
 
   const { data: plans = [] } = useQuery({
     queryKey: ['renewal-plans'],
@@ -75,27 +77,51 @@ export const RenewModal: React.FC<{
       membersApi.renewMembership(member.id, {
         months,
         package_id: selectedPlan?.package_id || member.package_id,
-        payment_provider: paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY'),
+        payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
         payment_amount: priceEstimate,
         carry_forward: carryForward,
         reason,
       }),
     onSuccess: (res: any) => {
-      if (res.status === 'PENDING_APPROVAL') {
-        toast.info(res.message || 'Renewal submitted for cash approval');
-      } else {
-        toast.success(res.message || 'Membership renewed successfully');
-      }
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
       queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
-      onClose();
+
+      if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
+        setGeneratedLink({
+          paymentUrl: res.payment_url,
+          amount: res.amount || priceEstimate,
+          orderNumber: res.order_number,
+          memberName: member.name,
+          memberPhone: member.phone,
+          packageName: selectedPlan?.name || member.package_name,
+        });
+      } else if (res.status === 'PENDING_APPROVAL') {
+        toast.info(res.message || 'Renewal submitted for cash approval');
+        onClose();
+      } else {
+        toast.success(res.message || 'Membership renewed successfully');
+        onClose();
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || err.message || 'Failed to renew membership');
     },
   });
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -141,12 +167,18 @@ export const RenewModal: React.FC<{
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value as any)}
-              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background font-medium"
             >
-              <option value="CARD">Credit/Debit Card (POS)</option>
-              <option value="ONLINE">Online Payment (UPI/Gateway)</option>
+              <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
+              <option value="CARD">Credit/Debit Card (POS Terminal)</option>
+              <option value="ONLINE">Online Payment (Instant Gateway)</option>
               <option value="CASH">Cash (Requires Manager Approval)</option>
             </select>
+            {paymentMethod === 'PAYMENT_LINK' && (
+              <p className="text-[11px] text-primary">
+                🔗 Generates a secure checkout link to share with {member.name} via WhatsApp, SMS, or email. Plan activates upon completion.
+              </p>
+            )}
             {paymentMethod === 'CASH' && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
                 ⚠ Cash renewal creates a provisional contract pending manager approval before entitlement activation.
@@ -900,9 +932,10 @@ export const RejoinModal: React.FC<{
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
-  const [paymentProvider, setPaymentProvider] = useState<string>('CASH');
-  const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
+  const [paymentProvider, setPaymentProvider] = useState<string>('PAYMENT_LINK');
+  const [paymentMethod, setPaymentMethod] = useState<string>('PAYMENT_LINK');
   const [reason, setReason] = useState<string>('Former member returning to active status');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim() || !selectedPlan) return;
@@ -941,10 +974,12 @@ export const RejoinModal: React.FC<{
     queryFn: () => membersApi.getPaymentMethods(),
   });
 
-  const availableMethods = methodsData.length > 0 ? methodsData : [
+  const availableMethods = [
+    { id: 'PAYMENT_LINK', label: 'Send Payment Link (Online / WhatsApp / UPI)', provider: 'PAYMENT_LINK', category: 'ONLINE' },
     { id: 'CASH', label: 'Cash (Front Desk)', provider: 'CASH', category: 'OFFLINE' },
+    { id: 'CARD', label: 'Card / POS Terminal', provider: 'CARD', category: 'OFFLINE' },
+    { id: 'UPI', label: 'Direct UPI / QR Scan', provider: 'UPI', category: 'OFFLINE' },
     { id: 'BANK_TRANSFER', label: 'Bank Transfer / NEFT', provider: 'BANK_TRANSFER', category: 'OFFLINE' },
-    { id: 'UPI', label: 'UPI / QR Scan', provider: 'CASH', category: 'OFFLINE' },
   ];
 
   const selectedPlan = plans.find((p: any) => p.package_id === selectedPlanId || p.id === selectedPlanId);
@@ -969,17 +1004,42 @@ export const RejoinModal: React.FC<{
       if (paymentAmount) payload.payment_amount = parseFloat(paymentAmount);
       return membersApi.rejoinMember(member.id, payload);
     },
-    onSuccess: (res) => {
-      toast.success(res.message || 'Member successfully rejoined!');
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
       queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
-      onClose();
+
+      if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
+        setGeneratedLink({
+          paymentUrl: res.payment_url,
+          amount: res.amount || paymentAmount,
+          orderNumber: res.order_number,
+          memberName: member.name,
+          memberPhone: member.phone,
+          packageName: selectedPlan?.name,
+        });
+      } else {
+        toast.success(res.message || 'Member successfully rejoined!');
+        onClose();
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || err.message || 'Failed to rejoin member');
     },
   });
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
