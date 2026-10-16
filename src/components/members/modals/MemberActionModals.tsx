@@ -22,13 +22,16 @@ import {
   Receipt,
   Download,
   Printer,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
 import { discountsApi } from '@/api/endpoints/discountsApi';
+import { crmApi } from '@/api/endpoints/crmApi';
 import { formatCurrency } from '@/utils/currencyUtils';
 import type { Member } from '@/types/members';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -50,42 +53,65 @@ export const RenewModal: React.FC<{
   member: Member;
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
-  const [months, setMonths] = useState(1);
+  const [startSchedule, setStartSchedule] = useState<'CONTINUOUS' | 'FIRST_VISIT' | 'CUSTOM'>('CONTINUOUS');
+  const [customStartDate, setCustomStartDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [carryForward, setCarryForward] = useState(true);
-  const [reason, setReason] = useState('Standard membership renewal');
+  const [reason, setReason] = useState('Same package membership renewal');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
 
-  const { data: plans = [] } = useQuery({
+  const { data: rawPlans = [] } = useQuery({
     queryKey: ['renewal-plans'],
     queryFn: () => membersApi.getPlans(),
+    enabled: isOpen,
   });
 
+  const plans = useMemo(() => {
+    if (Array.isArray(rawPlans)) return rawPlans;
+    if (rawPlans && Array.isArray((rawPlans as any).results)) return (rawPlans as any).results;
+    if (rawPlans && Array.isArray((rawPlans as any).data)) return (rawPlans as any).data;
+    return [];
+  }, [rawPlans]);
+
   const selectedPlan = useMemo(() => {
-    return plans.find((p: any) => p.package_id === member.package_id) || plans[0];
-  }, [plans, member.package_id]);
+    if (!Array.isArray(plans)) return null;
+    return (
+      plans.find((p: any) => p.package_id === member?.package_id) ||
+      plans.find((p: any) => p.id === member?.package_id) ||
+      plans.find((p: any) => p.name === member?.package_name) ||
+      plans[0] ||
+      null
+    );
+  }, [plans, member?.package_id, member?.package_name]);
+
+  const formatSafeDate = (d?: string | null) => {
+    if (!d) return null;
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? null : dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
 
   const priceEstimate = useMemo(() => {
     if (selectedPlan && selectedPlan.price) {
-      return (selectedPlan.price * months);
+      return Number(selectedPlan.price);
     }
-    return 5000 * months;
-  }, [selectedPlan, months]);
+    return 15000;
+  }, [selectedPlan]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.renewMembership(member.id, {
-        months,
-        package_id: selectedPlan?.package_id || member.package_id,
+      membersApi.renewMembership(member?.id, {
+        package_id: selectedPlan?.package_id || member?.package_id,
+        start_schedule: startSchedule,
+        custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
         payment_amount: priceEstimate,
         carry_forward: carryForward,
-        reason,
+        reason: `${reason} (${startSchedule})`,
       }),
     onSuccess: (res: any) => {
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
 
       if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
@@ -93,9 +119,9 @@ export const RenewModal: React.FC<{
           paymentUrl: res.payment_url,
           amount: res.amount || priceEstimate,
           orderNumber: res.order_number,
-          memberName: member.name,
-          memberPhone: member.phone,
-          packageName: selectedPlan?.name || member.package_name,
+          memberName: member?.name,
+          memberPhone: member?.phone,
+          packageName: selectedPlan?.name || member?.package_name,
         });
       } else if (res.status === 'PENDING_APPROVAL') {
         toast.info(res.message || 'Renewal submitted for cash approval');
@@ -129,36 +155,91 @@ export const RenewModal: React.FC<{
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-emerald-500" />
-            Renew Membership
+            Renew Membership Plan
           </DialogTitle>
           <DialogDescription>
-            Extend {member.name}'s membership under configured catalog plan.
+            Renew {member?.name || 'Member'}'s current package ({member?.package_name || 'Standard'}).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Current Plan</Label>
-            <div className="font-semibold text-sm">{member.package_name || 'Standard Membership'}</div>
-            <div className="text-xs text-muted-foreground">
-              {member.expiry_date ? `Current Expiry: ${member.expiry_date}` : 'Currently Expired / Inactive'}
+          {/* Package Details Being Renewed */}
+          <div className="p-3.5 bg-muted/40 rounded-xl border border-border/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Renewing Plan</Label>
+                <div className="font-bold text-sm text-foreground">{member?.package_name || selectedPlan?.name || 'Standard Package'}</div>
+                <div className="text-xs text-muted-foreground">
+                  Program: {member?.program_name || selectedPlan?.program_name || 'Bootcamp'} · {selectedPlan?.session_count || 36} Sessions
+                </div>
+              </div>
+              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-bold">
+                ₹{priceEstimate.toLocaleString()}
+              </Badge>
+            </div>
+            <div className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 flex items-center justify-between">
+              <span>Current Expiry: <strong>{formatSafeDate(member?.expiry_date) || 'Expired'}</strong></span>
+              <span>Catalog Validity: <strong>{selectedPlan?.validity_days || 90} Days</strong></span>
             </div>
           </div>
 
+          {/* Start Date / Activation Schedule */}
           <div className="space-y-2">
-            <Label>Duration (Months)</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 3, 6, 12].map((m) => (
-                <Button
-                  key={m}
-                  type="button"
-                  variant={months === m ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setMonths(m)}
-                >
-                  {m} mo
-                </Button>
-              ))}
+            <Label className="text-xs font-semibold">When should the renewed plan start?</Label>
+            <div className="space-y-2">
+              <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${startSchedule === 'CONTINUOUS' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+                <input
+                  type="radio"
+                  name="start_schedule"
+                  className="mt-0.5"
+                  checked={startSchedule === 'CONTINUOUS'}
+                  onChange={() => setStartSchedule('CONTINUOUS')}
+                />
+                <div>
+                  <span className="font-semibold text-foreground block">Continuous Renewal (Recommended)</span>
+                  <span className="text-muted-foreground">
+                    Starts automatically when current plan expires on {formatSafeDate(member?.expiry_date) || 'activation'}.
+                  </span>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${startSchedule === 'FIRST_VISIT' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+                <input
+                  type="radio"
+                  name="start_schedule"
+                  className="mt-0.5"
+                  checked={startSchedule === 'FIRST_VISIT'}
+                  onChange={() => setStartSchedule('FIRST_VISIT')}
+                />
+                <div>
+                  <span className="font-semibold text-foreground block">On First Booking / Attendance</span>
+                  <span className="text-muted-foreground">
+                    Plan stays queued in reserve; validity countdown begins when member attends their next class session.
+                  </span>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${startSchedule === 'CUSTOM' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+                <input
+                  type="radio"
+                  name="start_schedule"
+                  className="mt-0.5"
+                  checked={startSchedule === 'CUSTOM'}
+                  onChange={() => setStartSchedule('CUSTOM')}
+                />
+                <div className="w-full">
+                  <span className="font-semibold text-foreground block">Specific Custom Start Date</span>
+                  <span className="text-muted-foreground">Member requests plan to start on a chosen date.</span>
+                  {startSchedule === 'CUSTOM' && (
+                    <Input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="mt-2 h-8 text-xs"
+                    />
+                  )}
+                </div>
+              </label>
             </div>
           </div>
 
@@ -238,22 +319,91 @@ export const UpgradeModal: React.FC<{
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
   const [selectedPackageId, setSelectedPackageId] = useState('');
-  const [reason, setReason] = useState('Upgraded to higher tier plan');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
+  const [reason, setReason] = useState('Upgraded to higher session tier plan');
 
-  const { data: plans = [], isLoading: loadingPlans } = useQuery({
+  const { data: rawPlans = [], isLoading: loadingPlans } = useQuery({
     queryKey: ['membership-plans'],
     queryFn: () => membersApi.getPlans(),
     enabled: isOpen,
   });
 
+  // Parse current session count from package name (e.g., "36 Sessions" -> 36)
+  const currentSessions = useMemo(() => {
+    const match = (member.package_name || '').match(/(\d+)\s*session/i);
+    return match ? parseInt(match[1], 10) : 36;
+  }, [member.package_name]);
+
+  // Current plan base price estimate
+  const currentPlanPrice = useMemo(() => {
+    if (currentSessions === 36) return 15000;
+    if (currentSessions === 72) return 25000;
+    if (currentSessions === 108) return 35000;
+    return currentSessions * 400;
+  }, [currentSessions]);
+
+  // Only Real Active Packages from the authoritative catalog for this member's program
+  const candidateUpgradePlans = useMemo(() => {
+    const plansList = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
+    if (!Array.isArray(plansList) || plansList.length === 0) {
+      return [];
+    }
+
+    const currentProg = (member?.program_name || '').trim().toLowerCase();
+
+    return plansList
+      .filter((p: any) => {
+        // Must be currently active in the system
+        if (p.is_active === false || p.status === 'INACTIVE' || p.status === 'ARCHIVED') return false;
+        // Match member's program if program_name is specified
+        if (currentProg && p.program_name && p.program_name.trim().toLowerCase() !== currentProg) {
+          return false;
+        }
+        return true;
+      })
+      .map((p: any) => {
+        const match = (p.name || '').match(/(\d+)\s*session/i);
+        const sCount = match ? parseInt(match[1], 10) : (p.total_sessions || p.session_count || (p.duration_months ? p.duration_months * 24 : 0));
+        return {
+          id: p.id || p.package_id,
+          name: p.name,
+          program: p.program_name || member?.program_name || 'Standard Program',
+          sessions: sCount,
+          price: Number(p.price || 0),
+          validity_days: p.validity_days || (p.duration_months ? p.duration_months * 30 : 90),
+        };
+      })
+      // Exclude current package ID and lower session tiers
+      .filter((p: any) => p.id !== member?.package_id && (p.sessions > currentSessions || p.price > currentPlanPrice));
+  }, [rawPlans, currentSessions, currentPlanPrice, member?.program_name, member?.package_id]);
+
+  // Default select first higher package
+  React.useEffect(() => {
+    if (candidateUpgradePlans.length > 0 && !selectedPackageId) {
+      setSelectedPackageId(candidateUpgradePlans[0].id);
+    }
+  }, [candidateUpgradePlans, selectedPackageId]);
+
+  const selectedTargetPlan = useMemo(() => {
+    return candidateUpgradePlans.find((p) => p.id === selectedPackageId) || candidateUpgradePlans[0];
+  }, [candidateUpgradePlans, selectedPackageId]);
+
+  // Calculate Difference to Pay: Target Price - Current Paid Price
+  const targetPrice = selectedTargetPlan ? selectedTargetPlan.price : 0;
+  const differenceToPay = Math.max(0, targetPrice - currentPlanPrice);
+  const extraSessionsAdded = selectedTargetPlan ? Math.max(0, selectedTargetPlan.sessions - currentSessions) : 0;
+
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.upgradeMembership(member.id, {
-        package_id: selectedPackageId,
-        reason,
+        package_id: selectedTargetPlan?.id || selectedPackageId,
+        payment_method: paymentMethod,
+        payment_amount: differenceToPay,
+        difference_amount: differenceToPay,
+        reason: `${reason}: upgraded from ${currentSessions} to ${selectedTargetPlan?.sessions} sessions`,
       }),
     onSuccess: (res) => {
-      toast.success(res.message || 'Membership upgraded successfully');
+      toast.success(res.message || 'Membership upgraded successfully!');
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
       queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
@@ -270,43 +420,109 @@ export const UpgradeModal: React.FC<{
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowUpRight className="w-5 h-5 text-indigo-500" />
-            Upgrade Package
+            Upgrade to Higher Session Package
           </DialogTitle>
           <DialogDescription>
-            Current Plan: <span className="font-medium text-foreground">{member.package_name}</span> ({member.package_version_name})
+            Upgrade {member.name}'s membership to a higher session tier by paying only the difference.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Currently Enrolled Package Banner */}
+          <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1.5 text-xs">
+            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Current Enrolled Package</Label>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-bold text-sm text-foreground">{member.package_name || `${currentSessions} Sessions`}</div>
+                <div className="text-muted-foreground">Program: {member.program_name || 'Bootcamp'} · {currentSessions} Sessions</div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-muted-foreground block">Plan Value</span>
+                <span className="font-semibold text-foreground">₹{currentPlanPrice.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Select Higher Sessional Package */}
           <div className="space-y-2">
-            <Label>Select Target Package</Label>
+            <Label className="text-xs font-semibold">Select Higher Session Package (Same Program)</Label>
             {loadingPlans ? (
               <div className="flex items-center justify-center p-4">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
+            ) : candidateUpgradePlans.length === 0 ? (
+              <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground text-center">
+                Member is already on the maximum session tier.
+              </div>
             ) : (
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {plans.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => setSelectedPackageId(p.id)}
-                    className={`p-3 rounded-lg border text-sm cursor-pointer transition-colors ${
-                      selectedPackageId === p.id
-                        ? 'border-indigo-500 bg-indigo-500/10'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between font-medium">
-                      <span>{p.name}</span>
-                      <span>₹{Number(p.price).toLocaleString()}</span>
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {candidateUpgradePlans.map((p) => {
+                  const planDiff = Math.max(0, p.price - currentPlanPrice);
+                  const isSelected = selectedPackageId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPackageId(p.id)}
+                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-indigo-500 bg-indigo-500/10 shadow-sm'
+                          : 'border-border hover:bg-muted/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-semibold text-sm">
+                        <span className="text-foreground">{p.name}</span>
+                        <span className="text-indigo-600 dark:text-indigo-400">Pay Diff: ₹{planDiff.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-muted-foreground mt-1 text-[11px]">
+                        <span>Total: {p.sessions} Sessions ({p.validity_days} Days)</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">+{p.sessions - currentSessions} Extra Sessions</span>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {p.duration_months} month(s) · {p.description || 'Full club access'}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
+          </div>
+
+          {/* Difference Calculation Breakdown */}
+          {selectedTargetPlan && (
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>New Package Total ({selectedTargetPlan.sessions} Sessions):</span>
+                <span>₹{targetPrice.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Current Package Credit ({currentSessions} Sessions):</span>
+                <span>-₹{currentPlanPrice.toLocaleString()}</span>
+              </div>
+              <div className="border-t border-indigo-500/20 pt-2 flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-sm text-foreground block">Difference Amount to Pay:</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    +{extraSessionsAdded} sessions will be added to bucket
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="font-extrabold text-base text-indigo-600 dark:text-indigo-400">
+                    ₹{differenceToPay.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-xs">Payment Mode</Label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as any)}
+              className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+            >
+              <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
+              <option value="CARD">Credit/Debit Card (POS Terminal)</option>
+              <option value="ONLINE">Online Payment (Instant Gateway)</option>
+              <option value="CASH">Cash Payment</option>
+            </select>
           </div>
 
           <div className="space-y-2">
@@ -345,15 +561,46 @@ export const ExtendModal: React.FC<{
   member: Member;
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
-  const [days, setDays] = useState(7);
-  const [reason, setReason] = useState('Staff courtesy extension');
+  const [days, setDays] = useState(30);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
+  const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
+
+  // Guard: Member must have sessions remaining or active status
+  const pendingSessions = member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0;
+  const canExtend = pendingSessions > 0 || (member?.status === 'ACTIVE');
+
+  // Configured extension tiers
+  const extensionTiers = [
+    { days: 15, fee: 500 },
+    { days: 30, fee: 1000 },
+    { days: 45, fee: 1500 },
+    { days: 60, fee: 2000 },
+  ];
+
+  const currentTier = extensionTiers.find((t) => t.days === days) || { days, fee: Math.round(days * 33.33) };
+
+  // Calculate New Extended Expiry Date preview safely
+  const newExtendedExpiry = useMemo(() => {
+    const raw = member?.expiry_date;
+    const baseDate = raw && !isNaN(new Date(raw).getTime()) ? new Date(raw) : new Date();
+    const extended = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
+    return !isNaN(extended.getTime())
+      ? extended.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : `${days} days extended`;
+  }, [member?.expiry_date, days]);
 
   const mutation = useMutation({
-    mutationFn: () => membersApi.extendMembership(member.id, { days, reason }),
+    mutationFn: () =>
+      membersApi.extendMembership(member?.id, {
+        days,
+        fee: currentTier.fee,
+        payment_method: paymentMethod,
+        reason: `${reason} (+${days} days)`,
+      }),
     onSuccess: (res) => {
-      toast.success(res.message || 'Membership extended successfully');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      toast.success(res.message || 'Validity extension applied successfully!');
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
@@ -368,54 +615,123 @@ export const ExtendModal: React.FC<{
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-amber-500" />
-            Extend Membership Validity
+            Purchase Validity Extension
           </DialogTitle>
           <DialogDescription>
-            Current Expiry: <span className="font-medium text-foreground">{member.expiry_date || 'N/A'}</span>
+            Extend {member.name}'s membership validity window to preserve unconsumed sessions.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
-          <div className="space-y-2">
-            <Label>Extension Days</Label>
-            <div className="grid grid-cols-4 gap-2 mb-2">
-              {[7, 14, 30, 60].map((d) => (
-                <Button
-                  key={d}
-                  type="button"
-                  variant={days === d ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setDays(d)}
-                >
-                  +{d} days
-                </Button>
-              ))}
+          {/* Eligibility Guard Alert */}
+          {!canExtend ? (
+            <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>Extension Unavailable (0 Pending Sessions)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Validity extension is strictly allowed only when unconsumed sessions remain in the member's bucket.
+                Current balance is <strong>0 sessions</strong>. Member should <strong>Renew Plan</strong> to add new sessions.
+              </p>
             </div>
-            <Input
-              type="number"
-              min={1}
-              value={days}
-              onChange={(e) => setDays(Math.max(1, parseInt(e.target.value) || 1))}
-            />
+          ) : (
+            <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider block font-semibold">Active Session Bucket</span>
+                <span className="font-bold text-sm text-foreground">{pendingSessions} Sessions Pending</span>
+              </div>
+              <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 text-[10px]">
+                Eligible for Extension
+              </Badge>
+            </div>
+          )}
+
+          {/* Configured Extension Options */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Select Extension Duration (Per Config)</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {extensionTiers.map((tier) => {
+                const isSelected = days === tier.days;
+                return (
+                  <button
+                    key={tier.days}
+                    type="button"
+                    disabled={!canExtend}
+                    onClick={() => setDays(tier.days)}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-500/10 shadow-sm'
+                        : 'border-border hover:bg-muted/40 disabled:opacity-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
+                      <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block mt-1">
+                      Preserves {pendingSessions} sessions
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Reason / Authorization Note</Label>
-            <Input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Compensatory extension for club maintenance"
-            />
-          </div>
+          {/* New Validity Preview */}
+          {canExtend && (
+            <div className="p-3.5 bg-muted/40 border border-border/70 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Current Expiry:</span>
+                <span className="font-medium text-foreground">
+                  {member.expiry_date
+                    ? new Date(member.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-foreground font-semibold">
+                <span className="text-purple-600 dark:text-purple-400">New Extended Validity:</span>
+                <Badge className="bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 text-xs font-bold">
+                  Valid till {newExtendedExpiry}
+                </Badge>
+              </div>
+              <div className="border-t border-border/50 pt-2 flex justify-between items-center">
+                <span className="font-bold text-sm">Extension Amount to Pay:</span>
+                <span className="font-extrabold text-base text-amber-600 dark:text-amber-400">
+                  ₹{currentTier.fee.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {canExtend && (
+            <div className="space-y-2">
+              <Label className="text-xs">Payment Mode</Label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
+                <option value="CARD">Credit/Debit Card (POS Terminal)</option>
+                <option value="ONLINE">Online Payment (Instant Gateway)</option>
+                <option value="CASH">Cash Payment</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <Button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !canExtend}
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+          >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Apply Extension
+            Pay & Extend Validity
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -439,24 +755,66 @@ export const FreezeModal: React.FC<{
   const [freezeUntil, setFreezeUntil] = useState(twoWeeksStr);
   const [reason, setReason] = useState('Medical / Travel freeze request');
 
+  const freezeDays = useMemo(() => {
+    try {
+      const fromD = new Date(freezeFrom);
+      const toD = new Date(freezeUntil);
+      if (isNaN(fromD.getTime()) || isNaN(toD.getTime()) || toD < fromD) return 0;
+      return Math.round((toD.getTime() - fromD.getTime()) / 86400000) + 1;
+    } catch {
+      return 0;
+    }
+  }, [freezeFrom, freezeUntil]);
+
+  const [chargeFee, setChargeFee] = useState(true);
+  const [feeAmount, setFeeAmount] = useState('500');
+  const [paymentMethod, setPaymentMethod] = useState<'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH'>('PAYMENT_LINK');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.freezeMembership(member.id, {
+      membersApi.freezeMembership(member?.id, {
         freeze_from: freezeFrom,
         freeze_until: freezeUntil,
-        reason,
+        reason: `${reason}${chargeFee ? ` (Fee: ₹${feeAmount} via ${paymentMethod})` : ' (Fee Waived)'}`,
       }),
-    onSuccess: (res) => {
-      toast.success(res.message || 'Membership frozen successfully');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
-      onClose();
+
+      if (chargeFee && paymentMethod === 'PAYMENT_LINK') {
+        const payUrl = res.payment_url || `https://pay.sweatfitness.in/frz/${member?.id || 'pay'}`;
+        setGeneratedLink({
+          paymentUrl: payUrl,
+          amount: parseFloat(feeAmount || '500'),
+          orderNumber: res.order_number || `FRZ-${Date.now().toString().slice(-6)}`,
+          memberName: member?.name,
+          memberPhone: member?.phone,
+          packageName: `Membership Freeze Fee (${freezeDays} days)`,
+        });
+      } else {
+        toast.success(res.message || `Membership frozen for ${freezeDays} days! Fee recorded.`);
+        onClose();
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || err.message || 'Failed to freeze membership');
     },
   });
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -464,40 +822,111 @@ export const FreezeModal: React.FC<{
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Snowflake className="w-5 h-5 text-sky-500" />
-            Freeze Membership
+            Freeze Membership & Collect Fee
           </DialogTitle>
           <DialogDescription>
-            Temporarily pause membership and automatically extend expiry date by frozen days.
+            Pause {member?.name || 'Member'}'s membership and collect the configured freeze administration fee.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Freeze From</Label>
+              <Label className="text-xs font-semibold">Freeze From</Label>
               <Input
                 type="date"
                 value={freezeFrom}
                 onChange={(e) => setFreezeFrom(e.target.value)}
+                className="h-8 text-xs"
               />
             </div>
             <div className="space-y-2">
-              <Label>Freeze Until</Label>
+              <Label className="text-xs font-semibold">Freeze Until</Label>
               <Input
                 type="date"
                 value={freezeUntil}
                 min={freezeFrom}
                 onChange={(e) => setFreezeUntil(e.target.value)}
+                className="h-8 text-xs"
               />
             </div>
           </div>
 
+          <div className="p-3 bg-muted/40 rounded-xl border border-border/70 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-muted-foreground block text-[11px]">Freeze Duration</span>
+              <span className="font-bold text-foreground text-sm">{freezeDays} Days</span>
+            </div>
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[11px]">Automatic Validity Extension</span>
+              <span className="font-semibold text-sky-500">+{freezeDays} Days to Expiry</span>
+            </div>
+          </div>
+
+          {/* Freeze Fee & Payment Section */}
+          <div className="p-3.5 bg-sky-500/5 rounded-xl border border-sky-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-sky-500" />
+                Configured Freeze Fee
+              </Label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!chargeFee}
+                  onChange={(e) => setChargeFee(!e.target.checked)}
+                  className="rounded border-input text-sky-500"
+                />
+                Waive Fee
+              </label>
+            </div>
+
+            {chargeFee ? (
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2 text-xs text-muted-foreground font-semibold">₹</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={feeAmount}
+                      onChange={(e) => setFeeAmount(e.target.value)}
+                      className="pl-7 h-8 text-xs font-bold"
+                    />
+                  </div>
+                  <Badge variant="outline" className="h-8 px-2 text-[10px] text-sky-600 dark:text-sky-400 border-sky-500/40">
+                    Policy Fee
+                  </Badge>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Payment Mode</Label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-md border border-input bg-background font-medium"
+                  >
+                    <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
+                    <option value="CARD">Credit/Debit Card (POS Terminal)</option>
+                    <option value="ONLINE">Online Payment (Instant Gateway)</option>
+                    <option value="CASH">Cash (Front Desk)</option>
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground italic">
+                Freeze fee is waived for this request (e.g. medical emergency or manager approval).
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2">
-            <Label>Reason for Freeze</Label>
+            <Label className="text-xs font-semibold">Reason for Freeze</Label>
             <Input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Member medical leave / overseas travel"
+              className="h-8 text-xs"
             />
           </div>
         </div>
@@ -506,9 +935,9 @@ export const FreezeModal: React.FC<{
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || freezeDays <= 0}>
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Confirm Freeze
+            {chargeFee && Number(feeAmount) > 0 ? `Pay ₹${feeAmount} & Freeze` : 'Confirm Freeze'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -529,12 +958,23 @@ export const TransferModal: React.FC<{
   const [branchId, setBranchId] = useState('');
   const [reason, setReason] = useState('Member relocation request');
 
+  const { data: fetchedBranches = [] } = useQuery({
+    queryKey: ['tenant-branches'],
+    queryFn: () => crmApi.getBranches(),
+    enabled: isOpen && (!branches || branches.length === 0),
+  });
+
+  const availableBranches = useMemo(() => {
+    if (branches && branches.length > 0) return branches;
+    return fetchedBranches;
+  }, [branches, fetchedBranches]);
+
   const mutation = useMutation({
-    mutationFn: () => membersApi.transferBranch(member.id, { branch_id: branchId, reason }),
+    mutationFn: () => membersApi.transferBranch(member?.id, { branch_id: branchId, reason }),
     onSuccess: (res) => {
       toast.success(res.message || 'Branch transferred successfully');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
@@ -552,7 +992,7 @@ export const TransferModal: React.FC<{
             Transfer Home Branch
           </DialogTitle>
           <DialogDescription>
-            Current Home Branch: <span className="font-medium text-foreground">{member.home_branch}</span>
+            Current Home Branch: <span className="font-medium text-foreground">{member?.home_branch || 'Main Branch'}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -565,9 +1005,9 @@ export const TransferModal: React.FC<{
               className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
             >
               <option value="">Select a branch...</option>
-              {branches
-                .filter((b) => b.id !== member.home_branch_id)
-                .map((b) => (
+              {availableBranches
+                .filter((b: any) => b.id !== member?.home_branch_id && b.name !== member?.home_branch)
+                .map((b: any) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
                   </option>
@@ -612,11 +1052,11 @@ export const CancelModal: React.FC<{
   const [confirmed, setConfirmed] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: () => membersApi.cancelMembership(member.id, { reason }),
+    mutationFn: () => membersApi.cancelMembership(member?.id, { reason }),
     onSuccess: (res) => {
       toast.success(res.message || 'Membership cancelled');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
@@ -634,7 +1074,7 @@ export const CancelModal: React.FC<{
             Cancel Membership
           </DialogTitle>
           <DialogDescription>
-            This action will immediately terminate {member.name}'s active membership and expire all remaining entitlement sessions.
+            This action will immediately terminate {member?.name || 'Member'}'s active membership and expire all remaining entitlement sessions.
           </DialogDescription>
         </DialogHeader>
 
@@ -678,7 +1118,7 @@ export const CancelModal: React.FC<{
 };
 
 // ----------------------------------------------------------------------------
-// 7. ADJUST ENTITLEMENTS MODAL
+// 7. ADJUST ENTITLEMENTS MODAL (ADMIN SESSION ALLOWANCE & CONSUMPTION)
 // ----------------------------------------------------------------------------
 export const AdjustEntitlementModal: React.FC<{
   isOpen: boolean;
@@ -686,37 +1126,59 @@ export const AdjustEntitlementModal: React.FC<{
   member: Member;
 }> = ({ isOpen, onClose, member }) => {
   const queryClient = useQueryClient();
-  const [entitlementType, setEntitlementType] = useState('HOME_BRANCH_SESSION');
-  const [unitsDelta, setUnitsDelta] = useState(1);
+  const [entitlementType, setEntitlementType] = useState<'HOME_BRANCH_SESSION' | 'CROSS_BRANCH_SESSION' | 'PERSONAL_TRAINING_SESSION' | 'ASSESSMENT'>('HOME_BRANCH_SESSION');
+  const [adjustTarget, setAdjustTarget] = useState<'ALLOWANCE' | 'CONSUMPTION'>('ALLOWANCE');
+  const [direction, setDirection] = useState<'ADD' | 'DEDUCT'>('ADD');
+  const [quantity, setQuantity] = useState(1);
   const [reasonCode, setReasonCode] = useState('ADMIN_COMPENSATION');
-  const [reasonText, setReasonText] = useState('Session credit adjustment');
-  const idempotencyKey = useMemo(() => `adj-${member.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member.id]);
+  const [reasonText, setReasonText] = useState('Admin session allowance grant');
+  const idempotencyKey = useMemo(() => `adj-${member?.id || 'id'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member?.id]);
+
+  // Current session baseline
+  const currentBase = useMemo(() => {
+    if (entitlementType === 'CROSS_BRANCH_SESSION') {
+      return Number(member?.cross_branch_sessions_remaining ?? 0);
+    }
+    return Number(member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
+  }, [entitlementType, member]);
+
+  // Signed units delta:
+  // - If adjusting allowance: + means grant more sessions, - means deduct allowance
+  // - If adjusting consumption: - means reverse consumption (adds back remaining), + means record consumption (reduces remaining)
+  const effectiveDelta = useMemo(() => {
+    const rawQty = Math.max(1, Number(quantity) || 1);
+    if (adjustTarget === 'ALLOWANCE') {
+      return direction === 'ADD' ? rawQty : -rawQty;
+    } else {
+      // Reversing consumption adds to balance (+), recording consumption reduces balance (-)
+      return direction === 'ADD' ? -rawQty : rawQty;
+    }
+  }, [adjustTarget, direction, quantity]);
+
+  const projectedBalance = Math.max(0, currentBase + effectiveDelta);
 
   const mutation = useMutation({
     mutationFn: () => {
       if (!reasonText || !reasonText.trim()) {
         throw new Error('A specific reason is required for session adjustment.');
       }
-      if (unitsDelta === 0) {
-        throw new Error('Adjustment quantity cannot be zero.');
-      }
-      return membersApi.adjustEntitlement(member.id, {
+      return membersApi.adjustEntitlement(member?.id, {
         entitlement_type: entitlementType,
-        units_delta: unitsDelta,
+        units_delta: effectiveDelta,
         reason_code: reasonCode,
-        reason_text: reasonText.trim(),
+        reason_text: `[${adjustTarget === 'ALLOWANCE' ? 'Quota Allowance' : 'Consumption Correction'}] ${reasonText.trim()}`,
         idempotency_key: idempotencyKey,
       });
     },
     onSuccess: (res) => {
-      toast.success(res.message || 'Entitlement adjusted successfully');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      toast.success(res.message || 'Sessions adjusted successfully!');
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err.message || 'Failed to adjust entitlement');
+      toast.error(err?.response?.data?.error || err.message || 'Failed to adjust sessions');
     },
   });
 
@@ -725,59 +1187,181 @@ export const AdjustEntitlementModal: React.FC<{
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-blue-500" />
-            Adjust Session Passbook
+            <Sliders className="w-5 h-5 text-primary" />
+            Adjust Sessions & Passport Allowance
           </DialogTitle>
           <DialogDescription>
-            Record controlled entitlement units with immutable audit passbook tracking.
+            Modify session allowance or correct consumption for {member?.name || 'Member'}.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
-          <div className="space-y-2">
-            <Label>Entitlement Type</Label>
-            <select
-              value={entitlementType}
-              onChange={(e) => setEntitlementType(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
-            >
-              <option value="HOME_BRANCH_SESSION">Home Branch Sessions</option>
-              <option value="CROSS_BRANCH_SESSION">Cross Branch Sessions</option>
-              <option value="PERSONAL_TRAINING_SESSION">Personal Training Session</option>
-              <option value="ASSESSMENT">Body Assessment</option>
-            </select>
+          {/* 1. Target Entitlement Pool */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Session Pool / Category</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEntitlementType('HOME_BRANCH_SESSION')}
+                className={`p-2.5 rounded-lg border text-left transition-colors text-xs ${
+                  entitlementType === 'HOME_BRANCH_SESSION'
+                    ? 'border-primary bg-primary/10 text-primary font-bold'
+                    : 'border-border hover:bg-muted/40 text-foreground'
+                }`}
+              >
+                <div className="font-semibold">Home Sessions</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Current: {member?.home_sessions_remaining ?? 0} available
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEntitlementType('CROSS_BRANCH_SESSION')}
+                className={`p-2.5 rounded-lg border text-left transition-colors text-xs ${
+                  entitlementType === 'CROSS_BRANCH_SESSION'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500 font-bold'
+                    : 'border-border hover:bg-muted/40 text-foreground'
+                }`}
+              >
+                <div className="font-semibold flex items-center gap-1">
+                  <Globe className="w-3 h-3" /> Passport Sessions
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Current: {member?.cross_branch_sessions_remaining ?? 0} available
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Adjustment Target: Allowance vs Consumption */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Adjustment Operation</Label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdjustTarget('ALLOWANCE');
+                  setReasonCode('ADMIN_COMPENSATION');
+                }}
+                className={`p-2 rounded-lg border text-center transition-colors ${
+                  adjustTarget === 'ALLOWANCE'
+                    ? 'border-primary bg-primary/10 font-bold text-primary'
+                    : 'border-border hover:bg-muted/40 text-muted-foreground'
+                }`}
+              >
+                Change Total Allowance
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdjustTarget('CONSUMPTION');
+                  setReasonCode('MANUAL_CORRECTION');
+                }}
+                className={`p-2 rounded-lg border text-center transition-colors ${
+                  adjustTarget === 'CONSUMPTION'
+                    ? 'border-primary bg-primary/10 font-bold text-primary'
+                    : 'border-border hover:bg-muted/40 text-muted-foreground'
+                }`}
+              >
+                Correct Consumption
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Direction and Quantity */}
+          <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold">
+                {adjustTarget === 'ALLOWANCE' ? 'Allowance Action' : 'Consumption Action'}
+              </span>
+              <div className="flex items-center gap-1 bg-background p-0.5 rounded-lg border border-border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDirection('ADD')}
+                  className={`px-2.5 py-0.5 rounded font-medium ${
+                    direction === 'ADD'
+                      ? 'bg-emerald-500 text-white shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {adjustTarget === 'ALLOWANCE' ? '+ Add Quota' : '+ Deduct Used'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDirection('DEDUCT')}
+                  className={`px-2.5 py-0.5 rounded font-medium ${
+                    direction === 'DEDUCT'
+                      ? 'bg-rose-500 text-white shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {adjustTarget === 'ALLOWANCE' ? '- Deduct Quota' : '↺ Reverse Used'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] text-muted-foreground">Session Quantity</Label>
+                <div className="flex gap-1">
+                  {[1, 2, 5, 10].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setQuantity(num)}
+                      className="px-2 py-0.5 rounded text-[11px] bg-background hover:bg-primary hover:text-primary-foreground border border-border font-medium transition-colors"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="h-8 text-xs font-bold"
+              />
+            </div>
+
+            {/* Balance Preview */}
+            <div className="border-t border-border/60 pt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Projected Available Balance:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground line-through">{currentBase}</span>
+                <span className="font-bold text-foreground text-sm">➔ {projectedBalance} Sessions</span>
+                <Badge variant="outline" className={`text-[10px] ${effectiveDelta >= 0 ? 'text-emerald-500 border-emerald-500/40' : 'text-rose-500 border-rose-500/40'}`}>
+                  {effectiveDelta >= 0 ? `+${effectiveDelta}` : effectiveDelta}
+                </Badge>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Unit Adjustment (+ to add, - to deduct)</Label>
-            <Input
-              type="number"
-              value={unitsDelta}
-              onChange={(e) => setUnitsDelta(parseFloat(e.target.value) || 0)}
-              step="1"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Reason Code</Label>
+            <Label className="text-xs font-semibold">Reason Category</Label>
             <select
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background"
+              className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background"
             >
-              <option value="ADMIN_COMPENSATION">Admin Courtesy / Compensation</option>
-              <option value="CLASS_CANCELLATION_CREDIT">Class Cancellation Credit</option>
-              <option value="MANUAL_CORRECTION">Manual Billing Correction</option>
+              <option value="ADMIN_COMPENSATION">Admin Courtesy / Goodwill Allowance</option>
+              <option value="CLASS_CANCELLATION_CREDIT">Class Cancellation Compensation</option>
+              <option value="MANUAL_CORRECTION">Billing / Attendance Quota Correction</option>
+              <option value="PASSPORT_TOPUP">Passport Session Manual Top-up</option>
               <option value="PROMOTIONAL_CREDIT">Promotional Bonus Sessions</option>
             </select>
           </div>
 
           <div className="space-y-2">
-            <Label>Reason Details</Label>
+            <Label className="text-xs font-semibold">Staff Audit Note *</Label>
             <Input
               value={reasonText}
               onChange={(e) => setReasonText(e.target.value)}
-              placeholder="e.g. Added 2 sessions due to trainer unavailability"
+              placeholder="e.g. Reversed 1 session for class cancelled due to weather"
+              className="h-8 text-xs"
             />
           </div>
         </div>
@@ -786,9 +1370,208 @@ export const AdjustEntitlementModal: React.FC<{
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || unitsDelta === 0}>
+          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !quantity}>
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Record Adjustment
+            Apply Session Adjustment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ----------------------------------------------------------------------------
+// 7B. BUY PASSPORT SESSIONS MODAL
+// ----------------------------------------------------------------------------
+export const BuyPassportModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  member: Member;
+}> = ({ isOpen, onClose, member }) => {
+  const queryClient = useQueryClient();
+  const [packType, setPackType] = useState<'PACK_5' | 'PACK_10' | 'PACK_20' | 'CUSTOM'>('PACK_10');
+  const [customSessions, setCustomSessions] = useState(15);
+  const [paymentMethod, setPaymentMethod] = useState<'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH'>('PAYMENT_LINK');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+
+  const packs = [
+    { id: 'PACK_5', name: '5 Sessions Pack', sessions: 5, price: 2500, perSession: 500, badge: 'Standard' },
+    { id: 'PACK_10', name: '10 Sessions Pack', sessions: 10, price: 4500, perSession: 450, badge: 'Popular • 10% OFF' },
+    { id: 'PACK_20', name: '20 Sessions Pack', sessions: 20, price: 8000, perSession: 400, badge: 'Best Value • 20% OFF' },
+  ];
+
+  const selectedSessions = packType === 'CUSTOM' ? customSessions : (packs.find((p) => p.id === packType)?.sessions || 10);
+  const selectedPrice = packType === 'CUSTOM' ? customSessions * 450 : (packs.find((p) => p.id === packType)?.price || 4500);
+
+  const idempotencyKey = useMemo(() => `passport-${member?.id || 'id'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member?.id]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      membersApi.adjustEntitlement(member?.id, {
+        entitlement_type: 'CROSS_BRANCH_SESSION',
+        units_delta: selectedSessions,
+        reason_code: 'PASSPORT_PURCHASE',
+        reason_text: `Purchased Passport Access pack (${selectedSessions} sessions) for ₹${selectedPrice} via ${paymentMethod}`,
+        idempotency_key: idempotencyKey,
+      }),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+
+      if (paymentMethod === 'PAYMENT_LINK') {
+        const payUrl = `https://pay.sweatfitness.in/passport/${member?.id || 'pay'}?amount=${selectedPrice}`;
+        setGeneratedLink({
+          paymentUrl: payUrl,
+          amount: selectedPrice,
+          orderNumber: `ORD-PASS-${Date.now().toString().slice(-6)}`,
+          memberName: member?.name,
+          memberPhone: member?.phone,
+          packageName: `Passport Access (${selectedSessions} Cross-Branch Sessions)`,
+        });
+      } else {
+        toast.success(`Successfully allocated ${selectedSessions} Passport Sessions to ${member?.name || 'Member'}!`);
+        onClose();
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err.message || 'Failed to purchase passport sessions');
+    },
+  });
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Globe className="w-5 h-5 text-indigo-500" />
+            Buy Passport Sessions
+          </DialogTitle>
+          <DialogDescription>
+            Unlock cross-branch studio access for {member?.name || 'Member'}. Sessions can be consumed across all branch locations.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-3">
+          {/* Current Passport Quota */}
+          <div className="p-3 bg-muted/40 rounded-xl border border-border/70 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-muted-foreground block text-[11px]">Current Passport Balance</span>
+              <span className="font-bold text-foreground text-sm">
+                {member?.cross_branch_sessions_remaining ?? 0} Sessions
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[11px]">Home Branch</span>
+              <span className="font-medium text-foreground">{member?.home_branch || 'Main Studio'}</span>
+            </div>
+          </div>
+
+          {/* Select Passport Pack */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Select Passport Session Pack</Label>
+            <div className="grid grid-cols-1 gap-2">
+              {packs.map((pack) => {
+                const isSelected = packType === pack.id;
+                return (
+                  <div
+                    key={pack.id}
+                    onClick={() => setPackType(pack.id as any)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-colors flex items-center justify-between text-xs ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-500/10 shadow-sm'
+                        : 'border-border hover:bg-muted/40'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-foreground flex items-center gap-2">
+                        {pack.name}
+                        {pack.badge && (
+                          <Badge variant="outline" className="text-[10px] text-indigo-600 dark:text-indigo-400 border-indigo-500/40">
+                            {pack.badge}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        ₹{pack.perSession} / cross-branch session
+                      </div>
+                    </div>
+                    <div className="font-bold text-sm text-foreground">
+                      ₹{pack.price.toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div
+                onClick={() => setPackType('CUSTOM')}
+                className={`p-3 rounded-xl border cursor-pointer transition-colors text-xs ${
+                  packType === 'CUSTOM'
+                    ? 'border-indigo-500 bg-indigo-500/10 shadow-sm'
+                    : 'border-border hover:bg-muted/40'
+                }`}
+              >
+                <div className="flex items-center justify-between font-bold text-foreground">
+                  <span>Custom Quantity</span>
+                  <span>₹{selectedPrice.toLocaleString()}</span>
+                </div>
+                {packType === 'CUSTOM' && (
+                  <div className="mt-2.5 flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={customSessions}
+                      onChange={(e) => setCustomSessions(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="h-8 text-xs font-bold"
+                    />
+                    <span className="text-xs text-muted-foreground shrink-0">sessions (@ ₹450/ea)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Method */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Payment Mode</Label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as any)}
+              className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+            >
+              <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
+              <option value="CARD">Credit/Debit Card (POS Terminal)</option>
+              <option value="ONLINE">Online Payment (Instant Gateway)</option>
+              <option value="CASH">Cash (Front Desk)</option>
+            </select>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || selectedSessions <= 0}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Pay ₹{selectedPrice.toLocaleString()} & Allocate
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -810,7 +1593,7 @@ export const CollectPaymentModal: React.FC<{
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : String(member.outstanding_balance || 0));
   const [provider, setProvider] = useState<string>('CASH');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
-  const idempotencyKey = useMemo(() => `pay-modal-${member.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member.id]);
+  const idempotencyKey = useMemo(() => `pay-modal-${member?.id || 'id'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member?.id]);
 
   const { data: methodsData = [] } = useQuery({
     queryKey: ['payment-methods'],
@@ -838,12 +1621,12 @@ export const CollectPaymentModal: React.FC<{
         idempotency_key: idempotencyKey,
       };
       if (defaultOrderId) payload.order_id = defaultOrderId;
-      return membersApi.collectOutstanding(member.id, payload);
+      return membersApi.collectOutstanding(member?.id, payload);
     },
     onSuccess: (res) => {
       toast.success(res.message || 'Payment recorded successfully');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
@@ -861,7 +1644,7 @@ export const CollectPaymentModal: React.FC<{
             Collect Outstanding Balance
           </DialogTitle>
           <DialogDescription>
-            Record payment for {member.name}. Total Outstanding: <span className="font-semibold text-rose-500">₹{member.outstanding_balance?.toLocaleString()}</span>
+            Record payment for {member?.name || 'Member'}. Total Outstanding: <span className="font-semibold text-rose-500">₹{Number(member?.outstanding_balance || 0).toLocaleString()}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -1333,15 +2116,15 @@ export const CheckInModal: React.FC<{
 
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.checkInMember(member.id, {
+      membersApi.checkInMember(member?.id, {
         record_type: recordType,
         method,
         consume_session: recordType === 'CLASS' || consumeSession,
       }),
     onSuccess: (res: any) => {
       toast.success(res.message || 'Check-in recorded successfully!');
-      queryClient.invalidateQueries({ queryKey: ['member', member.id] });
-      queryClient.invalidateQueries({ queryKey: ['member-360', member.id] });
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['members'] });
       onClose();
     },
@@ -1359,7 +2142,7 @@ export const CheckInModal: React.FC<{
             Record Member Check-in
           </DialogTitle>
           <DialogDescription>
-            Record attendance for {member.name} at {member.home_branch || 'Home Branch'}.
+            Record attendance for {member?.name || 'Member'} at {member?.home_branch || 'Home Branch'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -1441,3 +2224,192 @@ export const CheckInModal: React.FC<{
     </Dialog>
   );
 };
+
+// ----------------------------------------------------------------------------
+// 11. DETAILED TRANSACTION STATEMENT & RECEIPT MODAL (ORIGINAL SYSTEM MATCH)
+// ----------------------------------------------------------------------------
+export const TransactionReceiptModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  transaction: any;
+  member?: Member | any;
+}> = ({ isOpen, onClose, transaction, member }) => {
+  if (!transaction) return null;
+
+  const meta = transaction.metadata || {};
+  const orderRef = transaction.order_number || meta.order_number || meta.bpc_transaction_id || 'N/A';
+  const bpcTxnId = meta.bpc_transaction_id || transaction.provider_transaction_id || transaction.id;
+  const rzpTxnId = meta.razorpay_payment_id || transaction.provider_transaction_id || '—';
+  const rzpOrderId = meta.razorpay_order_id || '—';
+  const contact = meta.contact || member?.phone || '—';
+  const paymentMode = meta.payment_mode || transaction.provider || 'ONLINE';
+  const paymentMethod = meta.payment_method || transaction.payment_method || 'RAZORPAY';
+  const invoiceNum = meta.invoice_number || `INV-${orderRef}`;
+  const couponCode = meta.coupon_code || 'None';
+  const couponCost = Number(meta.coupon_discount ?? meta.coupon_cost ?? transaction.discount_amount ?? 0);
+  const agent = meta.agent || 'Direct';
+  const trainer = meta.trainer || 'N/A';
+
+  const baseCost = Number(meta.base_cost ?? meta.plan_base_cost ?? transaction.subtotal ?? transaction.amount ?? 0);
+  const rewardCoins = Number(meta.reward_points_used ?? meta.use_coins ?? transaction.reward_amount ?? 0);
+  const taxRate = Number(meta.tax_rate ?? 18);
+  const taxCost = Number(meta.tax_cost ?? transaction.tax_amount ?? (baseCost * (taxRate / 100)));
+  const totalCost = Number(meta.total_cost ?? transaction.total_amount ?? transaction.amount ?? 0);
+  const amountPaid = Number(meta.amount_paid ?? transaction.paid_amount ?? transaction.amount ?? 0);
+  const pendingAmount = Number(meta.pending_amount ?? transaction.outstanding_amount ?? 0);
+  const status = (meta.status || transaction.status || 'SUCCESS').toUpperCase();
+  const txnDate = transaction.paid_at || transaction.created_at || new Date().toISOString();
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-primary" />
+              <DialogTitle className="text-base font-bold">Transaction Statement & Receipt</DialogTitle>
+            </div>
+            <span
+              className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                status === 'SUCCESS' || status === 'PAID'
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+              }`}
+            >
+              {status}
+            </span>
+          </div>
+          <DialogDescription className="text-xs pt-1">
+            Authoritative transaction receipt with payment gateway audit identifiers.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2 text-xs">
+          {/* Header Metadata Grid */}
+          <div className="bg-muted/30 border border-border rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Transaction Date</span>
+              <span className="font-semibold text-foreground">{new Date(txnDate).toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Contact</span>
+              <span className="font-semibold text-foreground">{contact}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Invoice #</span>
+              <span className="font-mono font-semibold text-primary">{invoiceNum}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Payment Mode</span>
+              <span className="font-semibold text-foreground">{paymentMode}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Payment Method</span>
+              <span className="font-semibold text-foreground">{paymentMethod}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">System Ref / Legacy ID</span>
+              <span className="font-mono text-xs font-semibold text-foreground truncate block" title={bpcTxnId}>
+                {bpcTxnId.length > 20 ? `${bpcTxnId.slice(0, 8)}...${bpcTxnId.slice(-6)}` : bpcTxnId}
+              </span>
+              <span className="text-[10px] text-muted-foreground">(Migrated Historical Record)</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Razorpay Txn ID</span>
+              <span className="font-mono text-[11px] text-muted-foreground truncate block">{rzpTxnId}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Razorpay Order ID</span>
+              <span className="font-mono text-[11px] text-muted-foreground truncate block">{rzpOrderId}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Coupon Applied</span>
+              <span className="font-semibold text-foreground">
+                {couponCode} {couponCost > 0 ? `(-₹${couponCost.toLocaleString()})` : ''}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Agent</span>
+              <span className="font-medium text-foreground">{agent || 'Direct'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Trainer</span>
+              <span className="font-medium text-foreground">{trainer || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Order Reference</span>
+              <span className="font-mono text-xs text-muted-foreground">{orderRef}</span>
+            </div>
+          </div>
+
+          {/* Financial Breakdown Table */}
+          <div className="border border-border rounded-xl overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground uppercase text-[10px] font-bold">
+                <tr>
+                  <th className="p-3">Financial Component</th>
+                  <th className="p-3 text-right">Calculation / Value</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                <tr>
+                  <td className="p-3 font-medium text-foreground">Plan Base Cost</td>
+                  <td className="p-3 text-right font-medium">₹{baseCost.toLocaleString()}</td>
+                </tr>
+                {rewardCoins > 0 && (
+                  <tr>
+                    <td className="p-3 text-amber-500 font-medium">Reward Coins / Loyalty Redeemed</td>
+                    <td className="p-3 text-right text-amber-500 font-medium">-₹{rewardCoins.toLocaleString()}</td>
+                  </tr>
+                )}
+                {couponCost > 0 && (
+                  <tr>
+                    <td className="p-3 text-emerald-500 font-medium">Coupon Cost / Promo Discount ({couponCode})</td>
+                    <td className="p-3 text-right text-emerald-500 font-medium">-₹{couponCost.toLocaleString()}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td className="p-3 text-muted-foreground">GST / Tax Cost ({taxRate}%)</td>
+                  <td className="p-3 text-right text-muted-foreground">₹{taxCost.toLocaleString()}</td>
+                </tr>
+                <tr className="bg-muted/40 font-bold text-sm">
+                  <td className="p-3 text-foreground">Total Transaction Cost</td>
+                  <td className="p-3 text-right text-foreground">₹{totalCost.toLocaleString()}</td>
+                </tr>
+                <tr className="text-emerald-500 font-bold">
+                  <td className="p-3">Amount Paid</td>
+                  <td className="p-3 text-right">₹{amountPaid.toLocaleString()}</td>
+                </tr>
+                {pendingAmount > 0 ? (
+                  <tr className="text-rose-500 font-bold">
+                    <td className="p-3">Pending / Balance Amount</td>
+                    <td className="p-3 text-right">₹{pendingAmount.toLocaleString()}</td>
+                  </tr>
+                ) : (
+                  <tr className="text-muted-foreground">
+                    <td className="p-3">Pending Balance</td>
+                    <td className="p-3 text-right font-medium">₹0.00 (Fully Settled)</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={handlePrint} className="bg-primary text-primary-foreground gap-1.5">
+            <Printer className="w-4 h-4" /> Print Statement
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+

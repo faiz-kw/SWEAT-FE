@@ -13,7 +13,8 @@ export type MembershipLifecycleAction =
   | 'REJOIN'
   | 'ADJUST_ENTITLEMENT'
   | 'COLLECT_PAYMENT'
-  | 'CHECK_IN';
+  | 'CHECK_IN'
+  | 'BUY_PASSPORT';
 
 export interface AvailableAction {
   action: MembershipLifecycleAction;
@@ -173,7 +174,10 @@ export interface MemberBookingItem {
 export interface MemberAttendanceItem {
   id: string;
   date_time: string;
+  check_in_at?: string | null;
+  check_out_at?: string | null;
   branch_name: string;
+  class_name?: string;
   status: string;
   check_in_method: string;
   marked_by: string;
@@ -200,6 +204,9 @@ export interface MemberOrder {
   outstanding_amount: number;
   currency: string;
   created_at: string;
+  is_extension?: boolean;
+  notes?: string;
+  reward_amount?: number;
   items: MemberOrderItem[];
 }
 
@@ -213,6 +220,33 @@ export interface MemberPayment {
   currency: string;
   status: string;
   paid_at: string;
+  provider_transaction_id?: string;
+  metadata?: {
+    bpc_transaction_id?: string;
+    razorpay_order_id?: string;
+    razorpay_payment_id?: string;
+    contact?: string;
+    payment_mode?: string;
+    payment_method?: string;
+    invoice_number?: string;
+    coupon_code?: string;
+    coupon_cost?: number;
+    plan_base_cost?: number;
+    tax_cost?: number;
+    tax_percent?: string;
+    total_cost?: number;
+    amount_paid?: string;
+    pending_amount?: string;
+    agent_id?: string;
+    trainer_id?: string;
+    is_extension?: boolean;
+    passport_sessions?: number;
+    use_coins?: number;
+    referral_points?: number;
+    original_status?: string;
+    bill_item?: string;
+    [key: string]: any;
+  };
 }
 
 export interface MemberInvoiceItem {
@@ -388,5 +422,25 @@ export interface Member360Data {
       submission_id?: string | null;
     }>;
     submissions: MemberIntakeSubmission[];
+  };
+  rewards?: {
+    points_balance: number;
+    credit_balance: number;
+    lifetime_earned: number;
+    lifetime_redeemed: number;
+    status: string;
+    earn_rate_rupees?: number;
+  };
+  passport?: {
+    passport_allowed: number;
+    passport_consumed: number;
+    passport_remaining: number;
+    cross_branch_visits: Array<{
+      id: string;
+      branch_name: string;
+      class_name: string;
+      date_time: string;
+      status: string;
+    }>;
   };
 }

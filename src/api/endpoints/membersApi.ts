@@ -206,6 +206,16 @@ export const membersApi = {
     return res.data?.payment_methods || [];
   },
 
+  async updateAttendance(attendanceId: string, data: {
+    status?: string;
+    check_in_at?: string | null;
+    check_out_at?: string | null;
+    check_in_method?: string;
+  }): Promise<any> {
+    const res = await api.patch<any>(`/tenant/attendance-records/${attendanceId}/`, data);
+    return res.data;
+  },
+
   async getPlans(): Promise<any[]> {
     const res = await api.get<any[]>('/tenant/members/plans/');
     return res.data || [];

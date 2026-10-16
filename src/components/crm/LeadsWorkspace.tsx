@@ -161,6 +161,53 @@ function formatDuration(seconds: number): string {
   return `${days}d ${remHrs}h`;
 }
 
+function formatLeadDate(dateStr?: string | null): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function getPresetDates(preset: string) {
+  const now = new Date();
+  const formatYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatYMD(now);
+
+  if (preset === 'TODAY') {
+    return { dateFrom: todayStr, dateTo: todayStr };
+  }
+  if (preset === 'YESTERDAY') {
+    const y = new Date(now);
+    y.setDate(y.getDate() - 1);
+    const yStr = formatYMD(y);
+    return { dateFrom: yStr, dateTo: yStr };
+  }
+  if (preset === 'LAST_7_DAYS') {
+    const past = new Date(now);
+    past.setDate(past.getDate() - 6);
+    return { dateFrom: formatYMD(past), dateTo: todayStr };
+  }
+  if (preset === 'THIS_MONTH') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { dateFrom: formatYMD(startOfMonth), dateTo: todayStr };
+  }
+  return { dateFrom: '', dateTo: '' };
+}
+
 interface LeadsWorkspaceProps {
   initialViewMode?: 'LIST' | 'PIPELINE' | 'ATTENTION';
 }
@@ -182,14 +229,24 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [slaFilter, setSlaFilter] = React.useState<string>('ALL');
   const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
   const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'UNASSIGNED'>('ALL');
+  const [datePreset, setDatePreset] = React.useState<string>('ALL');
+  const [customDateFrom, setCustomDateFrom] = React.useState<string>('');
+  const [customDateTo, setCustomDateTo] = React.useState<string>('');
   const [viewMode, setViewMode] = React.useState<'LIST' | 'PIPELINE' | 'ATTENTION'>(initialViewMode);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
 
+  const { dateFrom: effectiveDateFrom, dateTo: effectiveDateTo } = React.useMemo(() => {
+    if (datePreset === 'CUSTOM') {
+      return { dateFrom: customDateFrom, dateTo: customDateTo };
+    }
+    return getPresetDates(datePreset);
+  }, [datePreset, customDateFrom, customDateTo]);
+
   // Reset page to 1 whenever any filter or search changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter]);
+  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, datePreset, customDateFrom, customDateTo]);
 
   React.useEffect(() => {
     setViewMode(initialViewMode);
@@ -198,7 +255,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const handleToggleView = (mode: 'LIST' | 'PIPELINE' | 'ATTENTION') => {
     setViewMode(mode);
     if (mode === 'LIST') router.navigate({ to: '/crm/leads' });
-    else if (mode === 'PIPELINE') router.navigate({ to: '/crm/pipeline' });
   };
 
   // Modals state
@@ -232,12 +288,13 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, currentPage, pageSize],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, effectiveDateFrom, effectiveDateTo, currentPage, pageSize],
     queryFn: () => {
       const p: Parameters<typeof crmApi.getLeadsPaginated>[0] = {
         current_status: statusFilter,
         page: currentPage,
         page_size: pageSize,
+        ordering: '-created_at',
       };
       if (searchQuery) p.search = searchQuery;
       if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
@@ -246,6 +303,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (branchFilter !== 'ALL') p.branch_id = branchFilter;
       if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
       if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      if (effectiveDateFrom) p.date_from = effectiveDateFrom;
+      if (effectiveDateTo) p.date_to = effectiveDateTo;
       return crmApi.getLeadsPaginated(p);
     },
     enabled: canView,
@@ -317,7 +376,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   };
 
   const { data: summaryMetrics, isLoading: isMetricsLoading } = useQuery({
-    queryKey: ['lead-summary-metrics', branchFilter, statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, scopeFilter],
+    queryKey: ['lead-summary-metrics', branchFilter, statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, scopeFilter, effectiveDateFrom, effectiveDateTo],
     queryFn: () => {
       const p: Record<string, any> = {};
       if (branchFilter !== 'ALL') p.branch_id = branchFilter;
@@ -328,6 +387,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (slaFilter !== 'ALL') p.sla_status = slaFilter;
       if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
       if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      if (effectiveDateFrom) p.date_from = effectiveDateFrom;
+      if (effectiveDateTo) p.date_to = effectiveDateTo;
       return crmApi.getLeadSummaryMetrics(p);
     },
     enabled: canView,
@@ -428,17 +489,17 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Page Header */}
       <CRMPageHeader
-        title={viewMode === 'LIST' ? 'Leads & Prospects' : 'Visual Sales Pipeline'}
+        title={viewMode === 'ATTENTION' ? 'Attention Queue' : 'Leads & Prospects'}
         subtitle={
-          viewMode === 'LIST'
-            ? 'Commercial prospect directory: lead intake, touchpoint history, trial bookings, and conversion tracking.'
-            : 'Kanban board of open deals, prospective trials, and stage progression.'
+          viewMode === 'ATTENTION'
+            ? 'Prioritized queue of prospects requiring urgent follow-up, overdue response, or outreach under SLA policy.'
+            : 'Commercial prospect directory: lead intake, touchpoint history, trial bookings, and conversion tracking.'
         }
-        icon={viewMode === 'LIST' ? Users : Kanban}
-        badgeText={viewMode === 'LIST' ? 'Commercial' : 'Pipeline'}
+        icon={viewMode === 'ATTENTION' ? AlertTriangle : Users}
+        badgeText={viewMode === 'ATTENTION' ? 'SLA Queue' : 'Commercial'}
         actions={
           <>
-            {/* View Mode Toggle */}
+            {/* View Mode Toggle: Table / List and Attention Queue */}
             <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
               <button
                 onClick={() => handleToggleView('LIST')}
@@ -450,19 +511,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 title="Table View"
               >
                 <List className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Table</span>
-              </button>
-              <button
-                onClick={() => handleToggleView('PIPELINE')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-medium transition-colors ${
-                  viewMode === 'PIPELINE'
-                    ? 'bg-background text-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                title="Pipeline Board"
-              >
-                <Kanban className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Pipeline</span>
+                <span className="hidden sm:inline">Table View</span>
               </button>
               <button
                 onClick={() => handleToggleView('ATTENTION')}
@@ -624,8 +673,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           </div>
         </div>
 
-        {/* Secondary Attribution & SLA Filters Bar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6 p-3 rounded-xl border border-border/70 bg-card/40 text-xs">
+        {/* Secondary Attribution, Date & SLA Filters Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 mb-6 p-3 rounded-xl border border-border/70 bg-card/40 text-xs">
           {/* Branch Filter */}
           <div className="space-y-1">
             <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
@@ -664,6 +713,26 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             </Select>
           </div>
 
+          {/* Creation Date Filter */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-muted-foreground/70" /> Creation Date
+            </span>
+            <Select value={datePreset} onValueChange={setDatePreset}>
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
+                <SelectValue placeholder="All Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL" className="text-xs">All Time</SelectItem>
+                <SelectItem value="TODAY" className="text-xs">Today</SelectItem>
+                <SelectItem value="YESTERDAY" className="text-xs">Yesterday</SelectItem>
+                <SelectItem value="LAST_7_DAYS" className="text-xs">Last 7 Days</SelectItem>
+                <SelectItem value="THIS_MONTH" className="text-xs">This Month</SelectItem>
+                <SelectItem value="CUSTOM" className="text-xs">Custom Range...</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Campaign Filter */}
           <div className="space-y-1">
             <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
@@ -694,6 +763,44 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               </SelectContent>
             </Select>
           </div>
+
+          {/* Custom Date Range Row */}
+          {datePreset === 'CUSTOM' && (
+            <div className="col-span-full flex flex-wrap items-center gap-2 pt-2 border-t border-border/50 text-xs">
+              <span className="text-muted-foreground font-medium">Custom Range:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">From</span>
+                <Input
+                  type="date"
+                  value={customDateFrom}
+                  onChange={(e) => setCustomDateFrom(e.target.value)}
+                  className="h-8 text-xs bg-background w-36"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">To</span>
+                <Input
+                  type="date"
+                  value={customDateTo}
+                  onChange={(e) => setCustomDateTo(e.target.value)}
+                  className="h-8 text-xs bg-background w-36"
+                />
+              </div>
+              {(customDateFrom || customDateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setCustomDateFrom('');
+                    setCustomDateTo('');
+                  }}
+                  className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Clear dates
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Content View */}
@@ -842,7 +949,10 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                               </div>
 
                               <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
-                                <span className="truncate max-w-[120px]">{lead.source_name || 'Direct'}</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="truncate max-w-[90px]">{lead.source_name || 'Direct'}</span>
+                                  <span className="text-[10px] text-muted-foreground/70 font-mono">· {formatLeadDate(lead.created_at)}</span>
+                                </div>
                                 {lead.current_status === 'CONVERTED' || lead.converted_member || (lead.action_eligibility?.is_terminal && lead.action_eligibility?.terminal_reason === 'CONVERTED') ? (
                                   (lead.converted_member?.member_id || lead.converted_user_profile) ? (
                                     <button
@@ -891,12 +1001,13 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 <table className="w-full text-left text-sm min-w-[1020px]">
                   <thead className="bg-muted/40 border-b border-border/70 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="px-5 py-3.5 min-w-[220px]">Lead Name</th>
-                      <th className="px-4 py-3.5 min-w-[190px]">Contact</th>
+                      <th className="px-5 py-3.5 min-w-[220px]">Lead Name &amp; Created</th>
+                      <th className="px-4 py-3.5 min-w-[180px]">Contact</th>
                       <th className="px-4 py-3.5 min-w-[170px]">Branch &amp; Interest</th>
-                      <th className="px-4 py-3.5 min-w-[170px]">Attribution &amp; Source</th>
-                      <th className="px-4 py-3.5 min-w-[190px]">Stage &amp; SLA Status</th>
-                      <th className="px-5 py-3.5 min-w-[215px] text-right">Actions</th>
+                      <th className="px-4 py-3.5 min-w-[160px]">Assigned Staff</th>
+                      <th className="px-4 py-3.5 min-w-[160px]">Source &amp; Campaign</th>
+                      <th className="px-4 py-3.5 min-w-[180px]">Stage &amp; SLA Status</th>
+                      <th className="px-5 py-3.5 min-w-[170px] text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
@@ -912,10 +1023,10 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           className="hover:bg-muted/30 transition-colors cursor-pointer group"
                           onClick={() => openLeadDetail(lead)}
                         >
-                          {/* 1. Lead Name */}
+                          {/* 1. Lead Name & Creation Date */}
                           <td className="px-5 py-3.5 min-w-[220px]">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-all shadow-2xs">
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-all shadow-2xs mt-0.5">
                                 {lead.first_name.substring(0, 1)}
                                 {lead.last_name.substring(0, 1)}
                               </div>
@@ -945,12 +1056,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                     <span className="truncate">{lead.area}</span>
                                   </div>
                                 )}
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1 font-mono">
+                                  <Calendar className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                                  <span>{formatLeadDate(lead.created_at)}</span>
+                                </div>
                               </div>
                             </div>
                           </td>
 
                           {/* 2. Contact */}
-                          <td className="px-4 py-3.5 min-w-[190px] text-xs text-muted-foreground space-y-1">
+                          <td className="px-4 py-3.5 min-w-[180px] text-xs text-muted-foreground space-y-1">
                             {lead.phone_normalized && (
                               <div className="flex items-center gap-1.5 font-mono text-foreground/90">
                                 <Phone className="w-3 h-3 text-muted-foreground/70 shrink-0" />
@@ -960,7 +1075,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                             {lead.email_normalized && (
                               <div className="flex items-center gap-1.5">
                                 <Mail className="w-3 h-3 text-muted-foreground/70 shrink-0" />
-                                <span className="truncate max-w-[170px]" title={lead.email_normalized}>{lead.email_normalized}</span>
+                                <span className="truncate max-w-[160px]" title={lead.email_normalized}>{lead.email_normalized}</span>
                               </div>
                             )}
                           </td>
@@ -995,26 +1110,42 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                             )}
                           </td>
 
-                          {/* 4. Source & Assigned */}
-                          <td className="px-4 py-3.5 min-w-[170px] text-xs">
-                            <div className="text-foreground font-medium">{lead.source_name || lead.first_touch_source || 'Direct / Walk In'}</div>
+                          {/* 4. Assigned Staff */}
+                          <td className="px-4 py-3.5 min-w-[160px] text-xs">
+                            {lead.assigned_sales_name ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px] shrink-0 border border-primary/20 shadow-2xs">
+                                  {lead.assigned_sales_name.substring(0, 1).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-foreground truncate max-w-[125px]" title={lead.assigned_sales_name}>
+                                    {lead.assigned_sales_name}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">Counselor</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                <User className="w-3 h-3" />
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 5. Source & Campaign */}
+                          <td className="px-4 py-3.5 min-w-[160px] text-xs">
+                            <div className="text-foreground font-semibold truncate max-w-[150px]" title={lead.source_name || lead.first_touch_source || 'Direct / Walk In'}>
+                              {lead.source_name || lead.first_touch_source || 'Direct / Walk In'}
+                            </div>
                             {lead.campaign_reference ? (
-                              <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[160px]">
+                              <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[150px]" title={lead.campaign_reference}>
                                 📢 {lead.campaign_reference}
                               </div>
-                            ) : lead.latest_touch_source ? (
-                              <div className="text-muted-foreground text-[11px] mt-0.5">
-                                Latest: {lead.latest_touch_source}
+                            ) : lead.latest_touch_source && lead.latest_touch_source !== lead.first_touch_source ? (
+                              <div className="text-muted-foreground text-[11px] mt-0.5 truncate max-w-[150px]" title={lead.latest_touch_source}>
+                                {lead.latest_touch_source}
                               </div>
                             ) : null}
-                            <div className="text-[11px] mt-1 flex items-center gap-1.5">
-                              <span className="text-muted-foreground">Assigned:</span>
-                              {lead.assigned_sales_name ? (
-                                <span className="font-semibold text-foreground truncate">{lead.assigned_sales_name}</span>
-                              ) : (
-                                <span className="text-amber-600 dark:text-amber-400 font-semibold">Unassigned</span>
-                              )}
-                            </div>
                           </td>
 
                           {/* 5. Stage & SLA Status */}
@@ -1198,6 +1329,10 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                               <span className="truncate">{lead.branch_name}</span>
                             </div>
                           ) : null}
+                          <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1 mt-0.5 font-mono">
+                            <Calendar className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                            <span>{formatLeadDate(lead.created_at)}</span>
+                          </div>
                         </div>
                       </div>
                       <Badge

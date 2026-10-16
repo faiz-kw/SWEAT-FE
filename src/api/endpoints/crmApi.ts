@@ -101,6 +101,9 @@ export interface GetLeadsParams {
   assigned_sales_user_id?: string;
   assigned_to_me?: boolean;
   unassigned?: boolean;
+  date_from?: string;
+  date_to?: string;
+  ordering?: string;
   page_size?: number;
   page?: number;
 }
@@ -137,6 +140,15 @@ export const crmApi = {
     }
     if (params?.program_id) {
       query.append('program_id', params.program_id);
+    }
+    if (params?.date_from) {
+      query.append('date_from', params.date_from);
+    }
+    if (params?.date_to) {
+      query.append('date_to', params.date_to);
+    }
+    if (params?.ordering) {
+      query.append('ordering', params.ordering);
     }
     if (params?.page_size) {
       query.append('page_size', String(params.page_size));
@@ -261,12 +273,18 @@ export const crmApi = {
     return res.data?.results || res.data || [];
   },
 
-  getPrograms: async (branchId?: string): Promise<Array<{ id: string; name: string; code?: string }>> => {
+  getPrograms: async (branchId?: string): Promise<Array<{ id: string; name: string; code?: string; category_name?: string; program_type_name?: string }>> => {
     const params = new URLSearchParams();
     params.append('status', 'ACTIVE');
     if (branchId) params.append('branch_id', branchId);
-    const res = await api.get<any>(`/tenant/programs/?${params.toString()}`);
-    return res.data?.results || res.data || [];
+    let res = await api.get<any>(`/tenant/programs/?${params.toString()}`);
+    let list = res.data?.results || res.data || [];
+    if (Array.isArray(list) && list.length === 0 && branchId) {
+      // Fallback: load all tenant active programs if branch mapping is empty
+      const fallbackRes = await api.get<any>('/tenant/programs/?status=ACTIVE');
+      list = fallbackRes.data?.results || fallbackRes.data || [];
+    }
+    return Array.isArray(list) ? list : [];
   },
 
   transitionStatus: async (
