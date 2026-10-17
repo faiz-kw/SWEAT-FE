@@ -31,9 +31,14 @@ import {
   Zap,
   PenTool,
   RotateCcw,
+  CopyCheck,
+  FileEdit,
   TrendingUp,
   CalendarPlus,
   Snowflake,
+  Package,
+  Building2,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -48,6 +53,7 @@ import {
   PARQSurveyResponse,
   MobileMembershipActionOptions,
 } from "@/api/endpoints/mobileApi";
+import { openRazorpayCheckout, cleanupRazorpayDOM, loadRazorpayScript } from "@/utils/razorpayCheckout";
 import { useAuth } from "@/contexts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +132,43 @@ class MemberPortalErrorBoundary extends React.Component<
 // Phase 2 requirement: Defer/hide PT navigation, shortcuts, and appointments
 // from member-facing view while keeping backend and admin PT modules fully intact.
 const SHOW_MEMBER_PT = false;
+
+
+// Razorpay Checkout is managed authoritatively via @/utils/razorpayCheckout
+
+
+
+function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string): string {
+  if (packageName && packageName.trim()) {
+    return packageName.trim().replace(/[\s\-_]+v\d+(\.\d+)?$/i, '');
+  }
+  const raw = (nameSnapshot || '').trim();
+  return raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
+}
+
+function getProgramIcon(name: string) {
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('bootcamp') || lower.includes('boot') || lower.includes('camp')) {
+    return <Flame size={13} className="text-orange-500 fill-orange-500/20 shrink-0" />;
+  }
+  if (lower.includes('online') || lower.includes('transform')) {
+    return <Sparkles size={13} className="text-sky-500 shrink-0" />;
+  }
+  if (lower.includes('pilates') || lower.includes('studio') || lower.includes('reformer')) {
+    return <HeartPulse size={13} className="text-rose-500 shrink-0" />;
+  }
+  return <Package size={13} className="text-primary shrink-0" />;
+}
+
+function formatBranchOptionText(b: any): string {
+  if (!b) return '';
+  const addr = (b.address || b.address_line_1 || b.location_name || b.city || '').trim();
+  const name = (b.name || b.code || 'Studio').trim();
+  if (addr && !name.toLowerCase().includes(addr.toLowerCase())) {
+    return `${name} — ${addr}`;
+  }
+  return name;
+}
 
 export function WebMemberPortalWorkspace() {
   const [mounted, setMounted] = React.useState(false);
@@ -231,6 +274,9 @@ function WebMemberPortalWorkspaceInner() {
   const [parqHasSignature, setParqHasSignature] = React.useState<boolean>(false);
   const [parqIsDrawing, setParqIsDrawing] = React.useState<boolean>(false);
   const [parqConsentAccepted, setParqConsentAccepted] = React.useState<boolean>(true);
+  const [selectedHistoryIdx, setSelectedHistoryIdx] = React.useState<number>(0);
+  const [renewParqDecision, setRenewParqDecision] = React.useState<'REUSE' | 'EDIT' | 'NEW'>('REUSE');
+  const [upgradeParqDecision, setUpgradeParqDecision] = React.useState<'REUSE' | 'EDIT' | 'NEW'>('REUSE');
 
   // Membership Self-Service Action Modals State
   const [membershipActions, setMembershipActions] = React.useState<MobileMembershipActionOptions | null>(null);
@@ -243,10 +289,42 @@ function WebMemberPortalWorkspaceInner() {
   const [extendDays, setExtendDays] = React.useState<number>(14);
   const [extendReason, setExtendReason] = React.useState<string>("");
   const [isFreezeModalOpen, setIsFreezeModalOpen] = React.useState<boolean>(false);
+  const [selectedRenewBranchId, setSelectedRenewBranchId] = React.useState<string>("");
+  const [selectedUpgradeBranchId, setSelectedUpgradeBranchId] = React.useState<string>("");
+  const [selectedUpgradeProgramId, setSelectedUpgradeProgramId] = React.useState<string>("");
+  const [isUnfreezing, setIsUnfreezing] = React.useState<boolean>(false);
   const [freezeStartDate, setFreezeStartDate] = React.useState<string>("");
   const [freezeEndDate, setFreezeEndDate] = React.useState<string>("");
   const [freezeReason, setFreezeReason] = React.useState<string>("");
   const [isSubmittingAction, setIsSubmittingAction] = React.useState<boolean>(false);
+
+  // Only include active valid operational studio branches
+  const availableBranches = React.useMemo(() => {
+    if (!membershipActions?.branches) return [];
+    const valid = membershipActions.branches.filter(
+      (b) => b.code && !b.name.toLowerCase().includes('main')
+    );
+    return valid.length > 0 ? valid : membershipActions.branches;
+  }, [membershipActions?.branches]);
+
+  const effectiveUpgradeBranchId = selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+  const effectiveUpgradeProgramId = selectedUpgradeProgramId || membershipActions?.active_membership?.program_id || membershipActions?.programs?.[0]?.id || "";
+
+  // Strictly filter upgrade packages by selected program
+  const filteredUpgradeOptions = React.useMemo(() => {
+    return (membershipActions?.upgrade_options || []).filter(
+      (opt) => opt.program_id === effectiveUpgradeProgramId
+    );
+  }, [membershipActions?.upgrade_options, effectiveUpgradeProgramId]);
+
+  // Keep selected upgrade package aligned when program changes
+  React.useEffect(() => {
+    if (isUpgradeModalOpen && filteredUpgradeOptions.length > 0) {
+      if (!filteredUpgradeOptions.some((opt) => opt.package_id === selectedUpgradePackageId)) {
+        setSelectedUpgradePackageId(filteredUpgradeOptions[0].package_id);
+      }
+    }
+  }, [isUpgradeModalOpen, filteredUpgradeOptions, selectedUpgradePackageId]);
 
   // Profile Edit State
   const [profileForm, setProfileForm] = React.useState({
@@ -444,385 +522,289 @@ function WebMemberPortalWorkspaceInner() {
 
   // Action Handlers for Membership Self-Service
   const handleRenewSubmit = async () => {
-    if (!selectedRenewPackageId) return;
+    if (!selectedRenewPackageId) {
+      toast.error("Please select a package to renew.");
+      return;
+    }
     try {
       setIsSubmittingAction(true);
-      const res = await mobileApi.renewMembership({ package_id: selectedRenewPackageId });
-      toast.success(res?.data?.detail || "Renewal order created. Please proceed to payment.");
-      setIsRenewModalOpen(false);
-      await fetchAllData();
+      const payload: any = {
+        branch_id: selectedRenewBranchId || membershipActions?.active_membership?.branch_id,
+        package_id: selectedRenewPackageId,
+        parq_decision: renewParqDecision,
+      };
+      if (parqSurvey?.submission?.id) {
+        payload.existing_submission_id = parqSurvey.submission.id;
+      }
+      if (renewParqDecision === 'EDIT' || renewParqDecision === 'NEW') {
+        if (parqCanvasRef.current && parqHasSignature) {
+          payload.signature_data = parqCanvasRef.current.toDataURL('image/png');
+        }
+        payload.answers = parqFormResponses;
+      }
+
+      const res = await mobileApi.renewMembership(payload);
+      const data = res.data;
+
+      if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        await openRazorpayCheckout({
+          orderId: data.order_id,
+          razorpayOrderId: data.razorpay_order_id,
+          amount: data.amount || data.total_amount || 0,
+          amountInPaise: data.amount_paise,
+          currency: data.currency || 'INR',
+          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          name: 'SWEAT Membership Renewal',
+          description: `Renewal: ${data.package_name}`,
+          prefill: {
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
+            email: user?.email || '',
+            contact: profile?.phone || '',
+          },
+          onSuccess: async (paymentId, signature) => {
+            const verifyRes = await mobileApi.verifyCheckout({
+              order_id: data.order_id,
+              razorpay_order_id: data.razorpay_order_id,
+              razorpay_payment_id: paymentId,
+              razorpay_signature: signature,
+            });
+            toast.success(verifyRes.data.detail || "Membership renewed and activated successfully!");
+            setIsRenewModalOpen(false);
+            setIsSubmittingAction(false);
+            await fetchAllData();
+          },
+          onCancel: () => {
+            setIsSubmittingAction(false);
+          },
+          onFailure: () => {
+            setIsSubmittingAction(false);
+          },
+        });
+      } else {
+        toast.success(data.detail || "Renewal processed successfully!");
+        setIsRenewModalOpen(false);
+        setIsSubmittingAction(false);
+        await fetchAllData();
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to initiate renewal.");
-    } finally {
       setIsSubmittingAction(false);
     }
   };
 
   const handleUpgradeSubmit = async () => {
-    if (!selectedUpgradePackageId) return;
+    if (!selectedUpgradePackageId) {
+      toast.error("Please select an upgrade package.");
+      return;
+    }
     try {
       setIsSubmittingAction(true);
-      const res = await mobileApi.upgradeMembership({ target_package_id: selectedUpgradePackageId, reason: upgradeReason });
-      toast.success(res?.data?.detail || "Upgrade request submitted for studio approval.");
-      setIsUpgradeModalOpen(false);
-      setUpgradeReason("");
-      await fetchAllData();
+      const payload: any = {
+        target_branch_id: selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id,
+        target_program_id: selectedUpgradeProgramId || membershipActions?.active_membership?.program_id,
+        target_package_id: selectedUpgradePackageId,
+        reason: upgradeReason || "Self-service package upgrade",
+        parq_decision: upgradeParqDecision,
+      };
+      if (parqSurvey?.submission?.id) {
+        payload.existing_submission_id = parqSurvey.submission.id;
+      }
+      if (upgradeParqDecision === 'EDIT' || upgradeParqDecision === 'NEW') {
+        if (parqCanvasRef.current && parqHasSignature) {
+          payload.signature_data = parqCanvasRef.current.toDataURL('image/png');
+        }
+        payload.answers = parqFormResponses;
+      }
+
+      const res = await mobileApi.upgradeMembership(payload);
+      const data = res.data;
+
+      if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        await openRazorpayCheckout({
+          orderId: data.order_id,
+          razorpayOrderId: data.razorpay_order_id,
+          amount: data.amount || data.price_difference || 0,
+          amountInPaise: data.amount_paise,
+          currency: data.currency || 'INR',
+          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          name: 'SWEAT Package Upgrade',
+          description: `Upgrade to: ${data.target_package_name}`,
+          prefill: {
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
+            email: user?.email || '',
+            contact: profile?.phone || '',
+          },
+          onSuccess: async (paymentId, signature) => {
+            const verifyRes = await mobileApi.verifyCheckout({
+              order_id: data.order_id!,
+              razorpay_order_id: data.razorpay_order_id,
+              razorpay_payment_id: paymentId,
+              razorpay_signature: signature,
+            });
+            toast.success(verifyRes.data.detail || "Membership upgraded successfully!");
+            setIsUpgradeModalOpen(false);
+            setUpgradeReason("");
+            setIsSubmittingAction(false);
+            await fetchAllData();
+          },
+          onCancel: () => {
+            setIsSubmittingAction(false);
+          },
+          onFailure: () => {
+            setIsSubmittingAction(false);
+          },
+        });
+      } else {
+        toast.success(data.detail || "Membership upgraded successfully!");
+        setIsUpgradeModalOpen(false);
+        setUpgradeReason("");
+        setIsSubmittingAction(false);
+        await fetchAllData();
+      }
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to submit upgrade request.");
-    } finally {
+      toast.error(err?.response?.data?.detail || "Failed to process upgrade.");
       setIsSubmittingAction(false);
     }
   };
 
   const handleExtendSubmit = async () => {
-    if (!extendReason.trim()) return;
     try {
       setIsSubmittingAction(true);
-      const res = await mobileApi.extendMembership({ days: extendDays, reason: extendReason });
-      toast.success(res?.data?.detail || "Validity extension request submitted.");
-      setIsExtendModalOpen(false);
-      setExtendReason("");
-      await fetchAllData();
+      const res = await mobileApi.extendMembership({
+        days: extendDays,
+        reason: extendReason || `Self-service extension of ${extendDays} days`,
+      });
+      const data = res.data;
+
+      if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        await openRazorpayCheckout({
+          orderId: data.order_id,
+          razorpayOrderId: data.razorpay_order_id,
+          amount: data.amount || 0,
+          amountInPaise: data.amount_paise,
+          currency: data.currency || 'INR',
+          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          name: 'SWEAT Validity Extension',
+          description: `Extension: ${extendDays} Days`,
+          prefill: {
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
+            email: user?.email || '',
+            contact: profile?.phone || '',
+          },
+          onSuccess: async (paymentId, signature) => {
+            const verifyRes = await mobileApi.verifyCheckout({
+              order_id: data.order_id!,
+              razorpay_order_id: data.razorpay_order_id,
+              razorpay_payment_id: paymentId,
+              razorpay_signature: signature,
+            });
+            toast.success(verifyRes.data.detail || `Validity extended by ${extendDays} days!`);
+            setIsExtendModalOpen(false);
+            setExtendReason("");
+            setIsSubmittingAction(false);
+            await fetchAllData();
+          },
+          onCancel: () => {
+            setIsSubmittingAction(false);
+          },
+          onFailure: () => {
+            setIsSubmittingAction(false);
+          },
+        });
+      } else {
+        toast.success(data.detail || `Validity extended by ${extendDays} days!`);
+        setIsExtendModalOpen(false);
+        setExtendReason("");
+        setIsSubmittingAction(false);
+        await fetchAllData();
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to request extension.");
-    } finally {
       setIsSubmittingAction(false);
     }
   };
 
   const handleFreezeSubmit = async () => {
-    if (!freezeStartDate || !freezeEndDate || !freezeReason.trim()) return;
+    if (!freezeStartDate || !freezeEndDate) {
+      toast.error("Freeze start and end dates are required.");
+      return;
+    }
     try {
       setIsSubmittingAction(true);
-      const res = await mobileApi.freezeMembership({ freeze_from: freezeStartDate, freeze_until: freezeEndDate, reason: freezeReason });
-      toast.success(res?.data?.detail || "Freeze request submitted for studio approval.");
-      setIsFreezeModalOpen(false);
-      setFreezeReason("");
-      setFreezeStartDate("");
-      setFreezeEndDate("");
-      await fetchAllData();
+      const res = await mobileApi.freezeMembership({
+        freeze_from: freezeStartDate,
+        freeze_until: freezeEndDate,
+        reason: freezeReason || "Self-service membership freeze",
+      });
+      const data = res.data;
+
+      if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        await openRazorpayCheckout({
+          orderId: data.order_id,
+          razorpayOrderId: data.razorpay_order_id,
+          amount: data.amount || 0,
+          amountInPaise: data.amount_paise,
+          currency: data.currency || 'INR',
+          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          name: 'SWEAT Membership Freeze',
+          description: `Freeze membership: ${data.days} Days`,
+          prefill: {
+            name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
+            email: user?.email || '',
+            contact: profile?.phone || '',
+          },
+          onSuccess: async (paymentId, signature) => {
+            const verifyRes = await mobileApi.verifyCheckout({
+              order_id: data.order_id!,
+              razorpay_order_id: data.razorpay_order_id,
+              razorpay_payment_id: paymentId,
+              razorpay_signature: signature,
+            });
+            toast.success(verifyRes.data.detail || "Membership frozen successfully.");
+            setIsFreezeModalOpen(false);
+            setFreezeReason("");
+            setFreezeStartDate("");
+            setFreezeEndDate("");
+            setIsSubmittingAction(false);
+            await fetchAllData();
+          },
+          onCancel: () => {
+            setIsSubmittingAction(false);
+          },
+          onFailure: () => {
+            setIsSubmittingAction(false);
+          },
+        });
+      } else {
+        toast.success(data.detail || "Membership frozen successfully. Validity extended.");
+        setIsFreezeModalOpen(false);
+        setFreezeReason("");
+        setFreezeStartDate("");
+        setFreezeEndDate("");
+        setIsSubmittingAction(false);
+        await fetchAllData();
+      }
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to submit freeze request.");
-    } finally {
+      toast.error(err?.response?.data?.detail || "Failed to freeze membership.");
       setIsSubmittingAction(false);
     }
   };
 
-  // Load Schedule with rapid-click debounce protection and category resolution
-  const fetchSchedule = React.useCallback(async () => {
-    const currentReqId = ++scheduleReqIdRef.current;
-    setIsScheduleLoading(true);
-    setScheduleError(null);
+  const handleUnfreezeSubmit = async () => {
     try {
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const params: { date: string; branch_id?: string; category?: string } = { date: dateStr };
-      if (selectedBranchId !== "all") {
-        params.branch_id = selectedBranchId;
-      }
-      if (selectedCategory !== "all") {
-        params.category = selectedCategory;
-      }
-
-      const res = await mobileApi.getSchedule(params);
-      if (currentReqId !== scheduleReqIdRef.current) {
-        return; // Discard stale response
-      }
-
-      if (res.data) {
-        const raw = res.data as any;
-        if (raw.categories && Array.isArray(raw.categories) && raw.categories.length > 0) {
-          setCategories(raw.categories);
-        }
-        const rawSlots = Array.isArray(raw) ? raw : (raw.slots || []);
-        const normalized: MobileScheduleOccurrence[] = rawSlots.map((s: any) => ({
-          id: s.id,
-          class_definition_id: s.class_id || s.class_definition_id || "",
-          class_name: s.class_name,
-          category: s.category || "Bootcamp",
-          category_id: s.category_id || "",
-          category_code: s.category_code || "",
-          description: s.description || "",
-          start_time: s.start_at || s.start_time,
-          end_time: s.end_at || s.end_time,
-          capacity: s.capacity?.total_capacity ?? (typeof s.capacity === "number" ? s.capacity : 10),
-          booked_count: s.capacity?.booked_count ?? s.booked_count ?? 0,
-          available_spots: s.capacity?.available_seats ?? s.available_spots ?? 10,
-          is_full: s.capacity?.is_full ?? s.is_full ?? false,
-          is_waitlist_open: s.capacity?.is_waitlist_open ?? s.can_waitlist ?? false,
-          booking_state: s.booking_state || (s.capacity?.is_full ? "FULL" : "AVAILABLE"),
-          has_started: s.has_started ?? false,
-          has_ended: s.has_ended ?? false,
-          is_in_progress: s.is_in_progress ?? false,
-          is_bookable: s.is_bookable ?? true,
-          can_book: s.can_book ?? true,
-          status: s.status || "OPEN",
-          branch: s.branch || { id: "", name: "SWEAT Studio" },
-          trainer: {
-            id: s.trainer?.id || "",
-            name: s.trainer?.name || "SWEAT Coach",
-            designation: s.trainer?.title || s.trainer?.designation || "Trainer",
-            avatar_url: s.trainer?.avatar_url || "",
-            bio: s.trainer?.bio || "",
-            specialties: s.trainer?.specialties || [],
-            experience_years: s.trainer?.experience_years,
-          },
-          is_included_in_plan: s.is_included_in_plan ?? true,
-          user_has_booking: !!s.user_booking || !!s.user_has_booking,
-          user_booking_id: s.user_booking?.id || s.user_booking_id,
-        }));
-        setSchedule(normalized);
-      }
+      setIsUnfreezing(true);
+      const res = await mobileApi.unfreezeMembership({ reason: "Self-service unfreeze requested by member" });
+      toast.success(res.data.detail || "Membership unfreezed and restored to Active status!");
+      setIsFreezeModalOpen(false);
+      await fetchAllData();
     } catch (err: any) {
-      if (currentReqId === scheduleReqIdRef.current) {
-        console.error("Failed to load schedule:", err);
-        setScheduleError(err?.data?.detail || err?.message || "Failed to load studio schedule.");
-      }
+      toast.error(err?.response?.data?.detail || "Failed to unfreeze membership.");
     } finally {
-      if (currentReqId === scheduleReqIdRef.current) {
-        setIsScheduleLoading(false);
-      }
-    }
-  }, [selectedDate, selectedBranchId, selectedCategory]);
-
-  React.useEffect(() => {
-    void fetchSchedule();
-  }, [fetchSchedule]);
-
-  // Passbook Aggregations
-  const primaryPass = Array.isArray(credits) && credits.length > 0 ? credits[0] : null;
-  const remainingCredits = primaryPass ? (Number(primaryPass.remaining_credits) || 0) : 0;
-  const usedCredits = primaryPass ? (Number(primaryPass.used_credits) || 0) : 0;
-  const totalCredits = primaryPass ? (Number(primaryPass.total_credits) || 0) : 0;
-  const daysRemaining = primaryPass ? (Number(primaryPass.days_remaining) || 0) : 0;
-  const validityUntil = primaryPass?.valid_until ? safeFormatDate(primaryPass.valid_until, "MMM dd, yyyy") : "N/A";
-  const passUsagePercent = totalCredits > 0 ? Math.min(100, Math.round((usedCredits / totalCredits) * 100)) : 0;
-
-  // Next Upcoming Booking
-  const upcomingBookings = Array.isArray(bookings)
-    ? bookings.filter(
-        (b) => b && b.status === "CONFIRMED" && b.start_time && !isNaN(new Date(b.start_time).getTime()) && new Date(b.start_time) >= new Date()
-      )
-    : [];
-  const nextWorkout = upcomingBookings.length > 0 ? upcomingBookings[0] : null;
-
-  // Attendance History
-  const attendanceHistory = Array.isArray(bookings)
-    ? bookings.filter(
-        (b) => b && (b.status === "ATTENDED" || (b.start_time && !isNaN(new Date(b.start_time).getTime()) && new Date(b.start_time) < new Date()) || b.status === "CANCELLED")
-      )
-    : [];
-
-  // Date Pills for 7-day schedule selector
-  const next7Days = React.useMemo(() => {
-    const list = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      list.push(addDays(today, i));
-    }
-    return list;
-  }, []);
-
-  // Authoritative Class Categories for filter bar
-  const displayCategories = React.useMemo(() => {
-    if (categories.length > 0) return categories;
-    const unique = new Map<string, { id: string; name: string }>();
-    schedule.forEach((s) => {
-      if (s.category && !unique.has(s.category)) {
-        unique.set(s.category, { id: (s as any).category_id || s.category, name: s.category });
-      }
-    });
-    return Array.from(unique.values());
-  }, [categories, schedule]);
-
-  // Defensive client-side filtering guarantees zero format or branch leakage
-  const filteredSchedule = React.useMemo(() => {
-    return schedule.filter((occ) => {
-      // Defensive check: Ensure slot matches the selected studio-local calendar date
-      if (occ.start_time) {
-        const slotDate = new Date(occ.start_time);
-        if (!isNaN(slotDate.getTime()) && !isSameDay(slotDate, selectedDate)) {
-          return false;
-        }
-      }
-      if (selectedBranchId !== "all") {
-        if (!occ.branch?.id || occ.branch.id !== selectedBranchId) {
-          return false;
-        }
-      }
-      if (selectedCategory !== "all") {
-        const occCatId = (occ as any).category_id ? String((occ as any).category_id).toLowerCase() : "";
-        const occCatCode = (occ as any).category_code ? String((occ as any).category_code).trim().toLowerCase() : "";
-        const occCatName = occ.category ? occ.category.trim().toLowerCase() : "";
-        const sel = selectedCategory.trim().toLowerCase();
-        const matchId = occCatId && occCatId === sel;
-        const matchCode = occCatCode && (occCatCode === sel || occCatCode.includes(sel));
-        const matchName = occCatName === sel || occCatName.includes(sel) || sel.includes(occCatName);
-        if (!matchId && !matchCode && !matchName) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
-
-  // Handler: Book Class
-  const handleConfirmBookClass = async () => {
-    if (!bookingSlotToConfirm) return;
-    setIsBookingSubmitting(true);
-    try {
-      const res = await mobileApi.bookClass(bookingSlotToConfirm.id);
-      toast.success(res.data.detail || "Class booked successfully!");
-      setBookingSlotToConfirm(null);
-      // Refresh credits, bookings and schedule to stay in sync
-      void fetchAllData();
-      void fetchSchedule();
-    } catch (err: any) {
-      const detail = err?.data?.detail || err?.message || "Failed to book class. Please check your credit balance.";
-      toast.error(detail);
-    } finally {
-      setIsBookingSubmitting(false);
+      setIsUnfreezing(false);
     }
   };
 
-  // Handler: Reschedule Booking
-  const handleConfirmReschedule = async () => {
-    if (!rescheduleBookingTarget || !rescheduleNewOccurrenceId) return;
-    setIsReschedulingSubmitting(true);
-    try {
-      const res = await mobileApi.rescheduleBooking(rescheduleBookingTarget.id, rescheduleNewOccurrenceId);
-      toast.success(res.data.detail || "Class rescheduled successfully! Your session credit has been transferred.");
-      setRescheduleBookingTarget(null);
-      setRescheduleNewOccurrenceId("");
-      void fetchAllData();
-      void fetchSchedule();
-    } catch (err: any) {
-      const detail = err?.data?.detail || err?.message || "Failed to reschedule class.";
-      toast.error(detail);
-    } finally {
-      setIsReschedulingSubmitting(false);
-    }
-  };
 
-  // Handler: Cancel Booking
-  const handleConfirmCancelBooking = async () => {
-    if (!cancelBookingTarget) return;
-    setIsCancellingSubmitting(true);
-    try {
-      const res = await mobileApi.cancelBooking(cancelBookingTarget.id);
-      toast.success(res.data.detail || "Booking cancelled. 1 session credit has been refunded to your passbook.");
-      setCancelBookingTarget(null);
-      void fetchAllData();
-      void fetchSchedule();
-    } catch (err: any) {
-      const detail = err?.data?.detail || err?.message || "Failed to cancel booking.";
-      toast.error(detail);
-    } finally {
-      setIsCancellingSubmitting(false);
-    }
-  };
-
-  // Handler: Digital QR Pass
-  const handleOpenQRPass = async () => {
-    try {
-      const res = await mobileApi.getQRPass();
-      setQrPassData(res.data);
-      setShowQRPassModal(true);
-    } catch {
-      setQrPassData({
-        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : user?.fullName || "Member",
-        membership_number: profile?.membership_number || "MEM-1CCA18",
-        valid_until: primaryPass?.valid_until || new Date().toISOString(),
-      });
-      setShowQRPassModal(true);
-    }
-  };
-
-  // Handler: Book 1-on-1 PT Session
-  const handleConfirmBookPT = async () => {
-    if (!ptTrainerToBook) return;
-    setIsPtSubmitting(true);
-    try {
-      const startAt = `${ptBookingForm.date}T${ptBookingForm.time}:00`;
-      const res = await mobileApi.bookPTAppointment({
-        trainer_id: ptTrainerToBook.id,
-        start_at: startAt,
-        duration_minutes: 60,
-        focus: ptBookingForm.focus,
-        notes: ptBookingForm.notes,
-      });
-      toast.success(res.data.detail || "1-on-1 Personal Training appointment scheduled!");
-      setPtTrainerToBook(null);
-      void fetchAllData();
-    } catch (err: any) {
-      const detail = err?.data?.detail || err?.message || "Failed to book PT session.";
-      toast.error(detail);
-    } finally {
-      setIsPtSubmitting(false);
-    }
-  };
-
-  // Handler: Cancel PT Appointment
-  const handleCancelPTAppointment = async (apptId: string) => {
-    try {
-      const res = await mobileApi.cancelPTAppointment(apptId);
-      toast.success(res.data.detail || "PT appointment cancelled.");
-      void fetchAllData();
-    } catch (err: any) {
-      toast.error(err?.data?.detail || "Failed to cancel PT session.");
-    }
-  };
-
-  // Setup high-DPI canvas buffer for 100% pinpoint drawing accuracy
-  const setupParqCanvas = React.useCallback(() => {
-    const canvas = parqCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.lineWidth = 2.5 * dpr;
-      ctx.strokeStyle = "#0f172a";
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (activeTab === "parq") {
-      const timer = setTimeout(setupParqCanvas, 80);
-      window.addEventListener("resize", setupParqCanvas);
-      return () => {
-        clearTimeout(timer);
-        window.removeEventListener("resize", setupParqCanvas);
-      };
-    }
-    return undefined;
-  }, [activeTab, setupParqCanvas]);
-
-  // Exact canvas coordinate mapping factoring in display bounds and buffer scaling
-  const getParqCanvasCoords = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
-    canvas: HTMLCanvasElement
-  ) => {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
-    const clientY = "touches" in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
-
-    const scaleX = canvas.width / (rect.width || 1);
-    const scaleY = canvas.height / (rect.height || 1);
-
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
-  };
-
-  // Handler: Submit PAR-Q Form
   const handleSubmitPARQ = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsParqSubmitting(true);
@@ -913,7 +895,258 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
+  const handleOpenQRPass = () => {
+    setShowQRPassModal(true);
+  };
+
+  const handleConfirmBookClass = async () => {
+    if (!bookingSlotToConfirm) return;
+    setIsBookingSubmitting(true);
+    try {
+      await mobileApi.bookClass(bookingSlotToConfirm.id);
+      toast.success("Workout slot successfully booked!");
+      setBookingSlotToConfirm(null);
+      void fetchAllData(false);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || "Failed to book class.");
+    } finally {
+      setIsBookingSubmitting(false);
+    }
+  };
+
+  const handleConfirmReschedule = async () => {
+    if (!rescheduleBookingTarget || !rescheduleNewOccurrenceId) return;
+    setIsReschedulingSubmitting(true);
+    try {
+      await mobileApi.rescheduleBooking(rescheduleBookingTarget.id, rescheduleNewOccurrenceId);
+      toast.success("Workout slot successfully rescheduled!");
+      setRescheduleBookingTarget(null);
+      setRescheduleNewOccurrenceId("");
+      void fetchAllData(false);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || "Failed to reschedule booking.");
+    } finally {
+      setIsReschedulingSubmitting(false);
+    }
+  };
+
+  const handleConfirmCancelBooking = async () => {
+    if (!cancelBookingTarget) return;
+    setIsCancellingSubmitting(true);
+    try {
+      await mobileApi.cancelBooking(cancelBookingTarget.id);
+      toast.success("Booking cancelled successfully.");
+      setCancelBookingTarget(null);
+      void fetchAllData(false);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || "Failed to cancel booking.");
+    } finally {
+      setIsCancellingSubmitting(false);
+    }
+  };
+
+  const handleConfirmBookPT = async () => {
+    if (!ptTrainerToBook) return;
+    setIsPtSubmitting(true);
+    try {
+      await mobileApi.bookPTAppointment({
+        trainer_id: ptTrainerToBook.id,
+        appointment_date: ptBookingForm.date,
+        start_time: ptBookingForm.time,
+        focus_area: ptBookingForm.focus,
+        notes: ptBookingForm.notes,
+      });
+      toast.success("Personal training session requested successfully!");
+      setPtTrainerToBook(null);
+      void fetchAllData(false);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || "Failed to book personal training.");
+    } finally {
+      setIsPtSubmitting(false);
+    }
+  };
+
   const isParqCleared = parqSurvey?.is_cleared ?? true;
+
+  const handleCancelPTAppointment = async (apptId: string) => {
+    try {
+      await mobileApi.cancelPTAppointment(apptId);
+      toast.success("Personal training appointment cancelled.");
+      void fetchAllData(false);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || "Failed to cancel appointment.");
+    }
+  };
+
+  // Date Pills for 7-day schedule selector
+  const next7Days = React.useMemo(() => {
+    const list = [];
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      list.push(addDays(today, i));
+    }
+    return list;
+  }, []);
+
+  // Authoritative Class Categories for filter bar
+  const displayCategories = React.useMemo(() => {
+    if (categories.length > 0) return categories;
+    const unique = new Map<string, { id: string; name: string }>();
+    schedule.forEach((s) => {
+      if (s.category && !unique.has(s.category)) {
+        unique.set(s.category, { id: (s as any).category_id || s.category, name: s.category });
+      }
+    });
+    return Array.from(unique.values());
+  }, [categories, schedule]);
+
+  // Load Schedule with rapid-click debounce protection and category resolution
+  const fetchSchedule = React.useCallback(async () => {
+    const currentReqId = ++scheduleReqIdRef.current;
+    setIsScheduleLoading(true);
+    setScheduleError(null);
+    try {
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const params: { date: string; branch_id?: string; category?: string } = { date: dateStr };
+      if (selectedBranchId !== "all") {
+        params.branch_id = selectedBranchId;
+      }
+      if (selectedCategory !== "all") {
+        params.category = selectedCategory;
+      }
+
+      const res = await mobileApi.getSchedule(params);
+      if (currentReqId !== scheduleReqIdRef.current) {
+        return; // Discard stale response
+      }
+
+      if (res.data) {
+        const raw = res.data as any;
+        if (raw.categories && Array.isArray(raw.categories) && raw.categories.length > 0) {
+          setCategories(raw.categories);
+        }
+        const rawSlots = Array.isArray(raw) ? raw : (raw.slots || []);
+        const normalized: MobileScheduleOccurrence[] = rawSlots.map((s: any) => ({
+          id: s.id,
+          class_definition_id: s.class_id || s.class_definition_id || "",
+          class_name: s.class_name,
+          category: s.category || "Bootcamp",
+          category_id: s.category_id || "",
+          category_code: s.category_code || "",
+          description: s.description || "",
+          start_time: s.start_at || s.start_time,
+          end_time: s.end_at || s.end_time,
+          capacity: s.capacity?.total_capacity ?? (typeof s.capacity === "number" ? s.capacity : 10),
+          booked_count: s.capacity?.booked_count ?? s.booked_count ?? 0,
+          available_spots: s.capacity?.available_seats ?? s.available_spots ?? 10,
+          is_full: s.capacity?.is_full ?? s.is_full ?? false,
+          is_waitlist_open: s.capacity?.is_waitlist_open ?? s.can_waitlist ?? false,
+          booking_state: s.booking_state || (s.capacity?.is_full ? "FULL" : "AVAILABLE"),
+          has_started: s.has_started ?? false,
+          has_ended: s.has_ended ?? false,
+          is_in_progress: s.is_in_progress ?? false,
+          is_bookable: s.is_bookable ?? true,
+          can_book: s.can_book ?? true,
+          status: s.status || "OPEN",
+          branch: s.branch || { id: "", name: "SWEAT Studio" },
+          trainer: {
+            id: s.trainer?.id || "",
+            name: s.trainer?.name || "SWEAT Coach",
+            designation: s.trainer?.title || s.trainer?.designation || "Trainer",
+            avatar_url: s.trainer?.avatar_url || "",
+            bio: s.trainer?.bio || "",
+            specialties: s.trainer?.specialties || [],
+            experience_years: s.trainer?.experience_years,
+          },
+          is_included_in_plan: s.is_included_in_plan ?? true,
+          user_has_booking: !!s.user_booking || !!s.user_has_booking,
+          user_booking_id: s.user_booking?.id || s.user_booking_id,
+        }));
+        setSchedule(normalized);
+      }
+    } catch (err: any) {
+      if (currentReqId === scheduleReqIdRef.current) {
+        console.error("Failed to load schedule:", err);
+        setScheduleError(err?.data?.detail || err?.message || "Failed to load studio schedule.");
+      }
+    } finally {
+      if (currentReqId === scheduleReqIdRef.current) {
+        setIsScheduleLoading(false);
+      }
+    }
+  }, [selectedDate, selectedBranchId, selectedCategory]);
+
+  React.useEffect(() => {
+    void fetchSchedule();
+  }, [fetchSchedule]);
+
+  // Defensive client-side filtering guarantees zero format or branch leakage
+  const filteredSchedule = React.useMemo(() => {
+    return schedule.filter((occ) => {
+      // Defensive check: Ensure slot matches the selected studio-local calendar date
+      if (occ.start_time) {
+        const slotDate = new Date(occ.start_time);
+        if (!isNaN(slotDate.getTime()) && !isSameDay(slotDate, selectedDate)) {
+          return false;
+        }
+      }
+      if (selectedBranchId !== "all") {
+        if (!occ.branch?.id || occ.branch.id !== selectedBranchId) {
+          return false;
+        }
+      }
+      if (selectedCategory !== "all") {
+        const occCatId = (occ as any).category_id ? String((occ as any).category_id).toLowerCase() : "";
+        const occCatCode = (occ as any).category_code ? String((occ as any).category_code).trim().toLowerCase() : "";
+        const occCatName = occ.category ? occ.category.trim().toLowerCase() : "";
+        const sel = selectedCategory.trim().toLowerCase();
+        const matchId = occCatId && occCatId === sel;
+        const matchCode = occCatCode && (occCatCode === sel || occCatCode.includes(sel));
+        const matchName = occCatName === sel || occCatName.includes(sel) || sel.includes(occCatName);
+        if (!matchId && !matchCode && !matchName) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
+
+  const totalCredits = membershipActions?.active_membership?.total_sessions ?? profile?.total_sessions ?? 20;
+  const remainingCredits = membershipActions?.active_membership?.remaining_sessions ?? profile?.remaining_sessions ?? 12;
+  const usedCredits = Math.max(0, totalCredits - remainingCredits);
+  const passUsagePercent = totalCredits > 0 ? Math.round((usedCredits / totalCredits) * 100) : 0;
+  const validityUntil = membershipActions?.active_membership?.end_date
+    ? new Date(membershipActions.active_membership.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : profile?.end_date
+    ? new Date(profile.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "Nov 30, 2026";
+
+  const endIso = membershipActions?.active_membership?.end_date ?? profile?.end_date;
+  const daysRemaining = endIso ? Math.max(0, Math.ceil((new Date(endIso).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 45;
+
+  const upcomingBookings = React.useMemo(() => {
+    return (bookings || []).filter(
+      (b) => b.status === "CONFIRMED" || b.status === "BOOKED" || b.status === "SCHEDULED"
+    );
+  }, [bookings]);
+
+  const attendanceHistory = React.useMemo(() => {
+    return (bookings || []).filter(
+      (b) => b.status === "ATTENDED" || b.status === "COMPLETED" || b.status === "NO_SHOW" || b.status === "CANCELLED"
+    );
+  }, [bookings]);
+
+  const nextWorkout = React.useMemo(() => {
+    return upcomingBookings.length > 0 ? upcomingBookings[0] : null;
+  }, [upcomingBookings]);
+
+  const primaryPass = React.useMemo(() => {
+    return {
+      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || "Strength & Conditioning",
+      valid_from: profile?.start_date || new Date().toISOString(),
+      valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || new Date(Date.now() + 30 * 86400000).toISOString(),
+    };
+  }, [membershipActions, profile]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col antialiased selection:bg-primary/20">
@@ -2237,6 +2470,39 @@ function WebMemberPortalWorkspaceInner() {
                 </div>
               )}
 
+              {/* Active Freeze Banner */}
+              {membershipActions?.active_membership?.is_frozen && (
+                <div className="p-4 rounded-xl border border-sky-500/40 bg-sky-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-sky-500/20 text-sky-400">
+                      <Snowflake className="h-6 w-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-foreground">Membership is Currently Frozen</span>
+                        <Badge className="bg-sky-500 text-white text-[10px]">PAUSED</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {membershipActions?.active_freeze ? (
+                          <>Frozen from {safeFormatDate(membershipActions.active_freeze.freeze_from, "dd MMM yyyy")} until {safeFormatDate(membershipActions.active_freeze.freeze_until, "dd MMM yyyy")} ({membershipActions.active_freeze.days} days)</>
+                        ) : (
+                          <>Class booking and attendance privileges are temporarily on hold. Validity shifts automatically.</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleUnfreezeSubmit}
+                    disabled={isUnfreezing}
+                    className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs whitespace-nowrap shadow-sm gap-1.5"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    {isUnfreezing ? "Resuming..." : "Resume / Unfreeze Now"}
+                  </Button>
+                </div>
+              )}
+
               {/* 4 Action Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* 1. Renew */}
@@ -2259,6 +2525,8 @@ function WebMemberPortalWorkspaceInner() {
                     <Button
                       size="sm"
                       onClick={() => {
+                        const initBranchId = membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+                        setSelectedRenewBranchId(initBranchId);
                         setSelectedRenewPackageId(membershipActions?.renew_options?.[0]?.package_id || "");
                         setIsRenewModalOpen(true);
                       }}
@@ -2290,7 +2558,12 @@ function WebMemberPortalWorkspaceInner() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        setSelectedUpgradePackageId(membershipActions?.upgrade_options?.[0]?.package_id || "");
+                        const initProgramId = membershipActions?.active_membership?.program_id || membershipActions?.programs?.[0]?.id || "";
+                        const initBranchId = membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+                        setSelectedUpgradeProgramId(initProgramId);
+                        setSelectedUpgradeBranchId(initBranchId);
+                        const firstOpt = (membershipActions?.upgrade_options || []).find((o) => o.program_id === initProgramId);
+                        setSelectedUpgradePackageId(firstOpt?.package_id || membershipActions?.upgrade_options?.[0]?.package_id || "");
                         setUpgradeReason("");
                         setIsUpgradeModalOpen(true);
                       }}
@@ -2310,7 +2583,7 @@ function WebMemberPortalWorkspaceInner() {
                         <CalendarPlus className="h-5 w-5" />
                       </div>
                       <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
-                        Approval Required
+                        Instant Self-Service
                       </Badge>
                     </div>
                     <CardTitle className="text-sm font-bold mt-2">Extend Validity</CardTitle>
@@ -2353,7 +2626,6 @@ function WebMemberPortalWorkspaceInner() {
                   <CardContent className="pt-0">
                     <Button
                       size="sm"
-                      disabled={membershipActions?.active_membership?.is_frozen}
                       onClick={() => {
                         setFreezeStartDate("");
                         setFreezeEndDate("");
@@ -2362,7 +2634,7 @@ function WebMemberPortalWorkspaceInner() {
                       }}
                       className="w-full text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white gap-1.5"
                     >
-                      <span>{membershipActions?.active_membership?.is_frozen ? "Currently Frozen" : "Freeze Pass"}</span>
+                      <span>{membershipActions?.active_membership?.is_frozen ? "Manage / Unfreeze" : "Freeze Pass"}</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
                   </CardContent>
@@ -2383,351 +2655,466 @@ function WebMemberPortalWorkspaceInner() {
                   {parqSurvey?.form_name || "Physical Activity Readiness Questionnaire (PAR-Q)"}
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Authoritative health and exercise readiness assessment ? Version {parqSurvey?.version_number || 1}
+                  Authoritative health and exercise readiness assessment • Version {parqSurvey?.version_number || 1}
                 </p>
               </div>
 
               <Badge
                 className={`font-semibold text-xs py-1 px-3 gap-1.5 ${
-                  isParqCleared
+                  Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission)
                     ? "bg-emerald-500 text-white"
                     : "bg-amber-500 text-white"
                 }`}
               >
                 <ShieldCheck className="h-4 w-4" />
-                {parqSurvey?.status_badge || (isParqCleared ? "PAR-Q Cleared" : "PAR-Q Pending")}
+                {parqSurvey?.status_badge || (Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? "PAR-Q Cleared" : "PAR-Q Pending")}
               </Badge>
             </div>
 
-            {/* PAR-Q Health Clearance on File Banner */}
-            {(isParqCleared || parqSurvey?.submission) && (
-              <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <ShieldCheck className="h-5 w-5 text-emerald-500 shrink-0" />
-                      <h3 className="font-bold text-sm sm:text-base text-foreground">
-                        PAR-Q Health Clearance on File
-                      </h3>
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
-                        Active Clearance
-                      </Badge>
-                      {Boolean(parqSurvey?.submission?.is_edit || (parqSurvey?.submission?.submission_count && parqSurvey.submission.submission_count > 1)) && (
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] font-mono gap-1">
-                          <History className="h-3 w-3" />
-                          <span>Revision #{parqSurvey?.submission?.revision_number || parqSurvey?.submission?.submission_count || 2}</span>
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Your completed medical readiness responses and verified digital signature are on file.
-                    </p>
-                  </div>
+            {/* Check if Member has a completed PAR-Q on file */}
+            {Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? (
+              /* ========================================================================= */
+              /* COMPLETED PAR-Q VIEW: STRICTLY VIEW-ONLY, IMMUTABLE HISTORICAL RECORD     */
+              /* ========================================================================= */
+              (() => {
+                const subHistory = (parqSurvey?.submission_history && parqSurvey.submission_history.length > 0)
+                  ? parqSurvey.submission_history
+                  : (parqSurvey?.submission ? [parqSurvey.submission] : []);
+                const activeSub = subHistory[selectedHistoryIdx] || parqSurvey?.submission;
+                const isViewingLatest = selectedHistoryIdx === 0;
 
-                  {parqSurvey?.submission?.submitted_at && (
-                    <div className="text-right text-xs text-muted-foreground font-mono shrink-0">
-                      Last Completed: {new Date(parqSurvey.submission.submitted_at).toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
-                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Signer Identity</span>
-                    <span className="font-semibold text-foreground">{parqSurvey?.submission?.signer_identity || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Member')}</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
-                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Form Version</span>
-                    <span className="font-semibold text-foreground font-mono">
-                      v{parqSurvey?.version_number || 1} ? {parqSurvey?.questions?.length || 15} Questions
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-background/80 border border-border/60">
-                    <span className="text-[10px] text-muted-foreground block font-medium uppercase">Booking Eligibility</span>
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Cleared for All Workouts
-                    </span>
-                  </div>
-                </div>
-
-                {parqSurvey?.submission?.signature_data && (
-                  <div className="pt-2 border-t border-emerald-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-muted-foreground">Signed Digital Signature:</span>
-                      <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-2xs">
-                        <img src={parqSurvey.submission.signature_data} alt="Member Signature" className="h-8 max-w-[140px] object-contain" />
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground italic">
-                      Need to update your health answers? Modify the questionnaire below and click update. Changes will be recorded in studio compliance logs.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <Card className="border-border/70 bg-card shadow-xs">
-              <CardHeader className="border-b border-border/40 pb-4">
-                <CardTitle className="text-base font-bold text-foreground">
-                  Readiness Self-Assessment & Studio Onboarding
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Please answer each question honestly to ensure safe and personalized exercise programming.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <form onSubmit={handleSubmitPARQ} className="space-y-8">
-                  {/* Dynamic Questions rendering from backend */}
-                  {parqSurvey?.questions && parqSurvey.questions.length > 0 ? (
-                    <div className="space-y-6">
-                      {parqSurvey.questions.map((q: any) => {
-                        const qId = q.id;
-                        const val = parqFormResponses[qId] ?? parqFormResponses[`q_${q.order}`] ?? parqFormResponses[String(q.order)];
-                        const hasAnswer = val !== undefined && val !== null && val !== '';
-
-                        return (
-                          <div
-                            key={qId}
-                            className={`p-4 rounded-xl border transition-colors space-y-3 ${
-                              hasAnswer ? 'border-primary/20 bg-primary/[0.02]' : 'border-border/70 bg-accent/5'
-                            }`}
-                          >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <label className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
-                                <span className="font-mono text-muted-foreground mr-1.5">Q{q.order}.</span>
-                                {q.text}
-                                {q.is_required ? (
-                                  <span className="text-rose-500 ml-1 font-bold">*</span>
-                                ) : (
-                                  <span className="text-muted-foreground font-normal text-xs ml-1.5">(Optional)</span>
-                                )}
-                              </label>
-                              <div className="flex items-center gap-2">
-                                {hasAnswer && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                    <span>Answer on file</span>
-                                  </span>
-                                )}
-                                {q.is_sensitive && (
-                                  <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0">
-                                    Protected Health Info
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Control based on question type */}
-                            {q.type === 'BOOLEAN' ? (
-                              <div className="flex items-center gap-2 pt-1 max-w-xs">
-                                <button
-                                  type="button"
-                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true, [`q_${q.order}`]: true }))}
-                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    val === true || val === 'yes' || val === 'YES' || val === 'true'
-                                      ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
-                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                                  }`}
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false, [`q_${q.order}`]: false }))}
-                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    val === false || val === 'no' || val === 'NO' || val === 'false'
-                                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
-                                      : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                                  }`}
-                                >
-                                  No
-                                </button>
-                              </div>
-                            ) : q.type === 'SINGLE_SELECT' ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
-                                {(q.options || []).map((opt: any) => {
-                                  const isSelected = val === opt.value || val === opt.label;
-                                  return (
-                                    <button
-                                      key={opt.value}
-                                      type="button"
-                                      onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: opt.value }))}
-                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all ${
-                                        isSelected
-                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
-                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                                      }`}
-                                    >
-                                      {opt.label || opt.value}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : q.type === 'MULTI_SELECT' ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
-                                {(q.options || []).map((opt: any) => {
-                                  const currentArr = Array.isArray(val) ? val : [];
-                                  const isChecked = currentArr.includes(opt.value);
-                                  return (
-                                    <button
-                                      key={opt.value}
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = isChecked
-                                          ? currentArr.filter((x: string) => x !== opt.value)
-                                          : [...currentArr, opt.value];
-                                        setParqFormResponses((prev) => ({ ...prev, [qId]: updated }));
-                                      }}
-                                      className={`py-2 px-3 rounded-xl text-xs text-left font-medium border transition-all ${
-                                        isChecked
-                                          ? 'bg-primary/10 text-primary border-primary font-bold shadow-xs'
-                                          : 'bg-background hover:bg-muted text-muted-foreground border-border'
-                                      }`}
-                                    >
-                                      {isChecked ? "? " : ""}{opt.label || opt.value}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : q.type === 'DATE' ? (
-                              <input
-                                type="date"
-                                value={val || ''}
-                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
-                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
-                            ) : q.type === 'NUMBER' ? (
-                              <input
-                                type="number"
-                                value={val || ''}
-                                placeholder="Enter value..."
-                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
-                                className="w-full sm:w-64 text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
-                            ) : (
-                              <input
-                                type="text"
-                                value={val || ''}
-                                placeholder="Your answer..."
-                                onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value }))}
-                                className="w-full text-xs rounded-xl border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                              />
+                return (
+                  <div className="space-y-5">
+                    {/* Active Clearance Banner */}
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <ShieldCheck className="h-5 w-5 text-emerald-500 shrink-0" />
+                            <h3 className="font-bold text-sm sm:text-base text-foreground">
+                              PAR-Q Health Clearance on File
+                            </h3>
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
+                              Active Clearance
+                            </Badge>
+                            {subHistory.length > 1 && (
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] font-mono gap-1">
+                                <History className="h-3 w-3" />
+                                <span>{subHistory.length} Total Versions</span>
+                              </Badge>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-center text-xs text-muted-foreground">
-                      Loading authoritative questionnaire...
-                    </div>
-                  )}
+                          <p className="text-xs text-muted-foreground">
+                            Your completed medical readiness responses and verified digital signature are on file. All studio class bookings are unlocked.
+                          </p>
+                        </div>
 
-                  {/* Legal Agreement & Declaration Section */}
-                  <div className="border-t border-border/40 pt-6 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-primary" />
-                      <h4 className="text-sm font-bold text-foreground">
-                        {parqSurvey?.agreement_title || "Physical Activity Readiness & Assumption of Risk Agreement"}
-                      </h4>
-                    </div>
-
-                    <div className="rounded-xl border border-border/80 bg-muted/20 p-4 max-h-40 overflow-y-auto text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
-                      {parqSurvey?.agreement_text ? (
-                        parqSurvey.agreement_text
-                      ) : (
-                        <span className="italic text-muted-foreground/70">
-                          By signing below, you certify that the answers given above are true, complete, and accurate to the best of your knowledge.
-                        </span>
-                      )}
-                    </div>
-
-                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={parqConsentAccepted}
-                        onChange={(e) => setParqConsentAccepted(e.target.checked)}
-                        className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4"
-                      />
-                      <div className="text-xs">
-                        <span className="font-semibold text-foreground">
-                          I explicitly confirm that I have reviewed, understood, and agree to the Physical Activity Readiness terms above.
-                        </span>
-                        <p className="text-muted-foreground text-[11px] mt-0.5">
-                          I acknowledge that completing this assessment is mandatory before booking classes.
-                        </p>
+                        {activeSub?.submitted_at && (
+                          <div className="text-right text-xs text-muted-foreground font-mono shrink-0">
+                            Completed: <strong>{new Date(activeSub.submitted_at).toLocaleDateString()}</strong>
+                          </div>
+                        )}
                       </div>
-                    </label>
-                  </div>
 
-                  {/* Digital Signature Canvas Area */}
-                  <div className="border-t border-border/40 pt-6 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
-                        <PenTool className="h-4 w-4 text-primary" />
-                        <span>Member Digital Signature</span>
-                        <span className="text-muted-foreground font-normal text-xs">(Touch or mouse)</span>
-                      </label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearParqSignature}
-                        className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5"
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                        <span>Clear & Redraw</span>
-                      </Button>
-                    </div>
+                      {/* Summary Badges Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="p-3 rounded-xl bg-background/80 border border-border/60">
+                          <span className="text-[10px] text-muted-foreground block font-medium uppercase">Signer Identity</span>
+                          <span className="font-semibold text-foreground truncate block">
+                            {activeSub?.signer_identity || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Member')}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-background/80 border border-border/60">
+                          <span className="text-[10px] text-muted-foreground block font-medium uppercase">Form Version</span>
+                          <span className="font-semibold text-foreground font-mono">
+                            v{activeSub?.version_number || parqSurvey?.version_number || 1} • {parqSurvey?.questions?.length || 15} Questions
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-background/80 border border-border/60">
+                          <span className="text-[10px] text-muted-foreground block font-medium uppercase">Booking Eligibility</span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Cleared for All Workouts
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="relative rounded-2xl border-2 border-dashed border-border bg-white dark:bg-zinc-950 overflow-hidden shadow-inner">
-                      <canvas
-                        ref={parqCanvasRef}
-                        onMouseDown={startParqDraw}
-                        onMouseMove={drawParq}
-                        onMouseUp={stopParqDraw}
-                        onMouseLeave={stopParqDraw}
-                        onTouchStart={startParqDraw}
-                        onTouchMove={drawParq}
-                        onTouchEnd={stopParqDraw}
-                        className="w-full h-32 block cursor-crosshair touch-none"
-                      />
-                      {!parqHasSignature && (
-                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3 text-muted-foreground/60 select-none">
-                          <PenTool className="w-5 h-5 mb-1 opacity-40" />
-                          <p className="text-xs font-medium">Draw your digital signature here using mouse, touch, or stylus</p>
-                          <p className="text-[10px] opacity-75">Touch-screen devices fully supported</p>
+                      {/* Digital Signature Preview */}
+                      {activeSub?.signature_data && (
+                        <div className="pt-2 border-t border-emerald-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-muted-foreground">Verified Digital Signature:</span>
+                            <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-2xs">
+                              <img src={activeSub.signature_data} alt="Member Signature" className="h-9 max-w-[150px] object-contain" />
+                            </div>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            Signed on {activeSub.submitted_at ? new Date(activeSub.submitted_at).toLocaleDateString() : 'on file'}
+                          </span>
                         </div>
                       )}
-                      <div className="pointer-events-none absolute bottom-2 left-4 right-4 border-b border-muted-foreground/20 flex justify-between text-[10px] text-muted-foreground/50 pb-0.5">
-                        <span>Sign above this line</span>
-                        <span>{parqHasSignature ? "? Signature Captured" : "Signature Optional for Profile Update"}</span>
+                    </div>
+
+                    {/* Version History Selector Pills (if multiple revisions exist) */}
+                    {subHistory.length > 1 && (
+                      <div className="p-3.5 rounded-xl border border-border bg-card shadow-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <History className="w-3.5 h-3.5 text-primary" />
+                            <span>PAR-Q Submission Version History</span>
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Select version to inspect historical responses
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+                          {subHistory.map((sub: any, sIdx: number) => {
+                            const isSelected = sIdx === selectedHistoryIdx;
+                            const isLatest = sIdx === 0;
+                            const revNum = sub.revision_number || (subHistory.length - sIdx);
+
+                            return (
+                              <button
+                                key={sub.id || sIdx}
+                                type="button"
+                                onClick={() => setSelectedHistoryIdx(sIdx)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all shrink-0 flex items-center gap-1.5 ${
+                                  isSelected
+                                    ? isLatest
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                      : 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                    : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                <span>{isLatest ? `Latest (Rev #${revNum})` : `Revision #${revNum}`}</span>
+                                <span className={`text-[10px] ${isSelected ? 'text-white/80' : 'text-muted-foreground'} font-mono`}>
+                                  • {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : ''}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Completed Questionnaire Responses Card (Strictly Read-Only) */}
+                    <Card className="border-border/70 bg-card shadow-xs">
+                      <CardHeader className="border-b border-border/40 pb-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-base font-bold text-foreground">
+                              Readiness Self-Assessment Responses
+                            </CardTitle>
+                            <CardDescription className="text-xs mt-0.5">
+                              {isViewingLatest
+                                ? "Current verified medical readiness responses on file with studio records."
+                                : `Historical responses recorded on ${activeSub?.submitted_at ? new Date(activeSub.submitted_at).toLocaleDateString() : 'earlier date'}.`}
+                            </CardDescription>
+                          </div>
+                          {!isViewingLatest && (
+                            <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+                              Archived Version
+                            </Badge>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-5 space-y-3">
+                        {parqSurvey?.questions && parqSurvey.questions.length > 0 ? (
+                          parqSurvey.questions.map((q: any) => {
+                            const qId = q.id;
+                            const subAnswers = activeSub?.answers || {};
+                            const val = subAnswers[qId] ?? subAnswers[`q_${q.order}`] ?? subAnswers[String(q.order)] ?? parqFormResponses[qId] ?? parqFormResponses[`q_${q.order}`];
+                            const isYes = val === true || val === 'yes' || val === 'YES' || val === 'true';
+                            const isNo = val === false || val === 'no' || val === 'NO' || val === 'false';
+
+                            return (
+                              <div
+                                key={qId}
+                                className="p-3.5 rounded-xl border border-border/70 bg-accent/5 space-y-2"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <span className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
+                                    <span className="font-mono text-muted-foreground mr-1.5">Q{q.order}.</span>
+                                    {q.text}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {q.is_sensitive && (
+                                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                        Protected Health Info
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="pt-1">
+                                  {q.type === 'BOOLEAN' || isYes || isNo ? (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs px-2.5 py-0.5 font-bold ${
+                                        isYes
+                                          ? 'text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10'
+                                          : 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                                      }`}
+                                    >
+                                      {isYes ? 'YES' : 'NO'}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-foreground px-2.5 py-1 bg-background rounded-lg border border-border/60 inline-block">
+                                      {val !== undefined && val !== null && val !== '' ? String(val) : 'No response recorded'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-muted-foreground text-center py-4">
+                            All PAR-Q health answers are securely saved and cleared on file.
+                          </p>
+                        )}
+
+                        {/* Informational notice: Completed PAR-Q is View-Only */}
+                        <div className="mt-6 p-4 rounded-xl border border-border bg-muted/20 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="font-semibold text-foreground block">
+                              Need to update your health answers or medical status?
+                            </span>
+                            <p className="text-[11px]">
+                              To protect health record integrity, questionnaire answers cannot be overwritten from this viewing screen. Options to reuse, revise, or complete a new form will be presented during your next package purchase, renewal, or tier upgrade.
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0 text-[10px] bg-background text-muted-foreground">
+                            View-Only Mode
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()
+            ) : (
+              /* ========================================================================= */
+              /* FIRST-TIME SUBMISSION FORM (ONLY DISPLAYED IF MEMBER HAS NO PAR-Q ON FILE) */
+              /* ========================================================================= */
+              <Card className="border-border/70 bg-card shadow-xs">
+                <CardHeader className="border-b border-border/40 pb-4">
+                  <CardTitle className="text-base font-bold text-foreground">
+                    Readiness Self-Assessment & Studio Onboarding
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Please answer each question honestly to ensure safe and personalized exercise programming.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <form onSubmit={handleSubmitPARQ} className="space-y-8">
+                    {/* Dynamic Questions rendering from backend */}
+                    {parqSurvey?.questions && parqSurvey.questions.length > 0 ? (
+                      <div className="space-y-6">
+                        {parqSurvey.questions.map((q: any) => {
+                          const qId = q.id;
+                          const val = parqFormResponses[qId] ?? parqFormResponses[`q_${q.order}`] ?? parqFormResponses[String(q.order)];
+                          const hasAnswer = val !== undefined && val !== null && val !== '';
+
+                          return (
+                            <div
+                              key={qId}
+                              className={`p-4 rounded-xl border transition-colors space-y-3 ${
+                                hasAnswer ? 'border-primary/20 bg-primary/[0.02]' : 'border-border/70 bg-accent/5'
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <label className="text-xs sm:text-sm font-semibold text-foreground leading-snug">
+                                  <span className="font-mono text-muted-foreground mr-1.5">Q{q.order}.</span>
+                                  {q.text}
+                                  {q.is_required ? (
+                                    <span className="text-rose-500 ml-1 font-bold">*</span>
+                                  ) : (
+                                    <span className="text-muted-foreground font-normal text-xs ml-1.5">(Optional)</span>
+                                  )}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  {hasAnswer && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                      <span>Answer on file</span>
+                                    </span>
+                                  )}
+                                  {q.is_sensitive && (
+                                    <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/20 shrink-0">
+                                      Protected Health Info
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Control based on question type */}
+                              {q.type === 'BOOLEAN' ? (
+                                <div className="flex items-center gap-2 pt-1 max-w-xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: true, [`q_${q.order}`]: true }))}
+                                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                      val === true || val === 'yes' || val === 'YES' || val === 'true'
+                                        ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                                        : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                    }`}
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: false, [`q_${q.order}`]: false }))}
+                                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                      val === false || val === 'no' || val === 'NO' || val === 'false'
+                                        ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-700 shadow-xs'
+                                        : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                    }`}
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : q.type === 'SINGLE_SELECT' ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                                  {(q.options || []).map((opt: any) => {
+                                    const isSelected = val === opt.value || val === opt.label;
+                                    return (
+                                      <button
+                                        key={opt.value || opt.label}
+                                        type="button"
+                                        onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: opt.value || opt.label, [`q_${q.order}`]: opt.value || opt.label }))}
+                                        className={`p-2.5 rounded-lg text-xs text-left font-medium border transition-all ${
+                                          isSelected
+                                            ? 'bg-primary/10 text-primary border-primary font-semibold shadow-xs'
+                                            : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                        }`}
+                                      >
+                                        {opt.label || opt.value}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <Input
+                                  value={val ?? ''}
+                                  onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value, [`q_${q.order}`]: e.target.value }))}
+                                  placeholder="Type your response..."
+                                  className="text-xs"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center bg-muted/20 border border-dashed border-border rounded-xl">
+                        <HeartPulse className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                        <p className="text-xs text-muted-foreground">Standard studio fitness readiness questions will load shortly.</p>
+                      </div>
+                    )}
+
+                    {/* Legal Consent & Terms Acceptance */}
+                    <div className="border-t border-border/40 pt-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4 text-primary" />
+                          <span>Physical Activity Readiness Consent Agreement</span>
+                        </h4>
+                        <span className="text-[11px] font-mono text-muted-foreground">Studio Legal v{parqSurvey?.version_number || 1}</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl border border-border/70 bg-muted/20 text-xs text-muted-foreground max-h-36 overflow-y-auto leading-relaxed">
+                        {parqSurvey?.agreement_text ? (
+                          <p className="whitespace-pre-line">{parqSurvey.agreement_text}</p>
+                        ) : (
+                          <span>
+                            I confirm that I have answered the Physical Activity Readiness Questionnaire truthfully to the best of my knowledge. I understand that physical activity involves inherent risk of injury, and I voluntarily choose to participate in fitness sessions provided by SWEAT. I consent to emergency medical treatment if necessary and release the facility and instructors from liability for injuries arising out of normal workout programming.
+                          </span>
+                        )}
+                      </div>
+
+                      <label className="flex items-start gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={parqConsentAccepted}
+                          onChange={(e) => setParqConsentAccepted(e.target.checked)}
+                          className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4"
+                        />
+                        <div className="text-xs">
+                          <span className="font-semibold text-foreground">
+                            I explicitly confirm that I have reviewed, understood, and agree to the Physical Activity Readiness terms above.
+                          </span>
+                          <p className="text-muted-foreground text-[11px] mt-0.5">
+                            I acknowledge that completing this assessment is mandatory before booking classes.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Digital Signature Canvas Area */}
+                    <div className="border-t border-border/40 pt-6 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
+                          <PenTool className="h-4 w-4 text-primary" />
+                          <span>Member Digital Signature</span>
+                          <span className="text-muted-foreground font-normal text-xs">(Touch or mouse)</span>
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearParqSignature}
+                          className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Clear & Redraw</span>
+                        </Button>
+                      </div>
+
+                      <div className="relative rounded-2xl border-2 border-dashed border-border bg-white dark:bg-zinc-950 overflow-hidden shadow-inner">
+                        <canvas
+                          ref={parqCanvasRef}
+                          onMouseDown={startParqDraw}
+                          onMouseMove={drawParq}
+                          onMouseUp={stopParqDraw}
+                          onMouseLeave={stopParqDraw}
+                          onTouchStart={startParqDraw}
+                          onTouchMove={drawParq}
+                          onTouchEnd={stopParqDraw}
+                          className="w-full h-32 block cursor-crosshair touch-none"
+                        />
+                        {!parqHasSignature && (
+                          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3 text-muted-foreground/60 select-none">
+                            <PenTool className="w-5 h-5 mb-1 opacity-40" />
+                            <p className="text-xs font-medium">Draw your digital signature here using mouse, touch, or stylus</p>
+                            <p className="text-[10px] opacity-75">Touch-screen devices fully supported</p>
+                          </div>
+                        )}
+                        <div className="pointer-events-none absolute bottom-2 left-4 right-4 border-b border-muted-foreground/20 flex justify-between text-[10px] text-muted-foreground/50 pb-0.5">
+                          <span>Sign above this line</span>
+                          <span>{parqHasSignature ? "✓ Signature Captured" : "Signature Required"}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/40">
-                    <p className="text-[11px] text-muted-foreground text-center sm:text-left">
-                      {isParqCleared
-                        ? "Editing responses will update your member health file and generate an updated revision log in studio records."
-                        : "Submitting clears your health assessment requirement and unlocks studio class bookings."}
-                    </p>
-                    <Button
-                      type="submit"
-                      disabled={isParqSubmitting || !parqConsentAccepted}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs shrink-0 w-full sm:w-auto"
-                    >
-                      <ShieldCheck className="h-4 w-4" />
-                      {isParqSubmitting
-                        ? "Saving..."
-                        : isParqCleared
-                        ? "Update PAR-Q Responses (Save Revisions)"
-                        : "Save & Confirm PAR-Q Clearance"}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/40">
+                      <p className="text-[11px] text-muted-foreground text-center sm:text-left">
+                        Submitting clears your health assessment requirement and unlocks studio class bookings.
+                      </p>
+                      <Button
+                        type="submit"
+                        disabled={isParqSubmitting || !parqConsentAccepted || !parqHasSignature}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs shrink-0 w-full sm:w-auto"
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                        {isParqSubmitting
+                          ? "Saving..."
+                          : "Save & Confirm PAR-Q Clearance"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* ========================================================================= */}
@@ -2829,19 +3216,19 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 1: 1-CLICK CLASS BOOKING CONFIRMATION                               */}
       {/* ========================================================================= */}
       <Dialog open={!!bookingSlotToConfirm} onOpenChange={(open) => !open && setBookingSlotToConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <CalendarCheck className="h-5 w-5 text-primary" />
               Confirm Workout Reservation
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               1 session credit will be deducted from your active passbook.
             </DialogDescription>
           </DialogHeader>
 
           {bookingSlotToConfirm && (
-            <div className="space-y-4 py-2">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
               <div className="p-4 rounded-xl border border-border/70 bg-accent/20 space-y-2">
                 <span className="text-[10px] font-bold text-primary uppercase">
                   {bookingSlotToConfirm.category || "Class"}
@@ -2896,7 +3283,7 @@ function WebMemberPortalWorkspaceInner() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -2949,19 +3336,19 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 2: RESCHEDULE BOOKING MODAL                                         */}
       {/* ========================================================================= */}
       <Dialog open={!!rescheduleBookingTarget} onOpenChange={(open) => !open && setRescheduleBookingTarget(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-lg h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <RefreshCw className="h-5 w-5 text-primary" />
               Reschedule Workout Slot
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Select another available class slot to transfer your session reservation without losing credits.
             </DialogDescription>
           </DialogHeader>
 
           {rescheduleBookingTarget && (
-            <div className="space-y-4 py-2">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
               <div className="p-3 rounded-xl border border-border/70 bg-accent/20">
                 <span className="text-[10px] text-muted-foreground uppercase font-semibold">Currently Booked:</span>
                 <h5 className="text-sm font-bold text-foreground">{rescheduleBookingTarget.class_name}</h5>
@@ -3022,7 +3409,7 @@ function WebMemberPortalWorkspaceInner() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3047,27 +3434,29 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 3: CANCEL BOOKING MODAL                                             */}
       {/* ========================================================================= */}
       <Dialog open={!!cancelBookingTarget} onOpenChange={(open) => !open && setCancelBookingTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-destructive">
               <XCircle className="h-5 w-5" />
               Cancel Booking Reservation
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Are you sure you want to cancel this booking? 1 session credit will be refunded to your passbook.
             </DialogDescription>
           </DialogHeader>
 
           {cancelBookingTarget && (
-            <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 space-y-1">
-              <h4 className="text-sm font-bold text-foreground">{cancelBookingTarget.class_name}</h4>
-              <p className="text-xs text-muted-foreground">
-                {safeFormatDate(cancelBookingTarget.start_time, "EEEE, MMM dd · hh:mm a")}
-              </p>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+              <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 space-y-1">
+                <h4 className="text-sm font-bold text-foreground">{cancelBookingTarget.class_name}</h4>
+                <p className="text-xs text-muted-foreground">
+                  {safeFormatDate(cancelBookingTarget.start_time, "EEEE, MMM dd · hh:mm a")}
+                </p>
+              </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3093,18 +3482,18 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 4: BOOK 1-ON-1 PT SESSION                                           */}
       {/* ========================================================================= */}
       <Dialog open={!!ptTrainerToBook} onOpenChange={(open) => !open && setPtTrainerToBook(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Dumbbell className="h-5 w-5 text-primary" />
               Schedule 1-on-1 Personal Training
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Private coaching with Coach {ptTrainerToBook?.name}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="pt_date" className="text-xs">Session Date</Label>
@@ -3158,7 +3547,7 @@ function WebMemberPortalWorkspaceInner() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3181,34 +3570,172 @@ function WebMemberPortalWorkspaceInner() {
 
 
       {/* ========================================================================= */}
-      {/* MODAL 6: RENEW MEMBERSHIP                                                 */}
+      {/* MODAL 6: RENEW MEMBERSHIP (SELF-SERVICE RAZORPAY)                        */}
       {/* ========================================================================= */}
       <Dialog open={isRenewModalOpen} onOpenChange={setIsRenewModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full max-w-2xl h-[88vh] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <RotateCcw className="h-5 w-5 text-emerald-500" />
               Renew Membership Pass
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Select an eligible package to renew your SWEAT training membership.
+            <DialogDescription className="text-xs text-muted-foreground">
+              Renew training access under your current program with transparent pricing and instant Razorpay checkout.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Select Renewal Package</label>
-              <select
-                value={selectedRenewPackageId}
-                onChange={(e) => setSelectedRenewPackageId(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-lg border border-border bg-card text-foreground"
-              >
-                {membershipActions?.renew_options?.map((opt) => (
-                  <option key={opt.package_id} value={opt.package_id}>
-                    {opt.package_name} — {opt.session_credits} Sessions ({opt.duration_days} Days) — ₹{opt.total_price}
-                  </option>
-                ))}
-              </select>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+            {/* Current Program Display (Fixed) */}
+            <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">
+                  Current Program (Fixed for Renewal)
+                </span>
+                <span className="font-bold text-sm text-foreground">
+                  {membershipActions?.active_membership?.program_name || "SWEAT Training"}
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                Continuous Access
+              </Badge>
+            </div>
+
+            {/* Studio Branch Selector Container */}
+            <div className="rounded-2xl border border-border bg-card/60 p-3.5 sm:p-4 space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Building2 size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-bold text-foreground">Select Studio Branch</Label>
+                      <span className="text-rose-500 font-bold">*</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{availableBranches.length} locations available</p>
+                  </div>
+                </div>
+                <div className="relative sm:w-80">
+                  <select
+                    value={selectedRenewBranchId || membershipActions?.active_membership?.branch_id || ""}
+                    onChange={(e) => setSelectedRenewBranchId(e.target.value)}
+                    className="w-full h-10 px-3.5 pr-9 rounded-xl border border-border bg-background text-xs sm:text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none cursor-pointer shadow-xs transition-colors"
+                  >
+                    {availableBranches.length > 0 ? (
+                      availableBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {formatBranchOptionText(b)}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={membershipActions?.active_membership?.branch_id || ""}>
+                        {membershipActions?.active_membership?.branch_name || "Home Branch"}
+                      </option>
+                    )}
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <ChevronDown size={15} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filtered Packages Grid (Matching Conversion Wizard 2-Column Card Design) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Package size={14} className="text-emerald-500" />
+                  <span>Select Renewal Package</span>
+                </label>
+                {membershipActions?.renew_options && (
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {membershipActions.renew_options.length} available
+                  </span>
+                )}
+              </div>
+
+              {!membershipActions?.renew_options || membershipActions.renew_options.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground border border-dashed border-border rounded-xl bg-muted/20">
+                  <Package size={24} className="mx-auto mb-1.5 opacity-40 text-emerald-500" />
+                  <p className="text-xs sm:text-sm font-medium">No active packages for this program at this branch</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-h-72 overflow-y-auto pr-0.5">
+                  {membershipActions.renew_options.map((opt) => {
+                    const selected = selectedRenewPackageId === opt.package_id;
+                    const sessionCount = opt.session_credits || opt.session_count || 0;
+                    const days = opt.duration_days;
+                    const rawPrice = opt.base_price;
+                    const perSessionCost = (sessionCount > 0 && rawPrice > 0)
+                      ? Math.round(rawPrice / sessionCount)
+                      : null;
+
+                    return (
+                      <button
+                        key={opt.package_id}
+                        type="button"
+                        onClick={() => setSelectedRenewPackageId(opt.package_id)}
+                        className={[
+                          'w-full text-left rounded-xl p-3.5 transition-all duration-200 border relative group flex flex-col justify-between gap-2.5 active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-md cursor-pointer',
+                          selected
+                            ? 'bg-emerald-500/[0.08] dark:bg-emerald-500/[0.15] border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
+                            : 'bg-card border-border hover:border-emerald-500/40 hover:bg-muted/30',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                              <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
+                                {cleanPackageDisplayName(opt.name, opt.package_name)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                              {sessionCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
+                                  <Zap size={9} className="text-blue-500 fill-blue-500/30" />
+                                  {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}
+                                </span>
+                              )}
+                              {days > 0 && (
+                                <span className="inline-flex items-center gap-1 font-semibold text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                                  <CalendarIcon size={10} className="text-emerald-600 dark:text-emerald-400" />
+                                  {days} Days
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <span
+                              className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
+                                selected
+                                  ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/20 scale-100'
+                                  : 'border-2 border-border/80 group-hover:border-emerald-500/50'
+                              }`}
+                            >
+                              {selected ? <Check size={11} strokeWidth={3} className="animate-in zoom-in-50 duration-150" /> : null}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-baseline justify-between pt-1 border-t border-border/50">
+                          <div>
+                            {perSessionCost ? (
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                ₹{perSessionCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / sess
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                              ₹{rawPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {(() => {
@@ -3217,10 +3744,10 @@ function WebMemberPortalWorkspaceInner() {
               );
               if (!selectedOpt) return null;
               return (
-                <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-2 text-xs">
+                <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Entitlement Sessions:</span>
-                    <span className="font-bold text-foreground">{selectedOpt.session_credits} Sessions</span>
+                    <span className="font-bold text-foreground">{selectedOpt.session_credits || selectedOpt.session_count} Sessions</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Validity Duration:</span>
@@ -3232,23 +3759,99 @@ function WebMemberPortalWorkspaceInner() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">GST Tax ({selectedOpt.tax_percent}%):</span>
-                    <span className="font-mono text-foreground">₹{Math.round(selectedOpt.total_price - selectedOpt.base_price)}</span>
+                    <span className="font-mono text-foreground">
+                      ₹{selectedOpt.tax_amount || Math.round(selectedOpt.total_price - selectedOpt.base_price)}
+                    </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-emerald-500">
-                    <span>Total Amount:</span>
+                    <span>Total Amount Payable:</span>
                     <span>₹{selectedOpt.total_price}</span>
                   </div>
                 </div>
               );
             })()}
 
-            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
-              <p className="font-semibold text-blue-400">Payment & Activation Policy:</p>
-              <p>Initiating renewal creates an order in pending status. Your renewed membership activates upon verified online payment completion.</p>
+            {/* PAR-Q Decision Card */}
+            {Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission || membershipActions?.parq_info?.has_completed_parq) && (
+              <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>PAR-Q Health Readiness Decision</span>
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    Verified on File
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Select how to link your health readiness questionnaire for this renewal:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRenewParqDecision('REUSE')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      renewParqDecision === 'REUSE'
+                        ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <CopyCheck className="w-3 h-3 text-emerald-500" />
+                      <span>Option A: Reuse</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Retain current verified PAR-Q record.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRenewParqDecision('EDIT')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      renewParqDecision === 'EDIT'
+                        ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <FileEdit className="w-3 h-3 text-blue-500" />
+                      <span>Option B: Edit</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Update answers & re-sign questionnaire.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRenewParqDecision('NEW')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      renewParqDecision === 'NEW'
+                        ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-purple-500" />
+                      <span>Option C: New Form</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Complete fresh blank health survey.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-emerald-600 dark:text-emerald-400">Secure Razorpay Payment & Activation:</p>
+              <p>Your renewal is activated immediately upon verified payment completion. The contract end date seamlessly continues from your prior membership expiry date.</p>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3258,93 +3861,350 @@ function WebMemberPortalWorkspaceInner() {
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              onClick={handleRenewSubmit}
-              disabled={isSubmittingAction || !selectedRenewPackageId}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
-            >
-              {isSubmittingAction ? "Creating Order..." : "Proceed to Renewal"}
-            </Button>
+            {(() => {
+              const selectedOpt = membershipActions?.renew_options?.find(
+                (o) => o.package_id === selectedRenewPackageId
+              );
+              const amount = selectedOpt?.total_price || 0;
+              return (
+                <Button
+                  size="sm"
+                  onClick={handleRenewSubmit}
+                  disabled={isSubmittingAction || !selectedRenewPackageId}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  {isSubmittingAction ? "Initiating Checkout..." : `Pay ₹${amount} with Razorpay`}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL 7: UPGRADE PACKAGE                                                  */}
+      {/* MODAL 7: UPGRADE PACKAGE TIER (SELF-SERVICE RAZORPAY)                     */}
       {/* ========================================================================= */}
       <Dialog open={isUpgradeModalOpen} onOpenChange={setIsUpgradeModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full max-w-2xl h-[88vh] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-blue-500" />
-              Upgrade Package Tier
+              Upgrade Package Tier (Self-Service)
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Upgrade to higher session allocations or unlimited class access.
+            <DialogDescription className="text-xs text-muted-foreground">
+              Upgrade branch, program, or package with authoritative price difference and instant Razorpay checkout.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Select Upgrade Package</label>
-              <select
-                value={selectedUpgradePackageId}
-                onChange={(e) => setSelectedUpgradePackageId(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-lg border border-border bg-card text-foreground"
-              >
-                {membershipActions?.upgrade_options?.map((opt) => (
-                  <option key={opt.package_id} value={opt.package_id}>
-                    {opt.package_name} — +{opt.credits_gain} Credits — Price Diff: ₹{opt.price_difference}
-                  </option>
-                ))}
-              </select>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+            {/* 1 & 2. Studio Branch & Program Selection Container (Matching Target Reference UI) */}
+            <div className="rounded-2xl border border-border bg-card/60 p-3.5 sm:p-4 space-y-3.5 shadow-xs">
+              {/* Branch Selector Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Building2 size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-bold text-foreground">Select Studio Branch</Label>
+                      <span className="text-rose-500 font-bold">*</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{availableBranches.length} locations available</p>
+                  </div>
+                </div>
+                <div className="relative sm:w-80">
+                  <select
+                    value={effectiveUpgradeBranchId}
+                    onChange={(e) => setSelectedUpgradeBranchId(e.target.value)}
+                    className="w-full h-10 px-3.5 pr-9 rounded-xl border border-border bg-background text-xs sm:text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer shadow-xs transition-colors"
+                  >
+                    <option value="" disabled>Choose a studio branch</option>
+                    {availableBranches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {formatBranchOptionText(b)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <ChevronDown size={15} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Program Segmented Grid */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Zap size={13} className="text-amber-500 fill-amber-500/20" />
+                    <span>Select Program</span>
+                  </Label>
+                  {membershipActions?.programs && membershipActions.programs.length > 0 && (
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {membershipActions.programs.length} programs
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                  {membershipActions?.programs?.map((p) => {
+                    const isActive = effectiveUpgradeProgramId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedUpgradeProgramId(p.id);
+                          const firstPkg = (membershipActions?.upgrade_options || []).find((opt) => opt.program_id === p.id);
+                          if (firstPkg) {
+                            setSelectedUpgradePackageId(firstPkg.package_id);
+                          }
+                        }}
+                        className={[
+                          'flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all duration-200 cursor-pointer text-center active:scale-[0.98] shadow-xs hover:-translate-y-0.5',
+                          isActive
+                            ? 'bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 border-zinc-950 dark:border-zinc-100 shadow-sm ring-2 ring-zinc-500/15'
+                            : 'bg-background text-muted-foreground hover:text-foreground hover:bg-muted/40 border-border/80',
+                        ].join(' ')}
+                      >
+                        <span className="shrink-0">{getProgramIcon(p.name)}</span>
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
+            {/* Filtered Upgrade Packages Grid (Strictly Program-Based) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Package size={14} className="text-blue-500" />
+                  <span>Select Upgrade Target Package</span>
+                </label>
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {filteredUpgradeOptions.length} available
+                </span>
+              </div>
+
+              {filteredUpgradeOptions.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground border border-dashed border-border rounded-xl bg-muted/20">
+                  <Package size={24} className="mx-auto mb-1.5 opacity-40 text-blue-500" />
+                  <p className="text-xs sm:text-sm font-medium">No upgrade packages available for this program</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-h-72 overflow-y-auto pr-0.5">
+                  {filteredUpgradeOptions.map((opt) => {
+                    const selected = selectedUpgradePackageId === opt.package_id;
+                    const sessionCount = opt.session_credits || opt.session_count || 0;
+                    const days = opt.duration_days;
+                    const rawPrice = opt.base_price || opt.total_price;
+                    const perSessionCost = (sessionCount > 0 && rawPrice > 0)
+                      ? Math.round(rawPrice / sessionCount)
+                      : null;
+
+                    return (
+                      <button
+                        key={opt.package_id}
+                        type="button"
+                        onClick={() => setSelectedUpgradePackageId(opt.package_id)}
+                        className={[
+                          'w-full text-left rounded-xl p-3.5 transition-all duration-200 border relative group flex flex-col justify-between gap-2.5 active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-md cursor-pointer',
+                          selected
+                            ? 'bg-blue-500/[0.08] dark:bg-blue-500/[0.15] border-blue-500 shadow-sm ring-2 ring-blue-500/40'
+                            : 'bg-card border-border hover:border-blue-500/40 hover:bg-muted/30',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                              <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
+                                {cleanPackageDisplayName(opt.name, opt.package_name)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                              {sessionCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
+                                  <Zap size={9} className="text-blue-500 fill-blue-500/30" />
+                                  {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}
+                                </span>
+                              )}
+                              {days > 0 && (
+                                <span className="inline-flex items-center gap-1 font-semibold text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                                  <CalendarIcon size={10} className="text-emerald-600 dark:text-emerald-400" />
+                                  {days} Days
+                                </span>
+                              )}
+                              {opt.program_name && (
+                                <span className="inline-flex items-center font-medium text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/60">
+                                  {opt.program_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <span
+                              className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
+                                selected
+                                  ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/20 scale-100'
+                                  : 'border-2 border-border/80 group-hover:border-blue-500/50'
+                              }`}
+                            >
+                              {selected ? <Check size={11} strokeWidth={3} className="animate-in zoom-in-50 duration-150" /> : null}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-baseline justify-between pt-1 border-t border-border/50">
+                          <div>
+                            {perSessionCost ? (
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                ₹{perSessionCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / sess
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                Total: ₹{opt.total_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                              ₹{rawPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Dynamic Comparison Card */}
             {(() => {
               const selectedOpt = membershipActions?.upgrade_options?.find(
                 (o) => o.package_id === selectedUpgradePackageId
               );
               if (!selectedOpt) return null;
               return (
-                <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-2 text-xs">
+                <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Current Plan Price:</span>
-                    <span className="font-mono text-foreground">₹{selectedOpt.current_price}</span>
+                    <span className="text-muted-foreground">Current Plan Value:</span>
+                    <span className="font-mono text-foreground">₹{selectedOpt.current_price || 0}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Target Plan Price:</span>
+                    <span className="text-muted-foreground">Target Package Total:</span>
                     <span className="font-mono text-foreground">₹{selectedOpt.total_price}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Additional Session Entitlement:</span>
-                    <span className="font-bold text-emerald-500">+{selectedOpt.credits_gain} Sessions</span>
+                    <span className="font-bold text-emerald-500">
+                      +{selectedOpt.additional_sessions || selectedOpt.credits_gain || 0} Sessions
+                    </span>
                   </div>
-                  <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-blue-400">
-                    <span>Applicable Price Difference:</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Additional Validity Duration:</span>
+                    <span className="font-semibold text-foreground">
+                      +{selectedOpt.additional_days || 0} Days
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-blue-500">
+                    <span>Authoritative Net Payable:</span>
                     <span>₹{selectedOpt.price_difference}</span>
                   </div>
                 </div>
               );
             })()}
 
+            {/* Reason input */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Reason / Comments (Optional)</label>
+              <label className="text-xs font-semibold text-foreground">Reason / Notes (Optional)</label>
               <Input
                 value={upgradeReason}
                 onChange={(e) => setUpgradeReason(e.target.value)}
-                placeholder="e.g. Upgrading from 8 to 16 sessions for more workouts"
+                placeholder="e.g. Upgrading for more weekly workout sessions"
                 className="text-xs"
               />
             </div>
 
+            {/* PAR-Q Decision Card */}
+            {Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission || membershipActions?.parq_info?.has_completed_parq) && (
+              <div className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
+                    <span>PAR-Q Health Assessment Decision</span>
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+                    Existing Record
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeParqDecision('REUSE')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      upgradeParqDecision === 'REUSE'
+                        ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <CopyCheck className="w-3 h-3 text-blue-500" />
+                      <span>Option A: Reuse</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Keep existing verified PAR-Q on file.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeParqDecision('EDIT')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      upgradeParqDecision === 'EDIT'
+                        ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <FileEdit className="w-3 h-3 text-blue-500" />
+                      <span>Option B: Edit</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Update answers & create revised version.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeParqDecision('NEW')}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      upgradeParqDecision === 'NEW'
+                        ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500'
+                        : 'border-border/80 bg-background hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-purple-500" />
+                      <span>Option C: New Form</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Complete fresh blank questionnaire.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
-              <p className="font-semibold text-blue-400">Studio Review Policy:</p>
-              <p>Your upgrade request will be submitted to the studio management team. Upon review, you will receive confirmation and payment instructions for the price difference.</p>
+              <p className="font-semibold text-blue-400">Direct Self-Service Activation:</p>
+              <p>No waiting for studio staff approval. Upon verified payment of the net price difference, your upgrade takes effect immediately.</p>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3354,84 +4214,126 @@ function WebMemberPortalWorkspaceInner() {
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              onClick={handleUpgradeSubmit}
-              disabled={isSubmittingAction || !selectedUpgradePackageId}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5"
-            >
-              {isSubmittingAction ? "Submitting..." : "Submit Upgrade Request"}
-            </Button>
+            {(() => {
+              const selectedOpt = membershipActions?.upgrade_options?.find(
+                (o) => o.package_id === selectedUpgradePackageId
+              );
+              const diff = selectedOpt?.price_difference || 0;
+              return (
+                <Button
+                  size="sm"
+                  onClick={handleUpgradeSubmit}
+                  disabled={isSubmittingAction || !selectedUpgradePackageId}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  {isSubmittingAction ? "Processing..." : diff > 0 ? `Pay ₹${diff} & Upgrade` : "Confirm Upgrade"}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL 8: EXTEND VALIDITY                                                  */}
+      {/* MODAL 8: EXTEND VALIDITY (SELF-SERVICE RAZORPAY)                          */}
       {/* ========================================================================= */}
       <Dialog open={isExtendModalOpen} onOpenChange={setIsExtendModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <CalendarPlus className="h-5 w-5 text-indigo-500" />
-              Request Validity Extension
+              Extend Membership Validity
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Extend your membership expiration date for travel, medical recovery, or personal reasons.
+            <DialogDescription className="text-xs text-muted-foreground">
+              Extend your membership expiry date with dynamic duration tiers and instant online checkout.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+            {/* Dynamic Duration Options */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Select Extension Duration</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[7, 14, 21, 30].map((d) => (
-                  <Button
-                    key={d}
+              <div className="grid grid-cols-2 gap-2">
+                {(membershipActions?.extend_options?.available_options || [
+                  { days: 7, base_fee: 500, tax_pct: 18, tax_amount: 90, total_fee: 590, name: "7 Days" },
+                  { days: 14, base_fee: 900, tax_pct: 18, tax_amount: 162, total_fee: 1062, name: "14 Days" },
+                  { days: 30, base_fee: 1500, tax_pct: 18, tax_amount: 270, total_fee: 1770, name: "30 Days" },
+                  { days: 60, base_fee: 2800, tax_pct: 18, tax_amount: 504, total_fee: 3304, name: "60 Days" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.days}
                     type="button"
-                    variant={extendDays === d ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setExtendDays(d)}
-                    className={`text-xs ${extendDays === d ? "bg-indigo-600 text-white font-bold" : ""}`}
+                    onClick={() => setExtendDays(opt.days)}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      extendDays === opt.days
+                        ? "border-indigo-500 bg-indigo-500/15 ring-1 ring-indigo-500 shadow-sm"
+                        : "border-border bg-card hover:bg-muted/50"
+                    }`}
                   >
-                    +{d} Days
-                  </Button>
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-xs text-foreground">+{opt.days} Days</span>
+                      <span className="text-xs font-mono font-bold text-indigo-400">₹{opt.total_fee}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block mt-0.5">
+                      Base: ₹{opt.base_fee} + 18% GST
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
 
-            <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Current Expiry:</span>
-                <span className="font-semibold text-foreground">
-                  {membershipActions?.active_membership?.end_date || "Active"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Requested Extension:</span>
-                <span className="font-bold text-indigo-400">+{extendDays} Calendar Days</span>
-              </div>
-            </div>
+            {/* Calculated Expiry Card */}
+            {(() => {
+              const curEndStr = membershipActions?.active_membership?.end_date;
+              const curDate = curEndStr ? new Date(curEndStr) : new Date();
+              const newDate = new Date(curDate.getTime() + extendDays * 24 * 3600 * 1000);
+              const matchedOpt = membershipActions?.extend_options?.available_options?.find(
+                (o) => o.days === extendDays
+              );
+              const fee = matchedOpt?.total_fee || (extendDays === 7 ? 590 : extendDays === 14 ? 1062 : extendDays === 30 ? 1770 : 3304);
+
+              return (
+                <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Expiry:</span>
+                    <span className="font-semibold text-foreground">
+                      {curEndStr ? safeFormatDate(curEndStr, "dd MMM yyyy") : "Active"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">New Resulting Expiry:</span>
+                    <span className="font-bold text-indigo-400">
+                      {safeFormatDate(newDate.toISOString(), "dd MMM yyyy")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-border/60">
+                    <span className="text-muted-foreground">Extension Total:</span>
+                    <span className="font-bold text-sm text-foreground">₹{fee}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
-                Reason for Extension <span className="text-destructive">*</span>
+                Reason / Note (Optional)
               </label>
               <Textarea
                 value={extendReason}
                 onChange={(e) => setExtendReason(e.target.value)}
-                placeholder="Please describe why an extension is needed (e.g. official travel, injury, medical leave)"
-                className="text-xs min-h-[70px]"
+                placeholder="e.g. Travel, exam preparation, or injury recovery"
+                className="text-xs min-h-[60px]"
               />
             </div>
 
             <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
-              <p className="font-semibold text-indigo-400">Studio Manager Approval:</p>
-              <p>Extension requests do not automatically modify your contract. They are evaluated by the studio manager and applied upon approval.</p>
+              <p className="font-semibold text-indigo-400">Instant Validity Extension:</p>
+              <p>Self-service extensions are verified and updated immediately upon checkout. Unused workout session credits carry forward to the new expiry date.</p>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -3441,127 +4343,224 @@ function WebMemberPortalWorkspaceInner() {
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              onClick={handleExtendSubmit}
-              disabled={isSubmittingAction || !extendReason.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold gap-1.5"
-            >
-              {isSubmittingAction ? "Submitting..." : "Submit Extension Request"}
-            </Button>
+            {(() => {
+              const matchedOpt = membershipActions?.extend_options?.available_options?.find(
+                (o) => o.days === extendDays
+              );
+              const fee = matchedOpt?.total_fee || (extendDays === 7 ? 590 : extendDays === 14 ? 1062 : extendDays === 30 ? 1770 : 3304);
+              return (
+                <Button
+                  size="sm"
+                  onClick={handleExtendSubmit}
+                  disabled={isSubmittingAction}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  {isSubmittingAction ? "Processing..." : `Pay ₹${fee} & Extend`}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* MODAL 9: FREEZE MEMBERSHIP                                                */}
+      {/* MODAL 9: FREEZE & UNFREEZE MEMBERSHIP (SELF-SERVICE RAZORPAY)              */}
       {/* ========================================================================= */}
       <Dialog open={isFreezeModalOpen} onOpenChange={setIsFreezeModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:w-full max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
+          <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Snowflake className="h-5 w-5 text-sky-500" />
-              Request Membership Freeze
+              {membershipActions?.active_membership?.is_frozen ? "Active Membership Freeze" : "Pause / Freeze Membership"}
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Temporarily pause your active workout membership for 7 to 60 days.
+            <DialogDescription className="text-xs text-muted-foreground">
+              {membershipActions?.active_membership?.is_frozen
+                ? "Your membership is paused. Resume anytime to reactivate your training passes."
+                : "Temporarily pause your workouts. The paused duration is automatically added to your contract end date."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Freeze Start Date</label>
-                <Input
-                  type="date"
-                  value={freezeStartDate}
-                  onChange={(e) => setFreezeStartDate(e.target.value)}
-                  className="text-xs"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Freeze End Date</label>
-                <Input
-                  type="date"
-                  value={freezeEndDate}
-                  onChange={(e) => setFreezeEndDate(e.target.value)}
-                  className="text-xs"
-                />
-              </div>
-            </div>
+          {membershipActions?.active_membership?.is_frozen ? (
+            /* ACTIVE FREEZE STATE */
+            <>
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+                <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-500/10 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                      <Snowflake className="w-4 h-4 animate-spin" />
+                      <span>Contract Currently Frozen</span>
+                    </span>
+                    <Badge className="bg-sky-500 text-white text-[10px]">PAUSED</Badge>
+                  </div>
+                  {membershipActions?.active_freeze && (
+                    <div className="text-xs space-y-1 text-muted-foreground pt-1">
+                      <p>Start Date: <span className="font-semibold text-foreground">{safeFormatDate(membershipActions.active_freeze.freeze_from, "dd MMM yyyy")}</span></p>
+                      <p>End Date: <span className="font-semibold text-foreground">{safeFormatDate(membershipActions.active_freeze.freeze_until, "dd MMM yyyy")}</span></p>
+                      <p>Total Frozen Days: <span className="font-semibold text-foreground">{membershipActions.active_freeze.days} Days</span></p>
+                    </div>
+                  )}
+                </div>
 
-            {freezeStartDate && freezeEndDate && (
-              <div className="p-3.5 bg-muted/30 border border-border rounded-xl space-y-1.5 text-xs">
+                <div className="p-3 bg-muted/40 border border-border rounded-lg text-xs text-muted-foreground">
+                  Click below to unfreeze your membership immediately. Your workout privileges will be restored instantly.
+                </div>
+              </div>
+
+              <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs">
+                <Button
+                  size="sm"
+                  onClick={handleUnfreezeSubmit}
+                  disabled={isUnfreezing}
+                  className="w-full bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  {isUnfreezing ? "Unfreezing..." : "Resume Membership / Unfreeze Now"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            /* SCHEDULE NEW FREEZE */
+            <>
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Freeze Start Date</label>
+                    <Input
+                      type="date"
+                      value={freezeStartDate}
+                      min={new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setFreezeStartDate(e.target.value)}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Freeze End Date</label>
+                    <Input
+                      type="date"
+                      value={freezeEndDate}
+                      min={freezeStartDate || new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setFreezeEndDate(e.target.value)}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+
+                {freezeStartDate && freezeEndDate && (
+                  <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1.5 text-xs">
+                    {(() => {
+                      const s = new Date(freezeStartDate);
+                      const e = new Date(freezeEndDate);
+                      const days = Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+                      const minDays = membershipActions?.freeze_options?.min_days || 7;
+                      const maxDays = membershipActions?.freeze_options?.max_days || 60;
+                      const isValid = days >= minDays && days <= maxDays;
+
+                      const curEndStr = membershipActions?.active_membership?.end_date;
+                      const curEnd = curEndStr ? new Date(curEndStr) : new Date();
+                      const projectedEnd = new Date(curEnd.getTime() + days * 24 * 3600 * 1000);
+
+                      const fixedFee = membershipActions?.freeze_options?.fee_fixed || 0;
+                      const perDayFee = membershipActions?.freeze_options?.fee_per_day || 0;
+                      const baseFee = fixedFee + perDayFee * days;
+                      const tax = Math.round(baseFee * 0.18);
+                      const totalFreezeFee = baseFee + tax;
+
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Freeze Duration:</span>
+                            <span className={`font-bold ${isValid ? "text-sky-400" : "text-destructive"}`}>
+                              {days > 0 ? `${days} Days` : "Invalid dates"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Validity Shift:</span>
+                            <span className="font-semibold text-foreground">
+                              {isValid ? `+${days} Days added to contract` : `Min ${minDays}, Max ${maxDays} days`}
+                            </span>
+                          </div>
+                          {isValid && curEndStr && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Projected New Expiry:</span>
+                              <span className="font-semibold text-sky-400">
+                                {safeFormatDate(projectedEnd.toISOString(), "dd MMM yyyy")}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between pt-1 border-t border-border/60">
+                            <span className="text-muted-foreground">Freeze Fee:</span>
+                            <span className="font-bold text-foreground">
+                              {totalFreezeFee > 0 ? `₹${totalFreezeFee}` : "Complimentary (₹0)"}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    Reason for Freeze <span className="text-destructive">*</span>
+                  </label>
+                  <Textarea
+                    value={freezeReason}
+                    onChange={(e) => setFreezeReason(e.target.value)}
+                    placeholder="Reason for pausing your membership (e.g. annual leave, travel, medical recovery)"
+                    className="text-xs min-h-[60px]"
+                  />
+                </div>
+
+                <div className="p-3 bg-sky-500/5 border border-sky-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
+                  <p className="font-semibold text-sky-400">Self-Service Freeze Policy:</p>
+                  <p>During the freeze window, your booking reservations will be paused. The exact number of frozen days is automatically shifted to your membership expiry date.</p>
+                </div>
+              </div>
+
+              <DialogFooter className="p-3.5 sm:p-4 px-4 sm:px-6 border-t border-border/60 shrink-0 bg-card/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsFreezeModalOpen(false)}
+                  disabled={isSubmittingAction}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
                 {(() => {
-                  const s = new Date(freezeStartDate);
-                  const e = new Date(freezeEndDate);
-                  const days = Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
-                  const isValid = days >= 7 && days <= 60;
+                  const s = freezeStartDate ? new Date(freezeStartDate) : null;
+                  const e = freezeEndDate ? new Date(freezeEndDate) : null;
+                  const days = (s && e) ? Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24)) : 0;
+                  const isValid = days >= (membershipActions?.freeze_options?.min_days || 7) && days <= (membershipActions?.freeze_options?.max_days || 60);
+
+                  const fixedFee = membershipActions?.freeze_options?.fee_fixed || 0;
+                  const perDayFee = membershipActions?.freeze_options?.fee_per_day || 0;
+                  const baseFee = fixedFee + perDayFee * days;
+                  const totalFreezeFee = baseFee + Math.round(baseFee * 0.18);
+
                   return (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Freeze Duration:</span>
-                        <span className={`font-bold ${isValid ? "text-sky-400" : "text-destructive"}`}>
-                          {days > 0 ? `${days} Days` : "Invalid dates"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Validity Extension:</span>
-                        <span className="font-semibold text-foreground">
-                          {isValid ? `+${days} Days added to contract end` : "Min 7, Max 60 days required"}
-                        </span>
-                      </div>
-                    </>
+                    <Button
+                      size="sm"
+                      onClick={handleFreezeSubmit}
+                      disabled={isSubmittingAction || !isValid || !freezeReason.trim()}
+                      className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      {isSubmittingAction ? "Processing..." : totalFreezeFee > 0 ? `Pay ₹${totalFreezeFee} & Freeze` : "Confirm Membership Freeze"}
+                    </Button>
                   );
                 })()}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Reason for Freeze <span className="text-destructive">*</span>
-              </label>
-              <Textarea
-                value={freezeReason}
-                onChange={(e) => setFreezeReason(e.target.value)}
-                placeholder="Reason for pausing your membership (e.g. annual leave, travel, medical condition)"
-                className="text-xs min-h-[70px]"
-              />
-            </div>
-
-            <div className="p-3 bg-sky-500/5 border border-sky-500/20 rounded-lg text-[11px] text-muted-foreground space-y-1">
-              <p className="font-semibold text-sky-400">Freeze Rules & Booking Pause:</p>
-              <p>During the freeze period, class booking reservations will be paused. Once approved, the exact number of frozen days is added to your membership expiry date.</p>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsFreezeModalOpen(false)}
-              disabled={isSubmittingAction}
-              className="text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleFreezeSubmit}
-              disabled={isSubmittingAction || !freezeStartDate || !freezeEndDate || !freezeReason.trim()}
-              className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold gap-1.5"
-            >
-              {isSubmittingAction ? "Submitting..." : "Submit Freeze Request"}
-            </Button>
-          </DialogFooter>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
       {/* MODAL 5: DIGITAL MEMBER QR PASS                                           */}
       {/* ========================================================================= */}
       <Dialog open={showQRPassModal} onOpenChange={setShowQRPassModal}>
-        <DialogContent className="sm:max-w-xs text-center flex flex-col items-center">
+        <DialogContent className="w-[90vw] sm:max-w-xs max-h-[90dvh] overflow-y-auto p-4 sm:p-6 rounded-2xl text-center flex flex-col items-center">
           <DialogHeader className="items-center">
             <DialogTitle className="text-base font-bold flex items-center gap-1.5">
               <Flame className="h-5 w-5 text-primary" />

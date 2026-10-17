@@ -292,6 +292,11 @@ export interface MemberIntakeSubmission {
   signature_date?: string | null;
   signer_identity?: string | null;
   sensitive_data_restricted?: boolean;
+  is_latest?: boolean;
+  linked_memberships?: string[];
+  is_edit?: boolean;
+  revision_number?: number;
+  metadata?: any;
   answers: Array<{
     question_id: string;
     question_text: string;

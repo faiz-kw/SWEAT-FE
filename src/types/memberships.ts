@@ -379,10 +379,12 @@ export interface ParqRequirementResponse {
 }
 
 export interface SignParqPayload {
-  agreement_accepted: boolean;
-  signature_data: string;
-  answers: Array<{
+  agreement_accepted?: boolean;
+  signature_data?: string;
+  answers?: Array<{
     question_id: string;
     value: any;
   }>;
+  parq_decision?: 'REUSE' | 'EDIT' | 'NEW';
+  existing_submission_id?: string;
 }

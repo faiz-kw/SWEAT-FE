@@ -200,7 +200,14 @@ export interface MobileMembershipActionOptions {
   active_membership: {
     id: string;
     membership_number: string;
+    package_id?: string | null;
     package_name: string;
+    package_version_id?: string | null;
+    program_id?: string | null;
+    program_name?: string | null;
+    program_code?: string | null;
+    branch_id?: string | null;
+    branch_name?: string | null;
     status: string;
     start_date: string | null;
     end_date: string | null;
@@ -209,45 +216,102 @@ export interface MobileMembershipActionOptions {
     remaining_sessions: number;
     used_sessions: number;
     is_frozen: boolean;
+    parq_status?: string | null;
+    parq_completed_at?: string | null;
   } | null;
+  branches?: Array<{
+    id: string;
+    name: string;
+    code?: string;
+    city?: string;
+    state?: string;
+  }>;
+  programs?: Array<{
+    id: string;
+    name: string;
+    code?: string;
+  }>;
   renew_options: Array<{
     package_id: string;
     package_version_id: string;
-    package_name: string;
+    name?: string;
+    package_name?: string;
+    program_id: string;
     program_name: string;
+    program_code?: string;
     duration_days: number;
-    session_credits: number;
+    session_count?: number;
+    session_credits?: number;
     base_price: number;
     tax_percent: number;
+    tax_amount?: number;
     total_price: number;
     currency: string;
-    is_current_package: boolean;
+    is_current_package?: boolean;
   }>;
   upgrade_options: Array<{
     package_id: string;
     package_version_id: string;
-    package_name: string;
+    name?: string;
+    package_name?: string;
+    program_id: string;
     program_name: string;
+    program_code?: string;
     duration_days: number;
-    session_credits: number;
+    session_count?: number;
+    session_credits?: number;
+    base_price?: number;
+    tax_percent?: number;
+    tax_amount?: number;
     total_price: number;
-    current_price: number;
+    current_price?: number;
     price_difference: number;
-    credits_gain: number;
+    additional_sessions?: number;
+    additional_days?: number;
+    credits_gain?: number;
     currency: string;
   }>;
   extend_options: {
-    available_days: number[];
-    requires_approval: boolean;
+    enabled?: boolean;
+    available_options?: Array<{
+      days: number;
+      base_fee: number;
+      tax_pct: number;
+      tax_amount: number;
+      total_fee: number;
+      name?: string;
+    }>;
+    available_days?: number[];
+    requires_approval?: boolean;
     policy_note: string;
   };
   freeze_options: {
+    enabled?: boolean;
     min_days: number;
     max_days: number;
-    requires_approval: boolean;
+    fee_fixed?: number;
+    fee_per_day?: number;
+    tax_pct?: number;
+    requires_approval?: boolean;
     policy_note: string;
   };
-  pending_requests: Array<{
+  active_freeze?: {
+    id: string;
+    freeze_from: string;
+    freeze_until: string;
+    days: number;
+    status: string;
+    reason?: string;
+  } | null;
+  parq_info?: {
+    has_completed_parq: boolean;
+    submission_id: string | null;
+    submitted_at: string | null;
+    is_cleared: boolean;
+    form_title?: string;
+  };
+  razorpay_key_id?: string;
+  pending_requests?: Array<{
     id: string;
     request_type: string;
     status: string;
@@ -328,47 +392,130 @@ export const mobileApi = {
     ),
 
   // Membership Self-Service Lifecycle Actions
-  getMembershipActions: () =>
-    api.get<MobileMembershipActionOptions>('/mobile/memberships/actions/'),
+  getMembershipActions: (params?: { branch_id?: string }) =>
+    api.get<MobileMembershipActionOptions>('/mobile/memberships/actions/', { params }),
 
-  renewMembership: (data: { package_id?: string; package_version_id?: string }) =>
+  renewMembership: (data: {
+    branch_id?: string;
+    package_id?: string;
+    package_version_id?: string;
+    parq_decision?: string;
+    existing_submission_id?: string;
+    signature_data?: string;
+    answers?: Record<string, any>;
+  }) =>
     api.post<{
       order_id: string;
       order_number: string;
+      razorpay_order_id?: string;
       status: string;
-      total_amount: number;
+      total_amount?: number;
+      amount?: number;
+      amount_paise?: number;
+      currency?: string;
+      razorpay_key_id?: string;
       package_name: string;
+      branch_name?: string;
       detail: string;
       requires_payment: boolean;
-      is_active: boolean;
+      is_active?: boolean;
     }>('/mobile/memberships/renew/', data),
 
-  upgradeMembership: (data: { target_package_id: string; reason?: string }) =>
+  upgradeMembership: (data: {
+    target_branch_id?: string;
+    target_program_id?: string;
+    target_package_id: string;
+    target_package_version_id?: string;
+    reason?: string;
+    parq_decision?: string;
+    existing_submission_id?: string;
+    signature_data?: string;
+    answers?: Record<string, any>;
+  }) =>
     api.post<{
       detail: string;
-      request_id: string;
+      order_id?: string;
+      order_number?: string;
+      razorpay_order_id?: string;
+      request_id?: string;
       status: string;
-      target_package_name: string;
+      target_package_name?: string;
       price_difference: number;
+      amount?: number;
+      amount_paise?: number;
+      currency?: string;
+      razorpay_key_id?: string;
+      requires_payment?: boolean;
+      breakdown?: {
+        current_package_price: number;
+        target_package_price: number;
+        difference_base: number;
+        difference_tax: number;
+        total_payable: number;
+      };
     }>('/mobile/memberships/upgrade/', data),
 
-  extendMembership: (data: { days: number; reason: string }) =>
+  extendMembership: (data: { days: number; reason?: string }) =>
     api.post<{
       detail: string;
-      request_id: string;
+      order_id?: string;
+      order_number?: string;
+      razorpay_order_id?: string;
+      request_id?: string;
       status: string;
-      requested_days: number;
+      requested_days?: number;
+      days?: number;
+      amount?: number;
+      amount_paise?: number;
+      currency?: string;
+      razorpay_key_id?: string;
       current_end_date: string | null;
+      new_end_date?: string | null;
+      requires_payment?: boolean;
     }>('/mobile/memberships/extend/', data),
 
   freezeMembership: (data: { freeze_from: string; freeze_until: string; reason: string }) =>
     api.post<{
       detail: string;
-      freeze_id: string;
-      request_id: string;
+      order_id?: string;
+      order_number?: string;
+      razorpay_order_id?: string;
+      freeze_id?: string;
+      request_id?: string;
       status: string;
       freeze_from: string;
       freeze_until: string;
       days: number;
+      amount?: number;
+      amount_paise?: number;
+      currency?: string;
+      razorpay_key_id?: string;
+      new_end_date?: string | null;
+      requires_payment?: boolean;
     }>('/mobile/memberships/freeze/', data),
+
+  unfreezeMembership: (data?: { reason?: string }) =>
+    api.post<{
+      detail: string;
+      status: string;
+      membership_id: string;
+    }>('/mobile/memberships/unfreeze/', data || {}),
+
+  verifyCheckout: (data: {
+    order_id: string;
+    razorpay_order_id?: string;
+    razorpay_payment_id?: string;
+    razorpay_signature?: string;
+    payment_id?: string;
+  }) =>
+    api.post<{
+      detail: string;
+      status: string;
+      membership_id?: string;
+      package_name?: string;
+      start_date?: string;
+      end_date?: string;
+      order_number?: string;
+      already_processed?: boolean;
+    }>('/mobile/checkout/verify/', data),
 };

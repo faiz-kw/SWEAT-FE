@@ -23,6 +23,7 @@ import { usePermissions } from '@/lib/permissions';
 import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
+import { cleanupRazorpayDOM, loadRazorpayScript } from '@/utils/razorpayCheckout';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1784,20 +1785,8 @@ export interface ConversionWizardProps {
   onConverted?: () => void;
 }
 
-function loadRazorpayScript(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (typeof window !== 'undefined' && (window as any).Razorpay) {
-      resolve(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-}
+// Razorpay SDK loader and DOM cleanup are imported from @/utils/razorpayCheckout
+
 
 class ConversionWizardErrorBoundary extends React.Component<
   { children: React.ReactNode; open: boolean; onOpenChange: (open: boolean) => void },
@@ -1901,11 +1890,7 @@ function ConversionWizardInner({ lead, open, onOpenChange, onConverted }: Conver
 const handleCancelRazorpay = useCallback(() => {
     setIsProcessingPayment(false);
     rzpInstanceRef.current = null;
-    const rzpContainer = document.querySelector('.razorpay-container');
-    if (rzpContainer) {
-      rzpContainer.remove();
-    }
-    document.body.style.pointerEvents = 'auto';
+    cleanupRazorpayDOM();
     toast.info('Payment was cancelled. You can retry checkout when ready.');
   }, []);
 
@@ -2163,11 +2148,7 @@ const handleCancelRazorpay = useCallback(() => {
             ...((checkoutOrder as any).config_id ? { config_id: (checkoutOrder as any).config_id } : {}),
             handler: function (response: any) {
               rzpInstanceRef.current = null;
-              const rzpContainer = document.querySelector('.razorpay-container');
-              if (rzpContainer) {
-                rzpContainer.remove();
-              }
-              document.body.style.pointerEvents = 'auto';
+              cleanupRazorpayDOM();
               const completePayload: ConversionPayload = {
                 ...payload,
                 razorpay_order_id: response.razorpay_order_id,
@@ -2200,11 +2181,7 @@ const handleCancelRazorpay = useCallback(() => {
           rzp.on('payment.failed', function (resp: any) {
             setIsProcessingPayment(false);
             rzpInstanceRef.current = null;
-            const rzpContainer = document.querySelector('.razorpay-container');
-            if (rzpContainer) {
-              rzpContainer.remove();
-            }
-            document.body.style.pointerEvents = 'auto';
+            cleanupRazorpayDOM();
             const desc = resp?.error?.description || 'Payment failed';
             toast.error(`Razorpay: ${desc}`);
           });
