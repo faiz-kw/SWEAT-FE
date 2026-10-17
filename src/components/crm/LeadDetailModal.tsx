@@ -51,6 +51,7 @@ import { toast } from 'sonner';
 
 import { crmApi, type InitiateLeadCallResponse } from '@/api/endpoints/crmApi';
 import { formatBranchOptionLabel, formatBranchAddressOnly, formatBranchTitle } from '@/lib/crmLabels';
+import { formatPercentage } from '@/utils/currencyUtils';
 import { ConversionWizard } from './ConversionWizard';
 import { BookTrialModal } from './BookTrialModal';
 import type {
@@ -98,9 +99,45 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
   HOT_LEAD: { label: 'Hot Lead', color: 'bg-orange-500/10 text-orange-500 border-orange-500/20' },
   PAYMENT_PENDING: { label: 'Payment Pending', color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
   CONVERTED: { label: 'Converted Member', color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' },
+  SUBSCRIBED: { label: 'Subscribed Member', color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' },
   NOT_INTERESTED: { label: 'Not Interested', color: 'bg-muted text-muted-foreground border-border' },
   LOST: { label: 'Lost', color: 'bg-muted text-muted-foreground border-border' },
 };
+
+export interface PipelineStageDefinition {
+  status: LeadStatus;
+  label: string;
+  shortLabel: string;
+  step: number;
+}
+
+export const PIPELINE_JOURNEY_STAGES: PipelineStageDefinition[] = [
+  { status: 'NEW_LEAD', label: 'New Lead', shortLabel: 'New Lead', step: 1 },
+  { status: 'FOLLOW_UP_PENDING', label: 'Follow-up Pending', shortLabel: 'Follow-up', step: 2 },
+  { status: 'TRIAL_BOOKED', label: 'Trial Booked', shortLabel: 'Trial Booked', step: 3 },
+  { status: 'TRIAL_ATTENDED', label: 'Trial Attended', shortLabel: 'Attended', step: 4 },
+  { status: 'INTERESTED', label: 'Interested', shortLabel: 'Interested', step: 5 },
+  { status: 'HOT_LEAD', label: 'Hot Lead', shortLabel: 'Hot Lead', step: 6 },
+  { status: 'PAYMENT_PENDING', label: 'Payment Pending', shortLabel: 'Payment', step: 7 },
+  { status: 'CONVERTED', label: 'Converted Member', shortLabel: 'Converted', step: 8 },
+];
+
+export function getLeadStageIndex(status?: LeadStatus | string): number {
+  switch (status) {
+    case 'NEW_LEAD': return 0;
+    case 'FOLLOW_UP_PENDING': return 1;
+    case 'TRIAL_BOOKED':
+    case 'TRIAL_CONFIRMED':
+    case 'NO_SHOW': return 2;
+    case 'TRIAL_ATTENDED': return 3;
+    case 'INTERESTED': return 4;
+    case 'HOT_LEAD': return 5;
+    case 'PAYMENT_PENDING': return 6;
+    case 'CONVERTED':
+    case 'SUBSCRIBED': return 7;
+    default: return -1;
+  }
+}
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -411,6 +448,52 @@ export function LeadDetailModal({
     } else {
       setActiveTab('timeline');
     }
+  };
+
+  // 1-Click Pipeline Stage Transition Mutation (moves lead to clicked stage)
+  const pipelineTransitionMutation = useMutation({
+    mutationFn: (newStatus: LeadStatus) =>
+      crmApi.transitionStatus(currentLead!.id, {
+        new_status: newStatus,
+        reason_code: 'CRM_UI_CHANGE',
+        reason_text: `Moved to ${STATUS_CONFIG[newStatus]?.label || newStatus} via lead pipeline stage bar`,
+      }),
+    onSuccess: (updatedLead) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+      toast.success(`Lead moved to ${STATUS_CONFIG[updatedLead.current_status]?.label || updatedLead.current_status}`);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to move lead stage');
+    },
+  });
+
+  // Confirmation state for moving pipeline stages
+  const [stageToConfirm, setStageToConfirm] = React.useState<LeadStatus | null>(null);
+
+  const handleStageTransitionClick = (targetStatus: LeadStatus) => {
+    if (!currentLead) return;
+    if (targetStatus === currentLead.current_status) return;
+
+    if (targetStatus === 'CONVERTED') {
+      if (canConvert) {
+        setConversionWizardOpen(true);
+      } else {
+        toast.info('Conversion requires selecting a membership package.');
+      }
+      return;
+    }
+
+    if (targetStatus === 'TRIAL_BOOKED') {
+      if (onBookTrialClick && canBookTrial) {
+        onBookTrialClick(currentLead);
+        return;
+      }
+    }
+
+    // Always prompt for user confirmation before moving stage
+    setStageToConfirm(targetStatus);
   };
 
   // Trial actions mutations
@@ -873,8 +956,19 @@ export function LeadDetailModal({
                 {currentLead.last_name?.charAt(0)}
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
-                <DialogTitle className="text-base sm:text-xl font-bold tracking-tight text-foreground truncate">
-                  {currentLead.first_name} {currentLead.last_name}
+                <DialogTitle className="text-base sm:text-xl font-bold tracking-tight text-foreground truncate flex items-center gap-2">
+                  <span>
+                    {currentLead.converted_member?.full_name && !currentLead.converted_member.full_name.startsWith('Subscriber')
+                      ? currentLead.converted_member.full_name
+                      : currentLead.first_name === 'Subscriber'
+                        ? `Subscriber ${currentLead.last_name}`
+                        : `${currentLead.first_name} ${currentLead.last_name}`}
+                  </span>
+                  {currentLead.converted_member?.member_number && (
+                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      {currentLead.converted_member.member_number}
+                    </span>
+                  )}
                 </DialogTitle>
                 <Badge variant="outline" className={`text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 font-medium ${statusConf.color}`}>
                   {statusConf.label}
@@ -1182,6 +1276,105 @@ export function LeadDetailModal({
             </div>
           )}
 
+          {/* VISUAL PIPELINE STAGE ROW (Sales Pipeline Stepper inside each Lead) */}
+          {(() => {
+            const isConverted =
+              currentLead.current_status === 'CONVERTED' ||
+              Boolean(currentLead.converted_member) ||
+              (currentLead.action_eligibility?.is_terminal && currentLead.action_eligibility?.terminal_reason === 'CONVERTED');
+            const isTerminalLost = currentLead.current_status === 'LOST' || currentLead.current_status === 'NOT_INTERESTED';
+            const isActiveProspect = !isConverted && !isTerminalLost;
+            const currentIdx = getLeadStageIndex(currentLead.current_status);
+
+            return (
+              <div className="w-full bg-card/60 dark:bg-muted/20 border border-border/80 rounded-xl p-2.5 space-y-2 shadow-xs">
+                <div className="flex items-center justify-between text-xs px-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      Sales Pipeline
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_CONFIG[currentLead.current_status]?.color || 'bg-muted text-foreground'}`}
+                    >
+                      Current: {STATUS_CONFIG[currentLead.current_status]?.label || currentLead.current_status}
+                    </Badge>
+                    {isTerminalLost && (
+                      <span className="text-[11px] text-muted-foreground italic">
+                        (Closed prospect &bull; Click any stage to reactivate)
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Drop-off / Terminal actions: Not Interested / Lost */}
+                  {isActiveProspect && canEdit && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleStageTransitionClick('NOT_INTERESTED')}
+                        disabled={pipelineTransitionMutation.isPending}
+                        className="text-muted-foreground hover:text-foreground hover:underline transition-colors cursor-pointer text-[11px]"
+                      >
+                        Not Interested
+                      </button>
+                      <span className="text-border/80">•</span>
+                      <button
+                        type="button"
+                        onClick={() => handleStageTransitionClick('LOST')}
+                        disabled={pipelineTransitionMutation.isPending}
+                        className="text-rose-500 hover:text-rose-600 hover:underline transition-colors cursor-pointer font-medium text-[11px]"
+                      >
+                        Mark Lost
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* The 8 Pipeline Stages in One Row */}
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 w-full">
+                  {PIPELINE_JOURNEY_STAGES.map((st, idx) => {
+                    const isCurrent = currentIdx === idx && !isTerminalLost;
+                    const isPast = currentIdx > idx && !isTerminalLost;
+
+                    return (
+                      <button
+                        key={st.status}
+                        type="button"
+                        onClick={() => handleStageTransitionClick(st.status)}
+                        disabled={!canEdit || isCurrent || pipelineTransitionMutation.isPending}
+                        className={`group relative flex flex-col items-center justify-center py-2 px-1 rounded-lg text-center transition-all cursor-pointer select-none ${
+                          isCurrent
+                            ? 'bg-primary text-primary-foreground font-bold shadow-xs ring-2 ring-primary/40'
+                            : isPast
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                            : 'bg-background hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border/60 hover:border-border'
+                        } ${pipelineTransitionMutation.isPending ? 'opacity-60 cursor-wait' : ''}`}
+                        title={`Click to move to ${st.label}`}
+                      >
+                        <div className="flex items-center gap-1 mb-0.5">
+                          {isPast ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          ) : isCurrent ? (
+                            <span className="w-2 h-2 rounded-full bg-primary-foreground animate-pulse shrink-0" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 group-hover:bg-foreground shrink-0" />
+                          )}
+                          <span className="text-[10px] font-mono opacity-80">
+                            0{st.step}
+                          </span>
+                        </div>
+                        <span className="text-[11px] truncate max-w-full font-medium leading-tight">
+                          {st.shortLabel}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* CONSOLIDATED 6-TAB BAR */}
           <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pt-1 -mb-1 border-t border-border/40">
             {/* 1. OVERVIEW */}
@@ -1281,9 +1474,9 @@ export function LeadDetailModal({
             >
               <Tag className="w-3.5 h-3.5" />
               Commercial
-              {leadOffersData && ((leadOffersData.available_coupons?.length || 0) > 0 || (leadOffersData.campaigns?.length || 0) > 0) && (
+              {leadOffersData && (leadOffersData.redemptions?.length || 0) > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-primary-foreground/20">
-                  {(leadOffersData.available_coupons?.length || 0) + (leadOffersData.campaigns?.length || 0)}
+                  {leadOffersData.redemptions?.length || 0}
                 </span>
               )}
             </button>
@@ -3288,23 +3481,23 @@ export function LeadDetailModal({
             </div>
           );
         })()}
-          {/* TAB 5: COMMERCIAL (Phase 9 & Consolidated) */}
+          {/* TAB 5: COMMERCIAL */}
           {activeTab === 'commercial' && (
             <div className="space-y-6">
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-primary" />
-                  Commercial Intelligence & Conversion
+                  Commercial & Coupon Redemption History
                 </h4>
                 <p className="text-xs text-muted-foreground">
-                  Promotional campaigns, applicable voucher codes, conversion status, and package entitlements.
+                  Promotional coupons redeemed by this lead, applied discounts, and conversion offers.
                 </p>
               </div>
 
               {isOffersLoading ? (
                 <div className="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Loading commercial offers and coupons...
+                  Loading commercial history...
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -3336,149 +3529,59 @@ export function LeadDetailModal({
                         <div>
                           <span className="text-muted-foreground block text-[10px]">Discount Saved</span>
                           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            ₹{parseFloat(leadOffersData.conversion_offer.discount_amount).toLocaleString('en-IN')}
+                            ₹{parseFloat(leadOffersData.conversion_offer.discount_amount || '0').toLocaleString('en-IN')}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground block text-[10px]">Converted At</span>
                           <span className="text-muted-foreground">
-                            {new Date(leadOffersData.conversion_offer.converted_at).toLocaleDateString()}
+                            {leadOffersData.conversion_offer.converted_at ? new Date(leadOffersData.conversion_offer.converted_at).toLocaleDateString() : '—'}
                           </span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Available Coupon Codes */}
+                  {/* Redemption History */}
                   <div className="space-y-2.5">
                     <h5 className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      <span>Available Coupon Codes</span>
+                      <span>Coupons Redeemed History</span>
                       <span className="text-[10px] text-muted-foreground font-normal">
-                        Branch & package matched
+                        {(leadOffersData?.redemptions?.length || 0)} redemption(s) recorded
                       </span>
                     </h5>
 
-                    {(!leadOffersData?.available_coupons || leadOffersData.available_coupons.length === 0) ? (
-                      <div className="p-4 rounded-xl border border-border bg-card/40 text-center text-xs text-muted-foreground">
-                        No active coupon codes currently targeted for this lead's branch or package.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {leadOffersData.available_coupons.map((c: any) => (
-                          <div
-                            key={c.id}
-                            className="p-3 rounded-xl border border-border bg-card shadow-xs space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono font-bold text-xs text-primary px-2 py-0.5 bg-primary/10 rounded-md border border-primary/20">
-                                {c.code}
-                              </span>
-                              <Badge
-                                variant={c.computed_status === 'ACTIVE' ? 'default' : 'secondary'}
-                                className="text-[10px]"
-                              >
-                                {c.computed_status || c.status}
-                              </Badge>
-                            </div>
-                            <div className="text-xs font-medium text-foreground">
-                              {c.campaign_name}
-                            </div>
-                            <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-                              <span>
-                                {c.branch_name ? `Branch: ${c.branch_name}` : 'All Branches'}
-                              </span>
-                              {c.usage_remaining !== null && c.usage_remaining !== undefined && (
-                                <span className="font-mono">
-                                  {c.usage_remaining} left
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Active Campaigns */}
-                  <div className="space-y-2.5">
-                    <h5 className="text-xs font-semibold text-foreground">
-                      Promotional Discount Campaigns
-                    </h5>
-
-                    {(!leadOffersData?.campaigns || leadOffersData.campaigns.length === 0) ? (
-                      <div className="p-4 rounded-xl border border-border bg-card/40 text-center text-xs text-muted-foreground">
-                        No promotional discount campaigns active.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {leadOffersData.campaigns.map((camp: any) => (
-                          <div
-                            key={camp.id}
-                            className="p-3 rounded-xl border border-border bg-card/60 shadow-xs space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-foreground truncate">
-                                {camp.name}
-                              </span>
-                              <span className="text-xs font-mono font-bold text-foreground">
-                                {camp.discount_type === 'PERCENTAGE'
-                                  ? `${formatPercentage(camp.discount_value)}% OFF`
-                                  : `₹${camp.discount_value} OFF`}
-                              </span>
-                            </div>
-                            {camp.description && (
-                              <p className="text-[11px] text-muted-foreground line-clamp-2">
-                                {camp.description}
-                              </p>
-                            )}
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/50">
-                              <span>
-                                {camp.minimum_order_amount ? `Min: ₹${camp.minimum_order_amount}` : 'No min spend'}
-                              </span>
-                              <span>
-                                {camp.max_discount ? `Max cap: ₹${camp.max_discount}` : 'No cap'}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Redemption History */}
-                  <div className="space-y-2.5">
-                    <h5 className="text-xs font-semibold text-foreground">
-                      Coupon Redemption History
-                    </h5>
-
                     {(!leadOffersData?.redemptions || leadOffersData.redemptions.length === 0) ? (
-                      <div className="p-4 rounded-xl border border-border bg-card/40 text-center text-xs text-muted-foreground">
-                        No coupons redeemed by this lead.
+                      <div className="p-8 rounded-xl border border-dashed border-border bg-card/40 text-center text-xs text-muted-foreground space-y-1">
+                        <div className="font-medium text-foreground">No coupons redeemed</div>
+                        <p className="text-[11px] text-muted-foreground">
+                          This lead has not redeemed any promotional coupon codes yet.
+                        </p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto border border-border rounded-xl">
                         <table className="w-full text-xs text-left">
                           <thead>
                             <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold">
-                              <th className="py-2 px-3">Code</th>
-                              <th className="py-2 px-3">Campaign</th>
-                              <th className="py-2 px-3 text-right">Discount</th>
-                              <th className="py-2 px-3 text-right">Redeemed At</th>
+                              <th className="py-2.5 px-3">Coupon Code</th>
+                              <th className="py-2.5 px-3">Campaign</th>
+                              <th className="py-2.5 px-3 text-right">Discount Value</th>
+                              <th className="py-2.5 px-3 text-right">Redeemed Date</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
                             {leadOffersData.redemptions.map((r: any) => (
-                              <tr key={r.id} className="hover:bg-muted/30">
-                                <td className="py-2 px-3 font-mono font-bold text-primary">
+                              <tr key={r.id || Math.random()} className="hover:bg-muted/30 transition-colors">
+                                <td className="py-2.5 px-3 font-mono font-bold text-primary">
                                   {r.code_snapshot || r.discount_code?.code || '—'}
                                 </td>
-                                <td className="py-2 px-3 text-foreground font-medium">
-                                  {r.campaign?.name || '—'}
+                                <td className="py-2.5 px-3 text-foreground font-medium">
+                                  {r.campaign?.name || r.campaign_name || 'Standard Promotion'}
                                 </td>
-                                <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                                   ₹{parseFloat(r.discount_amount || '0').toLocaleString('en-IN')}
                                 </td>
-                                <td className="py-2 px-3 text-right text-muted-foreground text-[11px]">
+                                <td className="py-2.5 px-3 text-right text-muted-foreground text-[11px]">
                                   {r.redeemed_at ? new Date(r.redeemed_at).toLocaleString() : '—'}
                                 </td>
                               </tr>
@@ -4119,6 +4222,53 @@ export function LeadDetailModal({
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* CONFIRM STAGE TRANSITION MODAL */}
+      {stageToConfirm && currentLead && (
+        <Dialog open={Boolean(stageToConfirm)} onOpenChange={(open) => !open && setStageToConfirm(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-foreground text-base">
+                <ArrowRight className="w-5 h-5 text-primary" />
+                Confirm Stage Transition
+              </DialogTitle>
+              <DialogDescription className="pt-2 text-xs sm:text-sm text-muted-foreground">
+                Are you sure you want to move <strong className="text-foreground">{currentLead.first_name} {currentLead.last_name}</strong> to the{' '}
+                <strong className="text-primary font-semibold">{STATUS_CONFIG[stageToConfirm]?.label || stageToConfirm}</strong> stage?
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="gap-2 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStageToConfirm(null)}
+                disabled={pipelineTransitionMutation.isPending}
+                className="h-8 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const target = stageToConfirm;
+                  setStageToConfirm(null);
+                  pipelineTransitionMutation.mutate(target);
+                }}
+                disabled={pipelineTransitionMutation.isPending}
+                className="h-8 text-xs bg-primary text-primary-foreground font-semibold"
+              >
+                {pipelineTransitionMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                ) : null}
+                Confirm &amp; Move Stage
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

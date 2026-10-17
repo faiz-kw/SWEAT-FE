@@ -72,6 +72,36 @@ import { usePermissions } from '../../lib/permissions';
 import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
 
+export function normalizeDaysOfWeek(days: any): number[] {
+  if (!days) return [];
+  if (Array.isArray(days)) {
+    return days.map(Number).filter((n) => !isNaN(n) && n >= 1 && n <= 7);
+  }
+  if (typeof days === 'string') {
+    try {
+      const parsed = JSON.parse(days);
+      if (Array.isArray(parsed)) {
+        return parsed.map(Number).filter((n) => !isNaN(n) && n >= 1 && n <= 7);
+      }
+    } catch {
+      // not json
+    }
+    return days
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => !isNaN(n) && n >= 1 && n <= 7);
+  }
+  if (typeof days === 'object') {
+    if (Array.isArray(days.days)) {
+      return days.days.map(Number).filter((n: any) => !isNaN(n) && n >= 1 && n <= 7);
+    }
+    return Object.keys(days)
+      .map(Number)
+      .filter((n) => !isNaN(n) && n >= 1 && n <= 7);
+  }
+  return [];
+}
+
 export const ClassesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -569,8 +599,9 @@ export const ClassesWorkspace: React.FC = () => {
       return { minTime: undefined, maxTime: undefined, text: 'Operating schedule not configured for selected branch' };
     }
 
-    const targetDays = ruleForm.days_of_week.length > 0
-      ? ruleForm.days_of_week
+    const normalizedFormDays = normalizeDaysOfWeek(ruleForm.days_of_week);
+    const targetDays = normalizedFormDays.length > 0
+      ? normalizedFormDays
       : ruleBranchWorkingHours.filter((w: any) => w.is_open).map((w: any) => w.day_of_week);
 
     if (targetDays.length === 0) {
@@ -759,7 +790,7 @@ export const ClassesWorkspace: React.FC = () => {
       class_template: rule.class_template || '',
       branch: rule.branch || '',
       recurrence_type: (rule as any).recurrence_type || 'WEEKLY',
-      days_of_week: rule.days_of_week || [],
+      days_of_week: normalizeDaysOfWeek(rule.days_of_week),
       start_time: rule.start_time ? rule.start_time.substring(0, 5) : '',
       end_time: rule.end_time ? rule.end_time.substring(0, 5) : '',
       valid_from: rule.valid_from || new Date().toISOString().split('T')[0],
@@ -2105,21 +2136,24 @@ export const ClassesWorkspace: React.FC = () => {
                           <div className="pt-0.5">
                             <div className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Schedule Days</div>
                             <div className="flex items-center gap-1 flex-wrap">
-                              {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                                const isActive = (rule.days_of_week || []).includes(d);
-                                return (
-                                  <span
-                                    key={d}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                      isActive
-                                        ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                                        : 'bg-muted/30 text-muted-foreground/40 border border-transparent'
-                                    }`}
-                                  >
-                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]}
-                                  </span>
-                                );
-                              })}
+                              {(() => {
+                                const ruleDays = normalizeDaysOfWeek(rule.days_of_week);
+                                return [1, 2, 3, 4, 5, 6, 7].map((d) => {
+                                  const isActive = ruleDays.includes(d);
+                                  return (
+                                    <span
+                                      key={d}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                        isActive
+                                          ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                                          : 'bg-muted/30 text-muted-foreground/40 border border-transparent'
+                                      }`}
+                                    >
+                                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]}
+                                    </span>
+                                  );
+                                });
+                              })()}
                             </div>
                           </div>
 
@@ -3449,7 +3483,8 @@ export const ClassesWorkspace: React.FC = () => {
                   { num: 6, label: 'Sat' },
                   { num: 7, label: 'Sun' },
                 ].map((d) => {
-                  const isSelected = ruleForm.days_of_week.includes(d.num);
+                  const currentDays = normalizeDaysOfWeek(ruleForm.days_of_week);
+                  const isSelected = currentDays.includes(d.num);
                   const closed = isDayClosed(d.num);
                   const scheduleText = getDayScheduleText(d.num);
 
@@ -3462,8 +3497,8 @@ export const ClassesWorkspace: React.FC = () => {
                       onClick={() => {
                         if (closed) return;
                         const next = isSelected
-                          ? ruleForm.days_of_week.filter((x) => x !== d.num)
-                          : [...ruleForm.days_of_week, d.num].sort();
+                          ? currentDays.filter((x) => x !== d.num)
+                          : [...currentDays, d.num].sort();
                         setRuleForm({ ...ruleForm, days_of_week: next });
                       }}
                       className={`py-2 px-1 flex flex-col items-center justify-center rounded-lg border transition-all ${
@@ -3484,7 +3519,7 @@ export const ClassesWorkspace: React.FC = () => {
               </div>
 
               {/* Warning if a closed day somehow selected */}
-              {ruleForm.days_of_week.some((d) => isDayClosed(d)) && (
+              {normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d)) && (
                 <p className="text-[11px] text-rose-500 mt-1.5 flex items-center gap-1 font-medium">
                   <AlertTriangle className="size-3 shrink-0" />
                   Branch is closed on some selected days. Please unselect them to proceed.
@@ -3636,12 +3671,12 @@ export const ClassesWorkspace: React.FC = () => {
               disabled={
                 !ruleForm.class_template ||
                 !ruleForm.branch ||
-                ruleForm.days_of_week.length === 0 ||
-                ruleForm.days_of_week.some((d) => isDayClosed(d)) ||
+                normalizeDaysOfWeek(ruleForm.days_of_week).length === 0 ||
+                normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d)) ||
                 !ruleForm.start_time ||
                 !ruleForm.end_time ||
                 ruleForm.end_time <= ruleForm.start_time ||
-                Boolean(ruleForm.valid_until && ruleForm.valid_until < ruleForm.valid_from) ||
+                Boolean(ruleForm.valid_until && ruleForm.valid_from && ruleForm.valid_until < ruleForm.valid_from) ||
                 saveRuleMutation.isPending
               }
             >

@@ -11,11 +11,20 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Settings,
+  AlertCircle,
+  CheckCircle2,
+  ShieldCheck,
+  Calendar,
 } from 'lucide-react';
 import { membershipsApi } from '@/api/endpoints/membershipsApi';
 import {
   Membership,
   MembershipContractSnapshot,
+  MembershipPolicyConfig,
+  ExtensionCalculationResult,
+  FreezeCalculationResult,
 } from '../../types/memberships';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
@@ -32,16 +41,26 @@ import { usePermissions } from '../../lib/permissions';
 import { useApp } from '@/contexts';
 
 export interface MembershipsWorkspaceProps {
-  initialTab?: 'memberships' | 'entitlements' | 'freezes' | 'policies' | undefined;
+  initialTab?: 'memberships' | 'freezes' | 'policies' | undefined;
 }
 
 export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ initialTab = 'memberships' }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, user } = usePermissions();
   const { locationId } = useApp();
   const canEdit = can('members.memberships.edit');
-  const [activeTab, setActiveTab] = useState<'memberships' | 'entitlements' | 'freezes' | 'policies'>(initialTab);
+  const isOrgAdmin = Boolean(
+    user?.isSuperAdmin ||
+    user?.isOrgWide ||
+    user?.role?.toUpperCase().includes('ADMIN') ||
+    user?.roles?.some((r: any) => (r.code || '').toUpperCase().includes('ADMIN')) ||
+    can('membership.policy.manage')
+  );
+
+  const [activeTab, setActiveTab] = useState<'memberships' | 'freezes' | 'policies'>(
+    (initialTab as any) === 'entitlements' ? 'memberships' : initialTab
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -71,12 +90,21 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const [loadingContractId, setLoadingContractId] = useState<string | null>(null);
   const [isContractOpen, setIsContractOpen] = useState(false);
   const [isFreezeOpen, setIsFreezeOpen] = useState(false);
+  const [isExtendOpen, setIsExtendOpen] = useState(false);
   const [isConsumeOpen, setIsConsumeOpen] = useState(false);
 
   // Freeze form
   const [freezeFrom, setFreezeFrom] = useState('');
   const [freezeUntil, setFreezeUntil] = useState('');
   const [freezeReason, setFreezeReason] = useState('');
+
+  // Extend form
+  const [extendDays, setExtendDays] = useState<number>(7);
+  const [extendReason, setExtendReason] = useState('');
+
+  // Policy configuration edit state
+  const [isEditingPolicy, setIsEditingPolicy] = useState(false);
+  const [policyForm, setPolicyForm] = useState<Partial<MembershipPolicyConfig>>({});
 
   // Entitlement consume form
   const [consumeType, setConsumeType] = useState('CLASS_SESSIONS');
@@ -110,15 +138,6 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const totalPages = membershipPage?.total_pages || 1;
 
   const {
-    data: entitlements = [],
-    isLoading: loadingEntitlements,
-    refetch: refetchEntitlements,
-  } = useQuery({
-    queryKey: ['membership-entitlements'],
-    queryFn: () => membershipsApi.getEntitlements(),
-  });
-
-  const {
     data: freezes = [],
     isLoading: loadingFreezes,
     refetch: refetchFreezes,
@@ -136,6 +155,50 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
     queryFn: () => membershipsApi.getChangePolicies(),
   });
 
+  const {
+    data: policyConfig,
+    isLoading: loadingPolicyConfig,
+    refetch: refetchPolicyConfig,
+  } = useQuery({
+    queryKey: ['membership-policy-config'],
+    queryFn: () => membershipsApi.getPolicyConfig(),
+  });
+
+  useEffect(() => {
+    if (policyConfig) {
+      setPolicyForm({
+        extension_per_day_fee: policyConfig.extension_per_day_fee,
+        extension_activation_fee: policyConfig.extension_activation_fee,
+        extension_min_days: policyConfig.extension_min_days,
+        extension_max_days: policyConfig.extension_max_days,
+        extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+        freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+        freeze_min_days: policyConfig.freeze_min_days,
+        freeze_max_days: policyConfig.freeze_max_days,
+        freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+      });
+    }
+  }, [policyConfig]);
+
+  // Real-time calculation quotes
+  const {
+    data: extendQuote,
+    isLoading: loadingExtendQuote,
+  } = useQuery({
+    queryKey: ['calculate-extension', selectedMembership?.id, extendDays],
+    queryFn: () => membershipsApi.calculateExtension(selectedMembership!.id, { days: Number(extendDays) || 1 }),
+    enabled: isExtendOpen && Boolean(selectedMembership?.id) && Number(extendDays) > 0,
+  });
+
+  const {
+    data: freezeQuote,
+    isLoading: loadingFreezeQuote,
+  } = useQuery({
+    queryKey: ['calculate-freeze', selectedMembership?.id, freezeFrom, freezeUntil],
+    queryFn: () => membershipsApi.calculateFreeze(selectedMembership!.id, { freeze_from: freezeFrom, freeze_until: freezeUntil }),
+    enabled: isFreezeOpen && Boolean(selectedMembership?.id) && Boolean(freezeFrom) && Boolean(freezeUntil) && freezeUntil >= freezeFrom,
+  });
+
   // Mutations
   const freezeMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => membershipsApi.applyFreeze(id, data),
@@ -143,9 +206,30 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
       queryClient.invalidateQueries({ queryKey: ['memberships'] });
       queryClient.invalidateQueries({ queryKey: ['membership-freezes'] });
       setIsFreezeOpen(false);
+      setSelectedMembership(null);
       setFreezeFrom('');
       setFreezeUntil('');
       setFreezeReason('');
+    },
+  });
+
+  const extendMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => membershipsApi.extendMembership(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['memberships'] });
+      setIsExtendOpen(false);
+      setSelectedMembership(null);
+      setExtendDays(7);
+      setExtendReason('');
+    },
+  });
+
+  const updatePolicyMutation = useMutation({
+    mutationFn: (data: Partial<MembershipPolicyConfig>) => membershipsApi.updatePolicyConfig(data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['membership-policy-config'], updated);
+      queryClient.invalidateQueries({ queryKey: ['membership-policy-config'] });
+      setIsEditingPolicy(false);
     },
   });
 
@@ -199,10 +283,18 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const handleOpenFreeze = (mem: Membership) => {
     setSelectedMembership(mem);
     const today = new Date().toISOString().split('T')[0] ?? '';
-    const nextWeek = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0] ?? '';
+    const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0] ?? '';
     setFreezeFrom(today);
     setFreezeUntil(nextWeek);
+    setFreezeReason('');
     setIsFreezeOpen(true);
+  };
+
+  const handleOpenExtend = (mem: Membership) => {
+    setSelectedMembership(mem);
+    setExtendDays(7);
+    setExtendReason('');
+    setIsExtendOpen(true);
   };
 
   const handleOpenConsume = (mem: Membership) => {
@@ -232,7 +324,6 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
             size="sm"
             onClick={() => {
               refetchMemberships();
-              refetchEntitlements();
               refetchFreezes();
               refetchPolicies();
             }}
@@ -258,17 +349,6 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
           >
             <Users className="size-3.5" />
             <span>Active Memberships ({totalCount})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('entitlements')}
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'entitlements'
-                ? 'bg-primary/10 text-primary font-bold border border-primary/20 shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-            }`}
-          >
-            <Activity className="size-3.5" />
-            <span>Session Quotas & Ledger ({entitlements.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('freezes')}
@@ -503,6 +583,17 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                                     <Snowflake className="size-3.5" />
                                   </Button>
                                 )}
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleOpenExtend(mem)}
+                                    className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                                    title="Extend Package Validity"
+                                  >
+                                    <Clock className="size-3.5" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -571,55 +662,6 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
           </div>
         )}
 
-        {activeTab === 'entitlements' && (
-          <div className="space-y-4">
-            <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
-              <h2 className="text-base font-semibold text-foreground">Active Entitlement Instances</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Consumable session buckets with automatic deduction and cancellation reversal tracking.
-              </p>
-
-              {loadingEntitlements ? (
-                <div className="p-12 text-center text-muted-foreground text-sm">
-                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                  Loading entitlements...
-                </div>
-              ) : entitlements.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">No entitlements found.</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                  {entitlements.map((e) => (
-                    <div
-                      key={e.id}
-                      className="p-4 bg-muted/40 border border-border/60 rounded-xl"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-semibold text-primary">
-                          {e.entitlement_type}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
-                          {e.status}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground">
-                          {e.is_unlimited ? 'Unlimited' : `${e.remaining_units || 0}`}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          / {e.allocated_units ? `${e.allocated_units} allocated` : 'unlimited'}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        Consumed: {e.consumed_units} session(s)
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {activeTab === 'freezes' && (
           <div className="space-y-4">
             <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
@@ -667,6 +709,279 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
 
         {activeTab === 'policies' && (
           <div className="space-y-4">
+            {/* Tenant Admin Package Extend & Freeze Policy Settings */}
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold text-foreground">
+                      Package Validity Extension & Freeze Configuration
+                    </h2>
+                    {isOrgAdmin ? (
+                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
+                        Admin Configurable
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-muted text-muted-foreground border border-border/60 rounded-md">
+                        Read Only
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tenant-wide operational settings governing daily extension fees, reactivation penalties, and freeze durations.
+                  </p>
+                </div>
+                {isOrgAdmin && (
+                  <div>
+                    {isEditingPolicy ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditingPolicy(false);
+                            if (policyConfig) {
+                              setPolicyForm({
+                                extension_per_day_fee: policyConfig.extension_per_day_fee,
+                                extension_activation_fee: policyConfig.extension_activation_fee,
+                                extension_min_days: policyConfig.extension_min_days,
+                                extension_max_days: policyConfig.extension_max_days,
+                                extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+                                freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+                                freeze_min_days: policyConfig.freeze_min_days,
+                                freeze_max_days: policyConfig.freeze_max_days,
+                                freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                              });
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={updatePolicyMutation.isPending}
+                          onClick={() => updatePolicyMutation.mutate(policyForm)}
+                          className="gap-1.5"
+                        >
+                          {updatePolicyMutation.isPending ? 'Saving...' : 'Save Settings'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (policyConfig) {
+                            setPolicyForm({
+                              extension_per_day_fee: policyConfig.extension_per_day_fee,
+                              extension_activation_fee: policyConfig.extension_activation_fee,
+                              extension_min_days: policyConfig.extension_min_days,
+                              extension_max_days: policyConfig.extension_max_days,
+                              extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+                              freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+                              freeze_min_days: policyConfig.freeze_min_days,
+                              freeze_max_days: policyConfig.freeze_max_days,
+                              freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                            });
+                          }
+                          setIsEditingPolicy(true);
+                        }}
+                        className="gap-1.5"
+                      >
+                        <Settings className="size-3.5" />
+                        <span>Configure Rules</span>
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {loadingPolicyConfig ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  <RefreshCw className="size-5 animate-spin mx-auto mb-2 text-primary" />
+                  Loading policy parameters...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Extension Rules Card */}
+                  <div className="p-4 rounded-xl border border-border/70 bg-muted/20 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Clock className="size-4 text-amber-500" />
+                      <span>Package Validity Extension Rules</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Per-Day Extension Fee (₹)</Label>
+                        {isEditingPolicy ? (
+                          <Input
+                            type="number"
+                            step="1"
+                            value={policyForm.extension_per_day_fee ?? policyConfig?.extension_per_day_fee ?? ''}
+                            onChange={(e) => setPolicyForm({ ...policyForm, extension_per_day_fee: e.target.value })}
+                            className="mt-1"
+                          />
+                        ) : (
+                          <div className="font-semibold text-foreground text-sm mt-0.5">
+                            ₹{policyConfig?.extension_per_day_fee || '35.00'} / day
+                          </div>
+                        )}
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">
+                          Standard fee charged per validity day added to an active package.
+                        </span>
+                      </div>
+
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Expired Package Activation Surcharge (₹)</Label>
+                        {isEditingPolicy ? (
+                          <Input
+                            type="number"
+                            step="1"
+                            value={policyForm.extension_activation_fee ?? policyConfig?.extension_activation_fee ?? ''}
+                            onChange={(e) => setPolicyForm({ ...policyForm, extension_activation_fee: e.target.value })}
+                            className="mt-1"
+                          />
+                        ) : (
+                          <div className="font-semibold text-amber-600 dark:text-amber-400 text-sm mt-0.5">
+                            ₹{policyConfig?.extension_activation_fee || '200.00'} (One-time)
+                          </div>
+                        )}
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">
+                          Mandatory fee charged before extending packages that have already expired.
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Min Days</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              value={policyForm.extension_min_days ?? policyConfig?.extension_min_days ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, extension_min_days: parseInt(e.target.value) || 1 })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-medium text-foreground mt-0.5">{policyConfig?.extension_min_days || 1} day</div>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Max Days</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              value={policyForm.extension_max_days ?? policyConfig?.extension_max_days ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, extension_max_days: parseInt(e.target.value) || 30 })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-medium text-foreground mt-0.5">{policyConfig?.extension_max_days || 30} days</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                        {isEditingPolicy ? (
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={policyForm.extension_requires_remaining_sessions !== undefined ? Boolean(policyForm.extension_requires_remaining_sessions) : Boolean(policyConfig?.extension_requires_remaining_sessions ?? true)}
+                              onChange={(e) => setPolicyForm({ ...policyForm, extension_requires_remaining_sessions: e.target.checked })}
+                              className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                            />
+                            <span className="text-foreground font-medium">Require remaining sessions to extend</span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className={`size-3.5 ${policyConfig?.extension_requires_remaining_sessions ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+                            <span>{policyConfig?.extension_requires_remaining_sessions ? 'Requires unconsumed sessions remaining to extend' : 'Allows extension even without remaining sessions'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Freeze Rules Card */}
+                  <div className="p-4 rounded-xl border border-border/70 bg-muted/20 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Snowflake className="size-4 text-blue-500" />
+                      <span>Membership Freeze Rules</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Per-Day Freeze Fee (₹)</Label>
+                        {isEditingPolicy ? (
+                          <Input
+                            type="number"
+                            step="1"
+                            value={policyForm.freeze_per_day_fee ?? policyConfig?.freeze_per_day_fee ?? ''}
+                            onChange={(e) => setPolicyForm({ ...policyForm, freeze_per_day_fee: e.target.value })}
+                            className="mt-1"
+                          />
+                        ) : (
+                          <div className="font-semibold text-foreground text-sm mt-0.5">
+                            ₹{policyConfig?.freeze_per_day_fee || '25.00'} / day
+                          </div>
+                        )}
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">
+                          Daily charge while membership validity is paused and extended forward.
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Min Freeze Days</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              value={policyForm.freeze_min_days ?? policyConfig?.freeze_min_days ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, freeze_min_days: parseInt(e.target.value) || 3 })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_min_days || 3} days</div>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Max Freeze Days</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              value={policyForm.freeze_max_days ?? policyConfig?.freeze_max_days ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, freeze_max_days: parseInt(e.target.value) || 60 })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_max_days || 60} days</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Max Freezes Allowed per Package</Label>
+                        {isEditingPolicy ? (
+                          <Input
+                            type="number"
+                            value={policyForm.freeze_max_count_per_cycle ?? policyConfig?.freeze_max_count_per_cycle ?? ''}
+                            onChange={(e) => setPolicyForm({ ...policyForm, freeze_max_count_per_cycle: parseInt(e.target.value) || 3 })}
+                            className="mt-1"
+                          />
+                        ) : (
+                          <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_max_count_per_cycle || 3} freezes</div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <CheckCircle2 className="size-3.5 text-blue-500" />
+                        <span>Lockout enforced during freeze; bookings auto-resume thereafter</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
               <h2 className="text-base font-semibold text-foreground">Change & Upgrade Policies</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -817,24 +1132,67 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                 <span className="font-mono text-foreground font-semibold">{selectedMembership.membership_number}</span>
               </div>
 
-              <div>
-                <Label className="mb-1 block">Freeze From</Label>
-                <Input
-                  type="date"
-                  required
-                  value={freezeFrom}
-                  onChange={(e) => setFreezeFrom(e.target.value)}
-                />
+              <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/60">
+                <span>Current Plan Expiry:</span>
+                <span className="font-semibold text-foreground">{selectedMembership.end_date}</span>
               </div>
 
-              <div>
-                <Label className="mb-1 block">Freeze Until</Label>
-                <Input
-                  type="date"
-                  required
-                  value={freezeUntil}
-                  onChange={(e) => setFreezeUntil(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="mb-1 block">Freeze From</Label>
+                  <Input
+                    type="date"
+                    required
+                    value={freezeFrom}
+                    onChange={(e) => setFreezeFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block">Freeze Until</Label>
+                  <Input
+                    type="date"
+                    required
+                    value={freezeUntil}
+                    onChange={(e) => setFreezeUntil(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Quotation Breakdown */}
+              {freezeQuote && (
+                <div className={`p-3 rounded-xl border space-y-2 text-xs ${
+                  freezeQuote.can_freeze ? 'bg-blue-500/10 border-blue-500/20' : 'bg-destructive/10 border-destructive/20 text-destructive'
+                }`}>
+                  <div className="flex items-center justify-between font-semibold text-blue-600 dark:text-blue-400">
+                    <span>Freeze Duration:</span>
+                    <span>{freezeQuote.freeze_days} Days</span>
+                  </div>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Rate (Per Day):</span>
+                    <span className="font-medium text-foreground">₹{freezeQuote.fee_per_day}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Total Freeze Fee:</span>
+                    <span className="font-bold text-sm text-foreground">₹{freezeQuote.total_fee}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-border/40 text-muted-foreground">
+                    <span>Extended Expiry Date:</span>
+                    <span className="font-bold text-primary">{freezeQuote.new_end_date}</span>
+                  </div>
+                  {!freezeQuote.can_freeze && freezeQuote.error && (
+                    <div className="text-red-500 font-medium pt-1">
+                      {freezeQuote.error}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Lockout Notice */}
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-300">
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Strict Booking Lockout:</strong> During the frozen window ({freezeFrom} to {freezeUntil}), the member cannot book any classes or sessions. On the day after freeze concludes, booking privileges automatically resume.
+                </span>
               </div>
 
               <div>
@@ -857,9 +1215,150 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                 </Button>
                 <Button
                   type="submit"
-                  disabled={freezeMutation.isPending}
+                  disabled={freezeMutation.isPending || (freezeQuote && !freezeQuote.can_freeze)}
                 >
                   {freezeMutation.isPending ? 'Freezing...' : 'Apply Freeze'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend Membership Modal */}
+      <Dialog open={isExtendOpen && !!selectedMembership} onOpenChange={setIsExtendOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend Package Validity</DialogTitle>
+          </DialogHeader>
+          {selectedMembership && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                extendMutation.mutate({
+                  id: selectedMembership.id,
+                  data: {
+                    days: Number(extendDays),
+                    reason_text: extendReason,
+                  },
+                });
+              }}
+              className="space-y-4 py-2 text-xs sm:text-sm"
+            >
+              <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5">
+                <span>Member:</span>
+                <span className="font-semibold text-foreground">{selectedMembership.member_name}</span>
+                {selectedMembership.member_number && (
+                  <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground">
+                    {selectedMembership.member_number}
+                  </span>
+                )}
+                <span>· Contract:</span>
+                <span className="font-mono text-foreground font-semibold">{selectedMembership.membership_number}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-xs bg-muted/30 p-2.5 rounded-lg border border-border/60">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Status:</span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      selectedMembership.status === 'EXPIRED'
+                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    }`}
+                  >
+                    {selectedMembership.status}
+                  </span>
+                </div>
+                <div className="text-muted-foreground">
+                  Current Expiry: <strong className="text-foreground">{selectedMembership.end_date}</strong>
+                </div>
+              </div>
+
+              <div>
+                <Label className="mb-1 block">Extension Days</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="180"
+                  required
+                  value={extendDays}
+                  onChange={(e) => setExtendDays(parseInt(e.target.value) || 1)}
+                />
+              </div>
+
+              <div>
+                <Label className="mb-1 block">Reason for Extension</Label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Vacation extension or customer goodwill"
+                  value={extendReason}
+                  onChange={(e) => setExtendReason(e.target.value)}
+                />
+              </div>
+
+              {/* Dynamic Extension Fee Breakdown */}
+              {extendQuote && (
+                <div className={`p-3.5 rounded-xl border space-y-2 text-xs ${
+                  extendQuote.can_extend
+                    ? 'bg-muted/40 border-border/60'
+                    : 'bg-destructive/10 border-destructive/20 text-destructive'
+                }`}>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Remaining Sessions:</span>
+                    <span className="font-semibold text-foreground">
+                      {extendQuote.remaining_sessions}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Per-Day Extension Fee:</span>
+                    <span className="font-medium text-foreground">
+                      ₹{extendQuote.fee_per_day} × {extendQuote.days} days = ₹{(Number(extendQuote.fee_per_day) * extendQuote.days).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {extendQuote.is_expired && (
+                    <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-medium">
+                      <span>Expired Package Activation Surcharge:</span>
+                      <span className="font-bold">₹{extendQuote.activation_fee}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                    <span className="font-semibold text-foreground">Total Fee Payable:</span>
+                    <span className="font-bold text-sm text-primary">₹{extendQuote.total_fee}</span>
+                  </div>
+
+                  {extendQuote.new_end_date && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>New End Date:</span>
+                      <span className="font-bold text-foreground">{extendQuote.new_end_date}</span>
+                    </div>
+                  )}
+
+                  {!extendQuote.can_extend && extendQuote.error && (
+                    <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive font-medium text-[11px] flex items-start gap-1.5 mt-2">
+                      <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                      <span>{extendQuote.error}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsExtendOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={extendMutation.isPending || (extendQuote && !extendQuote.can_extend)}
+                >
+                  {extendMutation.isPending ? 'Extending...' : 'Confirm Extension'}
                 </Button>
               </DialogFooter>
             </form>

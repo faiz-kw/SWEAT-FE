@@ -119,6 +119,15 @@ export interface TenantSettingsData {
   max_freeze_days_per_year: number;
   business_open_time: string;
   business_close_time: string;
+  membership_config?: {
+    reward_points?: {
+      earn_rate_rupees?: number;
+      points_per_rate?: number;
+      point_value_rupees?: number;
+      is_enabled?: boolean;
+    };
+    [key: string]: any;
+  };
 }
 
 export interface CustomFormRow extends Row {

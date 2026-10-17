@@ -9,5 +9,5 @@ export const Route = createFileRoute("/_shell/crm/pipeline")({
       { property: "og:title", content: "Visual Sales Pipeline · PerformanceOS Admin" },
     ],
   }),
-  component: () => <LeadsWorkspace initialViewMode="PIPELINE" />,
+  component: () => <LeadsWorkspace initialViewMode="LIST" />,
 });

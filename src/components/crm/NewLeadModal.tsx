@@ -172,6 +172,17 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     });
   }, [programs]);
 
+  // Group programs by category / program type
+  const programsByCategory = React.useMemo(() => {
+    const groups: Record<string, typeof uniquePrograms> = {};
+    uniquePrograms.forEach((p: any) => {
+      const cat = p.category_name || p.program_type_name || 'General Fitness Programs';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(p);
+    });
+    return groups;
+  }, [uniquePrograms]);
+
   React.useEffect(() => {
     if (selectedProgram && uniquePrograms.length > 0 && !uniquePrograms.some((p) => p.id === selectedProgram)) {
       setSelectedProgram('');
@@ -731,26 +742,29 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                     Interested In
                   </Label>
                   <select
+                    id="new-lead-program"
                     value={selectedProgram}
                     onChange={(e) => setSelectedProgram(e.target.value)}
                     className={`w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary ${
                       formErrors.program ? 'border-destructive' : ''
                     }`}
-                    disabled={isProgramsLoading || !selectedBranch}
+                    disabled={isProgramsLoading}
                   >
                     {isProgramsLoading ? (
-                      <option value="">Loading programs...</option>
-                    ) : !selectedBranch ? (
-                      <option value="">Please select a branch first</option>
-                    ) : programs.length === 0 ? (
+                      <option value="">Loading programs & categories...</option>
+                    ) : uniquePrograms.length === 0 ? (
                       <option value="">No active programs available</option>
                     ) : (
                       <>
-                        <option value="">Select interest / program</option>
-                        {programs.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
+                        <option value="">Select program interest</option>
+                        {Object.entries(programsByCategory).map(([catName, progs]) => (
+                          <optgroup key={catName} label={`📁 ${catName}`}>
+                            {progs.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.code ? `(${p.code})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </>
                     )}

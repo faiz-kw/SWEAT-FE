@@ -84,22 +84,32 @@ export interface InitiateLeadCallResponse {
   is_duplicate: boolean;
 }
 
+export interface LeadsPaginatedResult {
+  results: Lead[];
+  count: number;
+}
+
+export interface GetLeadsParams {
+  current_status?: string;
+  search?: string;
+  branch_id?: string;
+  lead_source_id?: string;
+  campaign?: string;
+  platform?: string;
+  sla_status?: string;
+  program_id?: string;
+  assigned_sales_user_id?: string;
+  assigned_to_me?: boolean;
+  unassigned?: boolean;
+  date_from?: string;
+  date_to?: string;
+  ordering?: string;
+  page_size?: number;
+  page?: number;
+}
+
 export const crmApi = {
-  getLeads: async (params?: {
-    current_status?: string;
-    search?: string;
-    branch_id?: string;
-    lead_source_id?: string;
-    campaign?: string;
-    platform?: string;
-    sla_status?: string;
-    program_id?: string;
-    assigned_sales_user_id?: string;
-    assigned_to_me?: boolean;
-    unassigned?: boolean;
-    page_size?: number;
-    page?: number;
-  }): Promise<Lead[]> => {
+  getLeadsPaginated: async (params?: GetLeadsParams): Promise<LeadsPaginatedResult> => {
     const query = new URLSearchParams();
     if (params?.assigned_to_me) {
       query.append('assigned_to_me', 'true');
@@ -113,10 +123,10 @@ export const crmApi = {
     if (params?.search) {
       query.append('search', params.search);
     }
-    if (params?.branch_id) {
+    if (params?.branch_id && params.branch_id !== 'ALL') {
       query.append('branch_id', params.branch_id);
     }
-    if (params?.lead_source_id) {
+    if (params?.lead_source_id && params.lead_source_id !== 'ALL') {
       query.append('lead_source_id', params.lead_source_id);
     }
     if (params?.campaign) {
@@ -125,11 +135,20 @@ export const crmApi = {
     if (params?.platform) {
       query.append('platform', params.platform);
     }
-    if (params?.sla_status) {
+    if (params?.sla_status && params.sla_status !== 'ALL') {
       query.append('sla_status', params.sla_status);
     }
     if (params?.program_id) {
       query.append('program_id', params.program_id);
+    }
+    if (params?.date_from) {
+      query.append('date_from', params.date_from);
+    }
+    if (params?.date_to) {
+      query.append('date_to', params.date_to);
+    }
+    if (params?.ordering) {
+      query.append('ordering', params.ordering);
     }
     if (params?.page_size) {
       query.append('page_size', String(params.page_size));
@@ -144,9 +163,43 @@ export const crmApi = {
     const endpoint = `/tenant/leads/${qStr ? `?${qStr}` : ''}`;
     const res = await api.get<PaginatedResponse<Lead> | Lead[]>(endpoint);
     if (Array.isArray(res.data)) {
-      return res.data;
+      return { results: res.data, count: res.data.length };
     }
-    return res.data.results ?? [];
+    return {
+      results: res.data.results ?? [],
+      count: typeof res.data.count === 'number' ? res.data.count : (res.data.results?.length ?? 0),
+    };
+  },
+
+  getLeads: async (params?: GetLeadsParams): Promise<Lead[]> => {
+    const res = await crmApi.getLeadsPaginated(params);
+    return res.results;
+  },
+
+  getLeadSummaryMetrics: async (params?: Record<string, any>): Promise<{
+    total: number;
+    inquiries: number;
+    trials: number;
+    converted: number;
+    sla_breaches: number;
+  }> => {
+    const sp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'ALL') {
+          sp.append(k, String(v));
+        }
+      });
+    }
+    const qStr = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await api.get<{
+      total: number;
+      inquiries: number;
+      trials: number;
+      converted: number;
+      sla_breaches: number;
+    }>(`/tenant/leads/summary_metrics/${qStr}`);
+    return res.data;
   },
 
   getLeadTimeline: async (leadId: string, limit = 50): Promise<LeadTimelineEvent[]> => {
@@ -220,12 +273,18 @@ export const crmApi = {
     return res.data?.results || res.data || [];
   },
 
-  getPrograms: async (branchId?: string): Promise<Array<{ id: string; name: string; code?: string }>> => {
+  getPrograms: async (branchId?: string): Promise<Array<{ id: string; name: string; code?: string; category_name?: string; program_type_name?: string }>> => {
     const params = new URLSearchParams();
     params.append('status', 'ACTIVE');
     if (branchId) params.append('branch_id', branchId);
-    const res = await api.get<any>(`/tenant/programs/?${params.toString()}`);
-    return res.data?.results || res.data || [];
+    let res = await api.get<any>(`/tenant/programs/?${params.toString()}`);
+    let list = res.data?.results || res.data || [];
+    if (Array.isArray(list) && list.length === 0 && branchId) {
+      // Fallback: load all tenant active programs if branch mapping is empty
+      const fallbackRes = await api.get<any>('/tenant/programs/?status=ACTIVE');
+      list = fallbackRes.data?.results || fallbackRes.data || [];
+    }
+    return Array.isArray(list) ? list : [];
   },
 
   transitionStatus: async (

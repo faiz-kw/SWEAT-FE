@@ -12,7 +12,7 @@ import { MemberParqSigningModal } from './modals/MemberParqSigningModal';
  * Zero mock fallback data. Fully backend-authoritative. Mobile responsive.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -41,6 +41,10 @@ import {
   ArrowRight,
   Sliders,
   ChevronRight,
+  ChevronLeft,
+  ShoppingBag,
+  Percent,
+  XCircle,
   Download,
   Receipt,
   UserCheck,
@@ -53,9 +57,13 @@ import {
   Sparkles,
   ShieldCheck,
   PenTool,
+  Edit3,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { EditMemberProfileModal } from './modals/EditMemberProfileModal';
+import { EditAttendanceModal } from './modals/EditAttendanceModal';
 import type {
   Member360Data,
   TimelineEvent,
@@ -84,13 +92,15 @@ import {
   RejoinModal,
   InvoiceDetailModal,
   AdjustEntitlementModal,
+  BuyPassportModal,
   CollectPaymentModal,
   CheckInModal,
+  TransactionReceiptModal,
 } from './modals/MemberActionModals';
 
 interface Member360WorkspaceProps {
   memberId: string;
-  initialTab?: string;
+  initialTab?: string | undefined;
 }
 
 type TabKey = 'overview' | 'timeline' | 'memberships' | 'bookings' | 'finance' | 'health';
@@ -121,6 +131,9 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   // Modals state
   const [activeModal, setActiveModal] = useState<MembershipLifecycleAction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
+  const [selectedAttendance, setSelectedAttendance] = useState<MemberAttendanceItem | null>(null);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
 
   // Fetch Member 360 data
   const {
@@ -213,8 +226,123 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     );
   }
 
-  const { member, header, overview, timeline, memberships, passbook, bookings_and_attendance, finance, health_and_forms, par_q_form } =
-    data360;
+  const member = data360.member || ({} as any);
+  const header = {
+    name: data360.header?.name || member.name || 'Member',
+    member_number: data360.header?.member_number || member.membership_number || member.member_number || '—',
+    status: data360.header?.status || member.membership_status || member.status || 'INACTIVE',
+    home_branch: data360.header?.home_branch || member.home_branch || 'Unassigned',
+    home_branch_id: data360.header?.home_branch_id || member.home_branch_id,
+    current_program: data360.header?.current_program || member.program_name || 'Standard',
+    current_package: data360.header?.current_package || member.package_name || 'None',
+    current_package_version: data360.header?.current_package_version || member.package_version_name || 'v1',
+    expiry_date: data360.header?.expiry_date || member.expiry_date,
+    home_sessions_remaining: data360.header?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0,
+    cross_branch_sessions_remaining: data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0,
+    outstanding_balance: Number(data360.header?.outstanding_balance ?? member.outstanding_balance ?? 0),
+    assigned_trainer: data360.header?.assigned_trainer || member.assigned_trainer || 'Unassigned',
+    alerts: Array.isArray(data360.header?.alerts) ? data360.header.alerts : [],
+    available_actions: Array.isArray(data360.header?.available_actions) ? data360.header.available_actions : [],
+  };
+
+  const overview = {
+    contact: data360.overview?.contact || {
+      full_name: header.name,
+      phone: member.phone || '',
+      email: member.email || '',
+      gender: member.gender || '—',
+      age: member.age,
+      date_of_birth: (member as any)?.date_of_birth,
+      emergency_contact: member.emergency_contact || '',
+      acquisition_source: member.source || 'Direct Walk-in',
+      joined_at: member.joined_at,
+    },
+    home_branch: data360.overview?.home_branch || {
+      id: header.home_branch_id,
+      name: header.home_branch,
+    },
+    current_membership: data360.overview?.current_membership || data360.memberships?.active || null,
+    entitlement_summary: Array.isArray(data360.overview?.entitlement_summary)
+      ? data360.overview.entitlement_summary
+      : (Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : []),
+    outstanding_balance: header.outstanding_balance,
+    next_booking: data360.overview?.next_booking || null,
+    assigned_trainer: header.assigned_trainer,
+    alerts: header.alerts,
+    recent_activities: Array.isArray(data360.overview?.recent_activities)
+      ? data360.overview.recent_activities
+      : (Array.isArray(data360.timeline) ? data360.timeline.slice(0, 5) : []),
+  };
+
+  const timeline = Array.isArray(data360.timeline) ? data360.timeline : [];
+  const memberships = {
+    active: data360.memberships?.active || null,
+    upcoming: Array.isArray(data360.memberships?.upcoming) ? data360.memberships.upcoming : [],
+    history: Array.isArray(data360.memberships?.history) ? data360.memberships.history : [],
+    freezes: Array.isArray(data360.memberships?.freezes) ? data360.memberships.freezes : [],
+    branch_history: Array.isArray(data360.memberships?.branch_history) ? data360.memberships.branch_history : [],
+    status_history: Array.isArray(data360.memberships?.status_history) ? data360.memberships.status_history : [],
+  };
+  const passbook = {
+    balances: Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : [],
+    ledger: Array.isArray(data360.passbook?.ledger) ? data360.passbook.ledger : [],
+  };
+  const bookings_and_attendance = {
+    upcoming_bookings: Array.isArray(data360.bookings_and_attendance?.upcoming_bookings)
+      ? data360.bookings_and_attendance.upcoming_bookings
+      : [],
+    past_bookings: Array.isArray(data360.bookings_and_attendance?.past_bookings)
+      ? data360.bookings_and_attendance.past_bookings
+      : [],
+    attendance_records: Array.isArray(data360.bookings_and_attendance?.attendance_records)
+      ? data360.bookings_and_attendance.attendance_records
+      : [],
+    stats: data360.bookings_and_attendance?.stats || { visits_30d: 0, total_bookings: 0, last_visit: null },
+  };
+  const finance = {
+    summary: data360.finance?.summary || { total_invoiced: 0, total_paid: 0, total_outstanding: 0, total_refunded: 0 },
+    orders: Array.isArray(data360.finance?.orders) ? data360.finance.orders : [],
+    payments: Array.isArray(data360.finance?.payments) ? data360.finance.payments : [],
+    invoices: Array.isArray(data360.finance?.invoices) ? data360.finance.invoices : [],
+    refunds: Array.isArray(data360.finance?.refunds) ? data360.finance.refunds : [],
+  };
+  const health_and_forms = {
+    submissions: Array.isArray(data360.health_and_forms?.submissions) ? data360.health_and_forms.submissions : [],
+  };
+  const par_q_form = {
+    requirements: Array.isArray(data360.par_q_form?.requirements) ? data360.par_q_form.requirements : [],
+    submissions: Array.isArray(data360.par_q_form?.submissions)
+      ? data360.par_q_form.submissions
+      : health_and_forms.submissions,
+  };
+
+  // Fully resolved authoritative Member object for Action Modals
+  const modalMember: Member = {
+    ...member,
+    id: member.id || memberId,
+    name: header.name || 'Member',
+    first_name: member.first_name || header.name.split(' ')[0] || 'Member',
+    last_name: member.last_name || header.name.split(' ').slice(1).join(' ') || '',
+    member_number: header.member_number || '',
+    status: (header.status as any) || 'ACTIVE',
+    phone: member.phone || overview.contact?.phone || '',
+    email: member.email || overview.contact?.email || '',
+    gender: member.gender || overview.contact?.gender || '—',
+    age: member.age || overview.contact?.age || 0,
+    home_branch: header.home_branch,
+    home_branch_id: header.home_branch_id,
+    program_name: header.current_program || memberships.active?.program_name || 'Bootcamp',
+    package_name: header.current_package || memberships.active?.package_name || 'Standard Package',
+    package_id: member.package_id || memberships.active?.package_id || '',
+    package_version_name: header.current_package_version || memberships.active?.package_version_name || 'v1',
+    expiry_date: header.expiry_date || memberships.active?.end_date || '',
+    start_date: memberships.active?.start_date || member.start_date || '',
+    home_sessions_remaining: header.home_sessions_remaining ?? 0,
+    cross_branch_sessions_remaining: header.cross_branch_sessions_remaining ?? 0,
+    sessions_remaining: header.home_sessions_remaining ?? 0,
+    outstanding_balance: header.outstanding_balance ?? 0,
+    membership_status: header.status,
+  };
 
   // Status Badge Helper
   const getStatusBadge = (status: string) => {
@@ -368,40 +496,46 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
               </div>
             </div>
 
-            {/* Header Key Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:border-l lg:border-border lg:pl-6">
-              <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                <div className="text-xs text-muted-foreground font-medium">Home Sessions</div>
+            {/* Header Key Metrics - Spacious, Uncluttered, and Readable */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:border-l lg:border-border/80 lg:pl-6 shrink-0 w-full lg:w-auto">
+              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm">
+                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Home Sessions</div>
                 <div className="text-xl font-bold text-foreground mt-0.5">
                   {header.home_sessions_remaining}
                 </div>
                 <div className="text-[10px] text-muted-foreground">remaining</div>
               </div>
 
-              <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                <div className="text-xs text-muted-foreground font-medium">Cross-Branch</div>
+              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm">
+                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Cross-Branch</div>
                 <div className="text-xl font-bold text-foreground mt-0.5">
                   {header.cross_branch_sessions_remaining}
                 </div>
                 <div className="text-[10px] text-muted-foreground">remaining</div>
               </div>
 
-              <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                <div className="text-xs text-muted-foreground font-medium">Expiry</div>
-                <div className="text-sm font-semibold text-foreground mt-1 truncate">
-                  {header.expiry_date ? new Date(header.expiry_date).toLocaleDateString() : 'No Active Plan'}
+              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[125px] shadow-sm">
+                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Expiry</div>
+                <div className="text-sm font-bold text-foreground mt-1 whitespace-nowrap">
+                  {header.expiry_date
+                    ? new Date(header.expiry_date).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : 'No Active Plan'}
                 </div>
-                <div className="text-[10px] text-muted-foreground">end date</div>
+                <div className="text-[10px] text-muted-foreground">valid till</div>
               </div>
 
               <div
-                className={`rounded-lg p-2.5 text-center ${
+                className={`rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm border ${
                   header.outstanding_balance > 0
-                    ? 'bg-rose-500/10 border border-rose-500/20'
-                    : 'bg-muted/40'
+                    ? 'bg-rose-500/10 border-rose-500/30'
+                    : 'bg-card/90 border-border/70'
                 }`}
               >
-                <div className="text-xs font-medium text-muted-foreground">Outstanding</div>
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</div>
                 <div
                   className={`text-xl font-bold mt-0.5 ${
                     header.outstanding_balance > 0 ? 'text-rose-500' : 'text-emerald-500'
@@ -473,7 +607,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     key={act.action}
                     size="sm"
                     variant={variant}
-                    disabled={!act.eligible || checkInMutation.isPending || unfreezeMutation.isPending}
+                    disabled={(act.action === 'RENEW' ? false : !act.eligible) || checkInMutation.isPending || unfreezeMutation.isPending}
                     title={act.reason || act.label}
                     onClick={() => handleActionClick(act.action)}
                     className="h-8 text-xs font-medium"
@@ -485,6 +619,16 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   </Button>
                 );
               })}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setActiveModal('BUY_PASSPORT')}
+                className="h-8 text-xs font-medium text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
+                title="Purchase cross-branch passport sessions"
+              >
+                <Globe className="w-3.5 h-3.5 mr-1.5" />
+                Buy Passport
+              </Button>
             </div>
           </div>
         </div>
@@ -496,13 +640,13 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-px">
             {[
               { key: 'overview', label: 'Overview', icon: User },
-              { key: 'timeline', label: 'Timeline', icon: History, count: timeline.length },
+              { key: 'timeline', label: 'Timeline', icon: History, count: (timeline || []).length },
               { key: 'memberships', label: 'Memberships & Passbook', icon: Layers },
               {
                 key: 'bookings',
                 label: 'Bookings & Attendance',
                 icon: Calendar,
-                count: bookings_and_attendance.upcoming_bookings.length,
+                count: (bookings_and_attendance?.upcoming_bookings || []).length,
               },
               { key: 'finance', label: 'Finance', icon: CreditCard },
               {
@@ -551,9 +695,21 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             {/* Left Column: Contact & Identity Info */}
             <div className="space-y-6 lg:col-span-1">
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <User className="w-4 h-4 text-primary" /> Identity & Profile
-                </h3>
+                <div className="flex items-center justify-between pb-1 border-b border-border/40">
+                  <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary" /> Identity & Profile
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                    onClick={() => setIsEditProfileOpen(true)}
+                    title="Edit Member Contact & Profile Details"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Profile</span>
+                  </Button>
+                </div>
 
                 <div className="space-y-3 text-sm divide-y divide-border/50">
                   <div className="pt-2 flex justify-between">
@@ -802,9 +958,14 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           <MemberMembershipsSection
             memberships={memberships}
             passbook={passbook}
+            finance={finance}
+            rewards={data360?.rewards}
+            passport={data360?.passport}
             onAdjustSessions={() => setActiveModal('ADJUST_ENTITLEMENT')}
+            onBuyPassport={() => setActiveModal('BUY_PASSPORT')}
             onRenew={() => setActiveModal('RENEW')}
             onUpgrade={() => setActiveModal('UPGRADE')}
+            onViewTransaction={(txn) => setSelectedTransaction(txn)}
           />
         )}
 
@@ -815,6 +976,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           <MemberBookingsSection
             bookingsData={bookings_and_attendance}
             onCheckIn={() => setActiveModal('CHECK_IN')}
+            onEditAttendance={(att) => setSelectedAttendance(att)}
             isCheckingIn={checkInMutation.isPending}
           />
         )}
@@ -827,6 +989,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             finance={finance}
             onCollectPayment={() => setActiveModal('COLLECT_PAYMENT')}
             onViewInvoice={(inv) => setSelectedInvoice(inv)}
+            onViewTransaction={(txn) => setSelectedTransaction(txn)}
           />
         )}
 
@@ -849,7 +1012,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <RenewModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -857,7 +1020,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <UpgradeModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -865,7 +1028,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <ExtendModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -873,7 +1036,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <FreezeModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -881,7 +1044,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <TransferModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -889,7 +1052,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <CancelModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -897,7 +1060,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <RejoinModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -905,7 +1068,15 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <AdjustEntitlementModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
+        />
+      )}
+
+      {activeModal === 'BUY_PASSPORT' && (
+        <BuyPassportModal
+          isOpen={true}
+          onClose={() => setActiveModal(null)}
+          member={modalMember}
         />
       )}
 
@@ -913,7 +1084,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <CollectPaymentModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -921,7 +1092,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <CheckInModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
-          member={member}
+          member={modalMember}
         />
       )}
 
@@ -930,7 +1101,42 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           isOpen={Boolean(selectedInvoice)}
           onClose={() => setSelectedInvoice(null)}
           invoice={selectedInvoice}
+          member={modalMember}
+        />
+      )}
+
+      {selectedTransaction && (
+        <TransactionReceiptModal
+          isOpen={Boolean(selectedTransaction)}
+          onClose={() => setSelectedTransaction(null)}
+          transaction={selectedTransaction}
           member={member}
+        />
+      )}
+
+      {isEditProfileOpen && (
+        <EditMemberProfileModal
+          isOpen={isEditProfileOpen}
+          onClose={() => setIsEditProfileOpen(false)}
+          memberId={member.id}
+          initialData={{
+            name: overview.contact.full_name || member.name,
+            phone: overview.contact.phone || member.phone,
+            email: overview.contact.email || member.email,
+            gender: overview.contact.gender || (member as any)?.gender,
+            date_of_birth: (overview.contact as any)?.date_of_birth,
+            emergency_contact: overview.contact.emergency_contact,
+            branch_id: (member as any)?.branch_id || (member as any)?.home_branch_id,
+          }}
+        />
+      )}
+
+      {selectedAttendance && (
+        <EditAttendanceModal
+          isOpen={Boolean(selectedAttendance)}
+          onClose={() => setSelectedAttendance(null)}
+          attendance={selectedAttendance}
+          memberId={member.id}
         />
       )}
     </div>
@@ -943,8 +1149,76 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
 const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeline }) => {
   const [filterCategory, setFilterCategory] = useState<string>('ALL');
   const [searchFilter, setSearchFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 10;
 
-  const categories = ['ALL', 'CRM', 'COMMERCE', 'MEMBERSHIP', 'ENTITLEMENT', 'BOOKING', 'ATTENDANCE', 'AUDIT'];
+  const categories = ['ALL', 'CRM', 'COMMERCE', 'MEMBERSHIP', 'BOOKING', 'ATTENDANCE', 'AUDIT'];
+
+  // Reset to first page when search or category filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filterCategory, searchFilter]);
+
+  const isUuid = (val: any): boolean =>
+    typeof val === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+  // Clean raw UUID hashes from descriptions for laymen
+  const sanitizeLaymanText = (text: string): string => {
+    if (!text) return '';
+    let cleaned = text.replace(/Package Version:\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'Package Enrolled');
+    cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (match) => `#${match.substring(0, 6)}…`);
+    return cleaned;
+  };
+
+  const formatMetadataKey = (key: string): string => {
+    const map: Record<string, string> = {
+      total_amount: 'Amount',
+      paid_amount: 'Amount Paid',
+      discount_amount: 'Coupon / Discount',
+      status: 'Status',
+      source: 'Source',
+      provider: 'Provider',
+      payment_method: 'Payment Method',
+      to_branch: 'Branch',
+      from_status: 'Previous Status',
+      to_status: 'New Status',
+      number: 'Ref #',
+      booking_reference: 'Booking Ref',
+      class_name: 'Class',
+      reason: 'Reason',
+    };
+    return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  // Filter out internal raw UUIDs and system IDs so laymen only see useful information
+  const getCleanMetadataEntries = (metadata?: Record<string, any>) => {
+    if (!metadata || typeof metadata !== 'object') return [];
+    const excludedKeys = new Set([
+      'id',
+      'uuid',
+      'tenant_id',
+      'user_profile_id',
+      'profile_id',
+      'lead_id',
+      'order_id',
+      'payment_id',
+      'invoice_id',
+      'membership_id',
+      'trial_id',
+      'conversion_id',
+      'package_version_id',
+      'booking_id',
+      'occurrence_id',
+      'created_by',
+    ]);
+    return Object.entries(metadata).filter(([k, v]) => {
+      if (excludedKeys.has(k.toLowerCase())) return false;
+      if (isUuid(v)) return false;
+      if (v === null || v === undefined || v === '') return false;
+      return true;
+    });
+  };
 
   const filteredEvents = timeline.filter((evt) => {
     if (filterCategory !== 'ALL' && evt.category !== filterCategory) return false;
@@ -959,6 +1233,11 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
     }
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
+  const paginatedEvents = filteredEvents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const startIndex = filteredEvents.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, filteredEvents.length);
 
   return (
     <div className="space-y-6">
@@ -1002,50 +1281,112 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
 
       {/* Timeline Stream */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
-        {filteredEvents.length > 0 ? (
-          <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
-            {filteredEvents.map((evt) => (
-              <div key={evt.id} className="relative group">
-                {/* Timeline node icon */}
-                <div
-                  className="absolute -left-[27px] top-1 w-3.5 h-3.5 rounded-full border-2 border-background ring-2 ring-border"
-                  style={{ backgroundColor: evt.badge_color || '#6366f1' }}
-                />
+        {paginatedEvents.length > 0 ? (
+          <>
+            <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
+              {paginatedEvents.map((evt) => {
+                const cleanMeta = getCleanMetadataEntries(evt.metadata);
+                return (
+                  <div key={evt.id} className="relative group">
+                    {/* Timeline node icon */}
+                    <div
+                      className="absolute -left-[27px] top-1 w-3.5 h-3.5 rounded-full border-2 border-background ring-2 ring-border"
+                      style={{ backgroundColor: evt.badge_color || '#6366f1' }}
+                    />
 
-                <div className="p-4 rounded-xl bg-muted/20 border border-border/80 hover:border-border transition-colors space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-foreground">{evt.title}</span>
-                      <Badge variant="outline" className="text-[10px] font-mono uppercase">
-                        {evt.category}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                      <span>{new Date(evt.occurred_at).toLocaleString()}</span>
-                      {evt.actor && (
-                        <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">
-                          by {evt.actor}
-                        </span>
+                    <div className="p-4 rounded-xl bg-muted/20 border border-border/80 hover:border-border transition-colors space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-foreground">{sanitizeLaymanText(evt.title)}</span>
+                          <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                            {evt.category}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                          <span>{new Date(evt.occurred_at).toLocaleString()}</span>
+                          {evt.actor && (
+                            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">
+                              by {evt.actor}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed">{sanitizeLaymanText(evt.description)}</p>
+
+                      {/* Clean metadata display without raw UUID hashes */}
+                      {cleanMeta.length > 0 && (
+                        <div className="pt-2 flex flex-wrap gap-2 text-[11px] font-mono text-muted-foreground">
+                          {cleanMeta.map(([key, val]) => (
+                            <span key={key} className="bg-muted/60 px-2 py-0.5 rounded border border-border/40">
+                              {formatMetadataKey(key)}: <strong className="text-foreground">{String(val)}</strong>
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  <p className="text-xs text-muted-foreground leading-relaxed">{evt.description}</p>
+            {/* Pagination Controls */}
+            {filteredEvents.length > pageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6 border-t border-border mt-6">
+                <div className="text-xs text-muted-foreground">
+                  Showing <span className="font-semibold text-foreground">{startIndex}</span> to{' '}
+                  <span className="font-semibold text-foreground">{endIndex}</span> of{' '}
+                  <span className="font-semibold text-foreground">{filteredEvents.length}</span> events
+                </div>
 
-                  {/* Metadata display if available */}
-                  {evt.metadata && Object.keys(evt.metadata).length > 0 && (
-                    <div className="pt-2 flex flex-wrap gap-2 text-[11px] font-mono text-muted-foreground">
-                      {Object.entries(evt.metadata).map(([key, val]) => (
-                        <span key={key} className="bg-muted/60 px-2 py-0.5 rounded border border-border/40">
-                          {key}: <strong className="text-foreground">{String(val)}</strong>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((page) => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                      .map((page, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        const showEllipsis = prev && page - prev > 1;
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsis && <span className="px-1 text-xs text-muted-foreground">…</span>}
+                            <button
+                              onClick={() => setCurrentPage(page)}
+                              className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
+                                currentPage === page
+                                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
+                                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-12 text-sm text-muted-foreground">
             <History className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
@@ -1063,25 +1404,307 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
 const MemberMembershipsSection: React.FC<{
   memberships: Member360Data['memberships'];
   passbook: Member360Data['passbook'];
+  finance: Member360Data['finance'];
+  rewards?: Member360Data['rewards'];
+  passport?: Member360Data['passport'];
   onAdjustSessions: () => void;
+  onBuyPassport?: () => void;
   onRenew: () => void;
   onUpgrade: () => void;
-}> = ({ memberships, passbook, onAdjustSessions, onRenew, onUpgrade }) => {
+  onViewTransaction: (txn: any) => void;
+}> = ({ memberships, passbook, finance, rewards, passport, onAdjustSessions, onBuyPassport, onRenew, onUpgrade, onViewTransaction }) => {
+  const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PURCHASES' | 'EXTENSIONS' | 'COUPONS' | 'CANCELLATIONS'>('ALL');
+
+  // Calculate total savings from coupons & discounts
+  const totalDiscountSaved = React.useMemo(() => {
+    let sum = 0;
+    (finance?.orders || []).forEach((o) => {
+      sum += Number(o.discount_amount || 0);
+    });
+    if (sum === 0 && memberships.active?.contract_snapshot?.discount_amount) {
+      sum += Number(memberships.active.contract_snapshot.discount_amount);
+    }
+    return sum;
+  }, [finance?.orders, memberships.active]);
+
+  // Total sessions remaining across active balance buckets
+  const totalSessionsRemaining = React.useMemo(() => {
+    return (passbook?.balances || []).reduce((acc, b) => {
+      if (b.is_unlimited) return acc;
+      return acc + (b.remaining || 0);
+    }, 0);
+  }, [passbook?.balances]);
+
+  // Assemble unified commercial passbook ledger for laymen
+  const purchaseLedgerEntries = React.useMemo(() => {
+    const entries: Array<{
+      id: string;
+      date: string;
+      type: 'PURCHASE' | 'CANCELLATION' | 'REFUND' | 'RENEWAL' | 'EXTENSION';
+      title: string;
+      originalPrice: number;
+      discountAmount: number;
+      finalAmount: number;
+      status: string;
+      reference: string;
+      notes?: string;
+      rawOrder?: any;
+    }> = [];
+
+    // 1. Process all commerce orders (purchases, renewals, extensions, cancellations)
+    (finance?.orders || []).forEach((o) => {
+      const isCancelled = o.status.toUpperCase() === 'CANCELLED' || o.status.toUpperCase() === 'VOID';
+      const isRefunded = o.status.toUpperCase() === 'REFUNDED';
+      const isExtension = Boolean(
+        o.is_extension ||
+        o.order_type === 'EXTENSION' ||
+        /extension/i.test(o.notes || '') ||
+        (o.items && o.items.some((i) => /extension/i.test(i.item_name || '')))
+      );
+      const itemsList = o.items && o.items.length > 0 ? o.items.map((i) => i.item_name).join(', ') : o.order_type;
+
+      entries.push({
+        id: `order-${o.id}`,
+        date: o.created_at,
+        type: isCancelled
+          ? 'CANCELLATION'
+          : isRefunded
+          ? 'REFUND'
+          : isExtension
+          ? 'EXTENSION'
+          : o.order_type === 'RENEWAL'
+          ? 'RENEWAL'
+          : 'PURCHASE',
+        title: isExtension
+          ? `Membership Validity Extension (${itemsList})`
+          : (itemsList || `${o.order_type.replace(/_/g, ' ')} Purchase`),
+        originalPrice: Number(o.subtotal || o.total_amount),
+        discountAmount: Number(o.discount_amount || 0),
+        finalAmount: Number(o.paid_amount || o.total_amount),
+        status: o.status,
+        reference: o.order_number,
+        notes: isCancelled
+          ? 'Purchase Cancelled'
+          : isExtension
+          ? (o.notes || 'Purchased validity extension')
+          : o.discount_amount > 0
+          ? `Coupon/Discount Applied: ₹${Number(o.discount_amount).toLocaleString()}`
+          : undefined,
+        rawOrder: o,
+      });
+    });
+
+    // 2. Process all refunds & cancellations
+    (finance?.refunds || []).forEach((r) => {
+      entries.push({
+        id: `refund-${r.id}`,
+        date: r.created_at,
+        type: 'REFUND',
+        title: `Refund for Order #${r.order_number}`,
+        originalPrice: 0,
+        discountAmount: 0,
+        finalAmount: -Number(r.amount),
+        status: r.status,
+        reference: r.order_number,
+        notes: r.reason ? `Cancellation Reason: ${r.reason}` : 'Refund Processed',
+        rawOrder: r,
+      });
+    });
+
+    // 3. Fallback: if no commerce orders exist yet, synthesize from active membership snapshot
+    if (entries.length === 0 && memberships.active) {
+      const snap = memberships.active.contract_snapshot;
+      entries.push({
+        id: `mem-${memberships.active.id}`,
+        date: memberships.active.start_date,
+        type: 'PURCHASE',
+        title: memberships.active.package_name,
+        originalPrice: Number(snap?.purchase_price || snap?.final_amount || 0),
+        discountAmount: Number(snap?.discount_amount || 0),
+        finalAmount: Number(snap?.final_amount || 0),
+        status: memberships.active.status,
+        reference: memberships.active.membership_number,
+        notes: snap?.discount_amount ? `Coupon Applied: ₹${Number(snap.discount_amount).toLocaleString()}` : undefined,
+        rawOrder: memberships.active,
+      });
+    }
+
+    return entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [finance?.orders, finance?.refunds, memberships.active]);
+
+  // Calculate original plan validity vs extended validity
+  const originalPlanEndDate = React.useMemo(() => {
+    if (!memberships.active) return null;
+    const snap = memberships.active.contract_snapshot as any;
+
+    // 1. If snapshot has an end_date that differs from active end_date, that snapshot date is the original validity
+    if (snap?.end_date && memberships.active.end_date && snap.end_date !== memberships.active.end_date) {
+      return snap.end_date;
+    }
+    if (snap?.original_end_date) return snap.original_end_date;
+    if (snap?.initial_end_date) return snap.initial_end_date;
+
+    // 2. If duration value and unit exist in contract snapshot, calculate from start_date
+    if (snap?.duration_value && memberships.active.start_date) {
+      const start = new Date(memberships.active.start_date);
+      const val = Number(snap.duration_value);
+      const unit = String(snap.duration_unit || 'DAYS').toUpperCase();
+      if (!isNaN(start.getTime()) && val > 0) {
+        const orig = new Date(start);
+        if (unit.includes('MONTH')) {
+          orig.setMonth(orig.getMonth() + val);
+        } else if (unit.includes('YEAR')) {
+          orig.setFullYear(orig.getFullYear() + val);
+        } else {
+          orig.setDate(orig.getDate() + val);
+        }
+        if (orig.getTime() < new Date(memberships.active.end_date).getTime()) {
+          return orig.toISOString();
+        }
+      }
+    }
+
+    // 3. Subtract extension duration from extension ledger entries
+    const extensionEntries = purchaseLedgerEntries.filter((e) => e.type === 'EXTENSION');
+    if (extensionEntries.length > 0 && memberships.active.end_date) {
+      let extDays = 0;
+      extensionEntries.forEach((ext) => {
+        const text = `${ext.title} ${ext.notes || ''} ${JSON.stringify(ext.rawOrder || {})}`;
+        const dayMatch = text.match(/(\d+)\s*(?:day|days)/i);
+        const monthMatch = text.match(/(\d+)\s*(?:month|months)/i);
+        const yearMatch = text.match(/(\d+)\s*(?:year|years)/i);
+        if (dayMatch) {
+          extDays += parseInt(dayMatch[1], 10);
+        } else if (monthMatch) {
+          extDays += parseInt(monthMatch[1], 10) * 30;
+        } else if (yearMatch) {
+          extDays += parseInt(yearMatch[1], 10) * 365;
+        } else {
+          extDays += 30;
+        }
+      });
+      if (extDays > 0) {
+        const currentEnd = new Date(memberships.active.end_date).getTime();
+        return new Date(currentEnd - extDays * 24 * 60 * 60 * 1000).toISOString();
+      }
+    }
+
+    return snap?.end_date || memberships.active.end_date;
+  }, [memberships.active, purchaseLedgerEntries]);
+
+  const filteredPurchaseLedger = purchaseLedgerEntries.filter((entry) => {
+    if (ledgerFilter === 'PURCHASES') return entry.type === 'PURCHASE' || entry.type === 'RENEWAL';
+    if (ledgerFilter === 'EXTENSIONS') return entry.type === 'EXTENSION';
+    if (ledgerFilter === 'COUPONS') return entry.discountAmount > 0;
+    if (ledgerFilter === 'CANCELLATIONS') return entry.type === 'CANCELLATION' || entry.type === 'REFUND';
+    return true;
+  });
+
   return (
     <div className="space-y-6">
-      {/* 1. Active Membership & Contract Snapshot */}
+      {/* 1. Passbook Summary KPI Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
+          <span className="text-[11px] text-muted-foreground font-medium">Active Membership</span>
+          <div className="text-sm font-bold text-foreground mt-1 truncate">
+            {memberships.active?.package_name || 'No Active Plan'}
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            {memberships.active ? `Status: ${memberships.active.status}` : 'Inactive'}
+          </span>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
+          <span className="text-[11px] text-muted-foreground font-medium">Total Purchases Paid</span>
+          <div className="text-lg font-bold text-emerald-500 mt-1">
+            ₹{Number(finance?.summary?.total_paid || 0).toLocaleString()}
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            {purchaseLedgerEntries.filter((e) => e.type === 'PURCHASE' || e.type === 'RENEWAL').length} Plans Settled
+          </span>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground font-medium">Coupons Saved</span>
+            <Tag className="w-3 h-3 text-emerald-400" />
+          </div>
+          <div className="text-lg font-bold text-foreground mt-1">
+            ₹{totalDiscountSaved.toLocaleString()}
+          </div>
+          <span className="text-[10px] text-emerald-400 font-medium">
+            Saved using promotions
+          </span>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground font-medium">Reward Coins</span>
+            <Sparkles className="w-3 h-3 text-amber-400" />
+          </div>
+          <div className="text-lg font-bold text-amber-400 mt-1">
+            {rewards?.points_balance ?? 0} Pts
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            ≈ ₹{rewards?.credit_balance ?? rewards?.points_balance ?? 0} value
+          </span>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground font-medium">Available Sessions</span>
+              <Globe className="w-3 h-3 text-primary" />
+            </div>
+            <div className="text-lg font-bold text-foreground mt-1">
+              {totalSessionsRemaining > 0 ? `${totalSessionsRemaining} Base` : 'Unlimited'}
+            </div>
+            <span className="text-[10px] text-primary font-medium">
+              +{passport?.passport_remaining ?? 0} Passport
+            </span>
+          </div>
+          {onBuyPassport && (
+            <button
+              type="button"
+              onClick={onBuyPassport}
+              className="mt-2 text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 hover:underline text-left cursor-pointer"
+            >
+              + Buy Passport Sessions
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Current Active Membership & Contract Snapshot */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-base text-foreground">Current Active Contract</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-base text-foreground">Current Active Contract</h3>
+              {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
+                <Badge className="bg-purple-500/15 text-purple-400 border-purple-500/30 text-[10px]">
+                  VALIDITY EXTENSION PURCHASED
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Authoritative, immutable snapshot created at purchase. Historical memberships never mutate.
+              Official membership contract snapshot with original plan pricing, validity, and coupon details.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={onRenew} className="h-8 text-xs">
               Renew Plan
             </Button>
+            {onBuyPassport && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onBuyPassport}
+                className="h-8 text-xs border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+              >
+                <Globe className="w-3.5 h-3.5 mr-1" /> Buy Passport
+              </Button>
+            )}
             <Button size="sm" onClick={onUpgrade} className="h-8 text-xs">
               <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Upgrade Plan
             </Button>
@@ -1092,8 +1715,13 @@ const MemberMembershipsSection: React.FC<{
           <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
               <div className="space-y-0.5">
-                <div className="text-lg font-bold text-foreground">
+                <div className="text-lg font-bold text-foreground flex items-center gap-2">
                   {memberships.active.package_name}
+                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
+                    <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40">
+                      Extension Active
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Program: {memberships.active.program_name} · Version: {memberships.active.package_version_name}
@@ -1104,39 +1732,85 @@ const MemberMembershipsSection: React.FC<{
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+            <div className={`grid gap-4 text-xs ${
+              purchaseLedgerEntries.some((e) => e.type === 'EXTENSION')
+                ? 'grid-cols-2 sm:grid-cols-5'
+                : 'grid-cols-2 sm:grid-cols-4'
+            }`}>
               <div>
-                <span className="text-muted-foreground block">Membership #</span>
+                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Membership #</span>
                 <span className="font-mono font-medium text-foreground text-sm">
                   {memberships.active.membership_number}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block">Validity Window</span>
+                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Start Date</span>
                 <span className="font-medium text-foreground text-sm">
-                  {new Date(memberships.active.start_date).toLocaleDateString()} —{' '}
-                  {new Date(memberships.active.end_date).toLocaleDateString()}
+                  {new Date(memberships.active.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
+                <div>
+                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                    Original Validity
+                  </span>
+                  <span className="font-medium text-foreground text-sm block mt-0.5">
+                    {originalPlanEndDate
+                      ? new Date(originalPlanEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </span>
+                </div>
+              )}
+              <div>
+                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') ? 'Extended Validity' : 'Current Validity Till'}
+                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-purple-500/50 text-purple-600 dark:text-purple-400 bg-purple-500/10 font-bold">
+                      EXTENDED
+                    </Badge>
+                  )}
+                </span>
+                <span className={`font-bold text-sm block mt-0.5 ${
+                  purchaseLedgerEntries.some((e) => e.type === 'EXTENSION')
+                    ? 'text-purple-600 dark:text-purple-400'
+                    : 'text-foreground'
+                }`}>
+                  {new Date(memberships.active.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block">Home Branch</span>
+                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Home Branch</span>
                 <span className="font-medium text-foreground text-sm">
                   {memberships.active.home_branch}
                 </span>
               </div>
-              <div>
-                <span className="text-muted-foreground block">Purchase Branch</span>
-                <span className="font-medium text-foreground text-sm">
-                  {memberships.active.purchase_branch}
-                </span>
-              </div>
             </div>
+
+            {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
+              <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">Validity Extension Active:</span>{' '}
+                    <span className="text-muted-foreground">
+                      Member purchased validity extension to preserve remaining sessions. Plan is valid till{' '}
+                      <strong className="text-foreground">
+                        {new Date(memberships.active.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </strong>.
+                    </span>
+                  </div>
+                </div>
+                <Badge className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 text-[10px]">
+                  Unused Sessions Protected
+                </Badge>
+              </div>
+            )}
 
             {/* Contract Snapshot Financial Breakdown */}
             {memberships.active.contract_snapshot && (
               <div className="pt-3 border-t border-border/80">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Financial Snapshot Details
+                  Financial Breakdown & Coupon Application
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-lg border border-border text-xs">
                   <div>
@@ -1146,8 +1820,9 @@ const MemberMembershipsSection: React.FC<{
                     </div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Discount Applied</span>
-                    <div className="font-medium text-emerald-400">
+                    <span className="text-muted-foreground">Coupon / Discount</span>
+                    <div className="font-semibold text-emerald-400 flex items-center gap-1">
+                      <Tag className="w-3 h-3" />
                       -₹{Number(memberships.active.contract_snapshot.discount_amount).toLocaleString()}
                     </div>
                   </div>
@@ -1174,18 +1849,355 @@ const MemberMembershipsSection: React.FC<{
         )}
       </div>
 
-      {/* 2. Generic Entitlement Passbook & Append-Only Ledger */}
+      {/* 3. Member Passbook & Purchase Ledger (Customer Account Ledger) */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-base text-foreground">Entitlement / Session Passbook</h3>
+            <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-primary" /> Member Passbook & Purchase Ledger
+            </h3>
             <p className="text-xs text-muted-foreground">
-              Controlled session balances and immutable append-only ledger events.
+              Complete customer statement of all plan purchases, applied coupons, cancellations, and refunds.
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={onAdjustSessions} className="h-8 text-xs">
-            <Sliders className="w-3.5 h-3.5 mr-1.5" /> Adjust Balance
-          </Button>
+
+          {/* Quick Ledger Filters */}
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: 'ALL', label: 'All Transactions' },
+              { id: 'PURCHASES', label: 'Purchases & Renewals' },
+              { id: 'EXTENSIONS', label: `Extensions ${purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') ? '(Active)' : ''}` },
+              { id: 'COUPONS', label: 'Coupons Used' },
+              { id: 'CANCELLATIONS', label: 'Cancellations & Refunds' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setLedgerFilter(f.id as any)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  ledgerFilter === f.id
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Ledger Table */}
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="py-2.5 px-3">Date</th>
+                <th className="py-2.5 px-3">Transaction</th>
+                <th className="py-2.5 px-3">Plan / Item</th>
+                <th className="py-2.5 px-3 text-right">Original Price</th>
+                <th className="py-2.5 px-3 text-right">Coupon / Discount</th>
+                <th className="py-2.5 px-3 text-right">Final Paid</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Notes & Reference</th>
+                <th className="py-2.5 px-3 text-center">Receipt</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {filteredPurchaseLedger.length > 0 ? (
+                filteredPurchaseLedger.map((row) => (
+                  <tr key={row.id} className="hover:bg-muted/30">
+                    <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                      {new Date(row.date).toLocaleDateString()}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${
+                          row.type === 'EXTENSION'
+                            ? 'text-purple-400 border-purple-500/30 bg-purple-500/10'
+                            : row.type === 'PURCHASE'
+                            ? 'text-emerald-400 border-emerald-500/30'
+                            : row.type === 'RENEWAL'
+                            ? 'text-indigo-400 border-indigo-500/30'
+                            : row.type === 'CANCELLATION'
+                            ? 'text-rose-400 border-rose-500/30 bg-rose-500/10'
+                            : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                        }`}
+                      >
+                        {row.type}
+                      </Badge>
+                    </td>
+                    <td className="py-2.5 px-3 font-medium text-foreground max-w-xs truncate">
+                      {row.title}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-muted-foreground">
+                      {row.originalPrice > 0 ? `₹${row.originalPrice.toLocaleString()}` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      {row.discountAmount > 0 ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                          <Tag className="w-3 h-3" /> -₹{row.discountAmount.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td
+                      className={`py-2.5 px-3 text-right font-bold ${
+                        row.finalAmount < 0 ? 'text-amber-400' : 'text-foreground'
+                      }`}
+                    >
+                      {row.finalAmount < 0
+                        ? `-₹${Math.abs(row.finalAmount).toLocaleString()}`
+                        : `₹${row.finalAmount.toLocaleString()}`}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <Badge
+                        className={`text-[10px] ${
+                          row.status === 'PAID' || row.status === 'ACTIVE'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : row.status === 'CANCELLED'
+                            ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                            : row.status === 'REFUNDED'
+                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                            : 'bg-muted text-muted-foreground border-border'
+                        }`}
+                      >
+                        {row.status}
+                      </Badge>
+                    </td>
+                    <td className="py-2.5 px-3 text-muted-foreground max-w-xs truncate">
+                      {row.notes ? <span className="text-foreground">{row.notes} </span> : null}
+                      <span className="font-mono text-[10px]">({row.reference})</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs text-primary font-medium px-2"
+                        onClick={() => onViewTransaction(row.rawOrder || row)}
+                      >
+                        <Receipt className="w-3 h-3 mr-1" /> Statement
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                    No transactions match the selected filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 4. Passport & Cross-Branch Sessions Section */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-base text-foreground">Passport & Cross-Branch Sessions</h3>
+              <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                Home Branch: {passport?.home_branch?.name || memberships.active?.home_branch || 'Primary Branch'}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Allows members to book and attend workout sessions across other branches outside their home branch.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {onBuyPassport && (
+              <Button
+                size="sm"
+                onClick={onBuyPassport}
+                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs font-semibold"
+              >
+                <Globe className="w-3.5 h-3.5 mr-1.5" /> Buy Passport Sessions
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={onAdjustSessions} className="h-8 text-xs">
+              <Sliders className="w-3.5 h-3.5 mr-1.5" /> Adjust Balance / Consumption
+            </Button>
+          </div>
+        </div>
+
+        {/* Passport Quota KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Total Passport Quota
+            </span>
+            <div className="text-2xl font-bold text-foreground">
+              {passport?.passport_allowed ?? 0} Sessions
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Package allocation for non-home branches
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Consumed Cross-Branch
+            </span>
+            <div className="text-2xl font-bold text-indigo-400">
+              {passport?.passport_consumed ?? 0} Sessions
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Attended across other gyms
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Remaining Balance
+            </span>
+            <div className="text-2xl font-bold text-emerald-400">
+              {passport?.passport_remaining ?? 0} Sessions
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Available to book across any other branch
+            </span>
+          </div>
+        </div>
+
+        {/* Cross-Branch Visits Table */}
+        <div className="pt-2">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Cross-Branch Visit History
+          </h4>
+
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Date / Time</th>
+                  <th className="py-2.5 px-3">Visited Branch</th>
+                  <th className="py-2.5 px-3">Workout / Session</th>
+                  <th className="py-2.5 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {passport?.cross_branch_visits && passport.cross_branch_visits.length > 0 ? (
+                  passport.cross_branch_visits.map((cb) => (
+                    <tr key={cb.id} className="hover:bg-muted/30">
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(cb.date_time).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-foreground">
+                        {cb.branch_name}
+                      </td>
+                      <td className="py-2.5 px-3 text-foreground">
+                        {cb.class_name}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                          {cb.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                      No cross-branch sessions consumed yet. Member is eligible to visit any non-home branch within their passport quota.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Reward Points & Loyalty Coins */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <h3 className="font-semibold text-base text-foreground">Reward Points & Loyalty Coins</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Accumulated loyalty coins that can be redeemed for plan discounts at checkout.
+            </p>
+          </div>
+          <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30 text-xs font-semibold">
+            Rule: 1 Point for every ₹{rewards?.earn_rate_rupees ?? 100} spent
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Current Balance
+            </span>
+            <div className="text-2xl font-bold text-amber-400">
+              {rewards?.points_balance ?? 0} Pts
+            </div>
+            <span className="text-[11px] text-muted-foreground">Available to redeem</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Equivalent Value
+            </span>
+            <div className="text-2xl font-bold text-foreground">
+              ₹{rewards?.credit_balance ?? rewards?.points_balance ?? 0}
+            </div>
+            <span className="text-[11px] text-emerald-400 font-medium">1 Pt = ₹1 Discount</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Lifetime Earned
+            </span>
+            <div className="text-2xl font-bold text-foreground">
+              {rewards?.lifetime_earned ?? 0} Pts
+            </div>
+            <span className="text-[11px] text-muted-foreground">Accrued across all purchases</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Total Redeemed
+            </span>
+            <div className="text-2xl font-bold text-muted-foreground">
+              {rewards?.lifetime_redeemed ?? 0} Pts
+            </div>
+            <span className="text-[11px] text-muted-foreground">Used during checkouts</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Session & Class Passbook (Entitlement Balances & Admin Adjustments) */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+              <Dumbbell className="w-4 h-4 text-primary" /> Session & Class Entitlements Passbook
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Remaining class credits, personal training quotas, and body assessments.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {onBuyPassport && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onBuyPassport}
+                className="h-8 text-xs border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 gap-1.5"
+              >
+                <Globe className="w-3.5 h-3.5" /> Buy Passport Sessions
+              </Button>
+            )}
+            <Button size="sm" onClick={onAdjustSessions} className="h-8 text-xs bg-primary text-primary-foreground gap-1.5">
+              <Sliders className="w-3.5 h-3.5" /> Admin: Adjust Sessions
+            </Button>
+          </div>
         </div>
 
         {/* Current Balances Grid */}
@@ -1209,81 +2221,6 @@ const MemberMembershipsSection: React.FC<{
               </div>
             </div>
           ))}
-        </div>
-
-        {/* Ledger Entries Table */}
-        <div className="pt-2">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Append-Only Passbook Ledger
-          </h4>
-
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-2.5 px-3">Date / Time</th>
-                  <th className="py-2.5 px-3">Transaction</th>
-                  <th className="py-2.5 px-3">Entitlement Type</th>
-                  <th className="py-2.5 px-3 text-right">Units</th>
-                  <th className="py-2.5 px-3 text-right">Balance After</th>
-                  <th className="py-2.5 px-3">Reason / Reference</th>
-                  <th className="py-2.5 px-3">Actor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {passbook.ledger.length > 0 ? (
-                  passbook.ledger.map((row) => (
-                    <tr key={row.id} className="hover:bg-muted/30">
-                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                        {new Date(row.occurred_at).toLocaleString()}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] ${
-                            row.transaction_type === 'ALLOCATION'
-                              ? 'text-emerald-400 border-emerald-500/30'
-                              : row.transaction_type === 'CONSUMPTION'
-                              ? 'text-indigo-400 border-indigo-500/30'
-                              : row.transaction_type === 'ADJUSTMENT'
-                              ? 'text-amber-400 border-amber-500/30'
-                              : 'text-rose-400 border-rose-500/30'
-                          }`}
-                        >
-                          {row.transaction_type}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px]">
-                        {row.entitlement_type}
-                      </td>
-                      <td
-                        className={`py-2.5 px-3 text-right font-semibold font-mono ${
-                          row.units > 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {row.units > 0 ? `+${row.units}` : row.units}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium">
-                        {row.balance_after ?? '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-muted-foreground max-w-xs truncate">
-                        {row.reason} {row.booking_id ? `(Booking: ${row.booking_id})` : ''}
-                      </td>
-                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                        {row.actor || 'System'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                      No entitlement ledger entries recorded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
 
@@ -1359,8 +2296,88 @@ const MemberMembershipsSection: React.FC<{
 const MemberBookingsSection: React.FC<{
   bookingsData: Member360Data['bookings_and_attendance'];
   onCheckIn: () => void;
+  onEditAttendance: (att: MemberAttendanceItem) => void;
   isCheckingIn: boolean;
-}> = ({ bookingsData, onCheckIn, isCheckingIn }) => {
+}> = ({ bookingsData, onCheckIn, onEditAttendance, isCheckingIn }) => {
+  const [bookingFilter, setBookingFilter] = useState<'UPCOMING' | 'PAST' | 'CANCELLED' | 'ALL'>('UPCOMING');
+  const [bookingPage, setBookingPage] = useState<number>(1);
+  const bookingPageSize = 5;
+
+  const [attendancePage, setAttendancePage] = useState<number>(1);
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>('ALL');
+  const attendancePageSize = 10;
+
+  const upcoming: MemberBookingItem[] = bookingsData?.upcoming_bookings || [];
+  const past: MemberBookingItem[] = bookingsData?.past_bookings || [];
+  const attendanceRecords: MemberAttendanceItem[] = bookingsData?.attendance_records || [];
+
+  const allBookings = useMemo<MemberBookingItem[]>(() => [...upcoming, ...past], [upcoming, past]);
+  const cancelledBookings = useMemo(
+    () => allBookings.filter((b: MemberBookingItem) => (b.status || '').toUpperCase() === 'CANCELLED' || (b.status || '').toLowerCase().includes('cancel')),
+    [allBookings]
+  );
+  const upcomingNonCancelled = useMemo(
+    () => upcoming.filter((b: MemberBookingItem) => (b.status || '').toUpperCase() !== 'CANCELLED'),
+    [upcoming]
+  );
+  const pastNonCancelled = useMemo(
+    () => past.filter((b: MemberBookingItem) => (b.status || '').toUpperCase() !== 'CANCELLED'),
+    [past]
+  );
+
+  // Bookings list based on active tab
+  const activeBookings = useMemo(() => {
+    if (bookingFilter === 'UPCOMING') return upcomingNonCancelled;
+    if (bookingFilter === 'PAST') return pastNonCancelled;
+    if (bookingFilter === 'CANCELLED') return cancelledBookings;
+    return allBookings;
+  }, [bookingFilter, upcomingNonCancelled, pastNonCancelled, cancelledBookings, allBookings]);
+
+  const totalBookingPages = Math.max(1, Math.ceil(activeBookings.length / bookingPageSize));
+  const currentBookingPage = Math.min(bookingPage, totalBookingPages);
+  const startBookingIdx = (currentBookingPage - 1) * bookingPageSize;
+  const paginatedBookings = activeBookings.slice(startBookingIdx, startBookingIdx + bookingPageSize);
+
+  // Filtered attendance records
+  const filteredAttendance = attendanceRecords.filter((att) => {
+    if (attendanceStatusFilter === 'ALL') return true;
+    return (att.status || '').toUpperCase() === attendanceStatusFilter;
+  });
+
+  const totalAttendancePages = Math.max(1, Math.ceil(filteredAttendance.length / attendancePageSize));
+  const currentAttendancePage = Math.min(attendancePage, totalAttendancePages);
+  const startAttendanceIdx = (currentAttendancePage - 1) * attendancePageSize;
+  const paginatedAttendance = filteredAttendance.slice(startAttendanceIdx, startAttendanceIdx + attendancePageSize);
+
+  const formatTimeOnly = (iso?: string | null) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '—';
+    }
+  };
+
+  const formatDateOnly = (iso?: string | null) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+    } catch {
+      return '—';
+    }
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    const s = (status || '').toUpperCase();
+    if (s === 'PRESENT' || s === 'VERIFIED') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+    if (s === 'LATE') return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+    if (s === 'NO_SHOW' || s === 'ABSENT' || s === 'CANCELLED') return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+    if (s === 'CONFIRMED') return 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+    return 'bg-muted text-muted-foreground border-border';
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Stats & Quick Check-in */}
@@ -1369,106 +2386,234 @@ const MemberBookingsSection: React.FC<{
           <div>
             <span className="text-xs text-muted-foreground block">30-Day Visits</span>
             <span className="text-2xl font-bold text-foreground">
-              {bookingsData.stats.visits_30d}
+              {bookingsData?.stats?.visits_30d ?? 0}
             </span>
           </div>
           <div>
             <span className="text-xs text-muted-foreground block">Total Bookings</span>
             <span className="text-2xl font-bold text-foreground">
-              {bookingsData.stats.total_bookings}
+              {bookingsData?.stats?.total_bookings ?? 0}
             </span>
           </div>
           <div>
             <span className="text-xs text-muted-foreground block">Last Visit</span>
             <span className="text-sm font-semibold text-foreground mt-1 block">
-              {bookingsData.stats.last_visit ? new Date(bookingsData.stats.last_visit).toLocaleDateString() : 'None'}
+              {bookingsData?.stats?.last_visit ? formatDateOnly(bookingsData.stats.last_visit) : 'None'}
             </span>
           </div>
         </div>
 
-        <Button onClick={onCheckIn} disabled={isCheckingIn} className="h-9 font-medium">
+        <Button onClick={onCheckIn} disabled={isCheckingIn} className="h-9 font-medium shadow-sm">
           <UserCheck className="w-4 h-4 mr-2" />
-          {isCheckingIn ? 'Recording...' : 'Mark Check-In Now'}
+          {isCheckingIn ? 'Recording...' : 'Mark Attendance / Check-In'}
         </Button>
       </div>
 
-      {/* Upcoming Bookings */}
+      {/* Bookings Section with Tabs & Pagination */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <h3 className="font-semibold text-base text-foreground">Upcoming Bookings</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h3 className="font-semibold text-base text-foreground">Bookings</h3>
+          <div className="flex flex-wrap items-center gap-1.5 bg-muted/40 p-1 rounded-lg border border-border/50 text-xs">
+            <button
+              onClick={() => { setBookingFilter('UPCOMING'); setBookingPage(1); }}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                bookingFilter === 'UPCOMING'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Upcoming ({upcomingNonCancelled.length})
+            </button>
+            <button
+              onClick={() => { setBookingFilter('PAST'); setBookingPage(1); }}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                bookingFilter === 'PAST'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Past ({pastNonCancelled.length})
+            </button>
+            <button
+              onClick={() => { setBookingFilter('CANCELLED'); setBookingPage(1); }}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                bookingFilter === 'CANCELLED'
+                  ? 'bg-rose-500/15 text-rose-500 shadow-sm border border-rose-500/30 font-bold'
+                  : 'text-muted-foreground hover:text-rose-400'
+              }`}
+            >
+              Cancelled ({cancelledBookings.length})
+            </button>
+            <button
+              onClick={() => { setBookingFilter('ALL'); setBookingPage(1); }}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                bookingFilter === 'ALL'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All ({allBookings.length})
+            </button>
+          </div>
+        </div>
 
         <div className="space-y-2">
-          {bookingsData.upcoming_bookings.length > 0 ? (
-            bookingsData.upcoming_bookings.map((b) => (
+          {paginatedBookings.length > 0 ? (
+            paginatedBookings.map((b: MemberBookingItem) => (
               <div
                 key={b.id}
-                className="p-3.5 bg-muted/20 border border-border rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                className="p-3.5 bg-muted/20 border border-border rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:border-border/80 transition-colors"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground text-sm">{b.class_name}</span>
-                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                    <span className="font-semibold text-foreground text-sm">{b.class_name || 'Class / Session'}</span>
+                    <Badge className={`text-[10px] ${getStatusBadgeClass(b.status)}`}>
                       {b.status}
                     </Badge>
                   </div>
-                  <div className="text-muted-foreground flex items-center gap-3">
+                  <div className="text-muted-foreground flex items-center gap-3 flex-wrap">
                     <span>{new Date(b.date_time).toLocaleString()}</span>
                     <span>•</span>
                     <span>{b.branch_name}</span>
                     {b.trainer_name && <span>• Coach: {b.trainer_name}</span>}
                   </div>
                 </div>
-                <div className="text-muted-foreground font-mono text-[11px]">
+                <div className="text-muted-foreground font-mono text-[11px] self-start sm:self-auto">
                   Ref: {b.booking_number}
                 </div>
               </div>
             ))
           ) : (
             <div className="text-center py-6 text-xs text-muted-foreground">
-              No upcoming bookings scheduled.
+              No bookings found in this category.
             </div>
           )}
         </div>
+
+        {/* Bookings Pagination Controls */}
+        {activeBookings.length > bookingPageSize && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-border mt-3 text-xs">
+            <div className="text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{startBookingIdx + 1}</span> to{' '}
+              <span className="font-semibold text-foreground">
+                {Math.min(startBookingIdx + bookingPageSize, activeBookings.length)}
+              </span> of{' '}
+              <span className="font-semibold text-foreground">{activeBookings.length}</span> bookings
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBookingPage((p) => Math.max(1, p - 1))}
+                disabled={currentBookingPage === 1}
+                className="h-7 px-2 text-xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+              </Button>
+              <span className="text-muted-foreground text-xs px-2">
+                Page {currentBookingPage} of {totalBookingPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBookingPage((p) => Math.min(totalBookingPages, p + 1))}
+                disabled={currentBookingPage === totalBookingPages}
+                className="h-7 px-2 text-xs"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Attendance Log Table */}
+      {/* Attendance Log Table with Check-in / Check-out Times and Admin Edit */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <h3 className="font-semibold text-base text-foreground">Attendance History</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-base text-foreground">Attendance History</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Track check-in and check-out logs with admin manual update capabilities.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={attendanceStatusFilter}
+              onChange={(e) => {
+                setAttendanceStatusFilter(e.target.value);
+                setAttendancePage(1);
+              }}
+              className="text-xs bg-muted/40 border border-border rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="ALL">All Statuses ({attendanceRecords.length})</option>
+              <option value="PRESENT">Present</option>
+              <option value="LATE">Late</option>
+              <option value="ABSENT">Absent</option>
+              <option value="NO_SHOW">No Show</option>
+            </select>
+          </div>
+        </div>
 
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left text-xs">
             <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="py-2.5 px-3">Date / Time</th>
+                <th className="py-2.5 px-3">Date</th>
+                <th className="py-2.5 px-3">Session / Class</th>
                 <th className="py-2.5 px-3">Branch</th>
-                <th className="py-2.5 px-3">Check-In Method</th>
+                <th className="py-2.5 px-3">Check-In</th>
+                <th className="py-2.5 px-3">Check-Out</th>
+                <th className="py-2.5 px-3">Method</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Marked By</th>
+                <th className="py-2.5 px-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {bookingsData.attendance_records.length > 0 ? (
-                bookingsData.attendance_records.map((a) => (
-                  <tr key={a.id} className="hover:bg-muted/30">
-                    <td className="py-2.5 px-3 text-foreground whitespace-nowrap">
-                      {new Date(a.date_time).toLocaleString()}
+              {paginatedAttendance.length > 0 ? (
+                paginatedAttendance.map((a: MemberAttendanceItem) => (
+                  <tr key={a.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-2.5 px-3 text-foreground whitespace-nowrap font-medium">
+                      {formatDateOnly(a.date_time || a.check_in_at)}
                     </td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{a.branch_name}</td>
+                    <td className="py-2.5 px-3 text-foreground font-medium">
+                      {a.class_name || 'Gym Access'}
+                    </td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{a.branch_name || '—'}</td>
+                    <td className="py-2.5 px-3 text-foreground font-mono">
+                      {formatTimeOnly(a.check_in_at || a.date_time)}
+                    </td>
+                    <td className="py-2.5 px-3 text-muted-foreground font-mono">
+                      {formatTimeOnly(a.check_out_at)}
+                    </td>
                     <td className="py-2.5 px-3">
                       <Badge variant="outline" className="text-[10px] font-mono">
-                        {a.check_in_method}
+                        {a.check_in_method || 'MANUAL'}
                       </Badge>
                     </td>
                     <td className="py-2.5 px-3">
-                      <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                      <Badge className={`text-[10px] ${getStatusBadgeClass(a.status)}`}>
                         {a.status}
                       </Badge>
                     </td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{a.marked_by}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{a.marked_by || 'System'}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEditAttendance(a)}
+                        className="h-7 px-2 text-xs text-primary hover:bg-primary/10 gap-1 inline-flex items-center"
+                        title="Update attendance record"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Update</span>
+                      </Button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
                     No attendance records found.
                   </td>
                 </tr>
@@ -1476,6 +2621,42 @@ const MemberBookingsSection: React.FC<{
             </tbody>
           </table>
         </div>
+
+        {/* Attendance Pagination Controls */}
+        {filteredAttendance.length > attendancePageSize && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-border mt-3 text-xs">
+            <div className="text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{startAttendanceIdx + 1}</span> to{' '}
+              <span className="font-semibold text-foreground">
+                {Math.min(startAttendanceIdx + attendancePageSize, filteredAttendance.length)}
+              </span> of{' '}
+              <span className="font-semibold text-foreground">{filteredAttendance.length}</span> records
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
+                disabled={currentAttendancePage === 1}
+                className="h-7 px-2 text-xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+              </Button>
+              <span className="text-muted-foreground text-xs px-2">
+                Page {currentAttendancePage} of {totalAttendancePages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAttendancePage((p) => Math.min(totalAttendancePages, p + 1))}
+                disabled={currentAttendancePage === totalAttendancePages}
+                className="h-7 px-2 text-xs"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1488,7 +2669,19 @@ const MemberFinanceSection: React.FC<{
   finance: Member360Data['finance'];
   onCollectPayment: () => void;
   onViewInvoice: (inv: MemberInvoiceItem) => void;
-}> = ({ finance, onCollectPayment, onViewInvoice }) => {
+  onViewTransaction: (txn: any) => void;
+}> = ({ finance, onCollectPayment, onViewInvoice, onViewTransaction }) => {
+  const [subTab, setSubTab] = useState<'INVOICES' | 'PAYMENTS' | 'REFUNDS'>('INVOICES');
+
+  // Map order number to invoice item if exists
+  const invoiceByOrder = React.useMemo(() => {
+    const map = new Map<string, MemberInvoiceItem>();
+    (finance.invoices || []).forEach((inv) => {
+      if (inv.order_number) map.set(inv.order_number, inv);
+    });
+    return map;
+  }, [finance.invoices]);
+
   return (
     <div className="space-y-6">
       {/* Financial KPIs */}
@@ -1498,6 +2691,7 @@ const MemberFinanceSection: React.FC<{
           <div className="text-xl font-bold text-foreground mt-1">
             ₹{Number(finance.summary.total_invoiced).toLocaleString()}
           </div>
+          <span className="text-[11px] text-muted-foreground">Billed across all orders</span>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
@@ -1505,6 +2699,7 @@ const MemberFinanceSection: React.FC<{
           <div className="text-xl font-bold text-emerald-500 mt-1">
             ₹{Number(finance.summary.total_paid).toLocaleString()}
           </div>
+          <span className="text-[11px] text-muted-foreground">Settled payments</span>
         </div>
 
         <div
@@ -1515,15 +2710,15 @@ const MemberFinanceSection: React.FC<{
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-medium">Outstanding</span>
+            <span className="text-xs text-muted-foreground font-medium">Outstanding Due</span>
             {finance.summary.total_outstanding > 0 && (
               <Button
                 size="sm"
                 variant="destructive"
-                className="h-6 text-[10px] px-2"
+                className="h-6 text-[10px] px-2 font-medium"
                 onClick={onCollectPayment}
               >
-                Collect
+                Collect Now
               </Button>
             )}
           </div>
@@ -1534,6 +2729,9 @@ const MemberFinanceSection: React.FC<{
           >
             ₹{Number(finance.summary.total_outstanding).toLocaleString()}
           </div>
+          <span className="text-[11px] text-muted-foreground">
+            {finance.summary.total_outstanding > 0 ? 'Payment pending' : 'Zero balance due'}
+          </span>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
@@ -1541,108 +2739,212 @@ const MemberFinanceSection: React.FC<{
           <div className="text-xl font-bold text-muted-foreground mt-1">
             ₹{Number(finance.summary.total_refunded).toLocaleString()}
           </div>
+          <span className="text-[11px] text-muted-foreground">Returned on cancellations</span>
         </div>
       </div>
 
-      {/* Orders List */}
+      {/* Streamlined Financial Records */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <h3 className="font-semibold text-base text-foreground">Commerce Orders</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-primary" /> Billing Statements & Invoices
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Consolidated view of customer invoices, paid receipts, and refunds.
+            </p>
+          </div>
 
-        <div className="space-y-3">
-          {finance.orders.length > 0 ? (
-            finance.orders.map((o) => (
-              <div key={o.id} className="p-4 bg-muted/20 border border-border rounded-xl space-y-3 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-foreground font-mono text-sm">{o.order_number}</span>
-                    <div className="text-muted-foreground">
-                      Created: {new Date(o.created_at).toLocaleString()} · Type: {o.order_type}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-foreground text-sm">
-                      ₹{Number(o.total_amount).toLocaleString()}
-                    </div>
-                    <Badge
-                      className={
-                        o.status === 'PAID'
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]'
-                          : 'bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]'
-                      }
-                    >
-                      {o.status}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Order Items */}
-                <div className="pt-2 border-t border-border/80">
-                  <table className="w-full text-left">
-                    <thead className="text-[10px] text-muted-foreground uppercase">
-                      <tr>
-                        <th>Item</th>
-                        <th className="text-center">Qty</th>
-                        <th className="text-right">Unit Price</th>
-                        <th className="text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40">
-                      {o.items.map((it) => (
-                        <tr key={it.id}>
-                          <td className="py-1 text-foreground font-medium">{it.item_name}</td>
-                          <td className="py-1 text-center text-muted-foreground">{it.quantity}</td>
-                          <td className="py-1 text-right text-muted-foreground">₹{Number(it.unit_price).toLocaleString()}</td>
-                          <td className="py-1 text-right text-foreground font-medium">₹{Number(it.total_amount).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Outstanding on Order */}
-                {o.outstanding_amount > 0 && (
-                  <div className="flex items-center justify-between p-2 rounded bg-rose-500/10 text-rose-300">
-                    <span>Outstanding on this order:</span>
-                    <strong className="font-mono">₹{Number(o.outstanding_amount).toLocaleString()}</strong>
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-6 text-xs text-muted-foreground">
-              No orders recorded for this member.
-            </div>
-          )}
+          {/* Sub-tab pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: 'INVOICES', label: `Invoices & Bills (${finance.orders.length || finance.invoices.length})` },
+              { id: 'PAYMENTS', label: `Payment Receipts (${finance.payments.length})` },
+              { id: 'REFUNDS', label: `Refunds (${finance.refunds.length})` },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSubTab(t.id as any)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  subTab === t.id
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Payment Transactions & Invoices Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Payment Transactions */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <h3 className="font-semibold text-base text-foreground">Payment Transactions</h3>
-
+        {/* Tab 1: Invoices & Bills Table */}
+        {subTab === 'INVOICES' && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Method</th>
-                  <th className="py-2.5 px-3 text-right">Amount</th>
+                  <th className="py-2.5 px-3">Invoice / Order #</th>
+                  <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3 text-right">Billed Amount</th>
+                  <th className="py-2.5 px-3 text-right">Paid</th>
+                  <th className="py-2.5 px-3 text-right">Balance Due</th>
                   <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {finance.orders.length > 0 ? (
+                  finance.orders.map((o) => {
+                    const inv = invoiceByOrder.get(o.order_number) || finance.invoices.find((i) => i.order_number === o.order_number);
+                    const itemNames = o.items && o.items.length > 0 ? o.items.map((it) => it.item_name).join(', ') : o.order_type;
+
+                    return (
+                      <tr key={o.id} className="hover:bg-muted/30">
+                        <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                          {new Date(o.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-medium text-foreground">
+                          {inv?.invoice_number || o.order_number}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-foreground max-w-xs truncate">
+                          {itemNames}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-medium text-foreground">
+                          ₹{Number(o.total_amount).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-emerald-500 font-semibold">
+                          ₹{Number(o.paid_amount || (o.status === 'PAID' ? o.total_amount : 0)).toLocaleString()}
+                        </td>
+                        <td
+                          className={`py-2.5 px-3 text-right font-semibold ${
+                            o.outstanding_amount > 0 ? 'text-rose-500' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {o.outstanding_amount > 0 ? `₹${Number(o.outstanding_amount).toLocaleString()}` : '₹0'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <Badge
+                            className={`text-[10px] ${
+                              o.status === 'PAID'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : o.status === 'CANCELLED'
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                            }`}
+                          >
+                            {o.status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-primary font-medium"
+                              onClick={() => onViewTransaction(o)}
+                            >
+                              <Receipt className="w-3.5 h-3.5 mr-1" /> Statement
+                            </Button>
+                            {inv ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-muted-foreground"
+                                onClick={() => onViewInvoice(inv)}
+                              >
+                                Invoice
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : finance.invoices.length > 0 ? (
+                  finance.invoices.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-muted/30">
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(inv.issued_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-medium text-foreground">
+                        {inv.invoice_number}
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-foreground">Order #{inv.order_number}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-foreground">
+                        ₹{Number(inv.total_amount).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-emerald-500 font-semibold">
+                        ₹{Number(inv.total_amount).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground">₹0</td>
+                      <td className="py-2.5 px-3">
+                        <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                          {inv.status || 'PAID'}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-primary font-medium"
+                            onClick={() => onViewTransaction(inv)}
+                          >
+                            <Receipt className="w-3.5 h-3.5 mr-1" /> Statement
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-muted-foreground"
+                            onClick={() => onViewInvoice(inv)}
+                          >
+                            Invoice
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                      No invoices or orders recorded for this member.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Tab 2: Payment Receipts Table */}
+        {subTab === 'PAYMENTS' && (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3">Method & Channel</th>
+                  <th className="py-2.5 px-3">Order Ref</th>
+                  <th className="py-2.5 px-3 text-right">Amount Received</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-center">Receipt & Statement</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {finance.payments.length > 0 ? (
                   finance.payments.map((p) => (
                     <tr key={p.id} className="hover:bg-muted/30">
-                      <td className="py-2.5 px-3 text-muted-foreground">
-                        {new Date(p.paid_at).toLocaleDateString()}
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(p.paid_at).toLocaleString()}
                       </td>
                       <td className="py-2.5 px-3 font-medium text-foreground">
                         {p.payment_method} <span className="text-[10px] text-muted-foreground">({p.provider})</span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-bold text-foreground">
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">
+                        {p.order_number || 'Direct Payment'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-emerald-500">
                         ₹{Number(p.amount).toLocaleString()}
                       </td>
                       <td className="py-2.5 px-3">
@@ -1656,11 +2958,21 @@ const MemberFinanceSection: React.FC<{
                           {p.status}
                         </Badge>
                       </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-primary font-medium"
+                          onClick={() => onViewTransaction(p)}
+                        >
+                          <Receipt className="w-3.5 h-3.5 mr-1" /> View Statement
+                        </Button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
                       No payment transactions recorded.
                     </td>
                   </tr>
@@ -1668,58 +2980,55 @@ const MemberFinanceSection: React.FC<{
               </tbody>
             </table>
           </div>
-        </div>
+        )}
 
-        {/* Member Invoices */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <h3 className="font-semibold text-base text-foreground">Invoices</h3>
-
+        {/* Tab 3: Refunds Table */}
+        {subTab === 'REFUNDS' && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-2.5 px-3">Invoice #</th>
                   <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3 text-right">Amount</th>
-                  <th className="py-2.5 px-3 text-center">Action</th>
+                  <th className="py-2.5 px-3">Order Ref</th>
+                  <th className="py-2.5 px-3">Cancellation / Refund Reason</th>
+                  <th className="py-2.5 px-3 text-right">Refund Amount</th>
+                  <th className="py-2.5 px-3">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {finance.invoices.length > 0 ? (
-                  finance.invoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-muted/30">
-                      <td className="py-2.5 px-3 font-mono font-medium text-foreground">
-                        {inv.invoice_number}
+                {finance.refunds.length > 0 ? (
+                  finance.refunds.map((r) => (
+                    <tr key={r.id} className="hover:bg-muted/30">
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(r.created_at).toLocaleDateString()}
                       </td>
-                      <td className="py-2.5 px-3 text-muted-foreground">
-                        {new Date(inv.issued_at).toLocaleDateString()}
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-foreground font-medium">
+                        {r.order_number}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-bold text-foreground">
-                        ₹{Number(inv.total_amount).toLocaleString()}
+                      <td className="py-2.5 px-3 text-muted-foreground max-w-sm truncate">
+                        {r.reason || 'Membership Cancellation & Refund'}
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-primary"
-                          onClick={() => onViewInvoice(inv)}
-                        >
-                          <Receipt className="w-3.5 h-3.5 mr-1" /> View
-                        </Button>
+                      <td className="py-2.5 px-3 text-right font-bold text-amber-400">
+                        ₹{Number(r.amount).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
+                          {r.status}
+                        </Badge>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                      No invoices issued yet.
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No refunds or chargebacks issued.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

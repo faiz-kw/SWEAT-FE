@@ -608,7 +608,10 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                               size="sm"
                               variant="ghost"
                               className="h-7 text-xs px-2 text-primary hover:bg-primary/10 gap-1"
-                              onClick={() => handleOpen360(member.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpen360(member.id);
+                              }}
                             >
                               <span>360</span>
                               <ArrowRight className="w-3.5 h-3.5" />
@@ -701,7 +704,10 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                           size="sm"
                           variant="default"
                           className="h-7 text-xs px-2.5 gap-1"
-                          onClick={() => handleOpen360(member.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpen360(member.id);
+                          }}
                         >
                           <span>Open 360</span>
                           <ArrowRight className="w-3 h-3" />

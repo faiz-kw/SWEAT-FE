@@ -33,7 +33,7 @@ export function ConfigurationWorkspace() {
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle" | "payment">("general");
+  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle" | "payment" | "rewards">("general");
   const [paymentPolicy, setPaymentPolicy] = React.useState<any>({
     payment_methods: {
       staff_cash_enabled: true,
@@ -132,6 +132,7 @@ export function ConfigurationWorkspace() {
             { id: "booking", label: "Booking & Cancellation Policies", icon: Settings },
             { id: "lifecycle", label: "Membership Lifecycle & Freeze", icon: ShieldAlert },
             { id: "payment", label: "Payment & Checkout Policy", icon: CreditCard },
+            { id: "rewards", label: "Reward Points & Loyalty", icon: Sparkles },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -590,6 +591,134 @@ export function ConfigurationWorkspace() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Reward Points & Loyalty Policy */}
+          {activeTab === "rewards" && (
+            <div className="bg-card border border-border/80 rounded-xl p-6 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  Loyalty Points & Rewards Engine
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Configure how members accrue reward coins on purchases and set point conversion values.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold text-foreground">Enable Reward Points Accrual</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically award loyalty points to members upon successful plan and renewal payments.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.membership_config?.reward_points?.is_enabled ?? true}
+                    onCheckedChange={(val) => {
+                      setSettings((prev) => ({
+                        ...prev,
+                        membership_config: {
+                          ...(prev.membership_config || {}),
+                          reward_points: {
+                            ...(prev.membership_config?.reward_points || {
+                              earn_rate_rupees: 100,
+                              points_per_rate: 1,
+                              point_value_rupees: 1,
+                            }),
+                            is_enabled: val,
+                          },
+                        },
+                      }));
+                    }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 p-4 rounded-lg border border-border bg-card">
+                    <Label className="text-sm font-semibold text-foreground">Spend Amount for 1 Point (₹)</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Rupees spent to earn 1 point (e.g. 100 = 1 point earned per ₹100 spent)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">₹</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={settings.membership_config?.reward_points?.earn_rate_rupees ?? 100}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 100;
+                          setSettings((prev) => ({
+                            ...prev,
+                            membership_config: {
+                              ...(prev.membership_config || {}),
+                              reward_points: {
+                                ...(prev.membership_config?.reward_points || {
+                                  point_value_rupees: 1,
+                                  is_enabled: true,
+                                }),
+                                earn_rate_rupees: val,
+                                points_per_rate: 1,
+                              },
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 p-4 rounded-lg border border-border bg-card">
+                    <Label className="text-sm font-semibold text-foreground">Point Redemption Value (₹)</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Discount value in INR per 1 redeemed point (e.g. 1 point = ₹1 discount)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">₹</span>
+                      <Input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={settings.membership_config?.reward_points?.point_value_rupees ?? 1}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 1;
+                          setSettings((prev) => ({
+                            ...prev,
+                            membership_config: {
+                              ...(prev.membership_config || {}),
+                              reward_points: {
+                                ...(prev.membership_config?.reward_points || {
+                                  earn_rate_rupees: 100,
+                                  is_enabled: true,
+                                }),
+                                point_value_rupees: val,
+                              },
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
+                  <span className="font-semibold">Active Earning Formula:</span> Members receive{' '}
+                  <strong>
+                    {settings.membership_config?.reward_points?.points_per_rate || 1} Point
+                  </strong>{' '}
+                  for every{' '}
+                  <strong>
+                    ₹{settings.membership_config?.reward_points?.earn_rate_rupees || 100}
+                  </strong>{' '}
+                  spent on memberships and renewals. Points are worth{' '}
+                  <strong>
+                    ₹{settings.membership_config?.reward_points?.point_value_rupees || 1}
+                  </strong>{' '}
+                  each during redemption.
+                </div>
               </div>
             </div>
           )}
