@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle } from "lucide-react";
+import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check } from "lucide-react";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -11,7 +11,14 @@ import { Label } from "@/components/ui/label";
 import { 
   fetchTenantSettingsApi, 
   updateTenantSettingsApi, 
-  type TenantSettingsData 
+  type TenantSettingsData,
+  fetchLocationsApi,
+  type LocationRow,
+  fetchBookingPolicyApi,
+  updateBookingPolicyApi,
+  runBookingAutoCancellationApi,
+  resetBranchBookingPolicyApi,
+  type BookingPolicyData
 } from "@/api/endpoints/api-admin";
 
 export function ConfigurationWorkspace() {
@@ -31,9 +38,45 @@ export function ConfigurationWorkspace() {
     business_close_time: "22:00",
   });
 
+  const [bookingPolicy, setBookingPolicy] = React.useState<BookingPolicyData>({
+    auto_cancel_unpaid_enabled: true,
+    auto_cancel_unpaid_minutes: 30,
+    auto_cancel_unconfirmed_enabled: true,
+    auto_cancel_unconfirmed_minutes: 60,
+    cancellation_cutoff_hours: 2,
+    rescheduling_cutoff_hours: 2,
+    max_reschedules_per_booking: 2,
+    late_cancellation_allowed: true,
+    late_cancellation_session_action: 'CONSUME',
+    late_cancellation_fee: 0,
+    late_cancellation_treated_as_no_show: false,
+    allowed_booking_types: ['CLASS', 'PT_SESSION', 'FACILITY', 'TRIAL'],
+    require_active_membership: true,
+    max_upcoming_bookings: 5,
+    advance_booking_days_max: 14,
+    notify_unpaid_auto_cancellation: true,
+    notify_unconfirmed_auto_cancellation: true,
+    notify_late_cancellation: true,
+    notification_channels: ['WHATSAPP', 'IN_APP'],
+  });
+  const [branches, setBranches] = React.useState<LocationRow[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = React.useState<string>("");
+  const [isBranchOverride, setIsBranchOverride] = React.useState<boolean>(false);
+  const [applyToExisting, setApplyToExisting] = React.useState<boolean>(false);
+  const [runningAutoCancel, setRunningAutoCancel] = React.useState<boolean>(false);
+
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle" | "payment" | "rewards">("general");
+  const [activeTab, setActiveTab] = React.useState<"general" | "booking" | "billing" | "lifecycle" | "payment" | "rewards">(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam && ["general", "booking", "billing", "lifecycle", "payment", "rewards"].includes(tabParam)) {
+        return tabParam as any;
+      }
+    }
+    return "general";
+  });
   const [paymentPolicy, setPaymentPolicy] = React.useState<any>({
     payment_methods: {
       staff_cash_enabled: true,
@@ -77,6 +120,10 @@ export function ConfigurationWorkspace() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
+    fetchLocationsApi()
+      .then((locs) => setBranches(locs || []))
+      .catch((err) => console.error("Failed to load branches", err));
+
     crmApi.getPaymentPolicy()
       .then((data) => {
         if (data && typeof data === 'object') {
@@ -93,16 +140,72 @@ export function ConfigurationWorkspace() {
       .catch((err) => console.error("Failed to load payment policy", err));
   }, []);
 
+  React.useEffect(() => {
+    fetchBookingPolicyApi(selectedBranchId || undefined)
+      .then((res) => {
+        if (res && res.effective_policy) {
+          setBookingPolicy(res.effective_policy);
+          setIsBranchOverride(res.is_branch_override);
+        }
+      })
+      .catch((err) => console.error("Failed to load booking policy", err));
+  }, [selectedBranchId]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateTenantSettingsApi(settings);
-      await crmApi.updatePaymentPolicy(paymentPolicy);
-      toast.success("Business configuration & payment policies saved successfully!");
+      if (activeTab === "booking") {
+        await updateBookingPolicyApi(bookingPolicy, applyToExisting, selectedBranchId || undefined);
+        const branchLabel = selectedBranchId
+          ? branches.find((b) => b.id === selectedBranchId)?.name || "Selected Branch"
+          : "Organization Defaults";
+        toast.success(`Booking policy configuration saved successfully for ${branchLabel}!`);
+        // Refresh policy state after save
+        const refreshed = await fetchBookingPolicyApi(selectedBranchId || undefined);
+        if (refreshed?.effective_policy) {
+          setBookingPolicy(refreshed.effective_policy);
+          setIsBranchOverride(refreshed.is_branch_override);
+        }
+      } else if (activeTab === "payment") {
+        await crmApi.updatePaymentPolicy(paymentPolicy);
+        toast.success("Payment & checkout policy saved successfully!");
+      } else {
+        await updateTenantSettingsApi(settings);
+        toast.success("Business configuration saved successfully!");
+      }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to update configuration");
+      toast.error(err?.data?.detail || err?.message || "Failed to update configuration");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetBranchOverride = async () => {
+    if (!selectedBranchId) return;
+    setSaving(true);
+    try {
+      const res = await resetBranchBookingPolicyApi(selectedBranchId);
+      toast.success(res?.detail || "Branch override removed. Reverted to organization defaults.");
+      setIsBranchOverride(false);
+      if (res?.effective_policy) {
+        setBookingPolicy(res.effective_policy);
+      }
+    } catch (err: any) {
+      toast.error(err?.data?.detail || err?.message || "Failed to reset branch override");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRunAutoCancellationNow = async () => {
+    setRunningAutoCancel(true);
+    try {
+      const res = await runBookingAutoCancellationApi(selectedBranchId || undefined);
+      toast.success(res?.detail || `Auto-cancellations processed: ${res?.auto_cancelled_count || 0} cancelled, ${res?.promoted_from_waitlist_count || 0} waitlist promoted.`);
+    } catch (err: any) {
+      toast.error(err?.data?.detail || err?.message || "Failed to run auto-cancellation");
+    } finally {
+      setRunningAutoCancel(false);
     }
   };
 
@@ -110,11 +213,15 @@ export function ConfigurationWorkspace() {
     setSettings((prev) => ({ ...prev, [key]: val }));
   };
 
+  const updateBooking = (key: keyof BookingPolicyData, val: any) => {
+    setBookingPolicy((prev) => ({ ...prev, [key]: val }));
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <PageHeader
-        title="Business Configuration & System Policies"
-        subtitle="Global tenant operating parameters, GST tax rules, class booking cancellation windows, and membership freeze policies."
+        title="Business Settings & Policies"
+        subtitle="Configure operating hours, taxes, class booking cancellation rules, and membership policies."
         actions={
           <Button onClick={handleSave} disabled={saving} className="gap-2 bg-primary text-primary-foreground">
             <Save className="h-4 w-4" />
@@ -125,20 +232,27 @@ export function ConfigurationWorkspace() {
 
       <PageBody>
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 border-b border-border/50">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 mb-6 border-b border-border/50 scrollbar-none">
           {[
-            { id: "general", label: "General & Operating Hours", icon: Clock },
-            { id: "billing", label: "Tax & GST Billing", icon: Receipt },
-            { id: "booking", label: "Booking & Cancellation Policies", icon: Settings },
-            { id: "lifecycle", label: "Membership Lifecycle & Freeze", icon: ShieldAlert },
-            { id: "payment", label: "Payment & Checkout Policy", icon: CreditCard },
-            { id: "rewards", label: "Reward Points & Loyalty", icon: Sparkles },
+            { id: "general", label: "Hours & Timezone", icon: Clock },
+            { id: "billing", label: "Taxes & GST", icon: Receipt },
+            { id: "booking", label: "Booking & Cancellation Rules", icon: Settings },
+            { id: "lifecycle", label: "Membership Holds", icon: ShieldAlert },
+            { id: "payment", label: "Payment & Checkout", icon: CreditCard },
+            { id: "rewards", label: "Reward Points", icon: Sparkles },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("tab", tab.id);
+                    window.history.replaceState({}, "", url.toString());
+                  }
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? "bg-primary text-primary-foreground shadow-xs"
@@ -153,7 +267,7 @@ export function ConfigurationWorkspace() {
         </div>
 
         {/* Tab Content */}
-        <div className="max-w-3xl rounded-xl border border-border/60 bg-card p-6 shadow-xs space-y-6">
+        <div className="w-full max-w-4xl rounded-2xl border border-border/70 bg-card p-4 sm:p-6 lg:p-7 shadow-xs space-y-6">
           {/* GENERAL TAB */}
           {activeTab === "general" && (
             <div className="space-y-4 animate-in fade-in duration-150">
@@ -259,27 +373,619 @@ export function ConfigurationWorkspace() {
 
           {/* BOOKING TAB */}
           {activeTab === "booking" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <h3 className="font-semibold text-base border-b border-border/40 pb-2">Class & PT Cancellation Policies</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cancel_window">Cancellation Window (Hours before start)</Label>
-                  <Input
-                    id="cancel_window"
-                    type="number"
-                    value={settings.booking_cancellation_window_hours}
-                    onChange={(e) => update("booking_cancellation_window_hours", Number(e.target.value))}
-                  />
-                  <p className="text-xs text-muted-foreground">Cancellations made within this window are flagged as Late.</p>
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* STUDIO LOCATION / BRANCH SELECTOR */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-border/70 bg-card/60">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Building2 className="h-4 w-4 text-primary shrink-0" />
+                    <Label htmlFor="branch_selector" className="text-sm font-semibold text-foreground">
+                      Studio Location
+                    </Label>
+                    <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full ${
+                      isBranchOverride 
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20" 
+                        : "bg-primary/10 text-primary border border-primary/20"
+                    }`}>
+                      {isBranchOverride ? "Custom rules for this branch" : "Default for all locations"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Choose whether these rules apply to all gym locations or just a specific branch.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="late_fee">Late Cancellation Penalty Fee (₹)</Label>
-                  <Input
-                    id="late_fee"
-                    type="number"
-                    value={settings.late_cancellation_fee}
-                    onChange={(e) => update("late_cancellation_fee", Number(e.target.value))}
+
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <select
+                    id="branch_selector"
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full sm:w-auto h-9 rounded-md border border-input bg-background px-3 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">All Studios (Main Rules)</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        Branch: {b.name} ({b.city || "Location"})
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedBranchId && isBranchOverride && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={saving}
+                      onClick={handleResetBranchOverride}
+                      className="gap-1 text-xs text-destructive hover:bg-destructive/10 h-9 shrink-0"
+                      title="Remove custom branch rules and use main studio rules"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Reset to Main
+                    </Button>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={runningAutoCancel}
+                    onClick={handleRunAutoCancellationNow}
+                    className="gap-1.5 text-xs font-semibold h-9 shrink-0 ml-auto sm:ml-0"
+                    title="Check and release expired spots right now"
+                  >
+                    <Play className={`h-3.5 w-3.5 text-primary ${runningAutoCancel ? "animate-spin" : ""}`} />
+                    {runningAutoCancel ? "Checking..." : "Run Auto-Cancel Check"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* 1. AUTO-RELEASE UNUSED SPOTS */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Auto-Release Unused Spots</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically free up spots when members don't pay or confirm in time, so waitlisted members get a chance.
+                  </p>
+                </div>
+
+                {/* Unpaid Bookings */}
+                <div className="p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background space-y-3">
+                  <div className="flex items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer">
+                        Cancel if not paid in time
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        If a member reserves a class spot but doesn't finish payment, release the spot automatically.
+                      </p>
+                    </div>
+                    <Switch
+                      className="shrink-0"
+                      checked={bookingPolicy.auto_cancel_unpaid_enabled}
+                      onCheckedChange={(val) => updateBooking("auto_cancel_unpaid_enabled", val)}
+                    />
+                  </div>
+                  {bookingPolicy.auto_cancel_unpaid_enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border/40">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="unpaid_min" className="text-xs font-medium">Cancel after how many minutes?</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="unpaid_min"
+                            type="number"
+                            min="1"
+                            value={bookingPolicy.auto_cancel_unpaid_minutes}
+                            onChange={(e) => updateBooking("auto_cancel_unpaid_minutes", Number(e.target.value))}
+                            className="h-9 text-xs sm:text-sm"
+                          />
+                          <span className="text-xs text-muted-foreground shrink-0">minutes</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Timer starts right when the booking is made.</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/30 border border-border/40 self-start">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-medium cursor-pointer">Send alert to member</Label>
+                          <p className="text-[11px] text-muted-foreground">Notify member that their unpaid spot was released</p>
+                        </div>
+                        <Switch
+                          className="shrink-0"
+                          checked={bookingPolicy.notify_unpaid_auto_cancellation}
+                          onCheckedChange={(val) => updateBooking("notify_unpaid_auto_cancellation", val)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Unconfirmed Bookings */}
+                <div className="p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background space-y-3">
+                  <div className="flex items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer">
+                        Cancel if pending confirmation
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        If a booking requires confirmation and is left pending, release the spot automatically.
+                      </p>
+                    </div>
+                    <Switch
+                      className="shrink-0"
+                      checked={bookingPolicy.auto_cancel_unconfirmed_enabled}
+                      onCheckedChange={(val) => updateBooking("auto_cancel_unconfirmed_enabled", val)}
+                    />
+                  </div>
+                  {bookingPolicy.auto_cancel_unconfirmed_enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border/40">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="unconfirmed_min" className="text-xs font-medium">Cancel after how many minutes?</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="unconfirmed_min"
+                            type="number"
+                            min="1"
+                            value={bookingPolicy.auto_cancel_unconfirmed_minutes}
+                            onChange={(e) => updateBooking("auto_cancel_unconfirmed_minutes", Number(e.target.value))}
+                            className="h-9 text-xs sm:text-sm"
+                          />
+                          <span className="text-xs text-muted-foreground shrink-0">minutes</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Timer starts right when the booking is made.</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/30 border border-border/40 self-start">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-medium cursor-pointer">Send alert to member</Label>
+                          <p className="text-[11px] text-muted-foreground">Notify member that their unconfirmed booking expired</p>
+                        </div>
+                        <Switch
+                          className="shrink-0"
+                          checked={bookingPolicy.notify_unconfirmed_auto_cancellation}
+                          onCheckedChange={(val) => updateBooking("notify_unconfirmed_auto_cancellation", val)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. CANCELLATION & RESCHEDULING DEADLINES */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Settings className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Cancellation & Rescheduling Deadlines</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Set how many hours before class starts members are allowed to cancel for free or move to another class.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="cancel_cutoff" className="text-xs font-semibold text-foreground">
+                      Free Cancellation Deadline
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="cancel_cutoff"
+                        type="number"
+                        min="0"
+                        value={bookingPolicy.cancellation_cutoff_hours}
+                        onChange={(e) => updateBooking("cancellation_cutoff_hours", Number(e.target.value))}
+                        className="h-9 text-xs sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">hours before</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Cancellations made after this time count as late cancellations.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="resched_cutoff" className="text-xs font-semibold text-foreground">
+                      Reschedule Deadline
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="resched_cutoff"
+                        type="number"
+                        min="0"
+                        value={bookingPolicy.rescheduling_cutoff_hours}
+                        onChange={(e) => updateBooking("rescheduling_cutoff_hours", Number(e.target.value))}
+                        className="h-9 text-xs sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">hours before</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Members cannot switch classes once inside this time window.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="max_resched" className="text-xs font-semibold text-foreground">
+                      Max Times a Booking Can Move
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="max_resched"
+                        type="number"
+                        min="0"
+                        value={bookingPolicy.max_reschedules_per_booking}
+                        onChange={(e) => updateBooking("max_reschedules_per_booking", Number(e.target.value))}
+                        className="h-9 text-xs sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">times</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Limit how many times one booking can be rescheduled.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. LATE CANCELLATION RULES & PENALTIES */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Late Cancellation Rules & Penalties</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Choose what happens when a member cancels after the free cancellation deadline.
+                  </p>
+                </div>
+
+                <div className="flex items-start sm:items-center justify-between gap-4 p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium text-foreground cursor-pointer">
+                      Allow late cancellations in app
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      If turned off, members cannot cancel inside the deadline and must contact the gym directly.
+                    </p>
+                  </div>
+                  <Switch
+                    className="shrink-0"
+                    checked={bookingPolicy.late_cancellation_allowed}
+                    onCheckedChange={(val) => updateBooking("late_cancellation_allowed", val)}
                   />
+                </div>
+
+                {bookingPolicy.late_cancellation_allowed && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                    <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                      <Label htmlFor="session_action" className="text-xs font-semibold text-foreground">
+                        What happens to class credit?
+                      </Label>
+                      <select
+                        id="session_action"
+                        value={bookingPolicy.late_cancellation_session_action}
+                        onChange={(e) => updateBooking("late_cancellation_session_action", e.target.value)}
+                        className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="CONSUME">Deduct Credit (Standard — credit is used up)</option>
+                        <option value="RESTORE">Refund Credit (Return credit to member)</option>
+                        <option value="NO_ACTION">No Change (Keep credit balance as is)</option>
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Deducting credit is standard studio practice for late cancellations.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                      <Label htmlFor="late_fee_input" className="text-xs font-semibold text-foreground">
+                        Late Cancellation Fee (₹)
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="late_fee_input"
+                          type="number"
+                          min="0"
+                          value={bookingPolicy.late_cancellation_fee}
+                          onChange={(e) => updateBooking("late_cancellation_fee", Number(e.target.value))}
+                          className="h-9 text-xs sm:text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground shrink-0">₹ fine</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Optional cash penalty charged to member. Enter 0 if no fine.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border border-border/50 bg-background flex flex-col justify-between gap-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-semibold text-foreground cursor-pointer">
+                            Mark as Attendance Strike
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Record a no-show strike on the member's profile for dropping out late.
+                          </p>
+                        </div>
+                        <Switch
+                          className="shrink-0 mt-0.5"
+                          checked={bookingPolicy.late_cancellation_treated_as_no_show}
+                          onCheckedChange={(val) => updateBooking("late_cancellation_treated_as_no_show", val)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. WHO CAN BOOK & BOOKING LIMITS */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Who Can Book & Booking Limits</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Select which services follow these rules and set how many classes members can book at once.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-foreground">
+                    These rules apply to:
+                  </Label>
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                    {[
+                      { id: "CLASS", label: "Group Fitness Classes" },
+                      { id: "PT_SESSION", label: "1-on-1 Personal Training" },
+                      { id: "FACILITY", label: "Court & Facility Hire" },
+                      { id: "TRIAL", label: "Free Intro Trials" },
+                    ].map((type) => {
+                      const isSelected = bookingPolicy.allowed_booking_types.includes(type.id);
+                      return (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => {
+                            const current = new Set(bookingPolicy.allowed_booking_types);
+                            if (isSelected) {
+                              if (current.size > 1) current.delete(type.id);
+                            } else {
+                              current.add(type.id);
+                            }
+                            updateBooking("allowed_booking_types", Array.from(current));
+                          }}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all text-center ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                              : "bg-background text-muted-foreground border-border/60 hover:bg-muted"
+                          }`}
+                        >
+                          {isSelected && <Check className="h-3 w-3 shrink-0" />}
+                          <span>{type.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="max_upcoming" className="text-xs font-semibold text-foreground">
+                      Max Active Bookings at a Time
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="max_upcoming"
+                        type="number"
+                        min="1"
+                        value={bookingPolicy.max_upcoming_bookings}
+                        onChange={(e) => updateBooking("max_upcoming_bookings", Number(e.target.value))}
+                        className="h-9 text-xs sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">classes</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Maximum future reservations one member can hold at the same time.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="advance_days" className="text-xs font-semibold text-foreground">
+                      Advance Booking Window
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="advance_days"
+                        type="number"
+                        min="1"
+                        value={bookingPolicy.advance_booking_days_max}
+                        onChange={(e) => updateBooking("advance_booking_days_max", Number(e.target.value))}
+                        className="h-9 text-xs sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">days ahead</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      How many days into the future members can book classes (e.g. 14 days).
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border/50 bg-background flex flex-col justify-between gap-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-semibold text-foreground cursor-pointer">
+                          Require Active Membership
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Members must have an active membership or class credits to reserve.
+                        </p>
+                      </div>
+                      <Switch
+                        className="shrink-0 mt-0.5"
+                        checked={bookingPolicy.require_active_membership}
+                        onCheckedChange={(val) => updateBooking("require_active_membership", val)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. NOTIFICATION CHANNELS */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-3">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <BellRing className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">How Members Receive Notifications</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Choose which messaging channels send cancellation alerts and reminder messages to members.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 pt-1">
+                  {[
+                    { id: "WHATSAPP", label: "WhatsApp Message" },
+                    { id: "IN_APP", label: "App Notification & Inbox" },
+                    { id: "SMS", label: "SMS Text Message" },
+                    { id: "EMAIL", label: "Email" },
+                  ].map((ch) => {
+                    const active = bookingPolicy.notification_channels.includes(ch.id);
+                    return (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        onClick={() => {
+                          const current = new Set(bookingPolicy.notification_channels);
+                          if (active) {
+                            if (current.size > 1) current.delete(ch.id);
+                          } else {
+                            current.add(ch.id);
+                          }
+                          updateBooking("notification_channels", Array.from(current));
+                        }}
+                        className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold border transition-all ${
+                          active
+                            ? "bg-primary/10 border-primary text-primary shadow-2xs"
+                            : "bg-background border-border/60 text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {active ? (
+                          <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : (
+                          <span className="h-3.5 w-3.5 rounded-full border border-border/60 shrink-0" />
+                        )}
+                        <span>{ch.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 6. WHEN SHOULD THESE CHANGES TAKE EFFECT? */}
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 space-y-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">When Should These Changes Take Effect?</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Choose whether you want these rules to apply only to future bookings or also update existing ones.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div
+                    onClick={() => setApplyToExisting(false)}
+                    className={`cursor-pointer flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border text-xs transition-all ${
+                      !applyToExisting
+                        ? "border-primary bg-primary/10 text-foreground font-semibold ring-1 ring-primary shadow-xs"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id="policy_scope_new"
+                      name="policy_scope_choice"
+                      checked={!applyToExisting}
+                      onChange={() => setApplyToExisting(false)}
+                      className="mt-0.5 text-primary focus:ring-primary shrink-0"
+                    />
+                    <div>
+                      <label htmlFor="policy_scope_new" className="font-bold text-foreground cursor-pointer block">
+                        New Bookings Only (Recommended)
+                      </label>
+                      <div className="text-[11px] text-muted-foreground mt-1 font-normal leading-relaxed">
+                        Members who already booked will keep the cancellation deadlines and rules that were active when they booked.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setApplyToExisting(true)}
+                    className={`cursor-pointer flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border text-xs transition-all ${
+                      applyToExisting
+                        ? "border-amber-500 bg-amber-500/10 text-foreground font-semibold ring-1 ring-amber-500 shadow-xs"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id="policy_scope_existing"
+                      name="policy_scope_choice"
+                      checked={applyToExisting}
+                      onChange={() => setApplyToExisting(true)}
+                      className="mt-0.5 text-amber-500 focus:ring-amber-500 shrink-0"
+                    />
+                    <div>
+                      <label htmlFor="policy_scope_existing" className="font-bold text-foreground cursor-pointer block">
+                        Apply to Existing Open Bookings Too
+                      </label>
+                      <div className="text-[11px] text-muted-foreground mt-1 font-normal leading-relaxed">
+                        Any currently open unpaid or unconfirmed bookings will immediately be checked against these new time limits.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* DEDICATED IN-TAB SAVE BAR */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-border/60">
+                <div className="text-xs text-muted-foreground">
+                  Saving for:{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedBranchId
+                      ? branches.find((b) => b.id === selectedBranchId)?.name || "Selected Branch"
+                      : "All Studios (Main Rules)"}
+                  </span>
+                  {selectedBranchId && (
+                    <span className="ml-1.5 text-[11px] px-2 py-0.5 rounded-full bg-muted font-medium inline-block">
+                      {isBranchOverride ? "Custom Branch Rules" : "Using All Studios Default"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 justify-end">
+                  {selectedBranchId && isBranchOverride && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={saving}
+                      onClick={handleResetBranchOverride}
+                      className="text-xs gap-1.5 text-destructive hover:bg-destructive/10 w-full sm:w-auto"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reset to Main Rules
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={saving}
+                    onClick={handleSave}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-2 w-full sm:w-auto h-9"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {saving ? "Saving Rules..." : "Save Booking Rules"}
+                  </Button>
                 </div>
               </div>
             </div>

@@ -672,6 +672,70 @@ export async function updateTenantSettingsApi(payload: Partial<TenantSettingsDat
   return res.data;
 }
 
+// ── BOOKING & CANCELLATION POLICIES ────────────────────────────────────
+
+export interface BookingPolicyData {
+  auto_cancel_unpaid_enabled: boolean;
+  auto_cancel_unpaid_minutes: number;
+  auto_cancel_unconfirmed_enabled: boolean;
+  auto_cancel_unconfirmed_minutes: number;
+  cancellation_cutoff_hours: number;
+  rescheduling_cutoff_hours: number;
+  max_reschedules_per_booking: number;
+  late_cancellation_allowed: boolean;
+  late_cancellation_session_action: 'CONSUME' | 'RESTORE' | 'NO_ACTION';
+  late_cancellation_fee: string | number;
+  late_cancellation_treated_as_no_show: boolean;
+  allowed_booking_types: string[];
+  require_active_membership: boolean;
+  max_upcoming_bookings: number;
+  advance_booking_days_max: number;
+  apply_to_existing_bookings?: boolean;
+  policy_effective_at?: string;
+  notify_unpaid_auto_cancellation: boolean;
+  notify_unconfirmed_auto_cancellation: boolean;
+  notify_late_cancellation: boolean;
+  notification_channels: string[];
+}
+
+export interface BookingPolicyResponse {
+  organization_id: string;
+  branch_id?: string | null;
+  is_branch_override: boolean;
+  effective_policy: BookingPolicyData;
+  saved_config?: any;
+}
+
+export async function fetchBookingPolicyApi(branchId?: string): Promise<BookingPolicyResponse> {
+  const query = branchId ? `?branch_id=${branchId}` : '';
+  const res = await api.get<BookingPolicyResponse>(`/booking-policy/${query}`);
+  return res.data;
+}
+
+export async function updateBookingPolicyApi(
+  payload: Partial<BookingPolicyData>,
+  applyToExisting: boolean = false,
+  branchId?: string
+): Promise<any> {
+  const body = {
+    ...payload,
+    apply_to_existing_bookings: applyToExisting,
+    branch_id: branchId || undefined,
+  };
+  const res = await api.post<any>('/booking-policy/', body);
+  return res.data;
+}
+
+export async function runBookingAutoCancellationApi(branchId?: string): Promise<any> {
+  const res = await api.post<any>('/booking-policy/run-auto-cancellation/', { branch_id: branchId || undefined });
+  return res.data;
+}
+
+export async function resetBranchBookingPolicyApi(branchId: string): Promise<any> {
+  const res = await api.post<any>('/booking-policy/reset-branch-override/', { branch_id: branchId });
+  return res.data;
+}
+
 // ── CUSTOM FORMS ──────────────────────────────────────────────────────
 
 export async function fetchCustomFormsApi(): Promise<CustomFormRow[]> {

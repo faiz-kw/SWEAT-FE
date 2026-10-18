@@ -96,6 +96,14 @@ export interface MobileBooking {
   };
   can_reschedule?: boolean;
   can_cancel?: boolean;
+  is_late_cancellation?: boolean;
+  cancellation_fee?: number;
+  cancellation_cutoff_hours?: number;
+  rescheduling_cutoff_hours?: number;
+  late_cancellation_session_action?: string;
+  late_cancellation_warning?: string | null;
+  reschedule_count?: number;
+  max_reschedules_per_booking?: number;
 }
 
 export interface MobilePTAppointment {

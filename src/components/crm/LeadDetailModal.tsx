@@ -844,6 +844,27 @@ export function LeadDetailModal({
     },
   });
 
+  const grantConsentMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentLead?.id) throw new Error('Lead ID is missing');
+      return await crmApi.updateLeadVoiceConsent(currentLead.id, 'GRANTED', 'STAFF_VERIFIED');
+    },
+    onSuccess: () => {
+      toast.success('Voice Calling Permission Granted', {
+        description: 'Calling permission has been confirmed for this contact.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['lead', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update calling permission', {
+        description: err.message || 'Please check staff permissions and try again.',
+      });
+    },
+  });
+
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) {
@@ -2357,8 +2378,28 @@ export function LeadDetailModal({
                           <Badge variant="outline" className={currentLead?.do_not_contact ? 'bg-rose-500/10 text-rose-500 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'}>
                             {currentLead?.do_not_contact ? 'Do Not Contact' : 'Contact Allowed'}
                           </Badge>
-                          <Badge variant="outline" className={currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
+                          <Badge
+                            variant="outline"
+                            onClick={() => {
+                              if (canEdit && !(currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice)) {
+                                grantConsentMutation.mutate();
+                              }
+                            }}
+                            className={
+                              currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice
+                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                : 'bg-muted text-muted-foreground border-border hover:border-primary/50 cursor-pointer'
+                            }
+                            title={
+                              !(currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice)
+                                ? 'Click to grant verbal/intake calling permission'
+                                : 'Calling permission verified'
+                            }
+                          >
                             Calls: {currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice ? 'Given' : 'Not Given'}
+                            {canEdit && !(currentLead?.voice_consent?.status === 'GRANTED' || currentLead?.consent_voice) && (
+                              <span className="ml-1 text-[10px] underline font-normal text-primary">Grant</span>
+                            )}
                           </Badge>
                           <Badge variant="outline" className={currentLead?.consent_whatsapp ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-muted text-muted-foreground border-border'}>
                             WhatsApp: {currentLead?.consent_whatsapp ? 'Given' : 'Not Given'}
@@ -2541,10 +2582,10 @@ export function LeadDetailModal({
                       const eventsToShow = timelineEvents.filter((evt) => {
                         if (timelineFilter === 'ALL') return true;
                         if (timelineFilter === 'STAGES') return evt.event_type === 'STATUS_CHANGE';
-                        if (timelineFilter === 'TRIALS') return evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE';
-                        if (timelineFilter === 'FOLLOWUPS') return evt.event_type === 'FOLLOWUP_TASK';
-                        if (timelineFilter === 'COMMUNICATIONS') return evt.event_type === 'COMMUNICATION' || evt.event_type === 'VOICE_CALL';
-                        if (timelineFilter === 'ACTIVITIES') return evt.event_type === 'ACTIVITY';
+                        if (timelineFilter === 'TRIALS') return evt.event_type.startsWith('TRIAL');
+                        if (timelineFilter === 'FOLLOWUPS') return evt.event_type.startsWith('FOLLOWUP');
+                        if (timelineFilter === 'COMMUNICATIONS') return evt.event_type.startsWith('COMMUNICATION') || evt.event_type === 'VOICE_CALL' || evt.event_type === 'REMINDER_CALL';
+                        if (timelineFilter === 'ACTIVITIES') return evt.event_type === 'ACTIVITY' || evt.event_type === 'LEAD_ACTIVITY' || evt.event_type === 'REMINDER_CALL';
                         if (timelineFilter === 'NOTES') return evt.event_type === 'LEAD_NOTE';
                         return true;
                       });
@@ -2575,18 +2616,33 @@ export function LeadDetailModal({
                             } else if (evt.event_type === 'ATTRIBUTION_CAPTURED') {
                               IconComponent = Share2;
                               iconBg = 'bg-purple-500/10 text-purple-500';
-                            } else if (evt.event_type === 'TRIAL_BOOKED' || evt.event_type === 'TRIAL_STATUS_CHANGE') {
+                            } else if (evt.event_type === 'TRIAL_ATTENDED') {
+                              IconComponent = CheckCircle2;
+                              iconBg = 'bg-teal-500/10 text-teal-500';
+                            } else if (evt.event_type === 'TRIAL_NO_SHOW') {
+                              IconComponent = AlertCircle;
+                              iconBg = 'bg-rose-500/10 text-rose-500';
+                            } else if (evt.event_type === 'TRIAL_CANCELLED') {
+                              IconComponent = XCircle;
+                              iconBg = 'bg-rose-500/10 text-rose-500';
+                            } else if (evt.event_type === 'TRIAL_RESCHEDULED') {
+                              IconComponent = Calendar;
+                              iconBg = 'bg-amber-500/10 text-amber-500';
+                            } else if (evt.event_type.startsWith('TRIAL')) {
                               IconComponent = Calendar;
                               iconBg = 'bg-teal-500/10 text-teal-500';
                             } else if (evt.event_type === 'LEAD_NOTE') {
                               IconComponent = MessageSquare;
                               iconBg = 'bg-emerald-500/10 text-emerald-500';
-                            } else if (evt.event_type === 'FOLLOWUP_TASK') {
+                            } else if (evt.event_type === 'FOLLOWUP_TASK' || evt.event_type.startsWith('FOLLOWUP')) {
                               IconComponent = CheckSquare;
                               iconBg = 'bg-cyan-500/10 text-cyan-500';
-                            } else if (evt.event_type === 'COMMUNICATION') {
+                            } else if (evt.event_type.startsWith('COMMUNICATION')) {
                               IconComponent = Send;
                               iconBg = 'bg-violet-500/10 text-violet-500';
+                            } else if (evt.event_type === 'REMINDER_CALL') {
+                              IconComponent = PhoneCall;
+                              iconBg = 'bg-amber-500/10 text-amber-500';
                             } else if (evt.event_type === 'VOICE_CALL') {
                               IconComponent = PhoneCall;
                               iconBg = 'bg-emerald-500/10 text-emerald-500';
@@ -4163,6 +4219,25 @@ export function LeadDetailModal({
                         ? 'We cannot verify calling permission right now. Ask the person for permission before calling.'
                         : 'This person has not given permission for AI phone calls. Ask the person for permission before calling.'}
                     </p>
+                    {canEdit && !isDnc && vcStatus !== 'WITHDRAWN' && (
+                      <div className="pt-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => grantConsentMutation.mutate()}
+                          disabled={grantConsentMutation.isPending}
+                          className="h-7 text-xs border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-100 font-semibold gap-1.5"
+                        >
+                          {grantConsentMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Shield className="w-3 h-3 text-amber-600" />
+                          )}
+                          Grant Calling Permission (Verbal / Intake)
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">

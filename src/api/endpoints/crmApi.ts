@@ -329,6 +329,20 @@ export const crmApi = {
     return res.data;
   },
 
+  updateLeadVoiceConsent: async (
+    leadId: string,
+    status: 'GRANTED' | 'WITHDRAWN' = 'GRANTED',
+    source = 'STAFF_VERIFIED',
+    notes?: string
+  ): Promise<{ status: string; is_eligible: boolean; message: string; voice_consent: any }> => {
+    const res = await api.post(`/tenant/leads/${leadId}/voice-consent/`, {
+      status,
+      source,
+      notes,
+    });
+    return res.data;
+  },
+
 
   getLeadSources: async (params?: { active_only?: boolean; status?: string }): Promise<LeadSource[]> => {
     const query = new URLSearchParams();

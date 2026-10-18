@@ -419,6 +419,17 @@ function WebMemberPortalWorkspaceInner() {
               designation: b.trainer?.title || "Coach",
             },
           }));
+          const waitlisted = (raw.waitlisted || []).map((b: any) => ({
+            ...b,
+            start_time: b.start_at || b.start_time,
+            end_time: b.end_at || b.end_time,
+            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "SWEAT Studio" },
+            trainer: {
+              name: b.trainer?.name || b.trainer_name || "SWEAT Coach",
+              avatar_url: b.trainer?.avatar_url || "",
+              designation: b.trainer?.title || "Coach",
+            },
+          }));
           const past = (raw.past || []).map((b: any) => ({
             ...b,
             start_time: b.start_at || b.start_time,
@@ -430,7 +441,7 @@ function WebMemberPortalWorkspaceInner() {
               designation: b.trainer?.title || "Coach",
             },
           }));
-          list = [...upcoming, ...past];
+          list = [...upcoming, ...waitlisted, ...past];
         }
         setBookings(list);
       }
@@ -934,12 +945,16 @@ function WebMemberPortalWorkspaceInner() {
     if (!cancelBookingTarget) return;
     setIsCancellingSubmitting(true);
     try {
-      await mobileApi.cancelBooking(cancelBookingTarget.id);
-      toast.success("Booking cancelled successfully.");
+      const res = await mobileApi.cancelBooking(cancelBookingTarget.id);
+      if (res.data?.refunded) {
+        toast.success("Booking cancelled. 1 session credit refunded to your passbook.");
+      } else {
+        toast.warning(res.data?.detail || "Booking cancelled. Session credit forfeited per gym policy.");
+      }
       setCancelBookingTarget(null);
       void fetchAllData(false);
     } catch (err: any) {
-      toast.error(err?.data?.detail || "Failed to cancel booking.");
+      toast.error(err?.data?.detail || err?.message || "Failed to cancel booking.");
     } finally {
       setIsCancellingSubmitting(false);
     }
@@ -3357,6 +3372,23 @@ function WebMemberPortalWorkspaceInner() {
                 </p>
               </div>
 
+              {rescheduleBookingTarget.can_reschedule === false ? (
+                <div className="p-3 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>Rescheduling Window Closed</span>
+                  </div>
+                  <p className="text-muted-foreground">
+                    Per gym policy, bookings cannot be rescheduled within {rescheduleBookingTarget.rescheduling_cutoff_hours || 2} hours of start time.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg border border-primary/20 bg-primary/5 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>Rescheduling is permitted up to {rescheduleBookingTarget.rescheduling_cutoff_hours || 2} hours before start time.</span>
+                </div>
+              )}
+
               <div>
                 <Label className="text-xs font-semibold mb-2 block">
                   Select New Slot on Today&apos;s / Upcoming Schedule:
@@ -3420,7 +3452,7 @@ function WebMemberPortalWorkspaceInner() {
             </Button>
             <Button
               size="sm"
-              disabled={isReschedulingSubmitting || !rescheduleNewOccurrenceId}
+              disabled={isReschedulingSubmitting || !rescheduleNewOccurrenceId || rescheduleBookingTarget?.can_reschedule === false}
               onClick={handleConfirmReschedule}
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
             >
@@ -3441,7 +3473,9 @@ function WebMemberPortalWorkspaceInner() {
               Cancel Booking Reservation
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Are you sure you want to cancel this booking? 1 session credit will be refunded to your passbook.
+              {cancelBookingTarget?.is_late_cancellation
+                ? "This booking is within the late cancellation window. Review policy details below."
+                : "Are you sure you want to cancel this booking? 1 session credit will be refunded to your passbook."}
             </DialogDescription>
           </DialogHeader>
 
@@ -3453,6 +3487,33 @@ function WebMemberPortalWorkspaceInner() {
                   {safeFormatDate(cancelBookingTarget.start_time, "EEEE, MMM dd · hh:mm a")}
                 </p>
               </div>
+
+              {cancelBookingTarget.is_late_cancellation ? (
+                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>Late Cancellation Policy Active</span>
+                  </div>
+                  <p className="text-muted-foreground">
+                    Cancellations made less than {cancelBookingTarget.cancellation_cutoff_hours || 2} hours before start time are treated as late cancellations.
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {cancelBookingTarget.late_cancellation_session_action === 'CONSUME'
+                      ? "⚠️ 1 session credit will be forfeited per gym policy."
+                      : "✓ Your session credit will be restored to your passbook."}
+                  </p>
+                  {Number(cancelBookingTarget.cancellation_fee || 0) > 0 && (
+                    <p className="text-destructive font-medium">
+                      A late penalty fee of ₹{cancelBookingTarget.cancellation_fee} will apply.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <span>Eligible for full session refund. 1 credit will return to your passbook immediately.</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -3472,7 +3533,11 @@ function WebMemberPortalWorkspaceInner() {
               onClick={handleConfirmCancelBooking}
               className="text-xs font-semibold"
             >
-              {isCancellingSubmitting ? "Cancelling..." : "Yes, Cancel & Refund Credit"}
+              {isCancellingSubmitting
+                ? "Cancelling..."
+                : cancelBookingTarget?.is_late_cancellation && cancelBookingTarget?.late_cancellation_session_action === 'CONSUME'
+                ? "Yes, Cancel (Credit Forfeited)"
+                : "Yes, Cancel & Refund Credit"}
             </Button>
           </DialogFooter>
         </DialogContent>

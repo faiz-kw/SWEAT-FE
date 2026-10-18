@@ -773,7 +773,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               {booking.user_profile_name || 'Member'}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              {booking.user_profile_email || ''}
+                              {booking.user_profile_email || (booking as any).user_profile_phone || (booking as any).phone || ''}
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
