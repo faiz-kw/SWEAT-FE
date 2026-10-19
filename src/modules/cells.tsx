@@ -1,3 +1,4 @@
+import { ImageIcon, Video } from "lucide-react";
 import { StatusBadge } from "@/components/enterprise/StatusBadge";
 import { dateTime, inr, shortDate } from "@/components/enterprise/format";
 import type { Field } from "@/modules/schema";
@@ -23,6 +24,35 @@ export function formatCell(field: Field, value: unknown): React.ReactNode {
       return <StatusBadge value={value ? "Yes" : "No"} />;
     case "enum":
       return STATUSY.test(field.key) ? <StatusBadge value={String(value)} /> : String(value);
+    case "image":
+      return (
+        <div className="flex items-center gap-2">
+          {String(value).startsWith("data:") || String(value).startsWith("http") ? (
+            <img
+              src={String(value)}
+              alt=""
+              className="h-6 w-6 rounded object-cover border border-border"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          <span className="truncate max-w-[120px] text-xs text-muted-foreground">
+            {String(value).startsWith("data:") ? "Image file" : String(value)}
+          </span>
+        </div>
+      );
+    case "video":
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-primary font-medium">
+          <Video className="h-3.5 w-3.5" />
+          <span className="truncate max-w-[120px]">
+            {String(value).startsWith("data:") ? "Video file" : String(value)}
+          </span>
+        </span>
+      );
     default:
       return String(value);
   }

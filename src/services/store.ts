@@ -142,6 +142,7 @@ import {
   createNutritionPlanApi,
   createPaymentApi,
   createPlanApi,
+  createProductApi,
   createProgramApi,
   createTrainerApi,
   deleteAssessmentApi,
@@ -155,6 +156,7 @@ import {
   deleteNutritionPlanApi,
   deletePaymentApi,
   deletePlanApi,
+  deleteProductApi,
   deleteProgramApi,
   deleteTrainerApi,
   fetchAssessments,
@@ -169,6 +171,7 @@ import {
   fetchNutritionPlans,
   fetchPayments,
   fetchPlans,
+  fetchProducts,
   fetchPrograms,
   fetchTrainers,
   updateAssessmentApi,
@@ -182,6 +185,7 @@ import {
   updateNutritionPlanApi,
   updatePaymentApi,
   updatePlanApi,
+  updateProductApi,
   updateProgramApi,
   updateTrainerApi,
 } from "../api/endpoints/api-modules";
@@ -321,7 +325,7 @@ export function createRecord(key: CollectionKey, values: Record<string, unknown>
         console.error("Failed to create nutrition plan on backend:", err);
       });
   } else if (key === "products") {
-    createFoodItemApi(values)
+    createProductApi(values)
       .then((created) => {
         const idx = rows.findIndex((r) => r.id === row.id);
         if (idx !== -1) {
@@ -330,7 +334,7 @@ export function createRecord(key: CollectionKey, values: Record<string, unknown>
         }
       })
       .catch((err) => {
-        console.error("Failed to create food item on backend:", err);
+        console.error("Failed to create product on backend:", err);
       });
   } else if (key === "invoices") {
     createInvoiceApi(values)
@@ -416,8 +420,8 @@ export function updateRecord(key: CollectionKey, id: string, values: Record<stri
       console.error("Failed to update nutrition plan on backend:", err);
     });
   } else if (key === "products") {
-    updateFoodItemApi(id, values).catch((err) => {
-      console.error("Failed to update food item on backend:", err);
+    updateProductApi(id, values).catch((err) => {
+      console.error("Failed to update product on backend:", err);
     });
   } else if (key === "invoices") {
     updateInvoiceApi(id, values).catch((err) => {
@@ -498,8 +502,8 @@ export function deleteRecords(key: CollectionKey, ids: string[]) {
     }
   } else if (key === "products") {
     for (const id of ids) {
-      deleteFoodItemApi(id).catch((err) => {
-        console.error("Failed to delete food item on backend:", err);
+      deleteProductApi(id).catch((err) => {
+        console.error("Failed to delete product on backend:", err);
       });
     }
   } else if (key === "invoices") {
@@ -579,9 +583,9 @@ export function loadCollection(key: CollectionKey, locationId?: string) {
       })
       .catch(() => {});
   } else if (key === "products") {
-    fetchFoodDatabase()
+    fetchProducts(locationId)
       .then((rows) => {
-        setCollectionRows("products", rows);
+        if (rows.length > 0) setCollectionRows("products", rows);
       })
       .catch(() => {});
   } else if (key === "invoices") {

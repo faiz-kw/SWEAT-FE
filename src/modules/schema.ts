@@ -1,6 +1,6 @@
 import type { Row } from "@/services/store";
 
-export type FieldType = "text" | "textarea" | "number" | "currency" | "percent" | "date" | "datetime" | "boolean" | "enum";
+export type FieldType = "text" | "textarea" | "number" | "currency" | "percent" | "date" | "datetime" | "boolean" | "enum" | "image" | "video";
 
 export interface Field {
   key: string;
@@ -131,12 +131,16 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
   ],
   products: [
     { key: "name", label: "Product Name", type: "text", required: true },
-    { key: "category", label: "Category", type: "enum", options: ["Supplements", "Apparel", "Equipment", "Beverages", "Snacks"] },
-    { key: "sku", label: "SKU", type: "text" },
-    { key: "price", label: "Retail Price", type: "currency" },
+    { key: "category", label: "Category", type: "enum", options: ["Supplements", "Apparel", "Accessories", "Equipment", "Beverages", "Digital Guides", "Snacks"] },
+    { key: "productType", label: "Product Type", type: "enum", options: ["Physical Goods", "Digital Download", "Supplement / Nutrition"] },
+    { key: "sku", label: "SKU / Code", type: "text" },
+    { key: "price", label: "Retail Price", type: "currency", required: true },
     { key: "cost", label: "Cost Price", type: "currency" },
     { key: "stock", label: "Current Stock", type: "number" },
-    { key: "status", label: "Status", type: "enum", options: ["In Stock", "Low Stock", "Out of Stock"] },
+    { key: "imageUrl", label: "Product Image", type: "image" },
+    { key: "videoUrl", label: "Product Video", type: "video" },
+    { key: "description", label: "Description", type: "textarea" },
+    { key: "status", label: "Status", type: "enum", options: ["In Stock", "Low Stock", "Out of Stock", "Discontinued"] },
   ],
   assessments: [
     { key: "member", label: "Member", type: "text", required: true },

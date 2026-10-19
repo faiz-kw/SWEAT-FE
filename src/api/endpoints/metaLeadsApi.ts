@@ -57,7 +57,7 @@ export type MetaMapping = {
   fallback_branch?: string | null;
   lead_source: string;
   initial_stage?: string;
-  repeat_policy: 'REVIEW' | 'CREATE_NEW';
+  repeat_policy: 'REVIEW' | 'CREATE_NEW' | 'UPDATE_EXISTING';
   assignment_mode?: 'TENANT_POLICY' | 'SPECIFIC_USER';
   assigned_sales_user?: string | null;
   create_followup_task?: boolean;

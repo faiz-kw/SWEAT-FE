@@ -963,6 +963,104 @@ export async function deleteFoodItemApi(_id: string): Promise<void> {
   return;
 }
 
+// ── 11B. RETAIL PRODUCTS & PRO SHOP INVENTORY ─────────────────────────
+
+export function normalizeProduct(item: any): Row {
+  let images: string[] = [];
+  if (Array.isArray(item.images)) {
+    images = item.images.filter(Boolean);
+  } else if (Array.isArray(item.imageUrl)) {
+    images = item.imageUrl.filter(Boolean);
+  } else if (item.image_url) {
+    images = [item.image_url];
+  } else if (item.imageUrl) {
+    images = [item.imageUrl];
+  }
+
+  const primaryImage = images[0] || item.image_url || item.imageUrl || item.image || "";
+
+  return {
+    ...item,
+    id: String(item.id ?? `PROD-${Date.now()}`),
+    name: item.name || item.title || "New Product",
+    category: item.category || "Supplements",
+    productType: item.productType || item.product_type || "Physical Goods",
+    sku: item.sku || `SKU-${String(item.id ?? Date.now()).slice(-4)}`,
+    price: item.price !== undefined ? Number(item.price) : 0,
+    cost: item.cost !== undefined ? Number(item.cost) : (item.cost_price !== undefined ? Number(item.cost_price) : 0),
+    stock: item.stock !== undefined ? Number(item.stock) : (item.stock_quantity !== undefined ? Number(item.stock_quantity) : (item.quantity_on_hand !== undefined ? Number(item.quantity_on_hand) : 20)),
+    imageUrl: images.length > 1 ? images : primaryImage,
+    primaryImageUrl: primaryImage,
+    images: images,
+    videoUrl: item.videoUrl || item.video_url || item.video || "",
+    description: item.description || "",
+    status: item.status || (Number(item.stock ?? 20) > 0 ? "In Stock" : "Out of Stock"),
+  };
+}
+
+export async function fetchProducts(locationId?: string): Promise<Row[]> {
+  try {
+    const params = new URLSearchParams();
+    if (locationId && locationId !== "all") params.set("branch", locationId);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await api.get<any>(`/tenant/products/${query}`);
+    const list = extractList(res.data);
+    if (list.length > 0) return list.map(normalizeProduct);
+  } catch {
+    // Graceful fallback to local in-memory store
+  }
+  return [];
+}
+
+export async function createProductApi(values: Record<string, unknown>): Promise<Row> {
+  const norm = normalizeProduct({ id: `PROD-${Date.now()}`, ...values });
+  try {
+    const payload: Record<string, unknown> = {
+      name: norm.name,
+      category: norm.category,
+      product_type: norm.productType,
+      sku: norm.sku,
+      price: norm.price,
+      cost_price: norm.cost,
+      stock_quantity: norm.stock,
+      image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
+      images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
+      video_url: norm.videoUrl,
+      description: norm.description,
+      status: norm.status,
+    };
+    const res = await api.post<any>("/tenant/products/", payload);
+    return normalizeProduct(res.data);
+  } catch {
+    return norm;
+  }
+}
+
+export async function updateProductApi(id: string, values: Record<string, unknown>): Promise<Row> {
+  const norm = normalizeProduct({ id, ...values });
+  try {
+    const payload: Record<string, unknown> = {
+      ...values,
+      image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
+      images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
+      video_url: norm.videoUrl,
+    };
+    const res = await api.patch<any>(`/tenant/products/${id}/`, payload);
+    return normalizeProduct(res.data);
+  } catch {
+    return norm;
+  }
+}
+
+export async function deleteProductApi(id: string): Promise<void> {
+  try {
+    await api.delete(`/tenant/products/${id}/`);
+  } catch {
+    // Fallback
+  }
+}
+
+
 // ── 12. FINANCE & INVOICES ───────────────────────────────────────────
 
 export function normalizeInvoice(item: any): Row {

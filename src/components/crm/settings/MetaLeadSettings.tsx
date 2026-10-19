@@ -2392,6 +2392,7 @@ function MappingEditor({
               value={repeatPolicy}
               onChange={(e) => setRepeatPolicy(e.target.value as MetaMapping['repeat_policy'])}
             >
+              <option value="UPDATE_EXISTING">Update existing lead & log activity in timeline</option>
               <option value="REVIEW">Hold repeat enquiries for review</option>
               <option value="CREATE_NEW">Create a new enquiry</option>
             </select>
