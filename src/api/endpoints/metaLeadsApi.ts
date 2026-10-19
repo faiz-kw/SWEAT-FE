@@ -49,7 +49,7 @@ export type MetaMapping = {
   version: number;
   field_mappings: Record<string, string>;
   field_defaults?: Record<string, string>;
-  branch_mode: 'FIXED' | 'ANSWER';
+  branch_mode: 'FIXED' | 'ANSWER' | 'ALL';
   branch: string | null;
   branch_field: string;
   branch_answers: Record<string, string>;

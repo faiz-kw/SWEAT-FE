@@ -319,7 +319,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
       );
       const pageName = (matchedPage?.page_name || matchedPage?.name || '')?.toLowerCase();
       const branchName =
-        m.branch_mode === 'FIXED'
+        m.branch_mode === 'ALL'
+          ? 'all branches'
+          : m.branch_mode === 'FIXED'
           ? meta.branches.find((b) => b.id === m.branch)?.name?.toLowerCase() || ''
           : '';
       const matches =
@@ -758,7 +760,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               );
               const pageName = matchedPage?.page_name || matchedPage?.name;
               const branchName =
-                mapping.branch_mode === 'FIXED'
+                mapping.branch_mode === 'ALL'
+                  ? 'All branches (Organization-wide)'
+                  : mapping.branch_mode === 'FIXED'
                   ? meta.branches.find((b) => b.id === mapping.branch)?.name || 'Default branch'
                   : 'Route based on form answer';
               const assignedUser = meta.eligible_users?.find((u) => u.id === mapping.assigned_sales_user)?.name;
@@ -1055,7 +1059,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               );
               const formDisplayName = matchingMapping?.name || `Form ${item.form_id}`;
               const branchDisplayName =
-                matchingMapping?.branch_mode === 'FIXED'
+                matchingMapping?.branch_mode === 'ALL'
+                  ? 'All branches'
+                  : matchingMapping?.branch_mode === 'FIXED'
                   ? meta.branches.find((b) => b.id === matchingMapping.branch)?.name
                   : null;
 
@@ -1576,7 +1582,7 @@ function MappingEditor({
   });
 
   // Section 3: Branch & Salesperson
-  const [branchMode, setBranchMode] = React.useState<'FIXED' | 'ANSWER'>(mapping?.branch_mode || 'FIXED');
+  const [branchMode, setBranchMode] = React.useState<'FIXED' | 'ANSWER' | 'ALL'>(mapping?.branch_mode || 'ALL');
   const [branch, setBranch] = React.useState(mapping?.branch || metadata.branches[0]?.id || '');
   const [branchField, setBranchField] = React.useState(mapping?.branch_field || '');
   const [routes, setRoutes] = React.useState<{ answer: string; branchId: string }[]>(() => {
@@ -1785,7 +1791,9 @@ function MappingEditor({
     'this form';
 
   const selectedBranchLabel =
-    branchMode === 'FIXED'
+    branchMode === 'ALL'
+      ? 'all branches (organization-wide)'
+      : branchMode === 'FIXED'
       ? metadata.branches.find((b) => b.id === branch)?.name || 'the selected branch'
       : 'branches routed by question answer';
 
@@ -2182,14 +2190,19 @@ function MappingEditor({
             <select
               className={controlClass}
               value={branchMode}
-              onChange={(e) => setBranchMode(e.target.value as 'FIXED' | 'ANSWER')}
+              onChange={(e) => setBranchMode(e.target.value as 'FIXED' | 'ANSWER' | 'ALL')}
             >
+              <option value="ALL">All branches (Organization-wide)</option>
               <option value="FIXED">Send all leads to one branch</option>
               <option value="ANSWER">Route based on form answer (e.g. preferred location)</option>
             </select>
           </label>
 
-          {branchMode === 'FIXED' ? (
+          {branchMode === 'ALL' ? (
+            <div className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              <span>Leads from this form will belong to the entire organization and reflect across all branches in the CRM.</span>
+            </div>
+          ) : branchMode === 'FIXED' ? (
             <label className={labelClass}>
               <span>Destination branch:</span>
               <select
