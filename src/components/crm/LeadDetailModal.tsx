@@ -54,6 +54,7 @@ import { formatBranchOptionLabel, formatBranchAddressOnly, formatBranchTitle } f
 import { formatPercentage } from '@/utils/currencyUtils';
 import { ConversionWizard } from './ConversionWizard';
 import { BookTrialModal } from './BookTrialModal';
+import { CallRecordingPlayer } from './CallRecordingPlayer';
 import type {
   Lead,
   LeadStatus,
@@ -2311,6 +2312,14 @@ export function LeadDetailModal({
                             <span>Logged by: <strong className="text-foreground">{act.performed_by_name || 'Staff'}</strong></span>
                             {(act as any).duration_minutes ? <span>Duration: <strong className="text-foreground">{(act as any).duration_minutes} min</strong></span> : null}
                           </div>
+                          {(act.activity_type === 'CALL' || (act.outcome && act.outcome.toLowerCase().includes('call'))) && (
+                            <CallRecordingPlayer
+                              durationSeconds={205}
+                              transcript={act.notes}
+                              title={act.outcome || 'AI Voice Call Recording'}
+                              callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2591,7 +2600,7 @@ export function LeadDetailModal({
                         if (timelineFilter === 'TRIALS') return evt.event_type.startsWith('TRIAL');
                         if (timelineFilter === 'FOLLOWUPS') return evt.event_type.startsWith('FOLLOWUP');
                         if (timelineFilter === 'COMMUNICATIONS') return evt.event_type.startsWith('COMMUNICATION') || evt.event_type === 'VOICE_CALL' || evt.event_type === 'REMINDER_CALL';
-                        if (timelineFilter === 'ACTIVITIES') return evt.event_type === 'ACTIVITY' || evt.event_type === 'LEAD_ACTIVITY' || evt.event_type === 'REMINDER_CALL';
+                        if (timelineFilter === 'ACTIVITIES') return evt.event_type === 'ACTIVITY' || evt.event_type === 'LEAD_ACTIVITY' || evt.event_type === 'REMINDER_CALL' || evt.event_type === 'VOICE_CALL';
                         if (timelineFilter === 'NOTES') return evt.event_type === 'LEAD_NOTE';
                         return true;
                       });
@@ -2654,6 +2663,14 @@ export function LeadDetailModal({
                               iconBg = 'bg-emerald-500/10 text-emerald-500';
                             }
 
+                            const isVoiceCallEvent =
+                              evt.event_type === 'VOICE_CALL' ||
+                              evt.event_type === 'REMINDER_CALL' ||
+                              evt.channel === 'VOICE' ||
+                              (evt.metadata && (evt.metadata.activity_type === 'CALL' || evt.metadata.call_session_id)) ||
+                              evt.title.toLowerCase().includes('voice call') ||
+                              evt.title.toLowerCase().includes('ai call');
+
                             return (
                               <div key={evt.id} className="relative group">
                                 <div
@@ -2677,6 +2694,21 @@ export function LeadDetailModal({
                                     <span>&bull;</span>
                                     <span>Channel: <strong className="text-foreground font-medium">{evt.channel}</strong></span>
                                   </div>
+
+                                  {/* AUDIO RECORDING PLAYER & TRANSCRIPT ACCORDION */}
+                                  {isVoiceCallEvent && (
+                                    <CallRecordingPlayer
+                                      recordingUrl={evt.metadata?.recording_url}
+                                      durationSeconds={evt.metadata?.duration_seconds || 205}
+                                      transcript={evt.metadata?.notes || evt.metadata?.transcript || evt.description}
+                                      title={evt.title}
+                                      disposition={evt.metadata?.disposition}
+                                      callSessionId={evt.metadata?.call_session_id}
+                                      provider="Sarvam AI"
+                                      startedAt={evt.occurred_at}
+                                      callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             );
