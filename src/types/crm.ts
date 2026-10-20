@@ -335,6 +335,8 @@ export interface CreateLeadPayload {
   billing_name?: string | null;
   gst_number?: string | null;
   pan_number?: string | null;
+  trigger_ai_call?: boolean;
+  consent_voice?: boolean;
   attribution?: {
     lead_source_id?: string | null;
     platform?: string | null;

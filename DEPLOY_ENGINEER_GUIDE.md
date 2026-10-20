@@ -1,4 +1,4 @@
-﻿# SWEAT / PerformanceOS — Deployment Engineer Seed & Setup Runbook
+# SWEAT / PerformanceOS — Deployment Engineer Seed & Setup Runbook
 
 > **Target Audience:** DevOps / SRE / Cloud Deployment Engineers  
 > **Platform Version:** Enterprise Multi-Tenant (Phase 1 Layer 1)  
@@ -44,10 +44,10 @@ Save these initial credentials securely for deployment sign-off:
 | Portal / Role | Email / Identifier | Initial Password | Tenant Slug | Destination URL |
 | :--- | :--- | :--- | :--- | :--- |
 | **Platform Superadmin** *(Master Control Plane)* | `admin.local@platform.local` | `PlatformAdmin@123!` | *N/A (Global)* | `http://<domain>:8000/admin/` |
-| **Tenant Administrator** *(Org Managing Director)* | `admin@sweat.com` | `SweatAdmin@123!` | `sweat` | `http://<domain>:5173/login` |
-| **Front Desk Staff** | `frontdesk@sweat.com` | `FrontDesk@123!` | `sweat` | `http://<domain>:5173/login` |
-| **Sales & CRM Representative** | `sales@sweat.com` | `SalesRep@123!` | `sweat` | `http://<domain>:5173/login` |
-| **Fitness Trainer / Head Coach** | `trainer@sweat.com` | `Trainer@123!` | `sweat` | `http://<domain>:5173/login` |
+| **Tenant Administrator** *(Org Managing Director)* | `admin@sweat.com` | `Sweat@2026!` | `sweat` | `http://<domain>:5173/login` |
+| **Front Desk Staff** | `frontdesk@sweat.com` | `Sweat@2026!` | `sweat` | `http://<domain>:5173/login` |
+| **Sales & CRM Representative** | `sales@sweat.com` | `Sweat@2026!` | `sweat` | `http://<domain>:5173/login` |
+| **Fitness Trainer / Head Coach** | `trainer@sweat.com` | `Sweat@2026!` | `sweat` | `http://<domain>:5173/login` |
 
 ---
 
@@ -74,7 +74,7 @@ python manage.py seed_deployment \
 | `--tenant-name` | `SWEAT` | Commercial gym brand name |
 | `--tenant-slug` | `sweat` | Tenant identifier slug for routing & subdomain |
 | `--admin-email` | `admin@sweat.com` | Primary Tenant Administrator email |
-| `--admin-password` | `SweatAdmin@123!` | Primary Tenant Administrator password |
+| `--admin-password` | `Sweat@2026!` | Primary Tenant Administrator password |
 | `--reset-passwords` | `True` | Forces password synchronization for seeded accounts |
 | `--skip-packages` | `False` | Skips seeding starter programs & membership packages |
 
@@ -142,7 +142,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/auth/login/ \
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/auth/login/ \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@sweat.com", "password": "SweatAdmin@123!", "tenant_slug": "sweat"}'
+  -d '{"email": "admin@sweat.com", "password": "Sweat@2026!", "tenant_slug": "sweat"}'
 ```
 *Expected response: HTTP 200 with JWT tokens, tenant details, and `user_type: "tenant"`.*
 

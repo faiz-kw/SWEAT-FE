@@ -22,6 +22,9 @@ import {
   X,
   Share2,
   Sparkles,
+  Bot,
+  PhoneCall,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -112,6 +115,9 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   const [attrAdName, setAttrAdName] = React.useState('');
   const [attrFormName, setAttrFormName] = React.useState('');
   const [attrExternalLeadId, setAttrExternalLeadId] = React.useState('');
+
+  // AI Voice Calling Consent & Auto-trigger
+  const [triggerAiCall, setTriggerAiCall] = React.useState(true);
 
   // Validation feedback
   const [formErrors, setFormErrors] = React.useState<LeadFormErrors>({});
@@ -360,6 +366,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     setAttrAdName('');
     setAttrFormName('');
     setAttrExternalLeadId('');
+    setTriggerAiCall(true);
     setFormErrors({});
     setDuplicateMatches([]);
   };
@@ -498,6 +505,8 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       billing_name: billingName.trim() || null,
       gst_number: finalGst || null,
       pan_number: finalPan || null,
+      trigger_ai_call: triggerAiCall,
+      consent_voice: triggerAiCall,
     };
 
     createMutation.mutate(payload);
@@ -1267,6 +1276,45 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                       )}
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION: AI VOICE CALLING & AUTOMATION */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-foreground">Sarvam AI Automated Call</h4>
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                        Real-time AI Calling
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      AI agent (Mahek) will automatically explain programs, branches, and class timings, and book their trial session.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                  <input
+                    type="checkbox"
+                    checked={triggerAiCall}
+                    onChange={(e) => setTriggerAiCall(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {triggerAiCall && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 rounded-md px-2.5 py-1.5 border border-emerald-500/20">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Voice calling permission verified on intake. Outbound call will trigger automatically between 09:00–21:00 IST.</span>
                 </div>
               )}
             </div>
