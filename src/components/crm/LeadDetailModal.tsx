@@ -883,6 +883,8 @@ export function LeadDetailModal({
       last_name: lastName.trim(),
       email_normalized: email.trim() || null,
       phone_normalized: phone.trim() || null,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
       gender: gender || null,
       date_of_birth: dateOfBirth || null,
       country: country || null,

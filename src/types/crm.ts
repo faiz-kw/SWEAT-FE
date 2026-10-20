@@ -318,6 +318,8 @@ export interface CreateLeadPayload {
   last_name: string;
   phone_normalized?: string | null;
   email_normalized?: string | null;
+  phone?: string | null;
+  email?: string | null;
   assignment_mode?: 'MANUAL' | 'AUTO';
   gender?: string | null;
   date_of_birth?: string | null;

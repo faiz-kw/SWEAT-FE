@@ -481,6 +481,8 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
       last_name: lastName.trim() || '',
       email_normalized: email.trim().toLowerCase(),
       phone_normalized: canonicalPhone,
+      email: email.trim().toLowerCase(),
+      phone: canonicalPhone,
       assignment_mode: effectiveAssignmentMode,
       gender: gender || null,
       date_of_birth: dateOfBirth || null,
