@@ -150,19 +150,73 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
     return [];
   }, [transcript, extractedSummary]);
 
+  // Resolve effective audio playback URL
+  const resolvedAudioUrl = React.useMemo(() => {
+    let raw = recordingUrl;
+    if (!raw && callSessionId) {
+      raw = `/api/v1/voice-agent/recordings/${callSessionId}/audio.wav`;
+    }
+    if (!raw) return null;
+    if (raw.endsWith('/audio/')) {
+      raw = raw.replace(/\/audio\/$/, '/audio.wav');
+    }
+    return raw;
+  }, [recordingUrl, callSessionId]);
+
+  // Ensure audio element loads source whenever resolvedAudioUrl changes
+  React.useEffect(() => {
+    if (audioRef.current && resolvedAudioUrl) {
+      try {
+        audioRef.current.load();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [resolvedAudioUrl]);
+
   // Handle HTML5 audio playback or simulation
-  const handleTogglePlay = () => {
-    if (recordingUrl && audioRef.current) {
+  const handleTogglePlay = async () => {
+    if (resolvedAudioUrl) {
+      let audio = audioRef.current;
+      if (!audio) {
+        audio = new Audio(resolvedAudioUrl);
+        audioRef.current = audio;
+      }
+
       if (isPlaying) {
-        audioRef.current.pause();
+        audio.pause();
         setIsPlaying(false);
       } else {
-        audioRef.current.play().then(() => {
+        try {
+          audio.playbackRate = playbackRate;
+          audio.muted = isMuted;
+          if (audio.readyState === 0 || audio.error) {
+            audio.load();
+          }
+          await audio.play();
           setIsPlaying(true);
-        }).catch((err) => {
-          console.warn('Could not play audio:', err);
-          setIsPlaying(false);
-        });
+        } catch (err: any) {
+          console.warn('Primary audio play failed, falling back to standalone Audio instance:', err);
+          try {
+            const fallbackAudio = new Audio(resolvedAudioUrl);
+            fallbackAudio.playbackRate = playbackRate;
+            fallbackAudio.muted = isMuted;
+            fallbackAudio.ontimeupdate = () => {
+              setCurrentTime(fallbackAudio.currentTime);
+            };
+            fallbackAudio.onended = () => {
+              setIsPlaying(false);
+              setCurrentTime(0);
+            };
+            await fallbackAudio.play();
+            audioRef.current = fallbackAudio;
+            setIsPlaying(true);
+          } catch (retryErr: any) {
+            console.error('All audio playback attempts failed:', retryErr);
+            toast.error('Unable to play audio: ' + (retryErr.message || err.message));
+            setIsPlaying(false);
+          }
+        }
       }
       return;
     }
@@ -206,7 +260,7 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setCurrentTime(val);
-    if (recordingUrl && audioRef.current) {
+    if (resolvedAudioUrl && audioRef.current) {
       audioRef.current.currentTime = val;
     }
   };
@@ -254,14 +308,16 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
       )}
     >
       {/* Audio Element if URL available */}
-      {recordingUrl && (
+      {resolvedAudioUrl && (
         <audio
           ref={audioRef}
-          src={recordingUrl}
+          src={resolvedAudioUrl}
           onTimeUpdate={handleAudioTimeUpdate}
           onEnded={handleAudioEnded}
-          preload="metadata"
-        />
+          preload="auto"
+        >
+          <source src={resolvedAudioUrl} type="audio/wav" />
+        </audio>
       )}
 
       {/* Top Header / Metadata Bar */}
@@ -299,10 +355,10 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
 
         {/* Action Pills */}
         <div className="flex items-center gap-1.5">
-          {recordingUrl && (
+          {resolvedAudioUrl && (
             <a
-              href={recordingUrl}
-              download="call_recording.mp3"
+              href={resolvedAudioUrl}
+              download={`call_${callSessionId || 'recording'}.wav`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border/60 hover:bg-accent text-[11px] text-muted-foreground hover:text-foreground transition-colors"

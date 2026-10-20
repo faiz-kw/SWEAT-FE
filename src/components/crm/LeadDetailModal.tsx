@@ -2314,8 +2314,11 @@ export function LeadDetailModal({
                           </div>
                           {(act.activity_type === 'CALL' || (act.outcome && act.outcome.toLowerCase().includes('call'))) && (
                             <CallRecordingPlayer
-                              durationSeconds={205}
-                              transcript={act.notes}
+                              recordingUrl={(act as any).metadata?.recording_url}
+                              callSessionId={(act as any).metadata?.call_session_id}
+                              durationSeconds={(act as any).metadata?.duration_seconds || 155}
+                              transcript={(act as any).metadata?.transcript || act.notes}
+                              disposition={(act as any).metadata?.disposition}
                               title={act.outcome || 'AI Voice Call Recording'}
                               callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
                             />
@@ -2699,8 +2702,8 @@ export function LeadDetailModal({
                                   {isVoiceCallEvent && (
                                     <CallRecordingPlayer
                                       recordingUrl={evt.metadata?.recording_url}
-                                      durationSeconds={evt.metadata?.duration_seconds || 205}
-                                      transcript={evt.metadata?.notes || evt.metadata?.transcript || evt.description}
+                                      durationSeconds={evt.metadata?.duration_seconds || 155}
+                                      transcript={evt.metadata?.transcript || evt.metadata?.notes || evt.description}
                                       title={evt.title}
                                       disposition={evt.metadata?.disposition}
                                       callSessionId={evt.metadata?.call_session_id}
