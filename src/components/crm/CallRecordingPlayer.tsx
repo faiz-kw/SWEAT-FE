@@ -189,9 +189,13 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
       } else {
         try {
           audio.playbackRate = playbackRate;
+          audio.volume = 1.0;
           audio.muted = isMuted;
           if (audio.readyState === 0 || audio.error) {
             audio.load();
+          }
+          if (currentTime > 0 && Math.abs(audio.currentTime - currentTime) > 0.5) {
+            audio.currentTime = currentTime;
           }
           await audio.play();
           setIsPlaying(true);
@@ -200,7 +204,11 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
           try {
             const fallbackAudio = new Audio(resolvedAudioUrl);
             fallbackAudio.playbackRate = playbackRate;
+            fallbackAudio.volume = 1.0;
             fallbackAudio.muted = isMuted;
+            if (currentTime > 0) {
+              fallbackAudio.currentTime = currentTime;
+            }
             fallbackAudio.ontimeupdate = () => {
               setCurrentTime(fallbackAudio.currentTime);
             };
