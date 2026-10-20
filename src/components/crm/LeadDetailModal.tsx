@@ -832,13 +832,17 @@ export function LeadDetailModal({
         toast.error('Calling Not Set Up', {
           description: 'AI phone calling is not set up for your gym yet.',
         });
+      } else if (errCode === 'OUTSIDE_CALLING_HOURS') {
+        toast.error('Outside Calling Hours', {
+          description: errMsg || 'AI voice calls are only permitted between 09:00 AM and 09:00 PM IST.',
+        });
       } else if (errCode === 'INVALID_RECIPIENT_OR_CONSENT') {
         toast.error('Cannot Call Yet', {
-          description: 'This person has not given permission for AI phone calls.',
+          description: errMsg || 'This person has not given permission for AI phone calls.',
         });
       } else {
         toast.error('Could Not Start Call', {
-          description: 'Please try again or contact support if this continues.',
+          description: errMsg || 'Please try again or contact support if this continues.',
         });
       }
     },

@@ -2595,12 +2595,16 @@ export const ClassesWorkspace: React.FC = () => {
                         ];
                         const hasTrainer = allTrainers.length > 0;
 
-                        const startTimeFormatted = occ.start_at
-                          ? formatTime12h(occ.start_at.slice(11, 16))
-                          : (occ.start_time ? formatTime12h(occ.start_time.slice(0, 5)) : '');
-                        const endTimeFormatted = occ.end_at
-                          ? formatTime12h(occ.end_at.slice(11, 16))
-                          : (occ.end_time ? formatTime12h(occ.end_time.slice(0, 5)) : '');
+                        const startTimeFormatted = occ.start_time
+                          ? formatTime12h(occ.start_time.slice(0, 5))
+                          : (occ.start_at
+                              ? new Date(occ.start_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
+                              : '');
+                        const endTimeFormatted = occ.end_time
+                          ? formatTime12h(occ.end_time.slice(0, 5))
+                          : (occ.end_at
+                              ? new Date(occ.end_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
+                              : '');
 
                         const bookedCount = occ.booking_count ?? 0;
                         const waitlistCount = occ.waitlist_count ?? 0;
@@ -2822,12 +2826,16 @@ export const ClassesWorkspace: React.FC = () => {
                   ];
                   const hasTrainer = allTrainers.length > 0;
 
-                  const startTimeFormatted = occ.start_at
-                    ? formatTime12h(occ.start_at.slice(11, 16))
-                    : (occ.start_time ? formatTime12h(occ.start_time.slice(0, 5)) : '');
-                  const endTimeFormatted = occ.end_at
-                    ? formatTime12h(occ.end_at.slice(11, 16))
-                    : (occ.end_time ? formatTime12h(occ.end_time.slice(0, 5)) : '');
+                  const startTimeFormatted = occ.start_time
+                    ? formatTime12h(occ.start_time.slice(0, 5))
+                    : (occ.start_at
+                        ? new Date(occ.start_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
+                        : '');
+                  const endTimeFormatted = occ.end_time
+                    ? formatTime12h(occ.end_time.slice(0, 5))
+                    : (occ.end_at
+                        ? new Date(occ.end_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
+                        : '');
 
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;

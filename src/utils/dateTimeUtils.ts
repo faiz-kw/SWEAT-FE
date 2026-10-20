@@ -7,10 +7,16 @@
 export function formatTime12h(timeStr?: string | null): string {
   if (!timeStr) return '--';
   // If timeStr is an ISO string like "2026-09-28T10:00:00Z"
+  // If timeStr is an ISO string like "2026-09-28T10:00:00Z"
   if (timeStr.includes('T')) {
     const d = new Date(timeStr);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+      return d.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
     }
   }
 
@@ -23,15 +29,21 @@ export function formatTime12h(timeStr?: string | null): string {
     if (!isNaN(hours) && !isNaN(minutes)) {
       const period = hours >= 12 ? 'PM' : 'AM';
       const h12 = hours % 12 === 0 ? 12 : hours % 12;
+      const hStr = h12 < 10 ? `0${h12}` : `${h12}`;
       const mStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
-      return `${h12}:${mStr} ${period}`;
+      return `${hStr}:${mStr} ${period}`;
     }
   }
 
   // Fallback try Date parse
   const d = new Date(`1970-01-01T${clean}`);
   if (!isNaN(d.getTime())) {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+    return d.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
   }
 
   return clean || '--';
@@ -52,14 +64,14 @@ export function formatOccurrenceDate(dateStr?: string | null, startAt?: string |
     }
     const d = new Date(dateStr);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' });
     }
   }
 
   if (startAt) {
     const d = new Date(startAt);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' });
     }
   }
 
@@ -88,16 +100,16 @@ export function getOccurrenceDateTimeParts(occ?: {
   let startTimeStr = '--';
   let endTimeStr = '--';
 
-  if (occ.start_at) {
-    startTimeStr = formatTime12h(occ.start_at);
-  } else if (occ.start_time) {
+  if (occ.start_time) {
     startTimeStr = formatTime12h(occ.start_time);
+  } else if (occ.start_at) {
+    startTimeStr = formatTime12h(occ.start_at);
   }
 
-  if (occ.end_at) {
-    endTimeStr = formatTime12h(occ.end_at);
-  } else if (occ.end_time) {
+  if (occ.end_time) {
     endTimeStr = formatTime12h(occ.end_time);
+  } else if (occ.end_at) {
+    endTimeStr = formatTime12h(occ.end_at);
   }
 
   const time =

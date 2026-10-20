@@ -182,7 +182,19 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
     if (!timeStr) return '';
     if (timeStr.includes('T')) {
       const d = new Date(timeStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    const parts = timeStr.trim().split(':');
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const h12 = hours % 12 === 0 ? 12 : hours % 12;
+        const hStr = h12 < 10 ? `0${h12}` : `${h12}`;
+        const mStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+        return `${hStr}:${mStr} ${period}`;
+      }
     }
     return timeStr.slice(0, 5);
   };
@@ -430,7 +442,7 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
                         </div>
                         <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
                           <Clock className="size-2.5 shrink-0" />
-                          {formatTime(occ.start_at || occ.start_time)} - {formatTime(occ.end_at || occ.end_time)}
+                          {formatTime(occ.start_time || occ.start_at)} - {formatTime(occ.end_time || occ.end_at)}
                         </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -567,7 +579,7 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
                       <span className="flex items-center gap-1">
                         <Clock className="size-3.5 text-primary" />
                         <span className="font-semibold text-foreground">
-                          {formatTime(occ.start_at || occ.start_time)} - {formatTime(occ.end_at || occ.end_time)}
+                          {formatTime(occ.start_time || occ.start_at)} - {formatTime(occ.end_time || occ.end_at)}
                         </span>
                       </span>
                     </div>

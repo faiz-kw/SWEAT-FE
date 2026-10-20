@@ -250,13 +250,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     staleTime: 30 * 1000,
   });
 
-  // Set default branch and country on data load
-  React.useEffect(() => {
-    if (branches.length > 0 && branches[0] && !selectedBranch) {
-      setSelectedBranch(branches[0].id);
-    }
-  }, [branches, selectedBranch]);
-
+  // Set default country on data load (do NOT default branch so user can select their branch)
   React.useEffect(() => {
     if (metadata?.countries?.length && metadata.countries[0] && !country) {
       setCountry(metadata.countries[0]);
@@ -338,6 +332,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     setPhone('');
     setGender('');
     setDateOfBirth('');
+    setSelectedBranch('');
     setSelectedProgram('');
     setFitnessGoal('');
     setLocation('');
@@ -370,6 +365,12 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
     setFormErrors({});
     setDuplicateMatches([]);
   };
+
+  React.useEffect(() => {
+    if (!open) {
+      resetForm();
+    }
+  }, [open]);
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateLeadPayload) => crmApi.createLead(payload),
@@ -479,7 +480,7 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
         ? 'AUTO'
         : 'MANUAL';
 
-    const branchToUse = selectedBranch || uniqueBranches[0]?.id || null;
+    const branchToUse = selectedBranch || null;
     const programToUse = selectedProgram || null;
     const sourceToUse = selectedSource || sources[0]?.id || null;
 
@@ -719,6 +720,13 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                     onChange={(e) => {
                       setSelectedBranch(e.target.value);
                       setSelectedProgram(''); // Reset program when branch changes
+                      if (formErrors.branch) {
+                        setFormErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.branch;
+                          return next;
+                        });
+                      }
                     }}
                     className={`w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary ${
                       formErrors.branch ? 'border-destructive' : ''
