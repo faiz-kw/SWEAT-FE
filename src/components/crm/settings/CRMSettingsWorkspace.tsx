@@ -278,6 +278,13 @@ export function CRMSettingsWorkspace() {
   const [noShowDelayVal, setNoShowDelayVal] = React.useState<number | ''>('');
   const [noShowDelayUnit, setNoShowDelayUnit] = React.useState<'MINUTES' | 'HOURS' | 'DAYS'>('MINUTES');
 
+  // Step 5: Last-minute booking fast-track & Sarvam AI voice reminders
+  const [remLastMinuteThreshold, setRemLastMinuteThreshold] = React.useState<number>(120);
+  const [remLastMinuteAutoConfirm, setRemLastMinuteAutoConfirm] = React.useState<boolean>(true);
+  const [remAiCallingEnabled, setRemAiCallingEnabled] = React.useState<boolean>(false);
+  const [remAiCallingOffset, setRemAiCallingOffset] = React.useState<number>(1440);
+  const [remAiCallingSkipConfirmed, setRemAiCallingSkipConfirmed] = React.useState<boolean>(true);
+
   React.useEffect(() => {
     if (reminderPolicy) {
       setRemWhatsapp(reminderPolicy.immediate_whatsapp);
@@ -294,6 +301,11 @@ export function CRMSettingsWorkspace() {
       setNoShowEnabled(reminderPolicy.no_show_followup_enabled ?? false);
       setNoShowDelayVal(reminderPolicy.no_show_followup_delay_value ?? '');
       setNoShowDelayUnit(reminderPolicy.no_show_followup_delay_unit || 'MINUTES');
+      setRemLastMinuteThreshold(reminderPolicy.last_minute_threshold_minutes ?? 120);
+      setRemLastMinuteAutoConfirm(reminderPolicy.last_minute_auto_confirm ?? true);
+      setRemAiCallingEnabled(reminderPolicy.ai_calling_enabled ?? false);
+      setRemAiCallingOffset(reminderPolicy.ai_calling_offset_minutes ?? 1440);
+      setRemAiCallingSkipConfirmed(reminderPolicy.ai_calling_skip_if_confirmed ?? true);
     }
   }, [reminderPolicy]);
 
@@ -1144,20 +1156,121 @@ export function CRMSettingsWorkspace() {
                 )}
               </div>
 
-              {/* AI Voice Agent (Foundation status) */}
-              <div className="p-3.5 rounded-lg bg-muted/40 border border-border/60 flex items-center justify-between gap-3">
+              {/* 5. Last-Minute Booking Fast-Track Policy */}
+              <div className="space-y-3 pt-4 border-t border-border/40">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary shrink-0" />
-                  <div>
-                    <h4 className="text-xs font-bold text-foreground">Sarvam AI Automated Reminders</h4>
-                    <p className="text-[11px] text-muted-foreground">
-                      Automatic reminder calls before scheduled workout sessions.
-                    </p>
+                  <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    5. Last-Minute Booking Fast-Track Policy
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When a prospect books a trial workout close to class start time, expedite confirmation and suppress past notifications so they can attend immediately without friction.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-1">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Last-Minute Threshold Window</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        type="number"
+                        min="15"
+                        max="720"
+                        placeholder="120"
+                        value={remLastMinuteThreshold}
+                        onChange={(e) => setRemLastMinuteThreshold(parseInt(e.target.value, 10) || 120)}
+                        disabled={!canEdit}
+                        className="h-8 text-xs w-28"
+                      />
+                      <span className="text-xs text-muted-foreground">minutes before session (e.g. 120m / 2h)</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Fast-Track Attendance Handling</Label>
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={remLastMinuteAutoConfirm}
+                        onChange={(e) => setRemLastMinuteAutoConfirm(e.target.checked)}
+                        disabled={!canEdit}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                      />
+                      <span className="text-xs font-medium">
+                        Auto-confirm attendance immediately (no confirmation delay hold)
+                      </span>
+                    </label>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-[10px] bg-muted border-border shrink-0">
-                  Coming Soon
-                </Badge>
+              </div>
+
+              {/* 6. Sarvam AI Voice Outbound Reminders */}
+              <div className="space-y-3 pt-4 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      6. Sarvam AI Voice Outbound Reminders
+                    </h3>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 border-primary/30 text-primary font-semibold">
+                    Live Engine
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Automated outbound conversational phone calls placed by Sarvam AI to remind prospects of their upcoming workout and reconfirm attendance.
+                </p>
+
+                <label className="flex items-center gap-2.5 cursor-pointer pl-6">
+                  <input
+                    type="checkbox"
+                    checked={remAiCallingEnabled}
+                    onChange={(e) => setRemAiCallingEnabled(e.target.checked)}
+                    disabled={!canEdit}
+                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                  />
+                  <span className="text-xs font-medium">
+                    Enable automated Sarvam AI voice reminder calls
+                  </span>
+                </label>
+
+                {remAiCallingEnabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Schedule Call Ahead of Class</Label>
+                      <div className="flex gap-2 items-center">
+                        <select
+                          value={remAiCallingOffset}
+                          onChange={(e) => setRemAiCallingOffset(parseInt(e.target.value, 10))}
+                          disabled={!canEdit}
+                          className="h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+                        >
+                          <option value={1440}>24 hours before class</option>
+                          <option value={720}>12 hours before class</option>
+                          <option value={180}>3 hours before class</option>
+                          <option value={120}>2 hours before class</option>
+                          <option value={60}>1 hour before class</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Smart Courtesy Suppression</Label>
+                      <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={remAiCallingSkipConfirmed}
+                          onChange={(e) => setRemAiCallingSkipConfirmed(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                        />
+                        <span className="text-xs font-medium">
+                          Skip voice call if prospect already confirmed attendance in WhatsApp
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {canEdit && (
@@ -1179,6 +1292,11 @@ export function CRMSettingsWorkspace() {
                         no_show_followup_enabled: noShowEnabled,
                         no_show_followup_delay_value: noShowDelayVal ? Number(noShowDelayVal) : null,
                         no_show_followup_delay_unit: noShowDelayUnit,
+                        last_minute_threshold_minutes: Number(remLastMinuteThreshold) || 120,
+                        last_minute_auto_confirm: remLastMinuteAutoConfirm,
+                        ai_calling_enabled: remAiCallingEnabled,
+                        ai_calling_offset_minutes: Number(remAiCallingOffset) || 1440,
+                        ai_calling_skip_if_confirmed: remAiCallingSkipConfirmed,
                       })
                     }
                     disabled={updateReminderMutation.isPending}

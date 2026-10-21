@@ -521,6 +521,10 @@ export interface CRMTrialReminderPolicy {
   confirmation_wait_duration_unit: 'HOURS' | 'DAYS';
   no_response_action: 'CREATE_FOLLOWUP' | 'NOTIFY_AGENT' | 'NONE';
   ai_calling_enabled: boolean;
+  ai_calling_offset_minutes?: number;
+  ai_calling_skip_if_confirmed?: boolean;
+  last_minute_threshold_minutes?: number;
+  last_minute_auto_confirm?: boolean;
   post_attended_followup_enabled: boolean;
   post_attended_followup_delay_value?: number | null;
   post_attended_followup_delay_unit: 'MINUTES' | 'HOURS' | 'DAYS';
