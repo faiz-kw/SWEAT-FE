@@ -343,7 +343,21 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
                 {provider}
               </Badge>
               {disposition && (
-                <Badge variant="secondary" className="text-[10px] h-4.5 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[10px] h-4.5 px-1.5 font-semibold",
+                    disposition.toUpperCase().includes('BOOKED') || disposition.toUpperCase().includes('CONFIRMED')
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      : disposition.toUpperCase().includes('NO_ANSWER') || disposition.toUpperCase().includes('MISSED') || disposition.toUpperCase().includes('BUSY')
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      : disposition.toUpperCase().includes('NOT_INTERESTED') || disposition.toUpperCase().includes('FAILED')
+                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                      : disposition.toUpperCase().includes('DISCONNECTED') || disposition.toUpperCase().includes('SHORT')
+                      ? "bg-muted text-muted-foreground border-border"
+                      : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+                  )}
+                >
                   {disposition.replace(/_/g, ' ')}
                 </Badge>
               )}
