@@ -24,6 +24,7 @@ import {
   Sliders,
   RotateCw,
   UserCheck,
+  PhoneCall,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CRMAutomationSettings } from './CRMAutomationSettings';
@@ -319,6 +320,30 @@ export function CRMSettingsWorkspace() {
       toast.error(err?.response?.data?.error || err?.message || 'Failed to save reminder policy');
     },
   });
+
+  const handleSaveReminders = () => {
+    updateReminderMutation.mutate({
+      immediate_whatsapp: remWhatsapp,
+      immediate_email: remEmail,
+      immediate_sms: remSms,
+      reminder_offsets: remOffsets,
+      ask_attendance_confirmation: remConfirm,
+      confirmation_wait_duration_value: remWaitVal,
+      confirmation_wait_duration_unit: remWaitUnit,
+      no_response_action: remNoRespAction,
+      post_attended_followup_enabled: postAttendedEnabled,
+      post_attended_followup_delay_value: postAttendedDelayVal ? Number(postAttendedDelayVal) : null,
+      post_attended_followup_delay_unit: postAttendedDelayUnit,
+      no_show_followup_enabled: noShowEnabled,
+      no_show_followup_delay_value: noShowDelayVal ? Number(noShowDelayVal) : null,
+      no_show_followup_delay_unit: noShowDelayUnit,
+      last_minute_threshold_minutes: Number(remLastMinuteThreshold) || 120,
+      last_minute_auto_confirm: remLastMinuteAutoConfirm,
+      ai_calling_enabled: remAiCallingEnabled,
+      ai_calling_offset_minutes: Number(remAiCallingOffset) || 1440,
+      ai_calling_skip_if_confirmed: remAiCallingSkipConfirmed,
+    });
+  };
 
   // ==========================================
   // TAB 4 & 5: CHANNELS & TEMPLATES
@@ -881,372 +906,348 @@ export function CRMSettingsWorkspace() {
       {/* TAB 3: TRIAL REMINDERS                                                     */}
       {/* ========================================================================= */}
       {activeTab === 'reminders' && (
-        <div className="max-w-3xl space-y-5">
-          <div className="bg-card p-4 rounded-xl border border-border/50">
-            <h2 className="text-sm font-semibold text-foreground">Trial Class Reminders & Follow-Ups</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Set up automated WhatsApp messages, emails, and phone calls sent to prospects before and after their trial workout.
-            </p>
+        <div className="w-full space-y-6">
+          {/* Header Banner - Full Width with Quick Save Action */}
+          <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h2 className="text-base font-bold text-foreground">Trial Class Reminders & Automation</h2>
+                <Badge variant="outline" className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                  Active System
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                Configure automated WhatsApp messages, email passes, last-minute fast-tracking, and Sarvam AI voice calls before and after every trial workout.
+              </p>
+            </div>
+            {canEdit && (
+              <Button
+                onClick={handleSaveReminders}
+                disabled={updateReminderMutation.isPending}
+                size="sm"
+                className="gap-2 h-9 px-4 shrink-0 font-semibold w-full sm:w-auto"
+              >
+                {updateReminderMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Settings</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {isReminderLoading ? (
-            <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
+            <div className="flex items-center justify-center p-16 bg-card rounded-2xl border border-border/50 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               <span className="text-xs">Loading reminder settings...</span>
             </div>
           ) : (
-            <div className="space-y-6 bg-card p-5 rounded-xl border border-border/50">
-              {/* 1. Immediate Confirmation Upon Booking */}
-              <div className="space-y-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  1. Instant Booking Confirmation
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Choose how to send the guest pass and studio directions right after someone books.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <label className="flex items-center justify-between p-3 rounded-lg border border-border/60 hover:bg-muted/20 cursor-pointer">
-                    <span className="text-xs font-medium">WhatsApp Guest Pass</span>
-                    <input
-                      type="checkbox"
-                      checked={remWhatsapp}
-                      onChange={(e) => setRemWhatsapp(e.target.checked)}
-                      disabled={!canEdit}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                    />
-                  </label>
+            <>
+              {/* Responsive 2-Column Grid on Wide/Desktop Screens */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-                  <label className="flex items-center justify-between p-3 rounded-lg border border-border/60 hover:bg-muted/20 cursor-pointer">
-                    <span className="text-xs font-medium">Email Pass & Invite</span>
-                    <input
-                      type="checkbox"
-                      checked={remEmail}
-                      onChange={(e) => setRemEmail(e.target.checked)}
-                      disabled={!canEdit}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between p-3 rounded-lg border border-border/60 hover:bg-muted/20 cursor-pointer">
-                    <span className="text-xs font-medium">SMS Text Alert</span>
-                    <input
-                      type="checkbox"
-                      checked={remSms}
-                      onChange={(e) => setRemSms(e.target.checked)}
-                      disabled={!canEdit}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* 2. Reminders Before Class */}
-              <div className="space-y-2.5 pt-4 border-t border-border/40">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  2. Reminders Before Class
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Choose when to send reminders to the prospect before their session starts.
-                </p>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {remOffsets.map((mins, idx) => (
-                    <div
-                      key={idx}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs font-medium text-primary"
-                    >
-                      <span>{formatOffsetLabel(mins)}</span>
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => setRemOffsets(remOffsets.filter((_, i) => i !== idx))}
-                          className="hover:text-destructive transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {canEdit && (
-                  <div className="flex items-center gap-2 pt-2 max-w-sm">
-                    <Input
-                      type="number"
-                      placeholder="Minutes before class (e.g. 60)"
-                      value={newOffsetInput}
-                      onChange={(e) => setNewOffsetInput(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const val = parseInt(newOffsetInput, 10);
-                        if (!val || val <= 0) return;
-                        if (!remOffsets.includes(val)) {
-                          setRemOffsets([...remOffsets, val].sort((a, b) => b - a));
-                        }
-                        setNewOffsetInput('');
-                      }}
-                      className="h-8 text-xs shrink-0"
-                    >
-                      Add Reminder
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* 3. Confirming Attendance */}
-              <div className="space-y-3 pt-4 border-t border-border/40">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  3. Confirming Attendance
-                </h3>
-
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={remConfirm}
-                    onChange={(e) => setRemConfirm(e.target.checked)}
-                    disabled={!canEdit}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                  />
-                  <span className="text-xs font-medium">
-                    Ask prospects to confirm they are attending (via quick button in WhatsApp or Email)
-                  </span>
-                </label>
-
-                {remConfirm && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-1">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">How long to wait for their reply</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          value={remWaitVal}
-                          onChange={(e) => setRemWaitVal(parseInt(e.target.value, 10) || 1)}
-                          disabled={!canEdit}
-                          className="h-8 text-xs w-24"
-                        />
-                        <select
-                          value={remWaitUnit}
-                          onChange={(e) => setRemWaitUnit(e.target.value as any)}
-                          disabled={!canEdit}
-                          className="h-8 px-2 rounded-md border border-input bg-background text-xs"
-                        >
-                          <option value="HOURS">Hours</option>
-                          <option value="DAYS">Days</option>
-                        </select>
+                {/* Card 1: Instant Booking Confirmation */}
+                <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Zap className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">1. Instant Booking Confirmation</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Sent immediately when a prospect books a trial workout.
+                        </p>
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">If they don't reply in time</Label>
-                      <select
-                        value={remNoRespAction}
-                        onChange={(e) => setRemNoRespAction(e.target.value as any)}
-                        disabled={!canEdit}
-                        className="w-full h-8 px-2 rounded-md border border-input bg-background text-xs"
-                      >
-                        <option value="CREATE_FOLLOWUP">Create a task for staff to call them</option>
-                        <option value="NOTIFY_AGENT">Send an alert to their assigned sales agent</option>
-                        <option value="NONE">Do nothing</option>
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <label className="flex items-center justify-between p-3.5 rounded-xl border border-border/70 hover:bg-muted/30 cursor-pointer transition-all">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-semibold text-foreground block">WhatsApp</span>
+                          <span className="text-[10px] text-muted-foreground block">Pass & Maps pin</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={remWhatsapp}
+                          onChange={(e) => setRemWhatsapp(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-3.5 rounded-xl border border-border/70 hover:bg-muted/30 cursor-pointer transition-all">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-semibold text-foreground block">Email</span>
+                          <span className="text-[10px] text-muted-foreground block">Pass & invite</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={remEmail}
+                          onChange={(e) => setRemEmail(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-3.5 rounded-xl border border-border/70 hover:bg-muted/30 cursor-pointer transition-all">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-semibold text-foreground block">SMS</span>
+                          <span className="text-[10px] text-muted-foreground block">Text alert</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={remSms}
+                          onChange={(e) => setRemSms(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                      </label>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 4. Follow-Up After Class (Attended) */}
-              <div className="space-y-3 pt-4 border-t border-border/40">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  4. Follow-Up After Class (Attended)
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Reach out to prospects after they finish their workout to help them choose a membership.
-                </p>
-
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={postAttendedEnabled}
-                    onChange={(e) => setPostAttendedEnabled(e.target.checked)}
-                    disabled={!canEdit}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                  />
-                  <span className="text-xs font-medium">
-                    Automatically remind staff to follow up after class
-                  </span>
-                </label>
-
-                {postAttendedEnabled && (
-                  <div className="pl-6 pt-1 space-y-1">
-                    <Label className="text-xs font-medium">When to reach out</Label>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder="e.g. 2"
-                        value={postAttendedDelayVal}
-                        onChange={(e) => setPostAttendedDelayVal(e.target.value ? Number(e.target.value) : '')}
-                        disabled={!canEdit}
-                        className="h-8 text-xs w-28"
-                      />
-                      <select
-                        value={postAttendedDelayUnit}
-                        onChange={(e) => setPostAttendedDelayUnit(e.target.value as any)}
-                        disabled={!canEdit}
-                        className="h-8 px-2.5 rounded-md border border-input bg-background text-xs"
-                      >
-                        <option value="MINUTES">Minutes</option>
-                        <option value="HOURS">Hours</option>
-                        <option value="DAYS">Days</option>
-                      </select>
-                      <span className="text-xs text-muted-foreground">after workout is marked completed</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 5. Missed Class Follow-Up (No-Show) */}
-              <div className="space-y-3 pt-4 border-t border-border/40">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  5. Missed Class Follow-Up (No-Show)
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Reach out to prospects who missed their session so they can easily reschedule their trial.
-                </p>
-
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={noShowEnabled}
-                    onChange={(e) => setNoShowEnabled(e.target.checked)}
-                    disabled={!canEdit}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                  />
-                  <span className="text-xs font-medium">
-                    Automatically remind staff to follow up with no-shows
-                  </span>
-                </label>
-
-                {noShowEnabled && (
-                  <div className="pl-6 pt-1 space-y-1">
-                    <Label className="text-xs font-medium">When to reach out</Label>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder="e.g. 30"
-                        value={noShowDelayVal}
-                        onChange={(e) => setNoShowDelayVal(e.target.value ? Number(e.target.value) : '')}
-                        disabled={!canEdit}
-                        className="h-8 text-xs w-28"
-                      />
-                      <select
-                        value={noShowDelayUnit}
-                        onChange={(e) => setNoShowDelayUnit(e.target.value as any)}
-                        disabled={!canEdit}
-                        className="h-8 px-2.5 rounded-md border border-input bg-background text-xs"
-                      >
-                        <option value="MINUTES">Minutes</option>
-                        <option value="HOURS">Hours</option>
-                        <option value="DAYS">Days</option>
-                      </select>
-                      <span className="text-xs text-muted-foreground">after session is marked missed</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 6. Last-Minute Bookings */}
-              <div className="space-y-3 pt-4 border-t border-border/40">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    6. Last-Minute Bookings
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  If someone books right before a class starts, confirm them right away so they can walk in without waiting.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-1">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Consider last-minute if booked within</Label>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        type="number"
-                        min="15"
-                        max="720"
-                        placeholder="120"
-                        value={remLastMinuteThreshold}
-                        onChange={(e) => setRemLastMinuteThreshold(parseInt(e.target.value, 10) || 120)}
-                        disabled={!canEdit}
-                        className="h-8 text-xs w-28"
-                      />
-                      <span className="text-xs text-muted-foreground">minutes before class (e.g. 120 = 2 hours)</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Instant Confirmation</Label>
-                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={remLastMinuteAutoConfirm}
-                        onChange={(e) => setRemLastMinuteAutoConfirm(e.target.checked)}
-                        disabled={!canEdit}
-                        className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                      />
-                      <span className="text-xs font-medium">
-                        Instantly confirm their spot without making them wait
-                      </span>
-                    </label>
                   </div>
                 </div>
-              </div>
 
-              {/* 7. Automated AI Phone Calls */}
-              <div className="space-y-3 pt-4 border-t border-border/40">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary shrink-0" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      7. Automated AI Phone Calls (Sarvam Voice)
-                    </h3>
+                {/* Card 2: Reminders Before Class */}
+                <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+                        <Clock className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">2. Reminders Before Class</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Scheduled notifications sent ahead of time to keep prospects excited.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {remOffsets.map((mins, idx) => (
+                        <div
+                          key={idx}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs font-medium text-primary shadow-2xs"
+                        >
+                          <span>{formatOffsetLabel(mins)}</span>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => setRemOffsets(remOffsets.filter((_, i) => i !== idx))}
+                              className="hover:text-destructive transition-colors"
+                              title="Remove reminder"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {canEdit && (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                        <Input
+                          type="number"
+                          placeholder="Minutes before class (e.g. 60)"
+                          value={newOffsetInput}
+                          onChange={(e) => setNewOffsetInput(e.target.value)}
+                          className="h-8 text-xs flex-1"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const val = parseInt(newOffsetInput, 10);
+                            if (!val || val <= 0) return;
+                            if (!remOffsets.includes(val)) {
+                              setRemOffsets([...remOffsets, val].sort((a, b) => b - a));
+                            }
+                            setNewOffsetInput('');
+                          }}
+                          className="h-8 text-xs shrink-0 font-medium"
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" />
+                          Add Reminder
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  <Badge variant="outline" className="text-[10px] bg-primary/10 border-primary/30 text-primary font-semibold">
-                    Voice Agent
-                  </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  The AI Voice Agent can call prospects on their phone to remind them of their session and confirm they are still coming.
-                </p>
 
-                <label className="flex items-center gap-2.5 cursor-pointer pl-6">
-                  <input
-                    type="checkbox"
-                    checked={remAiCallingEnabled}
-                    onChange={(e) => setRemAiCallingEnabled(e.target.checked)}
-                    disabled={!canEdit}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                  />
-                  <span className="text-xs font-medium">
-                    Turn on automated reminder phone calls
-                  </span>
-                </label>
+                {/* Card 3: Confirming Attendance */}
+                <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">3. Attendance Confirmation</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Ask prospects to confirm their spot with a single tap in WhatsApp.
+                      </p>
+                    </div>
+                  </div>
 
-                {remAiCallingEnabled && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">When to call the prospect</Label>
+                  <label className="flex items-center gap-3 p-3 rounded-xl border border-border/70 hover:bg-muted/20 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={remConfirm}
+                      onChange={(e) => setRemConfirm(e.target.checked)}
+                      disabled={!canEdit}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">Ask prospects to confirm attendance</span>
+                      <span className="text-[11px] text-muted-foreground block">Sends interactive confirmation buttons on WhatsApp</span>
+                    </div>
+                  </label>
+
+                  {remConfirm && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-foreground">Wait for their reply</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            value={remWaitVal}
+                            onChange={(e) => setRemWaitVal(parseInt(e.target.value, 10) || 1)}
+                            disabled={!canEdit}
+                            className="h-8 text-xs w-24"
+                          />
+                          <select
+                            value={remWaitUnit}
+                            onChange={(e) => setRemWaitUnit(e.target.value as any)}
+                            disabled={!canEdit}
+                            className="h-8 px-2.5 rounded-md border border-input bg-background text-xs flex-1"
+                          >
+                            <option value="HOURS">Hours</option>
+                            <option value="DAYS">Days</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-foreground">If they don't reply in time</Label>
+                        <select
+                          value={remNoRespAction}
+                          onChange={(e) => setRemNoRespAction(e.target.value as any)}
+                          disabled={!canEdit}
+                          className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+                        >
+                          <option value="CREATE_FOLLOWUP">Create a task for staff to call them</option>
+                          <option value="NOTIFY_AGENT">Send an alert to their assigned sales agent</option>
+                          <option value="NONE">Do nothing</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card 4: Last-Minute Bookings Fast-Track */}
+                <div className="bg-card p-5 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-card to-amber-500/5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                        <Zap className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">4. Last-Minute Bookings</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Fast-track confirmations so late bookers can attend immediately.
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30 font-semibold">
+                      Fast-Track
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-foreground">Treat as last-minute if within</Label>
                       <div className="flex gap-2 items-center">
+                        <Input
+                          type="number"
+                          min="15"
+                          max="720"
+                          placeholder="120"
+                          value={remLastMinuteThreshold}
+                          onChange={(e) => setRemLastMinuteThreshold(parseInt(e.target.value, 10) || 120)}
+                          disabled={!canEdit}
+                          className="h-8 text-xs w-28"
+                        />
+                        <span className="text-xs text-muted-foreground">minutes of class (e.g. 120 = 2h)</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-foreground">Instant Confirmation</Label>
+                      <label className="flex items-center gap-2.5 pt-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={remLastMinuteAutoConfirm}
+                          onChange={(e) => setRemLastMinuteAutoConfirm(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-foreground">
+                          Instantly confirm spot without waiting
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 5: Automated AI Phone Calls (Sarvam Voice) */}
+                <div className="bg-card p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-primary/5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <PhoneCall className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">5. Automated AI Phone Calls</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Outbound conversational voice calls powered by Sarvam AI.
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-primary/10 border-primary/30 text-primary font-semibold">
+                      Sarvam Voice Agent
+                    </Badge>
+                  </div>
+
+                  <label className="flex items-center gap-3 p-3 rounded-xl border border-border/70 hover:bg-muted/20 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={remAiCallingEnabled}
+                      onChange={(e) => setRemAiCallingEnabled(e.target.checked)}
+                      disabled={!canEdit}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">Turn on automated reminder phone calls</span>
+                      <span className="text-[11px] text-muted-foreground block">Calls the prospect to verbally reconfirm their attendance</span>
+                    </div>
+                  </label>
+
+                  {remAiCallingEnabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-foreground">When to call the prospect</Label>
                         <select
                           value={remAiCallingOffset}
                           onChange={(e) => setRemAiCallingOffset(parseInt(e.target.value, 10))}
                           disabled={!canEdit}
-                          className="h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+                          className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
                         >
                           <option value={1440}>24 hours before class</option>
                           <option value={720}>12 hours before class</option>
@@ -1255,61 +1256,140 @@ export function CRMSettingsWorkspace() {
                           <option value={60}>1 hour before class</option>
                         </select>
                       </div>
-                    </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">Courtesy Rule</Label>
-                      <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={remAiCallingSkipConfirmed}
-                          onChange={(e) => setRemAiCallingSkipConfirmed(e.target.checked)}
-                          disabled={!canEdit}
-                          className="rounded border-input text-primary focus:ring-primary w-4 h-4"
-                        />
-                        <span className="text-xs font-medium">
-                          Don't call if they already confirmed on WhatsApp
-                        </span>
-                      </label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-foreground">Courtesy Calling Rule</Label>
+                        <label className="flex items-center gap-2.5 pt-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={remAiCallingSkipConfirmed}
+                            onChange={(e) => setRemAiCallingSkipConfirmed(e.target.checked)}
+                            disabled={!canEdit}
+                            className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                          />
+                          <span className="text-xs font-medium text-foreground">
+                            Don't call if already confirmed on WhatsApp
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card 6: Follow-Up After Class (Attended & Missed) */}
+                <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
+                      <UserCheck className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">6. Post-Workout Follow-Ups</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Keep the momentum going after workout or quickly re-engage no-shows.
+                      </p>
                     </div>
                   </div>
-                )}
+
+                  <div className="space-y-3.5 pt-1">
+                    {/* Attended Follow-Up */}
+                    <div className="p-3 rounded-xl border border-border/60 space-y-2">
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={postAttendedEnabled}
+                          onChange={(e) => setPostAttendedEnabled(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-foreground">
+                          Remind staff to follow up after completed workout
+                        </span>
+                      </label>
+                      {postAttendedEnabled && (
+                        <div className="flex flex-wrap items-center gap-2 pl-6 pt-1">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={postAttendedDelayVal}
+                            onChange={(e) => setPostAttendedDelayVal(e.target.value ? Number(e.target.value) : '')}
+                            disabled={!canEdit}
+                            className="h-8 text-xs w-20"
+                          />
+                          <select
+                            value={postAttendedDelayUnit}
+                            onChange={(e) => setPostAttendedDelayUnit(e.target.value as any)}
+                            disabled={!canEdit}
+                            className="h-8 px-2 rounded-md border border-input bg-background text-xs"
+                          >
+                            <option value="MINUTES">Minutes</option>
+                            <option value="HOURS">Hours</option>
+                            <option value="DAYS">Days</option>
+                          </select>
+                          <span className="text-xs text-muted-foreground">after class finishes</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* No-Show Follow-Up */}
+                    <div className="p-3 rounded-xl border border-border/60 space-y-2">
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={noShowEnabled}
+                          onChange={(e) => setNoShowEnabled(e.target.checked)}
+                          disabled={!canEdit}
+                          className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-foreground">
+                          Remind staff to follow up with no-shows to reschedule
+                        </span>
+                      </label>
+                      {noShowEnabled && (
+                        <div className="flex flex-wrap items-center gap-2 pl-6 pt-1">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={noShowDelayVal}
+                            onChange={(e) => setNoShowDelayVal(e.target.value ? Number(e.target.value) : '')}
+                            disabled={!canEdit}
+                            className="h-8 text-xs w-20"
+                          />
+                          <select
+                            value={noShowDelayUnit}
+                            onChange={(e) => setNoShowDelayUnit(e.target.value as any)}
+                            disabled={!canEdit}
+                            className="h-8 px-2 rounded-md border border-input bg-background text-xs"
+                          >
+                            <option value="MINUTES">Minutes</option>
+                            <option value="HOURS">Hours</option>
+                            <option value="DAYS">Days</option>
+                          </select>
+                          <span className="text-xs text-muted-foreground">after class ends</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
+              {/* Bottom Sticky/Full-Width Action Card */}
               {canEdit && (
-                <div className="pt-3 flex justify-end">
+                <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground text-center sm:text-left">
+                    <Info className="w-4 h-4 text-primary shrink-0" />
+                    <span>All changes apply immediately to upcoming bookings across all active studio branches.</span>
+                  </div>
                   <Button
-                    onClick={() =>
-                      updateReminderMutation.mutate({
-                        immediate_whatsapp: remWhatsapp,
-                        immediate_email: remEmail,
-                        immediate_sms: remSms,
-                        reminder_offsets: remOffsets,
-                        ask_attendance_confirmation: remConfirm,
-                        confirmation_wait_duration_value: remWaitVal,
-                        confirmation_wait_duration_unit: remWaitUnit,
-                        no_response_action: remNoRespAction,
-                        post_attended_followup_enabled: postAttendedEnabled,
-                        post_attended_followup_delay_value: postAttendedDelayVal ? Number(postAttendedDelayVal) : null,
-                        post_attended_followup_delay_unit: postAttendedDelayUnit,
-                        no_show_followup_enabled: noShowEnabled,
-                        no_show_followup_delay_value: noShowDelayVal ? Number(noShowDelayVal) : null,
-                        no_show_followup_delay_unit: noShowDelayUnit,
-                        last_minute_threshold_minutes: Number(remLastMinuteThreshold) || 120,
-                        last_minute_auto_confirm: remLastMinuteAutoConfirm,
-                        ai_calling_enabled: remAiCallingEnabled,
-                        ai_calling_offset_minutes: Number(remAiCallingOffset) || 1440,
-                        ai_calling_skip_if_confirmed: remAiCallingSkipConfirmed,
-                      })
-                    }
+                    onClick={handleSaveReminders}
                     disabled={updateReminderMutation.isPending}
-                    className="text-xs font-semibold h-9 px-4"
+                    className="w-full sm:w-auto h-9 px-6 text-xs font-semibold shrink-0"
                   >
                     {updateReminderMutation.isPending ? 'Saving...' : 'Save Settings'}
                   </Button>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
