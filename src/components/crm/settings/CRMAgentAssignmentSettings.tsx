@@ -7,6 +7,7 @@ import {
   Search,
   Sparkles,
   ShieldAlert,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -138,29 +139,36 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
   const activeCount = qualifyingUsers.filter((u) => !excludedUserIds.includes(u.id)).length;
 
   return (
-    <form onSubmit={handleSave} className="space-y-4 max-w-5xl">
+    <form onSubmit={handleSave} className="w-full space-y-5">
       {/* Top Header Controls */}
-      <div className="flex items-center justify-between gap-4 py-2 border-b border-border/60">
-        <div className="flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-primary" />
-            Sales Roles & Assignment
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            {allowedRoleCodes.length} roles active • {activeCount} staff eligible
-          </span>
+      <div className="bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm sm:text-base font-bold text-foreground">
+              Sales Roles & Lead Assignment
+            </h3>
+            <Badge variant="outline" className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              {activeCount} Staff Active
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+            Choose which employee roles can receive new leads, and configure how prospective members are automatically distributed among your sales reps.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
           {hasChanges && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => refetch()}
-              className="h-8 text-xs gap-1"
+              className="h-9 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
             >
-              <RotateCw className="w-3 h-3" />
+              <RotateCw className="w-3.5 h-3.5" />
               Reset
             </Button>
           )}
@@ -168,37 +176,37 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
             type="submit"
             size="sm"
             disabled={!canEdit || !hasChanges || updateMutation.isPending}
-            className="h-8 text-xs gap-1.5"
+            className="h-9 px-4 text-xs font-semibold gap-1.5"
           >
-            <Save className="w-3 h-3" />
+            <Save className="w-3.5 h-3.5" />
             {updateMutation.isPending ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
           </Button>
         </div>
       </div>
 
-      {/* Dynamic Lead Assignment Policy & Strategy Section */}
-      <div className="p-4 rounded-xl bg-card border border-border/70 space-y-4 shadow-2xs">
-        <div className="flex items-center justify-between pb-3 border-b border-border/60">
+      {/* Automatic Lead Distribution Rules Section */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border/60 space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border/50">
           <div className="flex items-center gap-2.5">
-            <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
+            <span className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
               <Sparkles className="w-4 h-4" />
             </span>
             <div>
-              <h4 className="text-xs font-semibold text-foreground">Lead Assignment Policy & Engine Strategy</h4>
+              <h4 className="text-xs sm:text-sm font-bold text-foreground">Automatic Lead Distribution Rules</h4>
               <p className="text-[11px] text-muted-foreground">
-                Configure auto-assignment algorithms, intake modes, leave-awareness, and manager escalation alerts.
+                Set how incoming enquiries from your website, WhatsApp, and social ads are assigned to your team.
               </p>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] font-mono">
-            Backend Authoritative
+          <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/20 shrink-0 self-start sm:self-auto">
+            Auto-Assign Active
           </Badge>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Permitted Intake Modes */}
+          {/* Permitted Assignment Methods */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground block">Permitted Intake Modes</label>
+            <label className="text-xs font-semibold text-foreground block">Allowed Assignment Methods</label>
             <select
               value={assignmentModeAllowed}
               onChange={(e) => {
@@ -207,20 +215,20 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
                 setHasChanges(true);
               }}
               disabled={!canEdit}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs"
+              className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs"
             >
               <option value="BOTH">Both Manual & Auto-Assign Allowed</option>
               <option value="AUTO">Auto-Assignment Only (Enforced)</option>
               <option value="MANUAL">Manual Assignment Only</option>
             </select>
             <p className="text-[10px] text-muted-foreground">
-              Controls whether reps can manually override assignment in lead intake.
+              Controls whether reps can manually choose who gets a lead or if rotation is enforced.
             </p>
           </div>
 
-          {/* Default Assignment Mode */}
+          {/* Default Assignment Method */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground block">Default Mode on Lead Form</label>
+            <label className="text-xs font-semibold text-foreground block">Default Method on New Lead Form</label>
             <select
               value={defaultAssignmentMode}
               onChange={(e) => {
@@ -229,19 +237,19 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
                 setHasChanges(true);
               }}
               disabled={!canEdit || assignmentModeAllowed === 'MANUAL' || assignmentModeAllowed === 'AUTO'}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs disabled:opacity-60"
+              className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs disabled:opacity-60"
             >
               <option value="MANUAL">Manual Selection (Default)</option>
-              <option value="AUTO">Auto-Assignment (Default)</option>
+              <option value="AUTO">Auto-Assign (Default)</option>
             </select>
             <p className="text-[10px] text-muted-foreground">
-              Preselected method when opening Register New Lead modal.
+              Pre-selected method when staff create a lead manually.
             </p>
           </div>
 
           {/* Auto Assignment Strategy */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground block">Auto-Assignment Strategy</label>
+            <label className="text-xs font-semibold text-foreground block">Auto-Assignment Strategy</label>
             <select
               value={autoAssignmentStrategy}
               onChange={(e) => {
@@ -250,21 +258,21 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
                 setHasChanges(true);
               }}
               disabled={!canEdit || assignmentModeAllowed === 'MANUAL'}
-              className="w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs disabled:opacity-60"
+              className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs disabled:opacity-60"
             >
-              <option value="ROUND_ROBIN">Sequential Round-Robin (Pointer-locked)</option>
-              <option value="LEAST_OPEN_LEADS">Workload Balancing (Least Open Leads)</option>
+              <option value="ROUND_ROBIN">Fair Rotation (Round-Robin one-by-one)</option>
+              <option value="LEAST_OPEN_LEADS">Least Busy (Assigns to rep with fewest open leads)</option>
               <option value="MANUAL_ONLY">Disabled (Manual Only)</option>
             </select>
             <p className="text-[10px] text-muted-foreground">
-              Algorithm executed dynamically by backend on auto-assign intake.
+              How the system chooses which sales rep gets the next incoming prospect.
             </p>
           </div>
         </div>
 
         {/* Feature Switches */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border/50 text-xs">
-          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/20 border border-border/50 cursor-pointer select-none">
             <Switch
               checked={considerLeaveAvailability}
               onCheckedChange={(val) => {
@@ -276,14 +284,14 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
               className="mt-0.5"
             />
             <div className="min-w-0">
-              <span className="font-medium text-foreground block">Workforce Leave-Aware</span>
+              <span className="font-semibold text-foreground block">Skip Staff on Leave</span>
               <span className="text-[10px] text-muted-foreground block leading-tight">
-                Automatically skip representatives on approved leave or time-off.
+                Automatically skips representatives who are away on approved vacation or leave.
               </span>
             </div>
           </label>
 
-          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/20 border border-border/50 cursor-pointer select-none">
             <Switch
               checked={allowUnassignedFallback}
               onCheckedChange={(val) => {
@@ -295,14 +303,14 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
               className="mt-0.5"
             />
             <div className="min-w-0">
-              <span className="font-medium text-foreground block">Zero Lead Loss Fallback</span>
+              <span className="font-semibold text-foreground block">Safety Fallback</span>
               <span className="text-[10px] text-muted-foreground block leading-tight">
-                Safely save lead as UNASSIGNED if no staff are currently available.
+                If no sales staff are on duty, safely saves the lead as unassigned without losing data.
               </span>
             </div>
           </label>
 
-          <label className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20 border border-border/50 cursor-pointer select-none">
+          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/20 border border-border/50 cursor-pointer select-none">
             <Switch
               checked={notifyManagerOnUnassigned}
               onCheckedChange={(val) => {
@@ -314,18 +322,18 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
               className="mt-0.5"
             />
             <div className="min-w-0">
-              <span className="font-medium text-foreground block">Escalate Unassigned Leads</span>
+              <span className="font-semibold text-foreground block">Alert Manager If Unassigned</span>
               <span className="text-[10px] text-muted-foreground block leading-tight">
-                Send in-app notifications to branch managers when lead is unassigned.
+                Sends an instant alert to the studio manager when a lead needs manual assignment.
               </span>
             </div>
           </label>
         </div>
       </div>
 
-      {/* Scoping Options */}
-      <div className="flex flex-wrap items-center gap-6 p-3 rounded-lg bg-muted/20 border border-border/60 text-xs">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
+      {/* Studio Branch Scoping Options */}
+      <div className="flex flex-wrap items-center gap-6 p-4 rounded-xl bg-card border border-border/60 text-xs">
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <Switch
             checked={requireBranchMatch}
             onCheckedChange={(val) => {
@@ -335,10 +343,10 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
             }}
             disabled={!canEdit}
           />
-          <span className="font-medium text-foreground">Require lead branch match</span>
+          <span className="font-medium text-foreground">Only assign staff from the lead's selected studio branch</span>
         </label>
 
-        <label className="flex items-center gap-2 cursor-pointer select-none">
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <Switch
             checked={allowAllStaffFallback}
             onCheckedChange={(val) => {
@@ -348,28 +356,30 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
             }}
             disabled={!canEdit}
           />
-          <span className="font-medium text-foreground">Fallback to all staff if none match</span>
+          <span className="font-medium text-foreground">Allow all studio staff as fallback if no branch staff match</span>
         </label>
       </div>
 
-      {/* Compact Roles List */}
-      <div className="space-y-2">
-        <div className="text-xs font-semibold text-foreground">Eligible Roles</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      {/* Eligible Roles List */}
+      <div className="space-y-3">
+        <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+          Roles Eligible to Receive Leads ({allowedRoleCodes.length})
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {availableRoles.map((role) => {
             const isEnabled = allowedRoleCodes.includes(role.code);
             return (
               <div
                 key={role.id}
                 onClick={() => handleToggleRole(role.code)}
-                className={`flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer select-none ${
+                className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
                   isEnabled
-                    ? 'border-primary/40 bg-primary/5'
+                    ? 'border-primary/50 bg-primary/5 shadow-xs'
                     : 'border-border/60 bg-card hover:bg-muted/30 opacity-70'
                 }`}
               >
                 <div className="min-w-0 pr-2">
-                  <div className="text-xs font-medium text-foreground truncate">{role.name}</div>
+                  <div className="text-xs font-semibold text-foreground truncate">{role.name}</div>
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
                     <span>{role.scope}</span>
                     <span>•</span>
@@ -389,28 +399,28 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
       </div>
 
       {/* Eligible Staff Members Preview */}
-      <div className="space-y-2 pt-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-semibold text-foreground">
-            Eligible Staff Preview ({activeCount})
+      <div className="space-y-3 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+            Eligible Team Members ({activeCount})
           </div>
-          <div className="relative w-48">
-            <Search className="w-3 h-3 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-muted-foreground" />
             <Input
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Filter staff..."
-              className="pl-7 h-7 text-xs bg-background"
+              placeholder="Search team member name or email..."
+              className="pl-8 h-8 text-xs bg-background"
             />
           </div>
         </div>
 
         {qualifyingUsers.length === 0 ? (
-          <div className="p-4 text-center border border-border/50 rounded-lg text-xs text-muted-foreground">
+          <div className="p-8 text-center border border-border/50 rounded-2xl bg-card text-xs text-muted-foreground">
             No active staff match the selected roles.
           </div>
         ) : (
-          <div className="border border-border/60 rounded-lg divide-y divide-border/50 bg-card overflow-hidden">
+          <div className="border border-border/60 rounded-2xl divide-y divide-border/50 bg-card overflow-hidden shadow-xs">
             {qualifyingUsers.map((u) => {
               const isExcluded = excludedUserIds.includes(u.id);
               const matchingRoles = u.roles.filter((r) => allowedRoleCodes.includes(r.code));
@@ -419,12 +429,12 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
               return (
                 <div
                   key={u.id}
-                  className={`flex items-center justify-between px-3.5 py-2.5 text-xs transition-colors ${
+                  className={`flex items-center justify-between px-4 py-3 text-xs transition-colors ${
                     isExcluded ? 'bg-muted/30 opacity-50' : 'hover:bg-muted/20'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="font-medium text-foreground truncate">{u.name}</span>
+                    <span className="font-semibold text-foreground truncate">{u.name}</span>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
                       {primaryRole}
                     </Badge>
@@ -435,9 +445,9 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-muted-foreground">
-                      {isExcluded ? 'Excluded' : 'Active'}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[11px] text-muted-foreground font-medium">
+                      {isExcluded ? 'Excluded' : 'Active for Assignment'}
                     </span>
                     <Switch
                       checked={!isExcluded}
@@ -451,6 +461,38 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
           </div>
         )}
       </div>
+
+      {/* Bottom Sticky Action Card */}
+      {canEdit && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground text-center sm:text-left">
+            <Info className="w-4 h-4 text-primary shrink-0" />
+            <span>Assignment rules apply immediately to new leads created across all connected channels.</span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {hasChanges && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => refetch()}
+                className="h-9 px-4 text-xs font-semibold"
+              >
+                Reset Changes
+              </Button>
+            )}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!hasChanges || updateMutation.isPending}
+              className="w-full sm:w-auto h-9 px-6 text-xs font-semibold"
+            >
+              <Save className="w-3.5 h-3.5 mr-1.5" />
+              {updateMutation.isPending ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+            </Button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

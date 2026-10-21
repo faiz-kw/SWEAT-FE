@@ -378,7 +378,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const hasReceivedEnquiries = allImports.some((i) => i.status === 'IMPORTED');
 
   return (
-    <div className="space-y-6 max-w-7xl w-full max-w-full overflow-x-hidden">
+    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
       {/* 1. Header & Connection Status */}
       <header className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">

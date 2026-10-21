@@ -125,18 +125,18 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {/* Overview Banner */}
-      <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-card p-4 sm:p-5 rounded-xl border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary" />
-            Stuck Lead Detection & Next Best Action Policy
+            At-Risk Leads & Immediate Action Rules
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
-            Configure automated attention triggers and time thresholds. When triggered, the engine marks leads as stuck,
-            determines the primary reason with overdue magnitude, and prescribes deterministic Next Best Actions.
+            Set automatic alerts and time limits so no lead falls through the cracks. When a lead needs urgent attention,
+            the system flags it and tells your sales team the exact next step to take.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {canEdit && (
             <Button
               type="button"
@@ -144,15 +144,15 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               size="sm"
               onClick={() => scanMutation.mutate()}
               disabled={scanMutation.isPending}
-              className="gap-1.5 h-8 text-xs"
-              title="Run on-demand SLA breach scan"
+              className="gap-1.5 h-8 text-xs flex-1 sm:flex-initial"
+              title="Run a live scan across all leads to flag anyone waiting too long"
             >
               {scanMutation.isPending ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Play className="w-3.5 h-3.5 text-primary" />
               )}
-              <span>Scan SLA Breaches</span>
+              <span>{scanMutation.isPending ? 'Scanning...' : 'Scan for At-Risk Leads'}</span>
             </Button>
           )}
           {canEdit && (
@@ -160,36 +160,36 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               type="submit"
               size="sm"
               disabled={!hasChanges || updateMutation.isPending}
-              className="gap-1.5 h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              className="gap-1.5 h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold flex-1 sm:flex-initial"
             >
               {updateMutation.isPending ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
-              <span>Save Policy</span>
+              <span>{updateMutation.isPending ? 'Saving...' : 'Save Rules'}</span>
             </Button>
           )}
         </div>
       </div>
 
       {/* MASTER SWITCH CARD */}
-      <div className="p-4 rounded-xl border border-border/70 bg-card/60 space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-card/60 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-0.5">
             <Label htmlFor="master-switch" className="text-sm font-bold text-foreground cursor-pointer">
-              Attention Engine Master Switch
+              Lead Attention & Alert System (Master Switch)
             </Label>
             <p className="text-xs text-muted-foreground">
-              When disabled, all attention checks are paused and no leads will be flagged as stuck.
+              When turned on, the system actively monitors lead response times and highlights leads needing immediate contact.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 self-end sm:self-auto">
             <Badge
               variant={formData.is_enabled ? 'default' : 'secondary'}
               className="text-[10px] font-semibold"
             >
-              {formData.is_enabled ? 'ACTIVE' : 'DISABLED'}
+              {formData.is_enabled ? 'ACTIVE' : 'PAUSED'}
             </Badge>
             <Switch
               id="master-switch"
@@ -202,22 +202,22 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
       </div>
 
       {/* 2-COLUMN SETTINGS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* CARD 1: Stage SLA & Follow-up Rules */}
-        <div className="p-4 rounded-xl border border-border/70 bg-card/40 space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-card/40 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-border/40">
             <Clock className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-              Stage SLAs & Follow-up Tasks
+              Response Deadlines & Follow-up Tasks
             </h3>
           </div>
 
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Stage SLA Breaches</Label>
+          <div className="space-y-4">
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Missed Stage Deadlines</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag leads whose stage SLA has elapsed according to configured Stage SLA Policies.
+                  Flag leads that have been in the same pipeline stage longer than your target response window.
                 </p>
               </div>
               <Switch
@@ -227,11 +227,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Overdue Follow-up Tasks</Label>
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Overdue Tasks</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag leads with pending sales tasks past their scheduled due date/time.
+                  Flag leads with scheduled phone calls, WhatsApp messages, or visits that passed their due time.
                 </p>
               </div>
               <Switch
@@ -241,11 +241,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">No Follow-up Scheduled</Label>
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">No Next Step Scheduled</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag leads lacking an upcoming follow-up after their stage SLA window elapses.
+                  Flag leads that have no future call or task scheduled once their initial contact window ends.
                 </p>
               </div>
               <Switch
@@ -258,20 +258,20 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
         </div>
 
         {/* CARD 2: Communication & Responsiveness */}
-        <div className="p-4 rounded-xl border border-border/70 bg-card/40 space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-card/40 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-border/40">
             <MessageSquare className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-              Customer Responsiveness
+              Customer Waiting Time
             </h3>
           </div>
 
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Awaiting Response Tracking</Label>
+          <div className="space-y-4">
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Waiting for Customer Reply</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag leads where outbound outreach awaits customer reply beyond the configured wait window.
+                  Flag leads where your team sent outreach (WhatsApp/Email/SMS) and the lead has not replied.
                 </p>
               </div>
               <Switch
@@ -282,11 +282,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
             </div>
 
             {formData.no_response_attention_enabled && (
-              <div className="space-y-1.5 pt-1 bg-muted/20 p-2.5 rounded-lg border border-border/40">
+              <div className="space-y-1.5 pt-1 bg-muted/20 p-3 rounded-lg border border-border/40">
                 <Label className="text-xs font-medium text-foreground">
-                  Response Wait Threshold (Hours)
+                  How long to wait before alerting (Hours)
                 </Label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input
                     type="number"
                     min={1}
@@ -296,28 +296,28 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                     disabled={!canEdit || !formData.is_enabled}
                     className="h-8 text-xs font-mono w-28"
                   />
-                  <span className="text-xs text-muted-foreground">hours after last outbound message</span>
+                  <span className="text-xs text-muted-foreground">hours after last message sent by your team</span>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* CARD 3: Trial Booking & Attendance Lifecycle */}
-        <div className="p-4 rounded-xl border border-border/70 bg-card/40 space-y-4">
+        {/* CARD 3: Trial Workout Lifecycle */}
+        <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-card/40 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-border/40">
             <Bell className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-              Trial Workout Lifecycle
+              Trial Workout Follow-ups
             </h3>
           </div>
 
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Trial Not Booked</Label>
+          <div className="space-y-4">
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Interested But Not Booked</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag interested / hot leads without a booked session once stage SLA expires.
+                  Flag qualified or hot leads who showed interest but have not booked their trial workout session.
                 </p>
               </div>
               <Switch
@@ -327,11 +327,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Trial Confirmation Pending</Label>
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Unconfirmed Booking</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag bookings pending confirmation beyond the trial reminder wait duration.
+                  Flag booked workouts that remain unconfirmed past the normal reminder response window.
                 </p>
               </div>
               <Switch
@@ -341,11 +341,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Trial No-Show Recovery</Label>
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Missed Workout (No-Show)</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag missed sessions lacking completed re-engagement follow-up.
+                  Flag clients who missed their scheduled workout session so staff can reach out right away to rebook.
                 </p>
               </div>
               <Switch
@@ -355,11 +355,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Post-Trial Conversion Follow-up</Label>
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Attended Workout (Ready for Membership)</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag attended workouts needing membership consultation follow-up.
+                  Flag clients who completed their trial workout and need a follow-up consultation to choose a membership plan.
                 </p>
               </div>
               <Switch
@@ -372,20 +372,20 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
         </div>
 
         {/* CARD 4: Lead Ownership & Assignment */}
-        <div className="p-4 rounded-xl border border-border/70 bg-card/40 space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl border border-border/70 bg-card/40 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-border/40">
             <UserCheck className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-              Lead Ownership & Assignment
+              Lead Assignment & Staff Alerts
             </h3>
           </div>
 
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-2">
-                <Label className="text-xs font-semibold text-foreground">Unassigned Lead Alerts</Label>
+          <div className="space-y-4">
+            <div className="flex items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-xs font-semibold text-foreground">Unassigned Leads</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Flag newly registered leads without an active sales representative.
+                  Flag incoming leads that have not been assigned to any sales rep or coach within the allowed grace period.
                 </p>
               </div>
               <Switch
@@ -396,11 +396,11 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
             </div>
 
             {formData.unassigned_lead_attention_enabled && (
-              <div className="space-y-1.5 pt-1 bg-muted/20 p-2.5 rounded-lg border border-border/40">
+              <div className="space-y-1.5 pt-1 bg-muted/20 p-3 rounded-lg border border-border/40">
                 <Label className="text-xs font-medium text-foreground">
-                  Unassigned Grace Period (Minutes)
+                  Allowed Unassigned Time (Minutes)
                 </Label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input
                     type="number"
                     min={0}
@@ -410,13 +410,65 @@ export function CRMAttentionSettings({ canEdit }: CRMAttentionSettingsProps) {
                     disabled={!canEdit || !formData.is_enabled}
                     className="h-8 text-xs font-mono w-28"
                   />
-                  <span className="text-xs text-muted-foreground">minutes after lead creation</span>
+                  <span className="text-xs text-muted-foreground">minutes before triggering an alert</span>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Sticky Bottom Save Action Bar */}
+      {canEdit && (
+        <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-lg">
+          <div className="flex items-center gap-2">
+            {hasChanges ? (
+              <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs">
+                Unsaved changes
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
+                All rules up to date
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Changes take effect immediately across all CRM lead views and alerts.
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => scanMutation.mutate()}
+              disabled={scanMutation.isPending}
+              className="gap-1.5 h-8 text-xs flex-1 sm:flex-initial"
+            >
+              {scanMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5 text-primary" />
+              )}
+              <span>{scanMutation.isPending ? 'Scanning...' : 'Scan Leads Now'}</span>
+            </Button>
+
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!hasChanges || updateMutation.isPending}
+              className="gap-1.5 h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold flex-1 sm:flex-initial"
+            >
+              {updateMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              <span>{updateMutation.isPending ? 'Saving...' : 'Save Rules'}</span>
+            </Button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

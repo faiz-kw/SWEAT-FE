@@ -340,18 +340,18 @@ export function CRMAutomationSettings({ canEdit }: Props) {
   return (
     <div className="space-y-4">
       {/* Top Header & Subtabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/50">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 sm:p-5 rounded-xl border border-border/50">
         <div>
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Tenant Automation Engine</h2>
+            <h2 className="text-sm font-semibold text-foreground">Studio Automations</h2>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Configure event-driven multi-step workflows, durable waits, and branch automations across CRM and integrations.
+          <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+            Set up automatic actions that run whenever a lead is created, changes stage, or books a trial workout.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <div className="inline-flex rounded-lg border border-input p-0.5 bg-background text-xs">
             <button
               type="button"
@@ -369,7 +369,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
                 view === 'history' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              History
+              Run History
             </button>
           </div>
 
@@ -428,12 +428,12 @@ export function CRMAutomationSettings({ canEdit }: Props) {
 
           {/* Workflow Cards */}
           {workflows.length === 0 ? (
-            <div className="p-12 text-center bg-card rounded-xl border border-border/50 space-y-3">
-              <Layers className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+            <div className="p-10 sm:p-14 text-center bg-card rounded-xl border border-border/50 space-y-3">
+              <Layers className="w-9 h-9 text-muted-foreground/40 mx-auto" />
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-foreground">No automations configured.</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Create your first tenant automation to automate lead assignment, trial follow-ups, and messaging.
+                <p className="text-sm font-semibold text-foreground">No automations created yet</p>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  Create your first automation workflow to send welcome messages, assign coaches, or trigger reminders automatically.
                 </p>
               </div>
               {canEdit && (
@@ -1060,7 +1060,7 @@ export function CRMAutomationSettings({ canEdit }: Props) {
 
                 {step.type === 'END' && (
                   <div className="text-xs text-muted-foreground p-2 rounded-md bg-muted/20">
-                    Terminal step. The workflow execution completes successfully.
+                    End of workflow. The automation finishes here.
                   </div>
                 )}
               </div>
@@ -1141,11 +1141,11 @@ export function CRMAutomationSettings({ canEdit }: Props) {
 
           {/* Execution List */}
           {executions.length === 0 ? (
-            <div className="p-12 text-center bg-card rounded-xl border border-border/50 space-y-2">
-              <History className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-              <p className="text-xs font-semibold text-foreground">No executions recorded yet.</p>
-              <p className="text-[11px] text-muted-foreground">
-                Executions will appear here when DomainOutboxEvents trigger published workflows.
+            <div className="p-10 sm:p-14 text-center bg-card rounded-xl border border-border/50 space-y-2">
+              <History className="w-9 h-9 text-muted-foreground/40 mx-auto" />
+              <p className="text-sm font-semibold text-foreground">No automation runs recorded yet</p>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                Automation runs will appear here as your active workflows trigger for leads and bookings.
               </p>
             </div>
           ) : (

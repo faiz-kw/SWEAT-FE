@@ -25,6 +25,9 @@ import {
   RotateCw,
   UserCheck,
   PhoneCall,
+  ChevronDown,
+  Copy,
+  CheckCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CRMAutomationSettings } from './CRMAutomationSettings';
@@ -431,269 +434,356 @@ export function CRMSettingsWorkspace() {
       />
 
       <main className="w-full max-w-full overflow-x-hidden px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
-        {/* Tabs Navigation (Consistent Segmented Control) */}
-        <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border overflow-x-auto no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setActiveTab('meta')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-sm ${
-            activeTab === 'meta'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          <span>Meta Lead Ads</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('sources')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'sources'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Tag className="w-3.5 h-3.5" />
-          <span>Lead Sources</span>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-            {leadSources.length}
-          </Badge>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('agents')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'agents'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>Sales Roles & Assignment</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('sla')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'sla'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          <span>Lead SLA Rules</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('attention')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'attention'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span>Attention & Next Actions</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('reminders')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'reminders'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Bell className="w-3.5 h-3.5" />
-          <span>Trial Reminders</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('channels')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'channels'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Radio className="w-3.5 h-3.5" />
-          <span>Channels</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('templates')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'templates'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>Templates</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('automation')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap ${
-            activeTab === 'automation'
-              ? 'bg-background text-foreground shadow-sm font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-          }`}
-        >
-          <Zap className="w-3.5 h-3.5" />
-          <span>Automation</span>
-        </button>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* TAB 1: LEAD SOURCES                                                        */}
-      {/* ========================================================================= */}
-      {activeTab === 'meta' && <MetaLeadSettings canEdit={canEdit} />}
-      {activeTab === 'sources' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/50">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Attribution & Acquisition Sources</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Manage the channels through which prospects find your fitness business. Technical codes are managed automatically.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0">
-              {/* Filter Pills */}
-              <div className="inline-flex rounded-lg border border-input p-0.5 bg-background text-xs">
-                {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setSourceFilter(filter)}
-                    className={`px-2.5 py-1 rounded-md transition-colors text-[11px] font-medium ${
-                      sourceFilter === filter ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {filter === 'ALL' ? 'All' : filter === 'ACTIVE' ? 'Active' : 'Inactive'}
-                  </button>
-                ))}
-              </div>
-
-              {canEdit && (
-                <Button
-                  size="sm"
-                  onClick={() => setIsNewSourceModalOpen(true)}
-                  className="gap-1.5 h-8 text-xs font-medium"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Source</span>
-                </Button>
-              )}
+        {/* Responsive Tabs Navigation */}
+        <div className="w-full">
+          {/* Mobile Tab Dropdown Selector (visible on small screens) */}
+          <div className="sm:hidden w-full mb-3">
+            <div className="relative">
+              <select
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value as any)}
+                className="w-full h-11 px-3.5 pr-9 rounded-xl border border-border bg-card text-foreground font-semibold text-xs appearance-none shadow-xs focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="meta">🌐 Meta Lead Ads</option>
+                <option value="sources">🏷️ Lead Sources ({leadSources.length})</option>
+                <option value="agents">👥 Sales Roles & Assignment</option>
+                <option value="sla">⏱️ Response Time Goals (SLAs)</option>
+                <option value="attention">✨ At-Risk Leads & Alerts</option>
+                <option value="reminders">🔔 Trial Reminders</option>
+                <option value="channels">📻 Communication Channels</option>
+                <option value="templates">💬 Message Templates</option>
+                <option value="automation">⚡ Studio Automations</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-3.5 pointer-events-none" />
             </div>
           </div>
 
-          {/* Table / Card List */}
-          {isSourcesLoading ? (
-            <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span className="text-xs">Loading lead sources from tenant database...</span>
-            </div>
-          ) : isSourcesError ? (
-            <div className="p-6 bg-destructive/5 rounded-xl border border-destructive/20 text-center space-y-2">
-              <AlertCircle className="w-5 h-5 text-destructive mx-auto" />
-              <p className="text-xs font-medium text-destructive">Failed to load lead sources from database.</p>
-              <Button size="sm" variant="outline" onClick={() => refetchSources()} className="text-xs">
-                Retry
-              </Button>
-            </div>
-          ) : filteredSources.length === 0 ? (
-            <div className="p-10 text-center bg-card rounded-xl border border-border/50 text-muted-foreground text-xs">
-              No lead sources found matching the selected filter.
-            </div>
-          ) : (
-            <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border/40 font-semibold">
-                    <tr>
-                      <th className="px-4 py-3">Source Name</th>
-                      <th className="px-4 py-3">Channel Type</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/30">
-                    {filteredSources.map((src) => (
-                      <tr key={src.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          {src.name}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          <span className="px-2 py-0.5 rounded-full bg-secondary/80 text-secondary-foreground text-[11px] font-medium">
-                            {SOURCE_TYPE_CHOICES.find((c) => c.value === src.source_type)?.label || src.source_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-                              src.status === 'ACTIVE'
-                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                : 'bg-muted text-muted-foreground border-border'
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${src.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
-                            {src.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {canEdit && (
-                            <div className="inline-flex items-center gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingSource(src);
-                                  setEditSourceName(src.name);
-                                  setEditSourceType(src.source_type);
-                                  setEditSourceStatus(src.status);
-                                }}
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                              >
-                                <Edit2 className="w-3.5 h-3.5 mr-1" />
-                                Edit
-                              </Button>
+          {/* Desktop & Tablet Segmented Tab Bar */}
+          <div className="hidden sm:flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border overflow-x-auto no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setActiveTab('meta')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'meta'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Meta Lead Ads</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('sources')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'sources'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Lead Sources</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                {leadSources.length}
+              </Badge>
+            </button>
 
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const nextStatus = src.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-                                  updateSourceMutation.mutate({
-                                    id: src.id,
-                                    payload: { status: nextStatus },
-                                  });
-                                }}
-                                className="h-7 px-2 text-[11px]"
-                              >
-                                {src.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <button
+              type="button"
+              onClick={() => setActiveTab('agents')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'agents'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Sales Roles & Assignment</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('sla')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'sla'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Response Goals (SLAs)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('attention')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'attention'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span>At-Risk Leads</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reminders')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'reminders'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Trial Reminders</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('channels')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'channels'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>Channels</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('templates')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'templates'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Templates</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('automation')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all shrink-0 whitespace-nowrap text-xs ${
+                activeTab === 'automation'
+                  ? 'bg-background text-foreground shadow-sm font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Automation</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* TAB 1: LEAD SOURCES                                                        */}
+        {/* ========================================================================= */}
+        {activeTab === 'meta' && <MetaLeadSettings canEdit={canEdit} />}
+        {activeTab === 'sources' && (
+          <div className="w-full space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs">
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-foreground">Where Leads Come From</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+                  Track how prospective members discover your studio (e.g. Walk-ins, Instagram, Website, Member Referrals). Staff choose from these sources when recording new leads.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                {/* Filter Pills */}
+                <div className="inline-flex rounded-lg border border-input p-0.5 bg-background text-xs">
+                  {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setSourceFilter(filter)}
+                      className={`px-2.5 py-1 rounded-md transition-colors text-[11px] font-medium ${
+                        sourceFilter === filter ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {filter === 'ALL' ? 'All' : filter === 'ACTIVE' ? 'Active' : 'Inactive'}
+                    </button>
+                  ))}
+                </div>
+
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    onClick={() => setIsNewSourceModalOpen(true)}
+                    className="gap-1.5 h-8 text-xs font-semibold shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Source</span>
+                  </Button>
+                )}
               </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Table / Card List */}
+            {isSourcesLoading ? (
+              <div className="flex items-center justify-center p-12 bg-card rounded-2xl border border-border/50 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span className="text-xs">Loading lead sources...</span>
+              </div>
+            ) : isSourcesError ? (
+              <div className="p-6 bg-destructive/5 rounded-2xl border border-destructive/20 text-center space-y-2">
+                <AlertCircle className="w-5 h-5 text-destructive mx-auto" />
+                <p className="text-xs font-medium text-destructive">Failed to load lead sources from database.</p>
+                <Button size="sm" variant="outline" onClick={() => refetchSources()} className="text-xs">
+                  Retry
+                </Button>
+              </div>
+            ) : filteredSources.length === 0 ? (
+              <div className="p-10 text-center bg-card rounded-2xl border border-border/50 text-muted-foreground text-xs">
+                No lead sources found matching the selected filter.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Mobile Responsive Cards (visible under 640px) */}
+                <div className="grid grid-cols-1 gap-2.5 sm:hidden">
+                  {filteredSources.map((src) => (
+                    <div key={src.id} className="p-3.5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground">{src.name}</h4>
+                          <span className="text-[11px] text-muted-foreground">
+                            {SOURCE_TYPE_CHOICES.find((c) => c.value === src.source_type)?.label || src.source_type}
+                          </span>
+                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                            src.status === 'ACTIVE'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : 'bg-muted text-muted-foreground border-border'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${src.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                          {src.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      {canEdit && (
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingSource(src);
+                              setEditSourceName(src.name);
+                              setEditSourceType(src.source_type);
+                              setEditSourceStatus(src.status);
+                            }}
+                            className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const nextStatus = src.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+                              updateSourceMutation.mutate({
+                                id: src.id,
+                                payload: { status: nextStatus },
+                              });
+                            }}
+                            className="h-7 px-2.5 text-xs font-medium"
+                          >
+                            {src.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop & Tablet Table (visible 640px and up) */}
+                <div className="hidden sm:block bg-card rounded-2xl border border-border/60 overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border/40 font-semibold">
+                        <tr>
+                          <th className="px-4 py-3">Source Name</th>
+                          <th className="px-4 py-3">Channel Type</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/30">
+                        {filteredSources.map((src) => (
+                          <tr key={src.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-3 font-semibold text-foreground">
+                              {src.name}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              <span className="px-2 py-0.5 rounded-full bg-secondary/80 text-secondary-foreground text-[11px] font-medium">
+                                {SOURCE_TYPE_CHOICES.find((c) => c.value === src.source_type)?.label || src.source_type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+                                  src.status === 'ACTIVE'
+                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                    : 'bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${src.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                                {src.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {canEdit && (
+                                <div className="inline-flex items-center gap-1.5">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingSource(src);
+                                      setEditSourceName(src.name);
+                                      setEditSourceType(src.source_type);
+                                      setEditSourceStatus(src.status);
+                                    }}
+                                    className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 mr-1" />
+                                    Edit
+                                  </Button>
+
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const nextStatus = src.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+                                      updateSourceMutation.mutate({
+                                        id: src.id,
+                                        payload: { status: nextStatus },
+                                      });
+                                    }}
+                                    className="h-7 px-2.5 text-xs font-medium"
+                                  >
+                                    {src.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* ========================================================================= */}
       {/* TAB: SALES ROLES & AGENT ASSIGNMENT                                        */}
@@ -706,37 +796,37 @@ export function CRMSettingsWorkspace() {
       {/* TAB 2: LEAD SLA RULES                                                      */}
       {/* ========================================================================= */}
       {activeTab === 'sla' && (
-        <div className="space-y-4">
-          <div className="bg-card p-4 rounded-xl border border-border/50">
-            <h2 className="text-sm font-semibold text-foreground">Pipeline Stage Response SLAs</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Set target response times for leads at each stage in the funnel. Internal canonical states remain strictly preserved.
+        <div className="w-full space-y-5">
+          <div className="bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs">
+            <h2 className="text-sm sm:text-base font-bold text-foreground">Lead Response Goals (SLAs)</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+              Set target response times for your sales team at every step of the funnel so leads receive quick, attentive service.
             </p>
           </div>
 
           {isSlaLoading ? (
-            <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
+            <div className="flex items-center justify-center p-12 bg-card rounded-2xl border border-border/50 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span className="text-xs">Loading stage SLA policies...</span>
+              <span className="text-xs">Loading response goals...</span>
             </div>
           ) : isSlaError ? (
-            <div className="p-6 bg-destructive/5 rounded-xl border border-destructive/20 text-center text-xs text-destructive">
+            <div className="p-6 bg-destructive/5 rounded-2xl border border-destructive/20 text-center text-xs text-destructive">
               Failed to load SLA rules.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {slaPolicies.map((rule) => (
                 <div
                   key={rule.id}
                   className={`p-4 rounded-xl border transition-all space-y-3 bg-card ${
-                    rule.is_enabled ? 'border-border/60 shadow-sm' : 'border-border/30 opacity-70 bg-muted/10'
+                    rule.is_enabled ? 'border-border/60 shadow-xs' : 'border-border/30 opacity-70 bg-muted/10'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-foreground">{rule.display_label}</h3>
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {rule.canonical_stage}
+                      <span className="text-[10px] text-muted-foreground">
+                        Stage: {rule.canonical_stage}
                       </span>
                     </div>
 
@@ -744,7 +834,7 @@ export function CRMSettingsWorkspace() {
                       variant={rule.is_enabled ? 'default' : 'secondary'}
                       className="text-[10px] font-semibold"
                     >
-                      {rule.is_enabled ? 'Active SLA' : 'Disabled'}
+                      {rule.is_enabled ? 'Active Goal' : 'Disabled'}
                     </Badge>
                   </div>
 
@@ -752,16 +842,16 @@ export function CRMSettingsWorkspace() {
                     <div className="flex justify-between items-center text-muted-foreground">
                       <span>Target Response:</span>
                       <span className="font-semibold text-foreground">
-                        {rule.response_target_value} {rule.response_target_unit.toLowerCase()}
+                        Within {rule.response_target_value} {rule.response_target_unit.toLowerCase()}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center text-muted-foreground">
-                      <span>Escalation:</span>
-                      <span className="text-foreground">
+                      <span>Escalation Alert:</span>
+                      <span className="text-foreground font-medium">
                         {rule.escalation_enabled && rule.escalation_after_value
-                          ? `After ${rule.escalation_after_value} ${rule.escalation_after_unit?.toLowerCase()}`
-                          : 'None'}
+                          ? `Alerts after ${rule.escalation_after_value} ${rule.escalation_after_unit?.toLowerCase()}`
+                          : 'None (No alert)'}
                       </span>
                     </div>
                   </div>
@@ -780,10 +870,10 @@ export function CRMSettingsWorkspace() {
                           setSlaEscalationValue(rule.escalation_after_value ?? '');
                           setSlaEscalationUnit(rule.escalation_after_unit || 'HOURS');
                         }}
-                        className="h-7 text-xs gap-1.5"
+                        className="h-7 text-xs gap-1.5 font-medium"
                       >
                         <Edit2 className="w-3 h-3" />
-                        Configure SLA
+                        Configure Goal
                       </Button>
                     </div>
                   )}
@@ -793,19 +883,19 @@ export function CRMSettingsWorkspace() {
           )}
 
           {/* ========================================================================= */}
-          {/* EVENT-DRIVEN STAGE AUTOMATION RULES SECTION                               */}
+          {/* AUTOMATIC STAGE PROGRESSION RULES SECTION                                */}
           {/* ========================================================================= */}
           <div className="pt-6 border-t border-border/60 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/50">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs">
               <div>
-                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <span>Event-Driven Stage Automation Rules</span>
-                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
-                    Engine Active
+                <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
+                  <span>Automatic Stage Progression</span>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-semibold">
+                    Automations Active
                   </Badge>
                 </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Automatically move leads to appropriate stages upon domain events (Follow-up completed, Trial booked, Attended, No-Show, Converted).
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+                  Automatically advance leads to the next pipeline stage when key workout and follow-up milestones occur.
                 </p>
               </div>
 
@@ -813,10 +903,10 @@ export function CRMSettingsWorkspace() {
                 <Button
                   size="sm"
                   onClick={() => setIsNewRuleModalOpen(true)}
-                  className="text-xs h-8 gap-1.5 shrink-0"
+                  className="text-xs h-8 gap-1.5 shrink-0 font-semibold"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Custom Automation Rule
+                  Add Stage Movement Rule
                 </Button>
               )}
             </div>
@@ -1398,31 +1488,41 @@ export function CRMSettingsWorkspace() {
       {/* TAB 4: COMMUNICATION CHANNELS                                             */}
       {/* ========================================================================= */}
       {activeTab === 'channels' && (
-        <div className="space-y-4">
-          <div className="bg-card p-4 rounded-xl border border-border/50">
-            <h2 className="text-sm font-semibold text-foreground">Connected Outreach Channels</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Communication channels for contacting leads. Technical connections and numbers are set up by your administrator.
+        <div className="w-full space-y-4">
+          <div className="bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs">
+            <h2 className="text-sm sm:text-base font-bold text-foreground">Connected Outreach Channels</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+              Review the automated messaging, transactional email, SMS, and conversational AI phone services connected to your studio.
             </p>
           </div>
 
           {isChannelsLoading ? (
-            <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
+            <div className="flex items-center justify-center p-12 bg-card rounded-2xl border border-border/50 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               <span className="text-xs">Checking integration statuses...</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(channels || []).map((chan) => (
-                <div key={chan.id} className="p-4 rounded-xl border border-border/60 bg-card space-y-3 shadow-sm">
+                <div key={chan.id} className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3.5 shadow-xs">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-sm font-bold text-foreground">{chan.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">{chan.description}</p>
+                      <h3 className="text-sm font-bold text-foreground">
+                        {chan.id === 'whatsapp'
+                          ? 'WhatsApp Business'
+                          : chan.id === 'email'
+                          ? 'Studio Email (SMTP / SES)'
+                          : chan.id === 'sms'
+                          ? 'SMS Text Alerts'
+                          : chan.id === 'ai_calling'
+                          ? 'Sarvam AI Voice Phone Agent'
+                          : chan.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{chan.description}</p>
                     </div>
 
                     <Badge
-                      className={`text-[10px] font-semibold ${
+                      className={`text-[10px] font-semibold shrink-0 ${
                         chan.status === 'CONNECTED'
                           ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
                           : chan.status === 'CONFIGURED'
@@ -1433,7 +1533,7 @@ export function CRMSettingsWorkspace() {
                       }`}
                     >
                       {chan.status === 'CONNECTED'
-                        ? 'Connected'
+                        ? 'Connected & Active'
                         : chan.status === 'CONFIGURED'
                         ? 'Setup Needed'
                         : chan.status === 'COMING_SOON'
@@ -1442,18 +1542,18 @@ export function CRMSettingsWorkspace() {
                     </Badge>
                   </div>
 
-                  <div className="space-y-1.5 pt-2 border-t border-border/40 text-xs">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Sending Number / ID:</span>
-                      <span className="font-mono text-foreground font-medium">
+                  <div className="space-y-2 pt-2 border-t border-border/40 text-xs">
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span>Sender Number / Email:</span>
+                      <span className="font-mono text-foreground font-medium text-[11px] px-2 py-0.5 rounded bg-muted/40">
                         {chan.sender_identity === 'Not configured' || chan.sender_identity === 'Not set'
-                          ? 'Not set up yet'
+                          ? 'Managed by administrator'
                           : chan.sender_identity}
                       </span>
                     </div>
 
                     <div className="space-y-1 pt-1">
-                      <span className="text-[11px] font-semibold text-muted-foreground">Features:</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground">Key Capabilities:</span>
                       <ul className="space-y-0.5 pl-4 list-disc text-muted-foreground text-[11px]">
                         {(chan.capabilities || chan.features || []).map((feat, i) => (
                           <li key={i}>{feat}</li>
@@ -1472,27 +1572,28 @@ export function CRMSettingsWorkspace() {
       {/* TAB 5: MESSAGE TEMPLATES                                                   */}
       {/* ========================================================================= */}
       {activeTab === 'templates' && (
-        <div className="space-y-4">
-          <div className="bg-card p-4 rounded-xl border border-border/50">
-            <h2 className="text-sm font-semibold text-foreground">CRM Notification Templates</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Pre-configured notification templates for Lead welcome and Trial reminders stored in the tenant governance repository.
-            </p>
+        <div className="w-full space-y-4">
+          <div className="bg-card p-4 sm:p-5 rounded-2xl border border-border/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-foreground">Message & Notification Templates</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl leading-relaxed">
+                Preview the automated WhatsApp passes, 24-hour reminders, and welcome emails delivered to your prospects and members.
+              </p>
+            </div>
+            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 shrink-0 font-semibold self-start sm:self-auto">
+              Live Templates Active
+            </Badge>
           </div>
 
           {isTemplatesLoading ? (
-            <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
+            <div className="flex items-center justify-center p-12 bg-card rounded-2xl border border-border/50 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               <span className="text-xs">Loading templates...</span>
             </div>
-          ) : (templates || []).length === 0 ? (
-            <div className="p-8 text-center bg-card rounded-xl border border-border/50 text-muted-foreground text-xs">
-              No custom CRM notification templates configured yet. System uses standard canonical defaults.
-            </div>
-          ) : (
+          ) : (templates || []).length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(templates || []).map((tmpl) => (
-                <div key={tmpl.id} className="p-4 rounded-xl border border-border/60 bg-card space-y-2.5">
+                <div key={tmpl.id} className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3 shadow-xs">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-foreground">{tmpl.name}</h3>
@@ -1510,11 +1611,185 @@ export function CRMSettingsWorkspace() {
                     </p>
                   )}
 
-                  <div className="p-2.5 rounded-lg bg-muted/40 text-xs font-mono text-muted-foreground line-clamp-3">
+                  <div className="p-3 rounded-xl bg-muted/30 text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">
                     {tmpl.body}
                   </div>
                 </div>
               ))}
+            </div>
+          ) : (
+            /* Live Standard System Templates Preview */
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-primary flex items-start gap-2.5">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  Your studio is using SWEAT's standard high-converting communication templates. All bracketed variables like <code className="bg-primary/10 px-1 py-0.5 rounded font-mono text-[10px]">{'{{first_name}}'}</code> are automatically personalized per prospect.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Template 1: Instant WhatsApp VIP Pass */}
+                <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3 shadow-xs flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">Instant Booking Confirmation (VIP Pass)</h3>
+                        <span className="text-[11px] text-muted-foreground">Sent immediately upon booking a trial session</span>
+                      </div>
+                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-semibold">
+                        WhatsApp
+                      </Badge>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-muted/40 border border-border/40 text-xs text-foreground font-sans whitespace-pre-wrap leading-relaxed space-y-1">
+                      <p className="font-semibold text-emerald-600">🥊 SWEAT Studio VIP Pass Confirmed!</p>
+                      <p>Hi {'{{first_name}}'}, get ready for an energizing workout!</p>
+                      <p className="text-muted-foreground">📅 Class: <span className="text-foreground font-medium">{'{{class_name}}'}</span></p>
+                      <p className="text-muted-foreground">⏰ Time: <span className="text-foreground font-medium">{'{{class_time}}'}</span></p>
+                      <p className="text-muted-foreground">📍 Studio: <span className="text-foreground font-medium">{'{{branch_name}}'}</span></p>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        Please arrive 15 minutes before class with athletic wear and water. If you need to reschedule or have questions, just reply directly to this message. See you on the reformer!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    <span>Delivered via Gupshup WhatsApp</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`🥊 SWEAT Studio VIP Pass Confirmed!\n\nHi {{first_name}}, get ready for an energizing workout!\n\n📅 Class: {{class_name}}\n⏰ Time: {{class_time}}\n📍 Studio: {{branch_name}}\n\nPlease arrive 15 minutes before class with athletic wear and water. If you need to reschedule or have questions, just reply directly to this message. See you on the reformer!`);
+                        toast.success('Template text copied to clipboard');
+                      }}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Copy className="w-3 h-3" />
+                      Copy Text
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Template 2: 24h & 2h Reminder */}
+                <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3 shadow-xs flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">Pre-Class Attendance Reminder</h3>
+                        <span className="text-[11px] text-muted-foreground">Sent 24h & 2h before the scheduled workout</span>
+                      </div>
+                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-semibold">
+                        WhatsApp
+                      </Badge>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-muted/40 border border-border/40 text-xs text-foreground font-sans whitespace-pre-wrap leading-relaxed space-y-1">
+                      <p className="font-semibold text-emerald-600">⏰ Upcoming Workout Reminder — SWEAT</p>
+                      <p>Hi {'{{first_name}}'}, this is a friendly reminder that your trial session is coming up:</p>
+                      <p className="text-muted-foreground">📅 Class: <span className="text-foreground font-medium">{'{{class_name}}'}</span></p>
+                      <p className="text-muted-foreground">⏰ Time: <span className="text-foreground font-medium">{'{{class_time}}'}</span></p>
+                      <p className="text-muted-foreground">📍 Studio: <span className="text-foreground font-medium">{'{{branch_name}}'}</span></p>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        Please reply "YES" to confirm you are attending, or reply to let us know if you need to reschedule. See you soon!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    <span>Delivered via Gupshup WhatsApp</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`⏰ Upcoming Workout Reminder — SWEAT\n\nHi {{first_name}}, this is a friendly reminder that your trial session is coming up:\n📅 Class: {{class_name}}\n⏰ Time: {{class_time}}\n📍 Studio: {{branch_name}}\n\nPlease reply "YES" to confirm you are attending, or reply to let us know if you need to reschedule. See you soon!`);
+                        toast.success('Template text copied to clipboard');
+                      }}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Copy className="w-3 h-3" />
+                      Copy Text
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Template 3: Missed Workout Re-engagement */}
+                <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3 shadow-xs flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">Missed Workout Follow-up</h3>
+                        <span className="text-[11px] text-muted-foreground">Sent after a session if the prospect didn't make it</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20 font-semibold">
+                        WhatsApp / SMS
+                      </Badge>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-muted/40 border border-border/40 text-xs text-foreground font-sans whitespace-pre-wrap leading-relaxed space-y-1">
+                      <p className="font-semibold text-amber-600">👋 We missed you today at SWEAT!</p>
+                      <p>Hi {'{{first_name}}'}, life gets busy and plans change! We would love to reschedule your trial workout to another day that works better for you.</p>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        Just reply to this message with your preferred day and time, and our team will book your spot on the reformer immediately!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    <span>Triggered automatically on No-Show</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`👋 We missed you today at SWEAT!\n\nHi {{first_name}}, life gets busy and plans change! We would love to reschedule your trial workout to another day that works better for you.\n\nJust reply to this message with your preferred day and time, and our team will book your spot on the reformer immediately!`);
+                        toast.success('Template text copied to clipboard');
+                      }}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Copy className="w-3 h-3" />
+                      Copy Text
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Template 4: Welcome Email */}
+                <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card space-y-3 shadow-xs flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">New Prospect Welcome Email</h3>
+                        <span className="text-[11px] text-muted-foreground">Sent upon website enquiry or Meta lead form submission</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-600 border-indigo-500/20 font-semibold">
+                        Email
+                      </Badge>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-muted/40 border border-border/40 text-xs text-foreground font-sans whitespace-pre-wrap leading-relaxed space-y-1">
+                      <p className="font-medium text-muted-foreground">Subject: <span className="text-foreground font-semibold">Welcome to SWEAT — Your Fitness Journey Starts Here!</span></p>
+                      <p className="pt-1">Hi {'{{first_name}}'}, thank you for your interest in SWEAT!</p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        A master trainer will be in touch shortly to learn about your fitness goals and help select the best trial class for your schedule. We can't wait to welcome you to our community.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    <span>Sent via Transactional Email</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`Subject: Welcome to SWEAT — Your Fitness Journey Starts Here!\n\nHi {{first_name}}, thank you for your interest in SWEAT!\n\nA master trainer will be in touch shortly to learn about your fitness goals and help select the best trial class for your schedule. We can't wait to welcome you to our community.`);
+                        toast.success('Template text copied to clipboard');
+                      }}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Copy className="w-3 h-3" />
+                      Copy Text
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
