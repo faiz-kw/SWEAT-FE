@@ -883,27 +883,30 @@ export function CRMSettingsWorkspace() {
       {activeTab === 'reminders' && (
         <div className="max-w-3xl space-y-5">
           <div className="bg-card p-4 rounded-xl border border-border/50">
-            <h2 className="text-sm font-semibold text-foreground">Trial Session Reminders & Policies</h2>
+            <h2 className="text-sm font-semibold text-foreground">Trial Class Reminders & Follow-Ups</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Specify exact notification timings and follow-up rules when a member or prospect books a trial workout.
+              Set up automated WhatsApp messages, emails, and phone calls sent to prospects before and after their trial workout.
             </p>
           </div>
 
           {isReminderLoading ? (
             <div className="flex items-center justify-center p-12 bg-card rounded-xl border border-border/50 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span className="text-xs">Loading trial reminder policy...</span>
+              <span className="text-xs">Loading reminder settings...</span>
             </div>
           ) : (
             <div className="space-y-6 bg-card p-5 rounded-xl border border-border/50">
-              {/* Immediate Confirmation Channels */}
+              {/* 1. Immediate Confirmation Upon Booking */}
               <div className="space-y-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  1. Immediate Confirmation Upon Booking
+                  1. Instant Booking Confirmation
                 </h3>
+                <p className="text-xs text-muted-foreground">
+                  Choose how to send the guest pass and studio directions right after someone books.
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <label className="flex items-center justify-between p-3 rounded-lg border border-border/60 hover:bg-muted/20 cursor-pointer">
-                    <span className="text-xs font-medium">WhatsApp Message</span>
+                    <span className="text-xs font-medium">WhatsApp Guest Pass</span>
                     <input
                       type="checkbox"
                       checked={remWhatsapp}
@@ -925,7 +928,7 @@ export function CRMSettingsWorkspace() {
                   </label>
 
                   <label className="flex items-center justify-between p-3 rounded-lg border border-border/60 hover:bg-muted/20 cursor-pointer">
-                    <span className="text-xs font-medium">SMS Alert</span>
+                    <span className="text-xs font-medium">SMS Text Alert</span>
                     <input
                       type="checkbox"
                       checked={remSms}
@@ -937,13 +940,13 @@ export function CRMSettingsWorkspace() {
                 </div>
               </div>
 
-              {/* Pre-Session Reminder Offsets */}
+              {/* 2. Reminders Before Class */}
               <div className="space-y-2.5 pt-4 border-t border-border/40">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  2. Pre-Session Reminder Schedule
+                  2. Reminders Before Class
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Define notifications triggered before the trial workout begins.
+                  Choose when to send reminders to the prospect before their session starts.
                 </p>
 
                 <div className="flex flex-wrap gap-2 pt-1">
@@ -970,7 +973,7 @@ export function CRMSettingsWorkspace() {
                   <div className="flex items-center gap-2 pt-2 max-w-sm">
                     <Input
                       type="number"
-                      placeholder="Minutes before session (e.g. 60)"
+                      placeholder="Minutes before class (e.g. 60)"
                       value={newOffsetInput}
                       onChange={(e) => setNewOffsetInput(e.target.value)}
                       className="h-8 text-xs"
@@ -988,16 +991,16 @@ export function CRMSettingsWorkspace() {
                       }}
                       className="h-8 text-xs shrink-0"
                     >
-                      Add Offset
+                      Add Reminder
                     </Button>
                   </div>
                 )}
               </div>
 
-              {/* Confirmation & No-Response Follow-up */}
+              {/* 3. Confirming Attendance */}
               <div className="space-y-3 pt-4 border-t border-border/40">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  3. Attendance Confirmation & No-Response Strategy
+                  3. Confirming Attendance
                 </h3>
 
                 <label className="flex items-center gap-2.5 cursor-pointer">
@@ -1009,14 +1012,14 @@ export function CRMSettingsWorkspace() {
                     className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                   />
                   <span className="text-xs font-medium">
-                    Require prospect to confirm attendance (via 1-click WhatsApp / Email button)
+                    Ask prospects to confirm they are attending (via quick button in WhatsApp or Email)
                   </span>
                 </label>
 
                 {remConfirm && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-1">
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Wait Duration for Response</Label>
+                      <Label className="text-xs font-medium">How long to wait for their reply</Label>
                       <div className="flex gap-2">
                         <Input
                           type="number"
@@ -1038,29 +1041,29 @@ export function CRMSettingsWorkspace() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">If No Response Received</Label>
+                      <Label className="text-xs font-medium">If they don't reply in time</Label>
                       <select
                         value={remNoRespAction}
                         onChange={(e) => setRemNoRespAction(e.target.value as any)}
                         disabled={!canEdit}
                         className="w-full h-8 px-2 rounded-md border border-input bg-background text-xs"
                       >
-                        <option value="CREATE_FOLLOWUP">Automatically create sales follow-up task</option>
-                        <option value="NOTIFY_AGENT">Send notification alert to primary agent</option>
-                        <option value="NONE">No action</option>
+                        <option value="CREATE_FOLLOWUP">Create a task for staff to call them</option>
+                        <option value="NOTIFY_AGENT">Send an alert to their assigned sales agent</option>
+                        <option value="NONE">Do nothing</option>
                       </select>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* 4. Post-Attended Follow-up Task Policy */}
+              {/* 4. Follow-Up After Class (Attended) */}
               <div className="space-y-3 pt-4 border-t border-border/40">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  4. Post-Trial Workout Follow-up Policy
+                  4. Follow-Up After Class (Attended)
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Automatically generate an idempotent follow-up task for the assigned sales agent when a prospect completes their workout.
+                  Reach out to prospects after they finish their workout to help them choose a membership.
                 </p>
 
                 <label className="flex items-center gap-2.5 cursor-pointer">
@@ -1072,13 +1075,13 @@ export function CRMSettingsWorkspace() {
                     className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                   />
                   <span className="text-xs font-medium">
-                    Enable automated post-attended sales follow-up task
+                    Automatically remind staff to follow up after class
                   </span>
                 </label>
 
                 {postAttendedEnabled && (
                   <div className="pl-6 pt-1 space-y-1">
-                    <Label className="text-xs font-medium">Schedule Delay After Attendance</Label>
+                    <Label className="text-xs font-medium">When to reach out</Label>
                     <div className="flex gap-2 items-center">
                       <Input
                         type="number"
@@ -1099,19 +1102,19 @@ export function CRMSettingsWorkspace() {
                         <option value="HOURS">Hours</option>
                         <option value="DAYS">Days</option>
                       </select>
-                      <span className="text-xs text-muted-foreground">after attendance marked</span>
+                      <span className="text-xs text-muted-foreground">after workout is marked completed</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* 5. No-Show Recovery Policy */}
+              {/* 5. Missed Class Follow-Up (No-Show) */}
               <div className="space-y-3 pt-4 border-t border-border/40">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  5. No-Show Recovery Follow-up Policy
+                  5. Missed Class Follow-Up (No-Show)
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Automatically schedule a recovery re-engagement task for sales staff if the prospect does not attend.
+                  Reach out to prospects who missed their session so they can easily reschedule their trial.
                 </p>
 
                 <label className="flex items-center gap-2.5 cursor-pointer">
@@ -1123,13 +1126,13 @@ export function CRMSettingsWorkspace() {
                     className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                   />
                   <span className="text-xs font-medium">
-                    Enable automated no-show recovery follow-up task
+                    Automatically remind staff to follow up with no-shows
                   </span>
                 </label>
 
                 {noShowEnabled && (
                   <div className="pl-6 pt-1 space-y-1">
-                    <Label className="text-xs font-medium">Schedule Delay After No-Show</Label>
+                    <Label className="text-xs font-medium">When to reach out</Label>
                     <div className="flex gap-2 items-center">
                       <Input
                         type="number"
@@ -1150,27 +1153,27 @@ export function CRMSettingsWorkspace() {
                         <option value="HOURS">Hours</option>
                         <option value="DAYS">Days</option>
                       </select>
-                      <span className="text-xs text-muted-foreground">after marked no-show</span>
+                      <span className="text-xs text-muted-foreground">after session is marked missed</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* 5. Last-Minute Booking Fast-Track Policy */}
+              {/* 6. Last-Minute Bookings */}
               <div className="space-y-3 pt-4 border-t border-border/40">
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-amber-500 shrink-0" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    5. Last-Minute Booking Fast-Track Policy
+                    6. Last-Minute Bookings
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  When a prospect books a trial workout close to class start time, expedite confirmation and suppress past notifications so they can attend immediately without friction.
+                  If someone books right before a class starts, confirm them right away so they can walk in without waiting.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-1">
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Last-Minute Threshold Window</Label>
+                    <Label className="text-xs font-medium">Consider last-minute if booked within</Label>
                     <div className="flex gap-2 items-center">
                       <Input
                         type="number"
@@ -1182,12 +1185,12 @@ export function CRMSettingsWorkspace() {
                         disabled={!canEdit}
                         className="h-8 text-xs w-28"
                       />
-                      <span className="text-xs text-muted-foreground">minutes before session (e.g. 120m / 2h)</span>
+                      <span className="text-xs text-muted-foreground">minutes before class (e.g. 120 = 2 hours)</span>
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Fast-Track Attendance Handling</Label>
+                    <Label className="text-xs font-medium">Instant Confirmation</Label>
                     <label className="flex items-center gap-2 pt-1 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1197,28 +1200,28 @@ export function CRMSettingsWorkspace() {
                         className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                       />
                       <span className="text-xs font-medium">
-                        Auto-confirm attendance immediately (no confirmation delay hold)
+                        Instantly confirm their spot without making them wait
                       </span>
                     </label>
                   </div>
                 </div>
               </div>
 
-              {/* 6. Sarvam AI Voice Outbound Reminders */}
+              {/* 7. Automated AI Phone Calls */}
               <div className="space-y-3 pt-4 border-t border-border/40">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary shrink-0" />
                     <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      6. Sarvam AI Voice Outbound Reminders
+                      7. Automated AI Phone Calls (Sarvam Voice)
                     </h3>
                   </div>
                   <Badge variant="outline" className="text-[10px] bg-primary/10 border-primary/30 text-primary font-semibold">
-                    Live Engine
+                    Voice Agent
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Automated outbound conversational phone calls placed by Sarvam AI to remind prospects of their upcoming workout and reconfirm attendance.
+                  The AI Voice Agent can call prospects on their phone to remind them of their session and confirm they are still coming.
                 </p>
 
                 <label className="flex items-center gap-2.5 cursor-pointer pl-6">
@@ -1230,14 +1233,14 @@ export function CRMSettingsWorkspace() {
                     className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                   />
                   <span className="text-xs font-medium">
-                    Enable automated Sarvam AI voice reminder calls
+                    Turn on automated reminder phone calls
                   </span>
                 </label>
 
                 {remAiCallingEnabled && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pl-6 pt-2">
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Schedule Call Ahead of Class</Label>
+                      <Label className="text-xs font-medium">When to call the prospect</Label>
                       <div className="flex gap-2 items-center">
                         <select
                           value={remAiCallingOffset}
@@ -1255,7 +1258,7 @@ export function CRMSettingsWorkspace() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Smart Courtesy Suppression</Label>
+                      <Label className="text-xs font-medium">Courtesy Rule</Label>
                       <label className="flex items-center gap-2 pt-1 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1265,7 +1268,7 @@ export function CRMSettingsWorkspace() {
                           className="rounded border-input text-primary focus:ring-primary w-4 h-4"
                         />
                         <span className="text-xs font-medium">
-                          Skip voice call if prospect already confirmed attendance in WhatsApp
+                          Don't call if they already confirmed on WhatsApp
                         </span>
                       </label>
                     </div>
@@ -1302,7 +1305,7 @@ export function CRMSettingsWorkspace() {
                     disabled={updateReminderMutation.isPending}
                     className="text-xs font-semibold h-9 px-4"
                   >
-                    {updateReminderMutation.isPending ? 'Saving...' : 'Save Reminder Settings'}
+                    {updateReminderMutation.isPending ? 'Saving...' : 'Save Settings'}
                   </Button>
                 </div>
               )}
