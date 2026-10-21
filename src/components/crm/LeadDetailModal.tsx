@@ -2699,36 +2699,35 @@ export function LeadDetailModal({
                                   </div>
 
                                   {/* AUDIO RECORDING PLAYER & TRANSCRIPT ACCORDION */}
-                                  {isVoiceCallEvent && (
-                                    evt.metadata?.recording_url ? (
-                                      <CallRecordingPlayer
-                                        recordingUrl={evt.metadata?.recording_url}
-                                        durationSeconds={evt.metadata?.duration_seconds || 155}
-                                        transcript={evt.metadata?.transcript || evt.metadata?.notes || evt.description}
-                                        title={evt.title}
-                                        disposition={evt.metadata?.disposition}
-                                        callSessionId={evt.metadata?.call_session_id}
-                                        provider="Sarvam AI"
-                                        startedAt={evt.occurred_at}
-                                        callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
-                                      />
-                                    ) : (
-                                      <div className="mt-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
-                                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                                        <div className="space-y-0.5 min-w-0">
-                                          <div className="font-semibold flex items-center gap-1.5">
-                                            <span>Call Not Connected ({evt.metadata?.disposition?.replace(/_/g, ' ') || evt.metadata?.status || 'No Answer'})</span>
-                                            <Badge variant="outline" className="text-[10px] h-4 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10">
-                                              No Audio
-                                            </Badge>
-                                          </div>
-                                          <p className="text-[11px] text-muted-foreground">
-                                            The recipient did not answer the phone. The call timed out with no conversation recorded.
-                                          </p>
+                                  {evt.metadata?.recording_url ? (
+                                    <CallRecordingPlayer
+                                      recordingUrl={evt.metadata?.recording_url}
+                                      durationSeconds={evt.metadata?.duration_seconds || 155}
+                                      transcript={evt.metadata?.transcript || evt.metadata?.notes || evt.description}
+                                      title={evt.title}
+                                      disposition={evt.metadata?.disposition}
+                                      callSessionId={evt.metadata?.call_session_id}
+                                      provider="Sarvam AI"
+                                      startedAt={evt.occurred_at}
+                                      callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
+                                    />
+                                  ) : (evt.id.startsWith('call-') || (evt.channel === 'VOICE' && evt.metadata?.call_session_id)) &&
+                                      ['NO_ANSWER', 'MISSED', 'BUSY', 'FAILED', 'UNANSWERED', 'REJECTED'].includes(String(evt.metadata?.status || '').toUpperCase()) ? (
+                                    <div className="mt-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                      <div className="space-y-0.5 min-w-0">
+                                        <div className="font-semibold flex items-center gap-1.5">
+                                          <span>Call Not Connected ({evt.metadata?.disposition?.replace(/_/g, ' ') || evt.metadata?.status || 'No Answer'})</span>
+                                          <Badge variant="outline" className="text-[10px] h-4 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10">
+                                            No Audio
+                                          </Badge>
                                         </div>
+                                        <p className="text-[11px] text-muted-foreground">
+                                          The recipient did not answer the phone. The call timed out with no conversation recorded.
+                                        </p>
                                       </div>
-                                    )
-                                  )}
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
                             );
