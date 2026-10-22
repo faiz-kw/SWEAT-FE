@@ -33,6 +33,8 @@ import { activityFeed, relatedGroups, timeOf } from "@/modules/related";
 import { inferFields, pickStatusKey, pickTitleKey, type Field } from "@/modules/schema";
 import { checkInMemberApi, fetchMembers, updateLeadApi, logLeadActivityApi } from "@/api/endpoints/api-modules";
 import { createRecord, setCollectionRows, updateRecord, type CollectionKey, type Row } from "@/services/store";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 /**
  * Record drilldown: full field detail, every linked record across modules, and
@@ -284,11 +286,56 @@ export function RecordDetail({
                 )}
 
                 {statusKey && <StatusBadge value={String(activeRow[statusKey] ?? "—")} />}
+                
+                {collection === "products" || "isActive" in activeRow || "is_active" in activeRow ? (
+                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-muted/40">
+                    <span
+                      className={cn(
+                        "text-xs font-semibold select-none",
+                        activeRow["isActive"] !== undefined
+                          ? (Boolean(activeRow["isActive"]) ? "text-emerald-600" : "text-muted-foreground")
+                          : (activeRow["is_active"] !== undefined && !activeRow["is_active"] ? "text-muted-foreground" : "text-emerald-600")
+                      )}
+                    >
+                      {(activeRow["isActive"] ?? activeRow["is_active"] ?? true) ? "Active" : "Inactive"}
+                    </span>
+                    <Switch
+                      checked={Boolean(activeRow["isActive"] ?? activeRow["is_active"] ?? true)}
+                      onCheckedChange={(val) => {
+                        const updated = {
+                          ...activeRow,
+                          isActive: val,
+                          is_active: val,
+                          status: val
+                            ? (Number(activeRow["stock"] ?? 1) > 0 ? "In Stock" : "Out of Stock")
+                            : "Discontinued",
+                        };
+                        setLocalRow(updated);
+                        updateRecord(collection, activeRow.id, {
+                          isActive: val,
+                          is_active: val,
+                          status: val
+                            ? (Number(activeRow["stock"] ?? 1) > 0 ? "In Stock" : "Out of Stock")
+                            : "Discontinued",
+                        });
+                        toast.success(
+                          val
+                            ? `"${activeRow["name"] || activeRow.id}" is now Active`
+                            : `"${activeRow["name"] || activeRow.id}" is now Inactive`,
+                        );
+                      }}
+                      className="data-[state=checked]:bg-emerald-600 scale-90"
+                      aria-label="Toggle active status"
+                    />
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" className="text-destructive" onClick={onDelete}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
+
                 <Button size="sm" variant="outline" onClick={onEdit}>
                   <Pencil className="mr-1 size-3.5" /> Edit
-                </Button>
-                <Button size="sm" variant="outline" className="text-destructive" onClick={onDelete}>
-                  <Trash2 className="size-3.5" />
                 </Button>
               </div>
             </div>

@@ -131,6 +131,7 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
   ],
   products: [
     { key: "name", label: "Product Name", type: "text", required: true },
+    { key: "isActive", label: "Active", type: "boolean" },
     { key: "category", label: "Category", type: "enum", options: ["Supplements", "Apparel", "Accessories", "Equipment", "Beverages", "Digital Guides", "Snacks"] },
     { key: "productType", label: "Product Type", type: "enum", options: ["Physical Goods", "Digital Download", "Supplement / Nutrition"] },
     { key: "sku", label: "SKU / Code", type: "text" },
@@ -138,9 +139,9 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
     { key: "cost", label: "Cost Price", type: "currency" },
     { key: "stock", label: "Current Stock", type: "number" },
     { key: "imageUrl", label: "Product Image", type: "image" },
+    { key: "status", label: "Stock Status", type: "enum", options: ["In Stock", "Low Stock", "Out of Stock", "Discontinued"] },
     { key: "videoUrl", label: "Product Video", type: "video" },
     { key: "description", label: "Description", type: "textarea" },
-    { key: "status", label: "Status", type: "enum", options: ["In Stock", "Low Stock", "Out of Stock", "Discontinued"] },
   ],
   assessments: [
     { key: "member", label: "Member", type: "text", required: true },

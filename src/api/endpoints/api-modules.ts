@@ -977,12 +977,15 @@ export function normalizeProduct(item: any): Row {
     images = [item.imageUrl];
   }
 
-  const primaryImage = images[0] || item.image_url || item.imageUrl || item.image || "";
+  const primaryImage = images[0] || item.image_url || item.imageUrl || "";
+  const isActive = item.is_active !== undefined ? Boolean(item.is_active) : (item.isActive !== undefined ? Boolean(item.isActive) : true);
 
   return {
     ...item,
     id: String(item.id ?? `PROD-${Date.now()}`),
     name: item.name || item.title || "New Product",
+    isActive: isActive,
+    is_active: isActive,
     category: item.category || "Supplements",
     productType: item.productType || item.product_type || "Physical Goods",
     sku: item.sku || `SKU-${String(item.id ?? Date.now()).slice(-4)}`,
@@ -994,7 +997,7 @@ export function normalizeProduct(item: any): Row {
     images: images,
     videoUrl: item.videoUrl || item.video_url || item.video || "",
     description: item.description || "",
-    status: item.status || (Number(item.stock ?? 20) > 0 ? "In Stock" : "Out of Stock"),
+    status: item.status || (isActive ? (Number(item.stock ?? 20) > 0 ? "In Stock" : "Out of Stock") : "Discontinued"),
   };
 }
 
@@ -1029,6 +1032,7 @@ export async function createProductApi(values: Record<string, unknown>): Promise
     price: norm.price,
     cost_price: norm.cost,
     stock_quantity: norm.stock,
+    is_active: norm.isActive,
     image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
     images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
     video_url: norm.videoUrl,
@@ -1043,6 +1047,7 @@ export async function updateProductApi(id: string, values: Record<string, unknow
   const norm = normalizeProduct({ id, ...values });
   const payload: Record<string, unknown> = {
     ...values,
+    is_active: norm.isActive !== undefined ? norm.isActive : norm.is_active,
     image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
     images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
     video_url: norm.videoUrl,
@@ -1051,11 +1056,21 @@ export async function updateProductApi(id: string, values: Record<string, unknow
   return normalizeProduct(res.data);
 }
 
+export async function toggleProductActiveApi(id: string): Promise<Row> {
+  const res = await api.post<any>(`/tenant/products/${id}/toggle-active/`);
+  return normalizeProduct(res.data);
+}
+
 export async function deleteProductApi(id: string): Promise<void> {
   try {
-    await api.delete(`/tenant/products/${id}/`);
+    // Soft-deactivate on backend
+    await api.patch(`/tenant/products/${id}/`, { is_active: false, status: "Discontinued" });
   } catch {
-    // Fallback
+    try {
+      await api.delete(`/tenant/products/${id}/`);
+    } catch {
+      // Fallback
+    }
   }
 }
 

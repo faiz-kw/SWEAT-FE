@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Trash2, Download, ArrowUpRight, Calendar, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Download, ArrowUpRight, Calendar, RotateCcw, CheckCircle2, PowerOff } from "lucide-react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 import { DataTable, type Column, type FilterDef } from "@/components/enterprise/DataTable";
 import { KpiTile, PageBody, PageHeader } from "@/components/enterprise/Page";
@@ -224,25 +226,78 @@ export function CrudModule({ path }: { path: string }) {
         key: f.key,
         header: f.label,
         align: f.type === "currency" || f.type === "number" || f.type === "percent" ? "right" : "left",
-        render: (row: Row) => formatCell(f, row[f.key]),
+        render: (row: Row) => {
+          if (f.key === "isActive" || f.key === "is_active") {
+            const active = row[f.key] !== undefined ? Boolean(row[f.key]) : true;
+            return (
+              <div
+                className="inline-flex items-center gap-2 cursor-pointer select-none py-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const next = !active;
+                  updateRecord(collectionKey, row.id, {
+                    isActive: next,
+                    is_active: next,
+                    status: next
+                      ? (Number(row["stock"] ?? 1) > 0 ? "In Stock" : "Out of Stock")
+                      : "Discontinued",
+                  });
+                  toast.success(
+                    next ? `"${row["name"] || row.id}" marked Active` : `"${row["name"] || row.id}" marked Inactive`
+                  );
+                }}
+              >
+                <Switch
+                  checked={active}
+                  className="data-[state=checked]:bg-emerald-600 scale-90"
+                  aria-label="Toggle active status"
+                />
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold px-2 py-0.5 rounded-full transition-colors",
+                    active
+                      ? "bg-emerald-500/15 text-emerald-600 border border-emerald-500/20"
+                      : "bg-muted text-muted-foreground border border-border"
+                  )}
+                >
+                  {active ? "Active" : "Inactive"}
+                </span>
+              </div>
+            );
+          }
+          return formatCell(f, row[f.key]);
+        },
         sortValue: (row: Row) => sortValue(f, row[f.key]),
         value: (row: Row) => plainValue(f, row[f.key]),
         hideByDefault: i >= PRIMARY_COLUMNS,
       })),
-    [fields],
+    [fields, collectionKey],
   );
 
   const filters: FilterDef<Row>[] = React.useMemo(
     () =>
       fields
-        .filter((f) => f.type === "enum" && (f.options?.length ?? 0) > 1)
+        .filter((f) => (f.type === "enum" && (f.options?.length ?? 0) > 1) || f.key === "isActive" || f.key === "is_active")
         .slice(0, 5)
-        .map((f) => ({
-          key: f.key,
-          label: f.label,
-          options: f.options ?? [],
-          match: (row: Row, value: string) => String(row[f.key] ?? "") === value,
-        })),
+        .map((f) => {
+          if (f.key === "isActive" || f.key === "is_active") {
+            return {
+              key: f.key,
+              label: f.label,
+              options: ["Active", "Inactive"],
+              match: (row: Row, value: string) => {
+                const b = row[f.key] !== undefined ? Boolean(row[f.key]) : true;
+                return value === "Active" ? b : !b;
+              },
+            };
+          }
+          return {
+            key: f.key,
+            label: f.label,
+            options: f.options ?? [],
+            match: (row: Row, value: string) => String(row[f.key] ?? "") === value,
+          };
+        }),
     [fields],
   );
 
@@ -428,14 +483,32 @@ export function CrudModule({ path }: { path: string }) {
             exportName={collectionKey}
             emptyLabel="No records match the current filters."
             onRowClick={(r) => setDetailId(r.id)}
-            bulkActions={[
-              { label: "Export selected", icon: Download },
-              { label: "Delete", icon: Trash2, destructive: true },
-            ]}
+            bulkActions={
+              collectionKey === "products"
+                ? [
+                    { label: "Export selected", icon: Download },
+                    { label: "Mark Active", icon: CheckCircle2 },
+                    { label: "Mark Inactive", icon: PowerOff },
+                  ]
+                : [
+                    { label: "Export selected", icon: Download },
+                    { label: "Delete", icon: Trash2, destructive: true },
+                  ]
+            }
             onBulkAction={(label, ids) => {
               if (label === "Delete") {
                 deleteRecords(collectionKey, ids);
                 toast.success(`${ids.length} record(s) deleted`);
+              } else if (label === "Mark Active") {
+                for (const id of ids) {
+                  updateRecord(collectionKey, id, { isActive: true, is_active: true, status: "In Stock" });
+                }
+                toast.success(`${ids.length} product(s) marked Active`);
+              } else if (label === "Mark Inactive") {
+                for (const id of ids) {
+                  updateRecord(collectionKey, id, { isActive: false, is_active: false, status: "Discontinued" });
+                }
+                toast.success(`${ids.length} product(s) marked Inactive`);
               } else {
                 const selectedRows = rows.filter((r) => ids.includes(r.id));
                 const head = columns.map((c) => c.header).join(",");
