@@ -1002,6 +1002,7 @@ export async function fetchProducts(locationId?: string): Promise<Row[]> {
   try {
     const params = new URLSearchParams();
     if (locationId && locationId !== "all") params.set("branch", locationId);
+    params.set("auto_sync", "true");
     const query = params.toString() ? `?${params.toString()}` : "";
     const res = await api.get<any>(`/tenant/products/${query}`);
     const list = extractList(res.data);
@@ -1010,6 +1011,12 @@ export async function fetchProducts(locationId?: string): Promise<Row[]> {
     // Graceful fallback to local in-memory store
   }
   return [];
+}
+
+export async function syncProductsCatalogApi(sourceUrl?: string): Promise<{ success: boolean; message: string; result?: any }> {
+  const payload = sourceUrl ? { source_url: sourceUrl } : {};
+  const res = await api.post<any>("/tenant/products/sync-catalog/", payload);
+  return res.data;
 }
 
 export async function createProductApi(values: Record<string, unknown>): Promise<Row> {
