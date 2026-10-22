@@ -335,6 +335,13 @@ export function createRecord(key: CollectionKey, values: Record<string, unknown>
       })
       .catch((err) => {
         console.error("Failed to create product on backend:", err);
+        const idx = rows.findIndex((r) => r.id === row.id);
+        if (idx !== -1) {
+          rows.splice(idx, 1);
+          emit();
+        }
+        const msg = err?.response?.data?.detail || err?.response?.data?.name?.[0] || err?.message || "Failed to save product to database";
+        toast.error(`Database Error: ${msg}`);
       });
   } else if (key === "invoices") {
     createInvoiceApi(values)
@@ -422,6 +429,8 @@ export function updateRecord(key: CollectionKey, id: string, values: Record<stri
   } else if (key === "products") {
     updateProductApi(id, values).catch((err) => {
       console.error("Failed to update product on backend:", err);
+      const msg = err?.response?.data?.detail || err?.message || "Failed to update product on backend";
+      toast.error(`Database Error: ${msg}`);
     });
   } else if (key === "invoices") {
     updateInvoiceApi(id, values).catch((err) => {
@@ -504,6 +513,8 @@ export function deleteRecords(key: CollectionKey, ids: string[]) {
     for (const id of ids) {
       deleteProductApi(id).catch((err) => {
         console.error("Failed to delete product on backend:", err);
+        const msg = err?.response?.data?.detail || err?.message || "Failed to delete product on backend";
+        toast.error(`Database Error: ${msg}`);
       });
     }
   } else if (key === "invoices") {

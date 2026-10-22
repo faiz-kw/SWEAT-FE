@@ -1014,42 +1014,34 @@ export async function fetchProducts(locationId?: string): Promise<Row[]> {
 
 export async function createProductApi(values: Record<string, unknown>): Promise<Row> {
   const norm = normalizeProduct({ id: `PROD-${Date.now()}`, ...values });
-  try {
-    const payload: Record<string, unknown> = {
-      name: norm.name,
-      category: norm.category,
-      product_type: norm.productType,
-      sku: norm.sku,
-      price: norm.price,
-      cost_price: norm.cost,
-      stock_quantity: norm.stock,
-      image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
-      images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
-      video_url: norm.videoUrl,
-      description: norm.description,
-      status: norm.status,
-    };
-    const res = await api.post<any>("/tenant/products/", payload);
-    return normalizeProduct(res.data);
-  } catch {
-    return norm;
-  }
+  const payload: Record<string, unknown> = {
+    name: norm.name,
+    category: norm.category,
+    product_type: norm.productType,
+    sku: norm.sku,
+    price: norm.price,
+    cost_price: norm.cost,
+    stock_quantity: norm.stock,
+    image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
+    images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
+    video_url: norm.videoUrl,
+    description: norm.description,
+    status: norm.status,
+  };
+  const res = await api.post<any>("/tenant/products/", payload);
+  return normalizeProduct(res.data);
 }
 
 export async function updateProductApi(id: string, values: Record<string, unknown>): Promise<Row> {
   const norm = normalizeProduct({ id, ...values });
-  try {
-    const payload: Record<string, unknown> = {
-      ...values,
-      image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
-      images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
-      video_url: norm.videoUrl,
-    };
-    const res = await api.patch<any>(`/tenant/products/${id}/`, payload);
-    return normalizeProduct(res.data);
-  } catch {
-    return norm;
-  }
+  const payload: Record<string, unknown> = {
+    ...values,
+    image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
+    images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
+    video_url: norm.videoUrl,
+  };
+  const res = await api.patch<any>(`/tenant/products/${id}/`, payload);
+  return normalizeProduct(res.data);
 }
 
 export async function deleteProductApi(id: string): Promise<void> {
