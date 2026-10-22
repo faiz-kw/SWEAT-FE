@@ -18,11 +18,19 @@ import {
   AlertCircle,
   LayoutList,
   LayoutGrid,
+  X,
+  Play,
+  Film,
+  Loader2,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { workforceApi } from '@/api/endpoints/workforceApi';
 import { ClassOccurrence } from '../../types/classes';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
+import { SecureWorkoutPlayer } from './SecureWorkoutPlayer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -56,6 +64,38 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
   const [attendanceOccurrence, setAttendanceOccurrence] = useState<ClassOccurrence | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(18);
+
+  // Video Stream Modal state
+  const [videoModalOccurrence, setVideoModalOccurrence] = useState<ClassOccurrence | null>(null);
+  const [videoData, setVideoData] = useState<{
+    occurrence_id: string;
+    class_name: string;
+    trainer_name?: string;
+    video_url?: string;
+    embed_player_url?: string;
+    is_assigned_trainer: boolean;
+    description?: string;
+    instructions?: string;
+  } | null>(null);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  const handleOpenVideo = async (occ: ClassOccurrence) => {
+    setVideoModalOccurrence(occ);
+    setIsLoadingVideo(true);
+    setVideoError(null);
+    setVideoData(null);
+    try {
+      const data = await classesApi.getTrainerClassVideo(occ.id);
+      setVideoData(data);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || 'Failed to load class workout video stream.';
+      setVideoError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoadingVideo(false);
+    }
+  };
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -479,14 +519,26 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Button
-                          size="sm"
-                          onClick={() => setAttendanceOccurrence(occ)}
-                          className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
-                        >
-                          <UserCheck className="size-3" />
-                          <span>Class Attendance</span>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenVideo(occ)}
+                            className="h-7 px-2 text-xs font-semibold gap-1 text-primary border-primary/20 hover:bg-primary/10"
+                            title="Watch Workout Video"
+                          >
+                            <Video className="size-3" />
+                            <span>Workout Video</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setAttendanceOccurrence(occ)}
+                            className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
+                          >
+                            <UserCheck className="size-3" />
+                            <span>Class Attendance</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -612,9 +664,16 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-border/80 flex items-center justify-between gap-2">
-                  <div className="text-2xs text-muted-foreground">
-                    Role: <span className="font-semibold text-foreground">Lead Trainer</span>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenVideo(occ)}
+                    className="h-8 text-xs font-semibold gap-1.5 border-primary/20 text-primary hover:bg-primary/10"
+                    title="Watch Workout Video"
+                  >
+                    <Video className="size-3.5" />
+                    <span>Workout Video</span>
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => setAttendanceOccurrence(occ)}
@@ -719,6 +778,113 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
         isOpen={!!attendanceOccurrence}
         onClose={() => setAttendanceOccurrence(null)}
       />
+
+      {/* Trainer Workout Video Streaming Modal */}
+      {videoModalOccurrence && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-muted/20">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                  <Film className="size-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">
+                    {videoData?.class_name || videoModalOccurrence.template_name || videoModalOccurrence.class_name || 'Class Workout Video'}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <span>{videoModalOccurrence.occurrence_date}</span>
+                    <span>•</span>
+                    <span>{videoModalOccurrence.branch_name || 'Main Branch'}</span>
+                    {videoData?.trainer_name && (
+                      <>
+                        <span>•</span>
+                        <span className="text-primary font-medium">{videoData.trainer_name}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setVideoModalOccurrence(null);
+                  setVideoData(null);
+                }}
+                className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            {/* Video Player / Content Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {isLoadingVideo ? (
+                <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-border/40 bg-black/10">
+                  <Loader2 className="size-8 animate-spin text-primary" />
+                  <p className="text-xs font-medium text-muted-foreground">Connecting to secure stream...</p>
+                </div>
+              ) : videoError ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-center text-rose-600">
+                  <AlertCircle className="size-8" />
+                  <p className="text-sm font-semibold">Video Stream Access Error</p>
+                  <p className="text-xs text-rose-600/80 max-w-md">{videoError}</p>
+                </div>
+              ) : videoData?.embed_player_url ? (
+                <div className="space-y-3">
+                  <SecureWorkoutPlayer embedUrl={videoData.embed_player_url} title={videoData.class_name || "Class Workout Stream"} />
+                  <div className="flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg">
+                    <ShieldCheck className="size-3.5 text-emerald-500 shrink-0" />
+                    <span>In-website streaming only. External YouTube redirection and downloads are disabled for trainer sessions.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-border/40 bg-muted/20 p-6 text-center">
+                  <Video className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm font-semibold text-foreground">No Video Link Attached</p>
+                  <p className="text-xs text-muted-foreground max-w-sm">
+                    No workout video has been linked to this class occurrence yet. Review the class format description below for session guidance.
+                  </p>
+                </div>
+              )}
+
+              {/* Class Description / Format Information */}
+              {(videoData?.description || videoModalOccurrence.description) && (
+                <div className="rounded-xl border border-border bg-card p-4 space-y-1.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Class Workout Format</h4>
+                  <p className="text-xs leading-relaxed text-foreground whitespace-pre-line">
+                    {videoData?.description || videoModalOccurrence.description}
+                  </p>
+                </div>
+              )}
+
+              {videoData?.instructions && (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-primary">
+                  <span className="font-semibold">Trainer Note: </span>
+                  {videoData.instructions}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end border-t border-border px-5 py-3 bg-muted/10">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setVideoModalOccurrence(null);
+                  setVideoData(null);
+                }}
+                className="h-8 text-xs font-medium"
+              >
+                Close Player
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

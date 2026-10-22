@@ -23,6 +23,8 @@ import {
   Layers,
   Info,
   Film,
+  Lock,
+  ShieldCheck,
   Link2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +41,7 @@ import {
   type WODTagGroup,
 } from "@/api/endpoints/wodApi";
 import { api } from "@/api/client";
+import { SecureWorkoutPlayer } from "../classes/SecureWorkoutPlayer";
 
 const TAG_GROUPS: { code: WODTagGroup; label: string; requiredForMovement?: boolean }[] = [
   { code: "PROGRAM", label: "Program / Class Type", requiredForMovement: true },
@@ -1091,19 +1094,15 @@ export function WODContentLibraryWorkspace() {
                               </div>
                             ) : item.video_url ? (
                               <div className="space-y-1">
-                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
-                                  <Download className="h-3 w-3" />
-                                  Pending Download
-                                </span>
-                                <div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownloadSingleVideo(item)}
-                                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
-                                  >
-                                    Download from Link
-                                  </button>
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewItem(item)}
+                                  className="inline-flex items-center gap-1 rounded-md bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-500/20 dark:text-sky-400"
+                                >
+                                  <Play className="h-3 w-3 fill-current" />
+                                  Stream Video
+                                </button>
+                                <div className="text-[10px] text-muted-foreground">In-App Stream</div>
                               </div>
                             ) : (
                               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -1517,55 +1516,31 @@ export function WODContentLibraryWorkspace() {
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Video Player Section */}
               <div className="overflow-hidden rounded-xl border border-border bg-black/95">
-                {previewItem.has_stored_video ? (
-                  loadingVideoBlob ? (
-                    <div className="flex h-64 items-center justify-center text-xs text-white/80">
-                      Loading stored video stream...
-                    </div>
-                  ) : videoBlobUrl ? (
-                    <video
-                      key={videoBlobUrl}
-                      src={videoBlobUrl}
-                      controls
-                      autoPlay
-                      className="max-h-[400px] w-full object-contain"
+                {previewItem.has_stored_video && videoBlobUrl ? (
+                  <video
+                    key={videoBlobUrl}
+                    src={videoBlobUrl}
+                    controls
+                    autoPlay
+                    className="max-h-[400px] w-full object-contain"
+                  />
+                ) : loadingVideoBlob ? (
+                  <div className="flex h-64 items-center justify-center text-xs text-white/80">
+                    Loading stored video stream...
+                  </div>
+                ) : (previewItem.embed_player_url || (previewItem.video_url && previewItem.video_url.includes("youtu"))) ? (
+                  <SecureWorkoutPlayer 
+                      embedUrl={previewItem.embed_player_url || `https://www.youtube-nocookie.com/embed/${previewItem.video_url?.match(/(?:v=|youtu\.be\/|\/embed\/|\/live\/|\/shorts\/)([a-zA-Z0-9_-]{11})/)?.[1] || ''}?rel=0&modestbranding=1&controls=1&showinfo=0&iv_load_policy=3&fs=0`} 
+                      title={previewItem.movement_name} 
                     />
-                  ) : (
-                    <div className="flex h-64 flex-col items-center justify-center gap-2 text-xs text-white/80">
-                      <p>Stored video ready ({previewItem.video_file_name})</p>
-                    </div>
-                  )
                 ) : (
                   <div className="flex h-56 flex-col items-center justify-center gap-3 p-6 text-center text-white/80">
                     <Video className="h-10 w-10 text-white/40" />
                     <div className="text-sm font-medium">
                       {previewItem.video_download_status === "FAILED"
                         ? `Video download from link failed: ${previewItem.video_download_error || "Restricted or invalid URL"}`
-                        : previewItem.video_url
-                        ? "Video link saved — click below to download video file onto server"
                         : "No video uploaded or linked yet"}
                     </div>
-                    {previewItem.video_url && (
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadSingleVideo(previewItem)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Download Video from Link Now
-                        </button>
-                        <a
-                          href={previewItem.video_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-3 py-2 text-xs text-white hover:bg-white/10"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Open Source Link
-                        </a>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

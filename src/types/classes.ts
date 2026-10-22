@@ -103,6 +103,7 @@ export interface ClassOccurrence {
   trial_capacity: number;
   waitlist_capacity: number;
   status: ClassOccurrenceStatus;
+  description?: string;
   assigned_trainers?: ClassOccurrenceTrainerInfo[];
   trainers?: ClassOccurrenceTrainerInfo[];
   trainer_checked_in?: boolean;

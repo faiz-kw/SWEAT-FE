@@ -274,6 +274,21 @@ export const classesApi = {
     return this.assignContent(occurrenceId);
   },
 
+  // --- Trainer Class Video Streaming ---
+  async getTrainerClassVideo(occurrenceId: string): Promise<{
+    occurrence_id: string;
+    class_name: string;
+    trainer_name?: string;
+    video_url?: string;
+    embed_player_url?: string;
+    is_assigned_trainer: boolean;
+    description?: string;
+    instructions?: string;
+  }> {
+    const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/trainer-video/`);
+    return res.data;
+  },
+
   // --- Branch Availability & Pricing ---
   async getBranchAvailabilities(templateId?: string): Promise<ClassBranchAvailability[]> {
     const res = await api.get<any>('/tenant/class-branch-availabilities/');

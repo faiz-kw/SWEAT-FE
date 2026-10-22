@@ -14,7 +14,8 @@ export type MembershipLifecycleAction =
   | 'ADJUST_ENTITLEMENT'
   | 'COLLECT_PAYMENT'
   | 'CHECK_IN'
-  | 'BUY_PASSPORT';
+  | 'BUY_PASSPORT'
+  | 'PURCHASE_PACKAGE';
 
 export interface AvailableAction {
   action: MembershipLifecycleAction;
@@ -107,6 +108,25 @@ export interface ContractSnapshotData {
   start_date: string;
   end_date: string;
   entitlements_snapshot: any[];
+  coupon_code?: string;
+  campaign_name?: string;
+  catalog_price?: number;
+  discount_type?: string;
+  discount_label?: string;
+  sold_by?: string;
+}
+
+export interface MemberCouponItem {
+  id: string;
+  coupon_code: string;
+  code?: string;
+  campaign_name?: string;
+  discount_amount: number;
+  order_number: string;
+  order_status?: string;
+  status?: string;
+  authorized_by?: string;
+  redeemed_at: string;
 }
 
 export interface MembershipRecord {
@@ -121,6 +141,14 @@ export interface MembershipRecord {
   home_branch: string;
   purchase_branch: string;
   activated_at?: string | null;
+  catalog_price?: number;
+  purchase_price?: number;
+  discount_amount?: number;
+  discount_type?: string;
+  discount_label?: string;
+  sold_by?: string;
+  coupon_code?: string;
+  campaign_name?: string;
   contract_snapshot?: ContractSnapshotData | null;
 }
 
@@ -167,6 +195,7 @@ export interface MemberBookingItem {
   branch_name: string;
   status: string;
   booking_source: string;
+  booked_by?: string;
   date_time: string;
   trainer_name: string;
 }
@@ -180,6 +209,7 @@ export interface MemberAttendanceItem {
   class_name?: string;
   status: string;
   check_in_method: string;
+  trainer_name?: string;
   marked_by: string;
 }
 
@@ -206,6 +236,15 @@ export interface MemberOrder {
   created_at: string;
   is_extension?: boolean;
   notes?: string;
+  sold_by?: string;
+  coupon_code?: string;
+  campaign_name?: string;
+  discount_type?: string;
+  discount_label?: string;
+  catalog_price?: number;
+  payment_mode?: string;
+  payment_method?: string;
+  provider_transaction_id?: string;
   reward_amount?: number;
   items: MemberOrderItem[];
 }
@@ -383,10 +422,12 @@ export interface Member360Data {
       reason: string;
       changed_at: string;
     }>;
+    coupon_history?: MemberCouponItem[];
   };
   passbook: {
     balances: EntitlementBalance[];
     ledger: EntitlementLedgerEntry[];
+    coupon_history?: MemberCouponItem[];
   };
   bookings_and_attendance: {
     upcoming_bookings: MemberBookingItem[];
@@ -409,6 +450,7 @@ export interface Member360Data {
     payments: MemberPayment[];
     invoices: MemberInvoiceItem[];
     refunds: MemberRefund[];
+    coupon_history?: MemberCouponItem[];
   };
   health_and_forms: {
     submissions: MemberIntakeSubmission[];

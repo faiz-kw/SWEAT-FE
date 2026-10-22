@@ -10,6 +10,9 @@ import {
   Users,
   Search,
   Plus,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   RefreshCw,
   Phone,
   Mail,
@@ -161,6 +164,27 @@ function formatDuration(seconds: number): string {
   return `${days}d ${remHrs}h`;
 }
 
+function formatLeadDateTime(dateStr?: string | null): { date: string; time: string } {
+  if (!dateStr) return { date: '—', time: '' };
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return { date: dateStr, time: '' };
+    const date = d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    const time = d.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return { date, time };
+  } catch {
+    return { date: dateStr, time: '' };
+  }
+}
+
 function formatLeadDate(dateStr?: string | null): string {
   if (!dateStr) return '—';
   try {
@@ -176,7 +200,7 @@ function formatLeadDate(dateStr?: string | null): string {
   }
 }
 
-function getPresetDates(preset: string) {
+function getPresetDates(preset: string, specificDate?: string) {
   const now = new Date();
   const formatYMD = (d: Date) => {
     const y = d.getFullYear();
@@ -195,6 +219,9 @@ function getPresetDates(preset: string) {
     y.setDate(y.getDate() - 1);
     const yStr = formatYMD(y);
     return { dateFrom: yStr, dateTo: yStr };
+  }
+  if (preset === 'SPECIFIC') {
+    return { dateFrom: specificDate || '', dateTo: specificDate || '' };
   }
   if (preset === 'LAST_7_DAYS') {
     const past = new Date(now);
@@ -232,21 +259,38 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [datePreset, setDatePreset] = React.useState<string>('ALL');
   const [customDateFrom, setCustomDateFrom] = React.useState<string>('');
   const [customDateTo, setCustomDateTo] = React.useState<string>('');
+  const [specificDate, setSpecificDate] = React.useState<string>('');
   const [viewMode, setViewMode] = React.useState<'LIST' | 'PIPELINE' | 'ATTENTION'>(initialViewMode);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
+
+  // Column Sorting State (Defaults to Created Date: Descending)
+  type SortField = 'created_at' | 'name' | 'contact' | 'branch' | 'assigned' | 'source' | 'status';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = React.useState<SortField>('created_at');
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>('desc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'created_at' ? 'desc' : 'asc');
+    }
+    setCurrentPage(1);
+  };
 
   const { dateFrom: effectiveDateFrom, dateTo: effectiveDateTo } = React.useMemo(() => {
     if (datePreset === 'CUSTOM') {
       return { dateFrom: customDateFrom, dateTo: customDateTo };
     }
-    return getPresetDates(datePreset);
-  }, [datePreset, customDateFrom, customDateTo]);
+    return getPresetDates(datePreset, specificDate);
+  }, [datePreset, customDateFrom, customDateTo, specificDate]);
 
   // Reset page to 1 whenever any filter or search changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, datePreset, customDateFrom, customDateTo]);
+  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, datePreset, customDateFrom, customDateTo, specificDate]);
 
   React.useEffect(() => {
     setViewMode(initialViewMode);
@@ -288,13 +332,22 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, effectiveDateFrom, effectiveDateTo, currentPage, pageSize],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, effectiveDateFrom, effectiveDateTo, currentPage, pageSize, viewMode, sortField, sortDirection],
     queryFn: () => {
+      let orderingParam = '-created_at';
+      if (sortField === 'created_at') {
+        orderingParam = sortDirection === 'asc' ? 'created_at' : '-created_at';
+      } else if (sortField === 'name') {
+        orderingParam = sortDirection === 'asc' ? 'first_name' : '-first_name';
+      } else if (sortField === 'status') {
+        orderingParam = sortDirection === 'asc' ? 'current_status' : '-current_status';
+      }
+
       const p: Parameters<typeof crmApi.getLeadsPaginated>[0] = {
         current_status: statusFilter,
-        page: currentPage,
-        page_size: pageSize,
-        ordering: '-created_at',
+        page: viewMode === 'PIPELINE' ? 1 : currentPage,
+        page_size: viewMode === 'PIPELINE' ? 100 : pageSize,
+        ordering: orderingParam,
       };
       if (searchQuery) p.search = searchQuery;
       if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
@@ -310,7 +363,62 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     enabled: canView,
   });
 
-  const leads = leadsData.results;
+  // Multi-column Asc/Desc sort (Server-side for created_at/name/status, fallback in-page for others)
+  const leads = React.useMemo(() => {
+    if (sortField === 'created_at' || sortField === 'name' || sortField === 'status') {
+      return leadsData.results;
+    }
+    const list = [...leadsData.results];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'created_at': {
+          const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          cmp = tA - tB;
+          break;
+        }
+        case 'name': {
+          const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
+          const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
+          cmp = nameA.localeCompare(nameB);
+          break;
+        }
+        case 'contact': {
+          const cA = (a.phone_normalized || a.email_normalized || '').toLowerCase();
+          const cB = (b.phone_normalized || b.email_normalized || '').toLowerCase();
+          cmp = cA.localeCompare(cB);
+          break;
+        }
+        case 'branch': {
+          const bA = (a.branch_name || '').toLowerCase();
+          const bB = (b.branch_name || '').toLowerCase();
+          cmp = bA.localeCompare(bB);
+          break;
+        }
+        case 'assigned': {
+          const aA = (a.assigned_sales_name || '').toLowerCase();
+          const aB = (b.assigned_sales_name || '').toLowerCase();
+          cmp = aA.localeCompare(aB);
+          break;
+        }
+        case 'source': {
+          const sA = (a.source_name || a.first_touch_source || '').toLowerCase();
+          const sB = (b.source_name || b.first_touch_source || '').toLowerCase();
+          cmp = sA.localeCompare(sB);
+          break;
+        }
+        case 'status': {
+          const stA = (a.current_status || '').toLowerCase();
+          const stB = (b.current_status || '').toLowerCase();
+          cmp = stA.localeCompare(stB);
+          break;
+        }
+      }
+      return sortDirection === 'desc' ? -cmp : cmp;
+    });
+    return list;
+  }, [leadsData.results, sortField, sortDirection]);
   const totalLeadsCount = leadsData.count;
   const totalPages = Math.max(1, Math.ceil(totalLeadsCount / pageSize));
 
@@ -392,18 +500,27 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       return crmApi.getLeadSummaryMetrics(p);
     },
     enabled: canView,
-    staleTime: 30000,
+    staleTime: 0,
   });
 
   const metrics = React.useMemo(() => {
+    if (summaryMetrics) {
+      return {
+        total: summaryMetrics.total ?? totalLeadsCount,
+        converted: summaryMetrics.converted ?? 0,
+        inquiries: summaryMetrics.inquiries ?? 0,
+        trials: summaryMetrics.trials ?? 0,
+        slaBreaches: summaryMetrics.sla_breaches ?? 0,
+      };
+    }
     return {
-      total: summaryMetrics?.total ?? totalLeadsCount,
-      converted: summaryMetrics?.converted ?? 0,
-      inquiries: summaryMetrics?.inquiries ?? 0,
-      trials: summaryMetrics?.trials ?? 0,
-      slaBreaches: summaryMetrics?.sla_breaches ?? 0,
+      total: totalLeadsCount,
+      converted: leads.filter((l) => ['CONVERTED', 'DEAL_DONE', 'SUBSCRIBED'].includes(l.current_status)).length,
+      inquiries: leads.filter((l) => ['NEW_LEAD', 'INTERESTED', 'HOT_LEAD', 'FOLLOW_UP_PENDING', 'NEW_DEAL'].includes(l.current_status)).length,
+      trials: leads.filter((l) => ['TRIAL_BOOKED', 'TRIAL_CONFIRMED', 'TRIAL_ATTENDED'].includes(l.current_status)).length,
+      slaBreaches: leads.filter((l) => l.sla_status === 'BREACHED' || l.attention?.is_stuck).length,
     };
-  }, [summaryMetrics, totalLeadsCount]);
+  }, [summaryMetrics, totalLeadsCount, leads]);
 
   const { data: metadata } = useQuery({
     queryKey: ['lead-metadata'],
@@ -606,24 +723,37 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           />
         </div>
 
-        {/* Search & Status Filters */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border/50 pb-4 mb-5">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:max-w-xl">
-            <div className="relative w-full">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search by name, phone, email, or location..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 text-xs sm:text-sm w-full"
-              />
-            </div>
-            {/* Scope Filter Tabs: All, My Leads, Unassigned */}
-            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 shrink-0">
+        {/* Spacious, Prominent Full-Width Search & Filter Header */}
+        <div className="space-y-3 mb-5 border-b border-border/50 pb-4">
+          {/* Row 1: Full-Width Spacious Search Bar */}
+          <div className="relative w-full">
+            <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search leads by prospect name, phone number, email address, program, or city location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 pr-10 h-11 text-sm bg-card border-border/80 focus:bg-background rounded-xl shadow-xs w-full"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-muted"
+                title="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Scope Tabs on Left + Status Quick Pills on Right */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            {/* Scope Filter Tabs */}
+            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/60 shrink-0 self-start">
               <button
                 type="button"
                 onClick={() => setScopeFilter('ALL')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   scopeFilter === 'ALL'
                     ? 'bg-background text-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
@@ -634,7 +764,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               <button
                 type="button"
                 onClick={() => setScopeFilter('MY_LEADS')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   scopeFilter === 'MY_LEADS'
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
@@ -645,7 +775,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               <button
                 type="button"
                 onClick={() => setScopeFilter('UNASSIGNED')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   scopeFilter === 'UNASSIGNED'
                     ? 'bg-background text-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
@@ -654,22 +784,23 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 Unassigned
               </button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 w-full lg:w-auto shrink-0 no-scrollbar">
-            {['ALL', 'NEW_LEAD', 'TRIAL_BOOKED', 'INTERESTED', 'HOT_LEAD', 'CONVERTED'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
-                  statusFilter === st
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                {st === 'ALL' ? 'All Leads' : STATUS_CONFIG[st as LeadStatus]?.label || st}
-              </button>
-            ))}
+            {/* Status Quick Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
+              {['ALL', 'NEW_LEAD', 'TRIAL_BOOKED', 'INTERESTED', 'HOT_LEAD', 'CONVERTED'].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+                    statusFilter === st
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
+                  {st === 'ALL' ? 'All Leads' : STATUS_CONFIG[st as LeadStatus]?.label || st}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -718,17 +849,28 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
               <Calendar className="w-3 h-3 text-muted-foreground/70" /> Creation Date
             </span>
-            <Select value={datePreset} onValueChange={setDatePreset}>
+            <Select 
+              value={datePreset} 
+              onValueChange={(val) => {
+                setDatePreset(val);
+                if (val !== 'SPECIFIC') setSpecificDate('');
+                if (val !== 'CUSTOM') {
+                  setCustomDateFrom('');
+                  setCustomDateTo('');
+                }
+              }}
+            >
               <SelectTrigger className="w-full h-8 text-xs bg-background">
-                <SelectValue placeholder="All Time" />
+                <SelectValue placeholder="All Dates" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL" className="text-xs">All Time</SelectItem>
+                <SelectItem value="SPECIFIC" className="text-xs">📅 Pick Specific Date</SelectItem>
                 <SelectItem value="TODAY" className="text-xs">Today</SelectItem>
                 <SelectItem value="YESTERDAY" className="text-xs">Yesterday</SelectItem>
                 <SelectItem value="LAST_7_DAYS" className="text-xs">Last 7 Days</SelectItem>
                 <SelectItem value="THIS_MONTH" className="text-xs">This Month</SelectItem>
-                <SelectItem value="CUSTOM" className="text-xs">Custom Range...</SelectItem>
+                <SelectItem value="CUSTOM" className="text-xs">Custom Range</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -763,6 +905,36 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               </SelectContent>
             </Select>
           </div>
+
+          {/* Specific Date Row */}
+          {datePreset === 'SPECIFIC' && (
+            <div className="col-span-full flex flex-wrap items-center gap-2.5 pt-2 border-t border-border/50 text-xs animate-in fade-in duration-150">
+              <span className="text-muted-foreground font-semibold flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-primary" /> Filter by Specific Date:
+              </span>
+              <Input
+                type="date"
+                value={specificDate}
+                onChange={(e) => setSpecificDate(e.target.value)}
+                className="h-8 text-xs bg-background w-44"
+              />
+              {specificDate && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[11px] font-medium bg-primary/10 text-primary border-primary/20">
+                    Showing leads created on {formatLeadDate(specificDate)}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSpecificDate('')}
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Clear date
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Custom Date Range Row */}
           {datePreset === 'CUSTOM' && (
@@ -801,6 +973,100 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               )}
             </div>
           )}
+
+          {/* Quick Date Presets Bar (Shared across Leads & Pipeline) */}
+          <div className="col-span-full flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40 text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground font-medium mr-1">Quick Date:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('ALL');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'ALL'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                All Time (Desc)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('TODAY');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'TODAY'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('YESTERDAY');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'YESTERDAY'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('LAST_7_DAYS');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'LAST_7_DAYS'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('THIS_MONTH');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'THIS_MONTH'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('SPECIFIC');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'SPECIFIC'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                📅 Pick Date
+              </button>
+            </div>
+
+            <div className="text-[10px] text-muted-foreground/80 font-mono hidden sm:flex items-center gap-1">
+              <span>Sequence: <strong>Current date &rarr; Back dates (Desc)</strong></span>
+            </div>
+          </div>
         </div>
 
         {/* Content View */}
@@ -1001,12 +1267,148 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 <table className="w-full text-left text-sm min-w-[1020px]">
                   <thead className="bg-muted/40 border-b border-border/70 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="px-5 py-3.5 min-w-[220px]">Lead Name &amp; Created</th>
-                      <th className="px-4 py-3.5 min-w-[180px]">Contact</th>
-                      <th className="px-4 py-3.5 min-w-[170px]">Branch &amp; Interest</th>
-                      <th className="px-4 py-3.5 min-w-[160px]">Assigned Staff</th>
-                      <th className="px-4 py-3.5 min-w-[160px]">Source &amp; Campaign</th>
-                      <th className="px-4 py-3.5 min-w-[180px]">Stage &amp; SLA Status</th>
+                      {/* 1. Created Date Column */}
+                      <th 
+                        onClick={() => handleSort('created_at')} 
+                        className="px-5 py-3.5 min-w-[170px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending (1st Oct) / Descending (Current date)"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground/70" />
+                          <span>Created Date</span>
+                          {sortField === 'created_at' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* 2. Lead Name Column */}
+                      <th 
+                        onClick={() => handleSort('name')} 
+                        className="px-5 py-3.5 min-w-[200px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle A-Z / Z-A by lead name"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-muted-foreground/70" />
+                          <span>Lead Name</span>
+                          {sortField === 'name' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* Contact Column */}
+                      <th 
+                        onClick={() => handleSort('contact')} 
+                        className="px-4 py-3.5 min-w-[180px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending / Descending by contact phone/email"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Contact</span>
+                          {sortField === 'contact' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* Branch & Interest Column */}
+                      <th 
+                        onClick={() => handleSort('branch')} 
+                        className="px-4 py-3.5 min-w-[170px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending / Descending by branch"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Branch &amp; Interest</span>
+                          {sortField === 'branch' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* Assigned Staff Column */}
+                      <th 
+                        onClick={() => handleSort('assigned')} 
+                        className="px-4 py-3.5 min-w-[160px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending / Descending by counselor name"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Assigned Staff</span>
+                          {sortField === 'assigned' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* Source & Campaign Column */}
+                      <th 
+                        onClick={() => handleSort('source')} 
+                        className="px-4 py-3.5 min-w-[160px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending / Descending by source"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Source &amp; Campaign</span>
+                          {sortField === 'source' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
+                      {/* Stage & SLA Status Column */}
+                      <th 
+                        onClick={() => handleSort('status')} 
+                        className="px-4 py-3.5 min-w-[180px] cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                        title="Click to toggle Ascending / Descending by status"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Stage &amp; SLA Status</span>
+                          {sortField === 'status' ? (
+                            sortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                          )}
+                        </div>
+                      </th>
+
                       <th className="px-5 py-3.5 min-w-[170px] text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1023,8 +1425,26 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           className="hover:bg-muted/30 transition-colors cursor-pointer group"
                           onClick={() => openLeadDetail(lead)}
                         >
-                          {/* 1. Lead Name & Creation Date */}
-                          <td className="px-5 py-3.5 min-w-[220px]">
+                          {/* 1. Created Date */}
+                          <td className="px-5 py-3.5 min-w-[170px] whitespace-nowrap">
+                            {(() => {
+                              const { date, time } = formatLeadDateTime(lead.created_at);
+                              return (
+                                <div className="flex flex-col gap-0.5 font-mono text-xs">
+                                  <div className="flex items-center gap-1.5 font-medium text-foreground">
+                                    <Calendar className="w-3.5 h-3.5 text-muted-foreground/70 shrink-0" />
+                                    <span>{date}</span>
+                                  </div>
+                                  {time && (
+                                    <span className="text-[11px] text-muted-foreground pl-5">{time}</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+
+                          {/* 2. Lead Name */}
+                          <td className="px-5 py-3.5 min-w-[200px]">
                             <div className="flex items-start gap-3">
                               <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-all shadow-2xs mt-0.5">
                                 {lead.first_name.substring(0, 1)}
@@ -1056,10 +1476,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                     <span className="truncate">{lead.area}</span>
                                   </div>
                                 )}
-                                <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1 font-mono">
-                                  <Calendar className="w-3 h-3 text-muted-foreground/70 shrink-0" />
-                                  <span>{formatLeadDate(lead.created_at)}</span>
-                                </div>
                               </div>
                             </div>
                           </td>

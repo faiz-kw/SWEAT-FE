@@ -2595,16 +2595,12 @@ export const ClassesWorkspace: React.FC = () => {
                         ];
                         const hasTrainer = allTrainers.length > 0;
 
-                        const startTimeFormatted = occ.start_time
-                          ? formatTime12h(occ.start_time.slice(0, 5))
-                          : (occ.start_at
-                              ? new Date(occ.start_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
-                              : '');
-                        const endTimeFormatted = occ.end_time
-                          ? formatTime12h(occ.end_time.slice(0, 5))
-                          : (occ.end_at
-                              ? new Date(occ.end_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
-                              : '');
+                        const startTimeFormatted = occ.start_at
+                          ? formatTime12h(occ.start_at)
+                          : (occ.start_time ? formatTime12h(occ.start_time) : '');
+                        const endTimeFormatted = occ.end_at
+                          ? formatTime12h(occ.end_at)
+                          : (occ.end_time ? formatTime12h(occ.end_time) : '');
 
                         const bookedCount = occ.booking_count ?? 0;
                         const waitlistCount = occ.waitlist_count ?? 0;
@@ -2674,16 +2670,22 @@ export const ClassesWorkspace: React.FC = () => {
                             <td className="py-3 px-4">
                               {hasTrainer ? (
                                 <div className="space-y-0.5">
-                                  {allTrainers.slice(0, 2).map((t, idx) => (
-                                    <div key={t.id || idx} className="flex items-center gap-1 text-xs">
-                                      <span className="font-medium text-foreground truncate max-w-[120px]">
-                                        {t.trainer_name || t.trainer_code || 'Trainer'}
-                                      </span>
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
-                                        {t.trainer_role || 'Lead'}
-                                      </Badge>
-                                    </div>
-                                  ))}
+                                  {allTrainers.slice(0, 2).map((t, idx) => {
+                                    const displayName = t.trainer_name && t.trainer_name.toLowerCase() !== 'sweat' ? t.trainer_name : (t.trainer_code || 'Trainer');
+                                    return (
+                                      <div key={t.id || idx} className="flex items-center gap-1 text-xs">
+                                        <span className="font-semibold text-foreground truncate max-w-[130px]" title={displayName}>
+                                          {displayName}
+                                        </span>
+                                        {t.trainer_code && displayName !== t.trainer_code && (
+                                          <span className="text-[10px] text-muted-foreground font-mono">({t.trainer_code})</span>
+                                        )}
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
+                                          {t.trainer_role || 'Lead'}
+                                        </Badge>
+                                      </div>
+                                    );
+                                  })}
                                   {allTrainers.length > 2 && (
                                     <span className="text-[10px] text-muted-foreground">+{allTrainers.length - 2} more</span>
                                   )}
@@ -2774,10 +2776,10 @@ export const ClassesWorkspace: React.FC = () => {
                                   size="sm"
                                   onClick={() => setAttendanceModalOccurrence(occ)}
                                   className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
-                                  title="Record or inspect attendance and member bookings"
+                                  title="View class details, assigned trainer, workout format, video, and roster"
                                 >
                                   <Users className="size-3" />
-                                  <span>Attendance & Bookings</span>
+                                  <span>Details & Roster</span>
                                 </Button>
 
                                 {canEdit && (
@@ -2826,16 +2828,12 @@ export const ClassesWorkspace: React.FC = () => {
                   ];
                   const hasTrainer = allTrainers.length > 0;
 
-                  const startTimeFormatted = occ.start_time
-                    ? formatTime12h(occ.start_time.slice(0, 5))
-                    : (occ.start_at
-                        ? new Date(occ.start_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
-                        : '');
-                  const endTimeFormatted = occ.end_time
-                    ? formatTime12h(occ.end_time.slice(0, 5))
-                    : (occ.end_at
-                        ? new Date(occ.end_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
-                        : '');
+                  const startTimeFormatted = occ.start_at
+                    ? formatTime12h(occ.start_at)
+                    : (occ.start_time ? formatTime12h(occ.start_time) : '');
+                  const endTimeFormatted = occ.end_at
+                    ? formatTime12h(occ.end_at)
+                    : (occ.end_time ? formatTime12h(occ.end_time) : '');
 
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;
@@ -2946,9 +2944,10 @@ export const ClassesWorkspace: React.FC = () => {
                           size="sm"
                           onClick={() => setAttendanceModalOccurrence(occ)}
                           className="flex-1 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                          title="View class details, assigned trainer, workout format, video, and roster"
                         >
                           <Users className="size-3.5" />
-                          <span>Attendance & Bookings</span>
+                          <span>Details & Roster</span>
                         </Button>
                         {canEdit && (
                           <Button

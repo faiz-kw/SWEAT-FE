@@ -167,6 +167,21 @@ export const membersApi = {
     return res.data;
   },
 
+  async purchasePackage(id: string, data: {
+    package_id: string;
+    package_version_id?: string | undefined;
+    branch_id?: string | undefined;
+    start_schedule?: string | undefined;
+    custom_start_date?: string | undefined;
+    payment_amount?: number | undefined;
+    payment_provider?: string | undefined;
+    payment_method?: string | undefined;
+    reason?: string | undefined;
+  }): Promise<any> {
+    const res = await api.post<any>(`/tenant/members/${id}/purchase-package/`, data);
+    return res.data;
+  },
+
   async adjustEntitlement(id: string, data: {
     entitlement_type: string;
     units_delta: number;
