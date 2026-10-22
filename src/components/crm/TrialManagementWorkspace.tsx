@@ -1,6 +1,9 @@
 import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Calendar,
   Clock,
   User,
@@ -81,6 +84,21 @@ export function TrialManagementWorkspace() {
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [dateFilter, setDateFilter] = React.useState<string>('');
 
+  // Sorting State: Default to current date / newest first (Descending)
+  type TrialSortField = 'date' | 'lead' | 'branch' | 'status' | 'confirmation';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = React.useState<TrialSortField>('date');
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>('desc');
+
+  const handleSort = (field: TrialSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'date' ? 'desc' : 'asc');
+    }
+  };
+
   // Modals state
   const [isBookModalOpen, setIsBookModalOpen] = React.useState(false);
   const [selectedLeadFor360, setSelectedLeadFor360] = React.useState<Lead | null>(null);
@@ -128,7 +146,7 @@ export function TrialManagementWorkspace() {
     isError: isTrialsError,
     refetch: refetchTrials,
   } = useQuery({
-    queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery],
+    queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery, sortDirection],
     queryFn: () => {
       const params: Parameters<typeof crmApi.getTrialBookings>[0] = {};
       if (selectedBranch) params.branch_id = selectedBranch;
@@ -139,9 +157,54 @@ export function TrialManagementWorkspace() {
         params.end_date = dateFilter;
       }
       if (searchQuery) params.search = searchQuery;
+      params.ordering = sortDirection === 'asc' ? 'scheduled_start' : '-scheduled_start';
       return crmApi.getTrialBookings(params);
     },
   });
+
+  // Sorted trials memo (Ensures top dated / current date comes first)
+  const sortedTrials = React.useMemo(() => {
+    const list = [...trials];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'date': {
+          const tA = new Date(a.booking_date || a.scheduled_start || a.created_at || 0).getTime();
+          const tB = new Date(b.booking_date || b.scheduled_start || b.created_at || 0).getTime();
+          cmp = tA - tB;
+          break;
+        }
+        case 'lead': {
+          const nameA = (a.lead_name || '').toLowerCase();
+          const nameB = (b.lead_name || '').toLowerCase();
+          cmp = nameA.localeCompare(nameB);
+          break;
+        }
+        case 'branch': {
+          const bA = (a.branch_name || '').toLowerCase();
+          const bB = (b.branch_name || '').toLowerCase();
+          cmp = bA.localeCompare(bB);
+          break;
+        }
+        case 'status': {
+          const sA = (a.status || '').toLowerCase();
+          const sB = (b.status || '').toLowerCase();
+          cmp = sA.localeCompare(sB);
+          break;
+        }
+        case 'confirmation': {
+          const cA = (a.confirmation_status || '').toLowerCase();
+          const cB = (b.confirmation_status || '').toLowerCase();
+          cmp = cA.localeCompare(cB);
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [trials, sortField, sortDirection]);
 
   // Available slots query for rescheduling
   const { data: rescheduleSlots = [], isLoading: isRescheduleSlotsLoading } = useQuery({
@@ -521,16 +584,102 @@ export function TrialManagementWorkspace() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-muted/40 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
                   <tr>
-                    <th className="px-4 py-3">Lead &amp; Contact</th>
-                    <th className="px-4 py-3">Class &amp; Schedule</th>
-                    <th className="px-4 py-3">Branch &amp; Trainer</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Confirmation</th>
+                    <th 
+                      onClick={() => handleSort('lead')}
+                      className="px-4 py-3 cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                      title="Click to sort by Lead name"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Lead &amp; Contact</span>
+                        {sortField === 'lead' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('date')}
+                      className="px-4 py-3 cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                      title="Click to sort by Date (Current date first by default)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span>Class &amp; Schedule</span>
+                        {sortField === 'date' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('branch')}
+                      className="px-4 py-3 cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                      title="Click to sort by Branch"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Branch &amp; Trainer</span>
+                        {sortField === 'branch' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('status')}
+                      className="px-4 py-3 cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                      title="Click to sort by Status"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Status</span>
+                        {sortField === 'status' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('confirmation')}
+                      className="px-4 py-3 cursor-pointer select-none hover:text-foreground transition-colors group/col"
+                      title="Click to sort by Confirmation"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Confirmation</span>
+                        {sortField === 'confirmation' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/col:opacity-80 transition-opacity shrink-0" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {trials.map((trial) => {
+                  {sortedTrials.map((trial) => {
                     return (
                       <tr key={trial.id} className="hover:bg-muted/20 transition-colors">
                         {/* Lead */}
@@ -732,7 +881,7 @@ export function TrialManagementWorkspace() {
 
             {/* MOBILE & TABLET FEED (VISIBLE ON SCREENS < LG) */}
             <div className="lg:hidden divide-y divide-border">
-              {trials.map((trial) => (
+              {sortedTrials.map((trial) => (
                 <div key={trial.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>

@@ -595,6 +595,7 @@ export const crmApi = {
     start_date?: string;
     end_date?: string;
     search?: string;
+    ordering?: string;
   }): Promise<TrialBooking[]> => {
     const sp = new URLSearchParams();
     if (params?.status) sp.append('status', params.status);
@@ -604,6 +605,7 @@ export const crmApi = {
     if (params?.start_date) sp.append('start_date', params.start_date);
     if (params?.end_date) sp.append('end_date', params.end_date);
     if (params?.search) sp.append('search', params.search);
+    if (params?.ordering) sp.append('ordering', params.ordering);
     const qStr = sp.toString() ? `?${sp.toString()}` : '';
     const res = await api.get<PaginatedResponse<TrialBooking> | TrialBooking[]>(`/tenant/trial-bookings/${qStr}`);
     if (Array.isArray(res.data)) {
