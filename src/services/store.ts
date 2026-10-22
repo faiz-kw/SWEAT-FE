@@ -51,6 +51,8 @@ export interface Collections {
   coaches: Row[];
   mlModels: Row[];
   supportTickets: Row[];
+  suppliers: Row[];
+  stockMovements: Row[];
 }
 
 const ID_PREFIX: Partial<Record<CollectionKey, string>> = {
@@ -61,6 +63,8 @@ const ID_PREFIX: Partial<Record<CollectionKey, string>> = {
   invoices: "INV",
   bookings: "BKG",
   supportTickets: "TKT",
+  suppliers: "SUP",
+  stockMovements: "MOV",
   aiCoachPlans: "AIC",
   copilotInsights: "CPI",
   biInsights: "BIQ",
@@ -86,6 +90,7 @@ export const BACKEND_COLLECTIONS = new Set<CollectionKey>([
   "payments",
   "coupons",
   "integrations",
+  "stockMovements",
 ]);
 
 let data: Collections | null = null;
@@ -100,6 +105,69 @@ function build(): Collections {
   for (const k of Object.keys({ ...d, ...ai })) {
     next[k] = []; // Clean empty array — ZERO dummy data! Only real DB data is loaded.
   }
+  next["suppliers"] = [
+    {
+      id: "SUP-001",
+      name: "Sweat Fit Wellness Official Store",
+      category: "Digital Guides & Merch",
+      contactPerson: "E-Commerce Fulfillment Desk",
+      email: "orders@sweatfitwellness.com",
+      phone: "+91 98200 12345",
+      address: "Mumbai, Maharashtra, India",
+      leadTimeDays: 1,
+      paymentTerms: "Immediate / Prepaid",
+      status: "Active",
+    },
+    {
+      id: "SUP-002",
+      name: "GripTech Performance Apparel",
+      category: "Accessories & Grip Socks",
+      contactPerson: "Sunil Verma",
+      email: "sales@griptech-india.com",
+      phone: "+91 98211 44556",
+      address: "Tirupur, Tamil Nadu, India",
+      leadTimeDays: 3,
+      paymentTerms: "Net 30",
+      status: "Active",
+    },
+    {
+      id: "SUP-003",
+      name: "Hydrate Pro Stainless Supplies",
+      category: "Water Tumblers & Bottles",
+      contactPerson: "Anita Deshmukh",
+      email: "anita@hydratepro.in",
+      phone: "+91 98333 77889",
+      address: "Pune, Maharashtra, India",
+      leadTimeDays: 5,
+      paymentTerms: "Net 15",
+      status: "Active",
+    },
+    {
+      id: "SUP-004",
+      name: "AeroMat & Foam Gear Co.",
+      category: "Knee & Elbow Cushions, Bands",
+      contactPerson: "Rahul Nair",
+      email: "rahul@aeromat.in",
+      phone: "+91 98444 11223",
+      address: "Bengaluru, Karnataka, India",
+      leadTimeDays: 4,
+      paymentTerms: "Net 30",
+      status: "Active",
+    },
+    {
+      id: "SUP-005",
+      name: "Optimum Wellness & Nutrition Dist.",
+      category: "Nutritional Supplements & Shakes",
+      contactPerson: "Deepak Mehra",
+      email: "deepak@optimumdist.com",
+      phone: "+91 98555 99001",
+      address: "Delhi NCR, India",
+      leadTimeDays: 2,
+      paymentTerms: "Net 30",
+      status: "Active",
+    },
+  ];
+  next["stockMovements"] = [];
   return next as unknown as Collections;
 }
 
@@ -109,7 +177,7 @@ export function getCollections(): Collections {
 }
 
 export function collection(key: CollectionKey): Row[] {
-  return getCollections()[key];
+  return getCollections()[key] ?? [];
 }
 
 /** Read-only view of every collection — used by cross-module timelines. */
@@ -165,6 +233,7 @@ import {
   fetchCoupons,
   fetchFoodDatabase,
   fetchIntegrationStatus,
+  fetchInventoryMovements,
   fetchInvoices,
   fetchLeads,
   fetchMembers,
@@ -621,6 +690,12 @@ export function loadCollection(key: CollectionKey, locationId?: string) {
     fetchIntegrationStatus()
       .then((rows) => {
         setCollectionRows("integrations", rows);
+      })
+      .catch(() => {});
+  } else if (key === "stockMovements") {
+    fetchInventoryMovements()
+      .then((rows) => {
+        if (rows.length > 0) setCollectionRows("stockMovements", rows);
       })
       .catch(() => {});
   }

@@ -59,15 +59,71 @@ export const MODULES: Record<string, ModuleDef> = {
   "/nutrition/diet-plans": { collection: "nutritionPlans" },
   "/nutrition/consultations": { collection: "nutritionPlans", preset: preset("Review due", "status", "Review Due") },
   "/nutrition/food-logs": { collection: "nutritionPlans", preset: preset("Active plans", "status", "Active") },
-  "/nutrition/supplements": { collection: "products" },
+  "/nutrition/supplements": {
+    collection: "products",
+    preset: {
+      label: "Supplements & Nutrition",
+      test: (r) => {
+        const cat = String(r["category"] || "").toLowerCase();
+        const pt = String(r["productType"] || r["product_type"] || "").toLowerCase();
+        return (
+          cat.includes("supplement") ||
+          cat.includes("guide") ||
+          cat === "beverages" ||
+          cat === "snacks" ||
+          pt === "digital download" ||
+          pt.includes("supplement")
+        );
+      },
+    },
+    hint: "Nutritional supplements, wellness beverages, snacks, and dietary guides.",
+  },
 
   /* Inventory */
-  "/inventory/products": { collection: "products" },
-  "/inventory/stock": { collection: "products" },
-  "/inventory/purchases": { collection: "products" },
-  "/inventory/suppliers": { collection: "products" },
-  "/inventory/movement": { collection: "products" },
-  "/inventory/expiry": { collection: "products" },
+  "/inventory/products": {
+    collection: "products",
+    hint: "Master retail product catalog across all categories and departments.",
+  },
+  "/inventory/stock": {
+    collection: "products",
+    preset: {
+      label: "Physical Goods Only",
+      test: (r) => {
+        const pt = String(r["productType"] || r["product_type"] || "").toLowerCase();
+        return pt !== "digital download";
+      },
+    },
+    hint: "Track on-hand warehouse and branch physical stock quantities and replenishment alerts.",
+  },
+  "/inventory/purchases": {
+    collection: "products",
+    hint: "Staff workspace for retail orders, member purchases, and pickup fulfillments.",
+  },
+  "/inventory/suppliers": {
+    collection: "suppliers",
+    hint: "Equipment vendors, apparel manufacturers, and nutrition distributors.",
+  },
+  "/inventory/movement": {
+    collection: "stockMovements",
+    hint: "Authoritative audit ledger of all stock intake, sales deductions, and inventory adjustments.",
+  },
+  "/inventory/expiry": {
+    collection: "products",
+    preset: {
+      label: "Perishables & Batch Expiry",
+      test: (r) => {
+        const cat = String(r["category"] || "").toLowerCase();
+        const pt = String(r["productType"] || r["product_type"] || "").toLowerCase();
+        return (
+          cat === "supplements" ||
+          cat === "beverages" ||
+          cat === "snacks" ||
+          pt.includes("supplement")
+        );
+      },
+    },
+    hint: "Monitor batches, shelf-life, and expiration dates for consumable items.",
+  },
 
   /* Finance */
   "/finance/invoices": { collection: "invoices" },

@@ -167,6 +167,27 @@ export const DEFAULT_COLLECTION_FIELDS: Record<string, Field[]> = {
     { key: "channel", label: "Channel", type: "enum", options: ["App", "WhatsApp", "Front Desk", "Email", "Call"] },
     { key: "status", label: "Status", type: "enum", options: ["Open", "In Progress", "Escalated", "Resolved", "Closed"] },
   ],
+  stockMovements: [
+    { key: "productName", label: "Product Name", type: "text", required: true },
+    { key: "sku", label: "SKU / Code", type: "text" },
+    { key: "category", label: "Category", type: "text" },
+    { key: "movementType", label: "Movement Type", type: "enum", options: ["RESTOCK", "SALE", "RESERVATION", "RESERVATION_RELEASE", "ADJUSTMENT"] },
+    { key: "quantityChange", label: "Quantity Change", type: "number" },
+    { key: "balanceAfter", label: "Balance After", type: "number" },
+    { key: "notes", label: "Notes / Reference", type: "text" },
+    { key: "createdAt", label: "Timestamp", type: "datetime" },
+  ],
+  suppliers: [
+    { key: "name", label: "Supplier / Vendor Name", type: "text", required: true },
+    { key: "category", label: "Category", type: "text" },
+    { key: "contactPerson", label: "Contact Person", type: "text" },
+    { key: "email", label: "Email", type: "text" },
+    { key: "phone", label: "Phone", type: "text" },
+    { key: "address", label: "Location / Address", type: "text" },
+    { key: "leadTimeDays", label: "Lead Time (Days)", type: "number" },
+    { key: "paymentTerms", label: "Payment Terms", type: "text" },
+    { key: "status", label: "Status", type: "enum", options: ["Active", "Inactive"] },
+  ],
 };
 
 const NEVER_ENUM = /(name|phone|email|contact|address|id|title|sku|notes|feedback|description|url|code|password)/i;

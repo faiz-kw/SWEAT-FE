@@ -1059,6 +1059,33 @@ export async function deleteProductApi(id: string): Promise<void> {
   }
 }
 
+export function normalizeInventoryMovement(item: any): Row {
+  return {
+    ...item,
+    id: String(item.id ?? `MOV-${Date.now()}`),
+    productName: item.product_name || item.productName || "Product",
+    sku: item.product_sku || item.sku || "-",
+    category: item.product_category || item.category || "General",
+    movementType: item.movement_type || item.movementType || "ADJUSTMENT",
+    quantityChange: Number(item.quantity_change ?? item.quantityChange ?? 0),
+    balanceAfter: Number(item.balance_after ?? item.balanceAfter ?? 0),
+    notes: item.notes || "Stock update",
+    createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+  };
+}
+
+export async function fetchInventoryMovements(): Promise<Row[]> {
+  try {
+    const res = await api.get<any>("/tenant/inventory-movements/?page_size=500");
+    const list = extractList(res.data);
+    if (list.length > 0) return list.map(normalizeInventoryMovement);
+  } catch {
+    // Fallback
+  }
+  return [];
+}
+
+
 
 // ── 12. FINANCE & INVOICES ───────────────────────────────────────────
 
