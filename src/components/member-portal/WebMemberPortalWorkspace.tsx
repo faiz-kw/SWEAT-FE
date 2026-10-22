@@ -39,7 +39,9 @@ import {
   Package,
   Building2,
   ChevronDown,
+  Utensils,
 } from "lucide-react";
+import { MemberNutritionTab } from "@/components/member-portal/MemberNutritionTab";
 import { toast } from "sonner";
 import {
   mobileApi,
@@ -1293,6 +1295,10 @@ function WebMemberPortalWorkspaceInner() {
               <TabsTrigger value="parq" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                 <HeartPulse className="h-4 w-4" />
                 PAR-Q Health Clearance
+              </TabsTrigger>
+              <TabsTrigger value="nutrition" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
+                <Utensils className="h-4 w-4 text-emerald-500" />
+                Nutrition & Wellness
               </TabsTrigger>
               <TabsTrigger value="profile" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                 <User className="h-4 w-4" />
@@ -3223,6 +3229,13 @@ function WebMemberPortalWorkspaceInner() {
                 </form>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ========================================================================= */}
+          {/* TAB 8: NUTRITION & WELLNESS (AI VISION & BARCODE SCANNER)                 */}
+          {/* ========================================================================= */}
+          <TabsContent value="nutrition" className="space-y-6">
+            <MemberNutritionTab memberFirstName={profile?.first_name} />
           </TabsContent>
         </Tabs>
       </main>
