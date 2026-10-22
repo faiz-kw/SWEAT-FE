@@ -1,6 +1,10 @@
 import * as React from "react";
-import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check, Snowflake, Sliders, CheckCircle2 } from "lucide-react";
 import { crmApi } from "@/api/endpoints/crmApi";
+import { membershipsApi } from "@/api/endpoints/membershipsApi";
+import type { MembershipPolicyConfig, MembershipChangePolicy } from "@/types/memberships";
+import { usePermissions } from "@/lib/permissions";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
@@ -114,6 +118,66 @@ export function ConfigurationWorkspace() {
     },
   });
 
+  const queryClient = useQueryClient();
+  const { can, user } = usePermissions();
+  const isOrgAdmin = Boolean(
+    user?.isSuperAdmin ||
+    user?.isOrgWide ||
+    user?.role?.toUpperCase().includes('ADMIN') ||
+    user?.roles?.some((r: any) => (r.code || '').toUpperCase().includes('ADMIN')) ||
+    can('membership.policy.manage')
+  );
+
+  const [isEditingPolicy, setIsEditingPolicy] = React.useState(false);
+  const [policyForm, setPolicyForm] = React.useState<Partial<MembershipPolicyConfig>>({});
+
+  const {
+    data: policyConfig,
+    isLoading: loadingPolicyConfig,
+    refetch: refetchPolicyConfig,
+  } = useQuery({
+    queryKey: ['membership-policy-config'],
+    queryFn: () => membershipsApi.getPolicyConfig(),
+  });
+
+  const {
+    data: changePolicies = [],
+    isLoading: loadingChangePolicies,
+    refetch: refetchChangePolicies,
+  } = useQuery({
+    queryKey: ['membership-change-policies'],
+    queryFn: () => membershipsApi.getChangePolicies(),
+  });
+
+  React.useEffect(() => {
+    if (policyConfig) {
+      setPolicyForm({
+        extension_per_day_fee: policyConfig.extension_per_day_fee,
+        extension_activation_fee: policyConfig.extension_activation_fee,
+        extension_min_days: policyConfig.extension_min_days,
+        extension_max_days: policyConfig.extension_max_days,
+        extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+        freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+        freeze_min_days: policyConfig.freeze_min_days,
+        freeze_max_days: policyConfig.freeze_max_days,
+        freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+      });
+    }
+  }, [policyConfig]);
+
+  const updatePolicyMutation = useMutation({
+    mutationFn: (data: Partial<MembershipPolicyConfig>) => membershipsApi.updatePolicyConfig(data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['membership-policy-config'], updated);
+      queryClient.invalidateQueries({ queryKey: ['membership-policy-config'] });
+      setIsEditingPolicy(false);
+      toast.success("Upgrade & extension rules saved successfully!");
+    },
+    onError: (err: any) => {
+      toast.error(err?.data?.detail || err?.message || "Failed to save upgrade & extension rules");
+    }
+  });
+
   React.useEffect(() => {
     fetchTenantSettingsApi()
       .then((data) => setSettings(data))
@@ -169,6 +233,12 @@ export function ConfigurationWorkspace() {
       } else if (activeTab === "payment") {
         await crmApi.updatePaymentPolicy(paymentPolicy);
         toast.success("Payment & checkout policy saved successfully!");
+      } else if (activeTab === "lifecycle") {
+        await updateTenantSettingsApi(settings);
+        if (isEditingPolicy) {
+          await updatePolicyMutation.mutateAsync(policyForm);
+        }
+        toast.success("Membership upgrade, extension & hold rules saved successfully!");
       } else {
         await updateTenantSettingsApi(settings);
         toast.success("Business configuration saved successfully!");
@@ -237,7 +307,7 @@ export function ConfigurationWorkspace() {
             { id: "general", label: "Hours & Timezone", icon: Clock },
             { id: "billing", label: "Taxes & GST", icon: Receipt },
             { id: "booking", label: "Booking & Cancellation Rules", icon: Settings },
-            { id: "lifecycle", label: "Membership Holds", icon: ShieldAlert },
+            { id: "lifecycle", label: "Upgrade & Extension Rules", icon: Sliders },
             { id: "payment", label: "Payment & Checkout", icon: CreditCard },
             { id: "rewards", label: "Reward Points", icon: Sparkles },
           ].map((tab) => {
@@ -991,30 +1061,355 @@ export function ConfigurationWorkspace() {
             </div>
           )}
 
-          {/* LIFECYCLE TAB */}
+          {/* LIFECYCLE / UPGRADE & EXTENSION RULES TAB */}
           {activeTab === "lifecycle" && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <h3 className="font-semibold text-base border-b border-border/40 pb-2">Membership Freeze & Grace Periods</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="freeze_days">Max Freeze Days Allowed per Year</Label>
-                  <Input
-                    id="freeze_days"
-                    type="number"
-                    value={settings.max_freeze_days_per_year}
-                    onChange={(e) => update("max_freeze_days_per_year", Number(e.target.value))}
-                  />
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* Tenant Admin Package Extend & Freeze Policy Settings */}
+              <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-semibold text-foreground">
+                        Package Validity Extension & Freeze Configuration
+                      </h2>
+                      {isOrgAdmin ? (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-md">
+                          Admin Configurable
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-muted text-muted-foreground border border-border/60 rounded-md">
+                          Read Only
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Tenant-wide operational settings governing daily extension fees, reactivation penalties, freeze durations, and renewal grace periods.
+                    </p>
+                  </div>
+                  {isOrgAdmin && (
+                    <div>
+                      {isEditingPolicy ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setIsEditingPolicy(false);
+                              if (policyConfig) {
+                                setPolicyForm({
+                                  extension_per_day_fee: policyConfig.extension_per_day_fee,
+                                  extension_activation_fee: policyConfig.extension_activation_fee,
+                                  extension_min_days: policyConfig.extension_min_days,
+                                  extension_max_days: policyConfig.extension_max_days,
+                                  extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+                                  freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+                                  freeze_min_days: policyConfig.freeze_min_days,
+                                  freeze_max_days: policyConfig.freeze_max_days,
+                                  freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                                });
+                              }
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={updatePolicyMutation.isPending || saving}
+                            onClick={async () => {
+                              try {
+                                await updatePolicyMutation.mutateAsync(policyForm);
+                                await updateTenantSettingsApi(settings);
+                                toast.success("Configuration updated successfully!");
+                              } catch (err: any) {
+                                toast.error(err?.data?.detail || err?.message || "Failed to save configuration");
+                              }
+                            }}
+                            className="gap-1.5"
+                          >
+                            {updatePolicyMutation.isPending ? 'Saving...' : 'Save Settings'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (policyConfig) {
+                              setPolicyForm({
+                                extension_per_day_fee: policyConfig.extension_per_day_fee,
+                                extension_activation_fee: policyConfig.extension_activation_fee,
+                                extension_min_days: policyConfig.extension_min_days,
+                                extension_max_days: policyConfig.extension_max_days,
+                                extension_requires_remaining_sessions: policyConfig.extension_requires_remaining_sessions,
+                                freeze_per_day_fee: policyConfig.freeze_per_day_fee,
+                                freeze_min_days: policyConfig.freeze_min_days,
+                                freeze_max_days: policyConfig.freeze_max_days,
+                                freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                              });
+                            }
+                            setIsEditingPolicy(true);
+                          }}
+                          className="gap-1.5"
+                        >
+                          <Settings className="size-3.5" />
+                          <span>Configure Rules</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="grace_days">Renewal Grace Period (Days)</Label>
-                  <Input
-                    id="grace_days"
-                    type="number"
-                    value={settings.membership_grace_period_days}
-                    onChange={(e) => update("membership_grace_period_days", Number(e.target.value))}
-                  />
-                  <p className="text-xs text-muted-foreground">Days after expiry before turnstile access is automatically locked.</p>
-                </div>
+
+                {loadingPolicyConfig ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    <RefreshCw className="size-5 animate-spin mx-auto mb-2 text-primary" />
+                    Loading policy parameters...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Extension Rules Card */}
+                    <div className="p-4 rounded-xl border border-border/70 bg-muted/20 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <Clock className="size-4 text-amber-500" />
+                        <span>Package Validity Extension Rules</span>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Per-Day Extension Fee (₹)</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              step="1"
+                              value={policyForm.extension_per_day_fee ?? policyConfig?.extension_per_day_fee ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, extension_per_day_fee: e.target.value })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-semibold text-foreground text-sm mt-0.5">
+                              ₹{policyConfig?.extension_per_day_fee || '35.00'} / day
+                            </div>
+                          )}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            Standard fee charged per validity day added to an active package.
+                          </span>
+                        </div>
+
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Expired Package Activation Surcharge (₹)</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              step="1"
+                              value={policyForm.extension_activation_fee ?? policyConfig?.extension_activation_fee ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, extension_activation_fee: e.target.value })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-semibold text-amber-600 dark:text-amber-400 text-sm mt-0.5">
+                              ₹{policyConfig?.extension_activation_fee || '200.00'} (One-time)
+                            </div>
+                          )}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            Mandatory fee charged before extending packages that have already expired.
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Min Days</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={policyForm.extension_min_days ?? policyConfig?.extension_min_days ?? ''}
+                                onChange={(e) => setPolicyForm({ ...policyForm, extension_min_days: parseInt(e.target.value) || 1 })}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{policyConfig?.extension_min_days || 1} day</div>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Max Days</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={policyForm.extension_max_days ?? policyConfig?.extension_max_days ?? ''}
+                                onChange={(e) => setPolicyForm({ ...policyForm, extension_max_days: parseInt(e.target.value) || 30 })}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{policyConfig?.extension_max_days || 30} days</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                          {isEditingPolicy ? (
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={policyForm.extension_requires_remaining_sessions !== undefined ? Boolean(policyForm.extension_requires_remaining_sessions) : Boolean(policyConfig?.extension_requires_remaining_sessions ?? true)}
+                                onChange={(e) => setPolicyForm({ ...policyForm, extension_requires_remaining_sessions: e.target.checked })}
+                                className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                              />
+                              <span className="text-foreground font-medium">Require remaining sessions to extend</span>
+                            </label>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <CheckCircle2 className={`size-3.5 ${policyConfig?.extension_requires_remaining_sessions ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+                              <span>{policyConfig?.extension_requires_remaining_sessions ? 'Requires unconsumed sessions remaining to extend' : 'Allows extension even without remaining sessions'}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Freeze Rules Card */}
+                    <div className="p-4 rounded-xl border border-border/70 bg-muted/20 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <Snowflake className="size-4 text-blue-500" />
+                        <span>Membership Freeze & Grace Rules</span>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Per-Day Freeze Fee (₹)</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              step="1"
+                              value={policyForm.freeze_per_day_fee ?? policyConfig?.freeze_per_day_fee ?? ''}
+                              onChange={(e) => setPolicyForm({ ...policyForm, freeze_per_day_fee: e.target.value })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-semibold text-foreground text-sm mt-0.5">
+                              ₹{policyConfig?.freeze_per_day_fee || '25.00'} / day
+                            </div>
+                          )}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            Daily charge while membership validity is paused and extended forward.
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Min Freeze Days</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={policyForm.freeze_min_days ?? policyConfig?.freeze_min_days ?? ''}
+                                onChange={(e) => setPolicyForm({ ...policyForm, freeze_min_days: parseInt(e.target.value) || 3 })}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_min_days || 3} days</div>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Max Freeze Days (Per Instance)</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={policyForm.freeze_max_days ?? policyConfig?.freeze_max_days ?? ''}
+                                onChange={(e) => setPolicyForm({ ...policyForm, freeze_max_days: parseInt(e.target.value) || 60 })}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_max_days || 60} days</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Max Freezes / Package</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={policyForm.freeze_max_count_per_cycle ?? policyConfig?.freeze_max_count_per_cycle ?? ''}
+                                onChange={(e) => setPolicyForm({ ...policyForm, freeze_max_count_per_cycle: parseInt(e.target.value) || 3 })}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{policyConfig?.freeze_max_count_per_cycle || 3} freezes</div>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Max Freeze Days / Year</Label>
+                            {isEditingPolicy ? (
+                              <Input
+                                type="number"
+                                value={settings.max_freeze_days_per_year}
+                                onChange={(e) => update("max_freeze_days_per_year", Number(e.target.value))}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <div className="font-medium text-foreground mt-0.5">{settings.max_freeze_days_per_year || 60} days/year</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Renewal Grace Period (Days)</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              value={settings.membership_grace_period_days}
+                              onChange={(e) => update("membership_grace_period_days", Number(e.target.value))}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-medium text-foreground mt-0.5">{settings.membership_grace_period_days || 7} days</div>
+                          )}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            Days after package expiry before turnstile access is automatically locked.
+                          </span>
+                        </div>
+
+                        <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <CheckCircle2 className="size-3.5 text-blue-500" />
+                          <span>Lockout enforced during freeze; bookings auto-resume thereafter</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: Change & Upgrade Policies */}
+              <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-xs">
+                <h2 className="text-base font-semibold text-foreground">Change & Upgrade Policies</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Versioned contractual rules governing proration, cancellation fees, and package transitions.
+                </p>
+
+                {loadingChangePolicies ? (
+                  <div className="p-12 text-center text-muted-foreground text-sm">
+                    <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                    Loading policies...
+                  </div>
+                ) : changePolicies.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">No change policies defined.</div>
+                ) : (
+                  <div className="divide-y divide-border/60 mt-4">
+                    {changePolicies.map((p) => (
+                      <div key={p.id} className="py-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold text-foreground">
+                            {p.policy_name} v{p.version_number}
+                          </h4>
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+                            {p.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {p.rules?.length || 0} active rule(s) configured for upgrades, downgrades, and cancellations.
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

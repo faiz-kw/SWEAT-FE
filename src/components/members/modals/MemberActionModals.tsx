@@ -23,6 +23,7 @@ import {
   Download,
   Printer,
   Globe,
+  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
@@ -51,7 +52,8 @@ export const RenewModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-}> = ({ isOpen, onClose, member }) => {
+  activeContracts?: any[];
+}> = ({ isOpen, onClose, member, activeContracts = [] }) => {
   const queryClient = useQueryClient();
   const [startSchedule, setStartSchedule] = useState<'CONTINUOUS' | 'FIRST_VISIT' | 'CUSTOM'>('CONTINUOUS');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -59,6 +61,33 @@ export const RenewModal: React.FC<{
   const [carryForward, setCarryForward] = useState(true);
   const [reason, setReason] = useState('Same package membership renewal');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({
+        ...c,
+        membership_id: c.membership_id || c.id,
+      }));
+    }
+    return [{
+      membership_id: member?.id,
+      membership_number: member?.membership_number,
+      package_id: member?.package_id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+      home_sessions_remaining: member?.home_sessions_remaining,
+      contract_snapshot: (member as any)?.contract_snapshot,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => {
+    return contracts[0]?.membership_id || contracts[0]?.id || member?.id || '';
+  });
+
+  const selectedContract = useMemo(() => {
+    return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
+  }, [contracts, selectedContractId]);
 
   const { data: rawPlans = [] } = useQuery({
     queryKey: ['renewal-plans'],
@@ -75,14 +104,18 @@ export const RenewModal: React.FC<{
 
   const selectedPlan = useMemo(() => {
     if (!Array.isArray(plans)) return null;
+    const targetPkgId = selectedContract?.package_id || member?.package_id;
+    const targetName = (selectedContract?.package_name || member?.package_name || '').trim().toLowerCase();
+    const cleanTargetName = targetName.replace(/\s*\([^)]*\)/g, '').trim();
+
     return (
-      plans.find((p: any) => p.package_id === member?.package_id) ||
-      plans.find((p: any) => p.id === member?.package_id) ||
-      plans.find((p: any) => p.name === member?.package_name) ||
+      (targetPkgId && plans.find((p: any) => p.package_id === targetPkgId || p.id === targetPkgId)) ||
+      (cleanTargetName && plans.find((p: any) => (p.name || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase() === cleanTargetName)) ||
+      (targetName && plans.find((p: any) => (p.name || '').toLowerCase().includes(cleanTargetName) || cleanTargetName.includes((p.name || '').toLowerCase()))) ||
       plans[0] ||
       null
     );
-  }, [plans, member?.package_id, member?.package_name]);
+  }, [plans, selectedContract, member]);
 
   const formatSafeDate = (d?: string | null) => {
     if (!d) return null;
@@ -91,16 +124,20 @@ export const RenewModal: React.FC<{
   };
 
   const priceEstimate = useMemo(() => {
-    if (selectedPlan && selectedPlan.price) {
+    if (selectedPlan && selectedPlan.price && Number(selectedPlan.price) > 0) {
       return Number(selectedPlan.price);
     }
+    const snapPrice = selectedContract?.contract_snapshot?.purchase_price ?? selectedContract?.contract_snapshot?.final_amount;
+    if (snapPrice && !isNaN(Number(snapPrice)) && Number(snapPrice) > 0) {
+      return Number(snapPrice);
+    }
     return 15000;
-  }, [selectedPlan]);
+  }, [selectedPlan, selectedContract]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.renewMembership(member?.id, {
-        package_id: selectedPlan?.package_id || member?.package_id,
+      membersApi.renewMembership(selectedContract?.membership_id || member?.id, {
+        package_id: selectedPlan?.package_id || selectedContract?.package_id || member?.package_id,
         start_schedule: startSchedule,
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
@@ -121,7 +158,7 @@ export const RenewModal: React.FC<{
           orderNumber: res.order_number,
           memberName: member?.name,
           memberPhone: member?.phone,
-          packageName: selectedPlan?.name || member?.package_name,
+          packageName: selectedPlan?.name || selectedContract?.package_name || member?.package_name,
         });
       } else if (res.status === 'PENDING_APPROVAL') {
         toast.info(res.message || 'Renewal submitted for cash approval');
@@ -158,19 +195,37 @@ export const RenewModal: React.FC<{
             Renew Membership Plan
           </DialogTitle>
           <DialogDescription>
-            Renew {member?.name || 'Member'}'s current package ({member?.package_name || 'Standard'}).
+            Renew {member?.name || 'Member'}'s current package ({selectedContract?.package_name || member?.package_name || 'Standard'}).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Active Contract Selector if multiple exist */}
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Active Membership to Renew</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {formatSafeDate(c.end_date) || 'N/A'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Package Details Being Renewed */}
           <div className="p-3.5 bg-muted/40 rounded-xl border border-border/70 space-y-2">
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Renewing Plan</Label>
-                <div className="font-bold text-sm text-foreground">{member?.package_name || selectedPlan?.name || 'Standard Package'}</div>
+                <div className="font-bold text-sm text-foreground">{selectedContract?.package_name || selectedPlan?.name || member?.package_name || 'Standard Package'}</div>
                 <div className="text-xs text-muted-foreground">
-                  Program: {member?.program_name || selectedPlan?.program_name || 'Bootcamp'} · {selectedPlan?.session_count || 36} Sessions
+                  Program: {selectedContract?.program_name || member?.program_name || selectedPlan?.program_name || 'Bootcamp'} · {selectedPlan?.total_sessions || selectedPlan?.session_count || 36} Sessions
                 </div>
               </div>
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-bold">
@@ -178,7 +233,7 @@ export const RenewModal: React.FC<{
               </Badge>
             </div>
             <div className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 flex items-center justify-between">
-              <span>Current Expiry: <strong>{formatSafeDate(member?.expiry_date) || 'Expired'}</strong></span>
+              <span>Current Expiry: <strong>{formatSafeDate(selectedContract?.end_date || member?.expiry_date) || 'Expired'}</strong></span>
               <span>Catalog Validity: <strong>{selectedPlan?.validity_days || 90} Days</strong></span>
             </div>
           </div>
@@ -198,7 +253,7 @@ export const RenewModal: React.FC<{
                 <div>
                   <span className="font-semibold text-foreground block">Continuous Renewal (Recommended)</span>
                   <span className="text-muted-foreground">
-                    Starts automatically when current plan expires on {formatSafeDate(member?.expiry_date) || 'activation'}.
+                    Starts automatically when current plan expires on {formatSafeDate(selectedContract?.end_date || member?.expiry_date) || 'activation'}.
                   </span>
                 </div>
               </label>
@@ -276,7 +331,7 @@ export const RenewModal: React.FC<{
               className="rounded border-input text-primary focus:ring-primary"
             />
             <Label htmlFor="carry_forward" className="text-xs cursor-pointer font-normal">
-              Carry forward remaining sessions ({member.home_sessions_remaining ?? 0} sessions)
+              Carry forward remaining sessions ({selectedContract?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0} sessions)
             </Label>
           </div>
 
@@ -316,11 +371,40 @@ export const UpgradeModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-}> = ({ isOpen, onClose, member }) => {
+  activeContracts?: any[];
+}> = ({ isOpen, onClose, member, activeContracts = [] }) => {
   const queryClient = useQueryClient();
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [reason, setReason] = useState('Upgraded to higher session tier plan');
+
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({
+        ...c,
+        membership_id: c.membership_id || c.id,
+      }));
+    }
+    return [{
+      membership_id: member?.id,
+      membership_number: member?.membership_number,
+      package_id: member?.package_id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      program_id: (member as any)?.program_id,
+      end_date: member?.expiry_date,
+      home_sessions_remaining: member?.home_sessions_remaining,
+      contract_snapshot: (member as any)?.contract_snapshot,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => {
+    return contracts[0]?.membership_id || contracts[0]?.id || member?.id || '';
+  });
+
+  const selectedContract = useMemo(() => {
+    return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
+  }, [contracts, selectedContractId]);
 
   const { data: rawPlans = [], isLoading: loadingPlans } = useQuery({
     queryKey: ['membership-plans'],
@@ -328,64 +412,103 @@ export const UpgradeModal: React.FC<{
     enabled: isOpen,
   });
 
-  // Parse current session count from package name (e.g., "36 Sessions" -> 36)
+  // Parse current session count from snapshot or package name (e.g., "144 Sessions" -> 144)
   const currentSessions = useMemo(() => {
-    const match = (member.package_name || '').match(/(\d+)\s*session/i);
-    return match ? parseInt(match[1], 10) : 36;
-  }, [member.package_name]);
+    const snap = selectedContract?.contract_snapshot;
+    if (snap?.total_sessions && Number(snap.total_sessions) > 0) return Number(snap.total_sessions);
+    if (snap?.session_count && Number(snap.session_count) > 0) return Number(snap.session_count);
+    const match = (selectedContract?.package_name || member?.package_name || '').match(/(\d+)\s*session/i);
+    return match ? parseInt(match[1], 10) : (selectedContract?.home_sessions_remaining || 36);
+  }, [selectedContract, member?.package_name]);
 
-  // Current plan base price estimate
+  // Current plan base price estimate from snapshot or catalog plans
   const currentPlanPrice = useMemo(() => {
+    const snap = selectedContract?.contract_snapshot;
+    const snapPrice = snap?.purchase_price ?? snap?.final_amount;
+    if (snapPrice && !isNaN(Number(snapPrice)) && Number(snapPrice) > 0) {
+      return Number(snapPrice);
+    }
+    const plansList = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
+    const curPkgId = selectedContract?.package_id || member?.package_id;
+    const curPlan = plansList.find((p: any) => (p.package_id && p.package_id === curPkgId) || (p.id && p.id === curPkgId));
+    if (curPlan?.price && Number(curPlan.price) > 0) return Number(curPlan.price);
+
     if (currentSessions === 36) return 15000;
     if (currentSessions === 72) return 25000;
     if (currentSessions === 108) return 35000;
-    return currentSessions * 400;
-  }, [currentSessions]);
+    if (currentSessions === 144) return 45000;
+    return currentSessions * 350;
+  }, [selectedContract, member?.package_id, rawPlans, currentSessions]);
 
-  // Only Real Active Packages from the authoritative catalog for this member's program
+  const catalogMRP = useMemo(() => {
+    return Number(selectedContract?.catalog_price || selectedContract?.contract_snapshot?.catalog_price || 0);
+  }, [selectedContract]);
+
+  // Real Active Packages matching the member's current program, filtered for HIGHER tiers
   const candidateUpgradePlans = useMemo(() => {
     const plansList = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
     if (!Array.isArray(plansList) || plansList.length === 0) {
       return [];
     }
 
-    const currentProg = (member?.program_name || '').trim().toLowerCase();
+    const currentProg = (selectedContract?.program_name || member?.program_name || '').trim().toLowerCase();
+    const currentProgId = selectedContract?.program_id || (member as any)?.program_id;
+    const currentPkgId = selectedContract?.package_id || member?.package_id;
 
     return plansList
       .filter((p: any) => {
         // Must be currently active in the system
         if (p.is_active === false || p.status === 'INACTIVE' || p.status === 'ARCHIVED') return false;
-        // Match member's program if program_name is specified
-        if (currentProg && p.program_name && p.program_name.trim().toLowerCase() !== currentProg) {
-          return false;
+
+        // Exclude current package ID
+        const pId = p.id || p.package_id;
+        if (currentPkgId && (pId === currentPkgId || p.package_id === currentPkgId)) return false;
+
+        // Program match: by program_id OR by program_name equality OR containment (e.g. Bootcamp)
+        if (currentProgId && p.program_id && p.program_id === currentProgId) {
+          return true;
         }
-        return true;
+        if (currentProg) {
+          const pProg = (p.program_name || '').trim().toLowerCase();
+          const pName = (p.name || '').trim().toLowerCase();
+          if (pProg === currentProg) return true;
+          if (pProg && (pProg.includes(currentProg) || currentProg.includes(pProg))) return true;
+          if (pName && pName.includes(currentProg)) return true;
+        }
+        return false;
       })
       .map((p: any) => {
         const match = (p.name || '').match(/(\d+)\s*session/i);
-        const sCount = match ? parseInt(match[1], 10) : (p.total_sessions || p.session_count || (p.duration_months ? p.duration_months * 24 : 0));
+        const sCount = match
+          ? parseInt(match[1], 10)
+          : (p.total_sessions || p.session_count || (p.duration_months ? p.duration_months * 24 : 0));
         return {
           id: p.id || p.package_id,
           name: p.name,
-          program: p.program_name || member?.program_name || 'Standard Program',
+          program: p.program_name || selectedContract?.program_name || member?.program_name || 'Standard Program',
           sessions: sCount,
           price: Number(p.price || 0),
           validity_days: p.validity_days || (p.duration_months ? p.duration_months * 30 : 90),
         };
       })
-      // Exclude current package ID and lower session tiers
-      .filter((p: any) => p.id !== member?.package_id && (p.sessions > currentSessions || p.price > currentPlanPrice));
-  }, [rawPlans, currentSessions, currentPlanPrice, member?.program_name, member?.package_id]);
+      // Strictly higher tier: more sessions OR higher price with equal/more sessions
+      .filter((p: any) => p.sessions > currentSessions || (p.price > currentPlanPrice && p.sessions >= currentSessions))
+      .sort((a: any, b: any) => a.sessions - b.sessions || a.price - b.price);
+  }, [rawPlans, currentSessions, currentPlanPrice, selectedContract, member]);
 
   // Default select first higher package
   React.useEffect(() => {
-    if (candidateUpgradePlans.length > 0 && !selectedPackageId) {
-      setSelectedPackageId(candidateUpgradePlans[0].id);
+    if (candidateUpgradePlans.length > 0) {
+      if (!selectedPackageId || !candidateUpgradePlans.find((p) => p.id === selectedPackageId)) {
+        setSelectedPackageId(candidateUpgradePlans[0].id);
+      }
+    } else {
+      setSelectedPackageId('');
     }
   }, [candidateUpgradePlans, selectedPackageId]);
 
   const selectedTargetPlan = useMemo(() => {
-    return candidateUpgradePlans.find((p) => p.id === selectedPackageId) || candidateUpgradePlans[0];
+    return candidateUpgradePlans.find((p) => p.id === selectedPackageId) || candidateUpgradePlans[0] || null;
   }, [candidateUpgradePlans, selectedPackageId]);
 
   // Calculate Difference to Pay: Target Price - Current Paid Price
@@ -396,12 +519,14 @@ export const UpgradeModal: React.FC<{
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.upgradeMembership(member.id, {
+        membership_id: selectedContract?.membership_id || selectedContract?.id,
         package_id: selectedTargetPlan?.id || selectedPackageId,
+        package_version_id: (selectedTargetPlan as any)?.package_version_id,
         payment_method: paymentMethod,
         payment_amount: differenceToPay,
         difference_amount: differenceToPay,
         reason: `${reason}: upgraded from ${currentSessions} to ${selectedTargetPlan?.sessions} sessions`,
-      }),
+      } as any),
     onSuccess: (res) => {
       toast.success(res.message || 'Membership upgraded successfully!');
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });
@@ -428,17 +553,45 @@ export const UpgradeModal: React.FC<{
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Active Contract Selector if multiple exist */}
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Enrolled Contract to Upgrade</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => {
+                  setSelectedContractId(e.target.value);
+                  setSelectedPackageId('');
+                }}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — {c.home_sessions_remaining ?? 0} sessions remaining
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Currently Enrolled Package Banner */}
           <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1.5 text-xs">
             <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Current Enrolled Package</Label>
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-bold text-sm text-foreground">{member.package_name || `${currentSessions} Sessions`}</div>
-                <div className="text-muted-foreground">Program: {member.program_name || 'Bootcamp'} · {currentSessions} Sessions</div>
+                <div className="font-bold text-sm text-foreground">{selectedContract?.package_name || member.package_name || `${currentSessions} Sessions`}</div>
+                <div className="text-muted-foreground">Program: {selectedContract?.program_name || member.program_name || 'Bootcamp'} · {currentSessions} Sessions</div>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-muted-foreground block">Plan Value</span>
+                <span className="text-[10px] text-muted-foreground block">
+                  {catalogMRP && catalogMRP > currentPlanPrice ? 'Amount Paid' : 'Plan Value'}
+                </span>
                 <span className="font-semibold text-foreground">₹{currentPlanPrice.toLocaleString()}</span>
+                {catalogMRP > currentPlanPrice && (
+                  <span className="block text-[10px] text-muted-foreground line-through">
+                    MRP: ₹{catalogMRP.toLocaleString()}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -451,14 +604,14 @@ export const UpgradeModal: React.FC<{
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : candidateUpgradePlans.length === 0 ? (
-              <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground text-center">
-                Member is already on the maximum session tier.
+              <div className="p-3 bg-muted/30 border border-dashed rounded-lg text-xs text-muted-foreground text-center">
+                No higher session package tiers available for {selectedContract?.program_name || member?.program_name || 'this program'}. Member is on the maximum tier.
               </div>
             ) : (
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {candidateUpgradePlans.map((p) => {
                   const planDiff = Math.max(0, p.price - currentPlanPrice);
-                  const isSelected = selectedPackageId === p.id;
+                  const isSelected = selectedTargetPlan?.id === p.id;
                   return (
                     <div
                       key={p.id}
@@ -489,12 +642,18 @@ export const UpgradeModal: React.FC<{
             <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>New Package Total ({selectedTargetPlan.sessions} Sessions):</span>
-                <span>₹{targetPrice.toLocaleString()}</span>
+                <span className="font-medium text-foreground">₹{targetPrice.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Current Package Credit ({currentSessions} Sessions):</span>
-                <span>-₹{currentPlanPrice.toLocaleString()}</span>
+                <span>Current Plan Paid Credit ({currentSessions} Sessions):</span>
+                <span className="font-medium text-foreground">-₹{currentPlanPrice.toLocaleString()}</span>
               </div>
+              {catalogMRP > currentPlanPrice && (
+                <div className="flex justify-between text-[11px] text-muted-foreground/80">
+                  <span>Current Package Catalog MRP:</span>
+                  <span>₹{catalogMRP.toLocaleString()}</span>
+                </div>
+              )}
               <div className="border-t border-indigo-500/20 pt-2 flex justify-between items-center">
                 <div>
                   <span className="font-bold text-sm text-foreground block">Difference Amount to Pay:</span>
@@ -530,7 +689,7 @@ export const UpgradeModal: React.FC<{
             <Input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Member requested unlimited access"
+              placeholder="e.g. Member requested higher session tier"
             />
           </div>
         </div>
@@ -541,7 +700,7 @@ export const UpgradeModal: React.FC<{
           </Button>
           <Button
             onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !selectedPackageId}
+            disabled={mutation.isPending || !selectedTargetPlan}
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Execute Upgrade
@@ -559,39 +718,73 @@ export const ExtendModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-}> = ({ isOpen, onClose, member }) => {
+  activeContracts?: any[];
+  pricingConfig?: any;
+}> = ({ isOpen, onClose, member, activeContracts = [], pricingConfig }) => {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
 
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({
+        ...c,
+        membership_id: c.membership_id || c.id,
+      }));
+    }
+    return [{
+      membership_id: member?.id,
+      membership_number: member?.membership_number,
+      package_id: member?.package_id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+      home_sessions_remaining: member?.home_sessions_remaining,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => {
+    return contracts[0]?.membership_id || contracts[0]?.id || member?.id || '';
+  });
+
+  const selectedContract = useMemo(() => {
+    return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
+  }, [contracts, selectedContractId]);
+
   // Guard: Member must have sessions remaining or active status
-  const pendingSessions = member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0;
+  const pendingSessions = selectedContract?.home_sessions_remaining ?? (member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
   const canExtend = pendingSessions > 0 || (member?.status === 'ACTIVE');
 
-  // Configured extension tiers
-  const extensionTiers = [
-    { days: 15, fee: 500 },
-    { days: 30, fee: 1000 },
-    { days: 45, fee: 1500 },
-    { days: 60, fee: 2000 },
-  ];
+  // Configured extension tiers from pricingConfig
+  const extensionTiers = useMemo(() => {
+    if (Array.isArray(pricingConfig?.extension_tiers) && pricingConfig.extension_tiers.length > 0) {
+      return pricingConfig.extension_tiers;
+    }
+    const per30 = Number(pricingConfig?.extension_fee_per_30_days) || 1000;
+    return [
+      { days: 15, fee: Math.round(per30 * 0.5) },
+      { days: 30, fee: per30 },
+      { days: 45, fee: Math.round(per30 * 1.5) },
+      { days: 60, fee: per30 * 2 },
+    ];
+  }, [pricingConfig]);
 
-  const currentTier = extensionTiers.find((t) => t.days === days) || { days, fee: Math.round(days * 33.33) };
+  const currentTier = extensionTiers.find((t: any) => t.days === days) || { days, fee: Math.round(days * 33.33) };
 
   // Calculate New Extended Expiry Date preview safely
   const newExtendedExpiry = useMemo(() => {
-    const raw = member?.expiry_date;
+    const raw = selectedContract?.end_date || member?.expiry_date;
     const baseDate = raw && !isNaN(new Date(raw).getTime()) ? new Date(raw) : new Date();
     const extended = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
     return !isNaN(extended.getTime())
       ? extended.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
       : `${days} days extended`;
-  }, [member?.expiry_date, days]);
+  }, [selectedContract?.end_date, member?.expiry_date, days]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.extendMembership(member?.id, {
+      membersApi.extendMembership(selectedContract?.membership_id || member?.id, {
         days,
         fee: currentTier.fee,
         payment_method: paymentMethod,
@@ -623,6 +816,24 @@ export const ExtendModal: React.FC<{
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Active Contract Selector if multiple exist */}
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Active Membership to Extend</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'} ({c.home_sessions_remaining ?? 0} sessions)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Eligibility Guard Alert */}
           {!canExtend ? (
             <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-xs space-y-1">
@@ -649,9 +860,16 @@ export const ExtendModal: React.FC<{
 
           {/* Configured Extension Options */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold">Select Extension Duration (Per Config)</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Select Extension Duration</Label>
+              {pricingConfig?.extension_fee_per_30_days && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  Base Fee: ₹{pricingConfig.extension_fee_per_30_days} / 30 days
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              {extensionTiers.map((tier) => {
+              {extensionTiers.map((tier: any) => {
                 const isSelected = days === tier.days;
                 return (
                   <button
@@ -684,8 +902,8 @@ export const ExtendModal: React.FC<{
               <div className="flex justify-between text-muted-foreground">
                 <span>Current Expiry:</span>
                 <span className="font-medium text-foreground">
-                  {member.expiry_date
-                    ? new Date(member.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                  {selectedContract?.end_date || member.expiry_date
+                    ? new Date(selectedContract?.end_date || member.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                     : 'N/A'}
                 </span>
               </div>
@@ -746,10 +964,37 @@ export const FreezeModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-}> = ({ isOpen, onClose, member }) => {
+  activeContracts?: any[];
+  pricingConfig?: any;
+}> = ({ isOpen, onClose, member, activeContracts = [], pricingConfig }) => {
   const queryClient = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
   const twoWeeksStr = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({
+        ...c,
+        membership_id: c.membership_id || c.id,
+      }));
+    }
+    return [{
+      membership_id: member?.id,
+      membership_number: member?.membership_number,
+      package_id: member?.package_id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => {
+    return contracts[0]?.membership_id || contracts[0]?.id || member?.id || '';
+  });
+
+  const selectedContract = useMemo(() => {
+    return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
+  }, [contracts, selectedContractId]);
 
   const [freezeFrom, setFreezeFrom] = useState(todayStr);
   const [freezeUntil, setFreezeUntil] = useState(twoWeeksStr);
@@ -766,14 +1011,15 @@ export const FreezeModal: React.FC<{
     }
   }, [freezeFrom, freezeUntil]);
 
+  const configuredFreezeFee = pricingConfig?.freeze_fee ?? 500;
   const [chargeFee, setChargeFee] = useState(true);
-  const [feeAmount, setFeeAmount] = useState('500');
+  const [feeAmount, setFeeAmount] = useState(String(configuredFreezeFee));
   const [paymentMethod, setPaymentMethod] = useState<'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
 
   const mutation = useMutation({
     mutationFn: () =>
-      membersApi.freezeMembership(member?.id, {
+      membersApi.freezeMembership(selectedContract?.membership_id || member?.id, {
         freeze_from: freezeFrom,
         freeze_until: freezeUntil,
         reason: `${reason}${chargeFee ? ` (Fee: ₹${feeAmount} via ${paymentMethod})` : ' (Fee Waived)'}`,
@@ -787,7 +1033,7 @@ export const FreezeModal: React.FC<{
         const payUrl = res.payment_url || `https://pay.sweatfitness.in/frz/${member?.id || 'pay'}`;
         setGeneratedLink({
           paymentUrl: payUrl,
-          amount: parseFloat(feeAmount || '500'),
+          amount: parseFloat(feeAmount || String(configuredFreezeFee)),
           orderNumber: res.order_number || `FRZ-${Date.now().toString().slice(-6)}`,
           memberName: member?.name,
           memberPhone: member?.phone,
@@ -830,6 +1076,24 @@ export const FreezeModal: React.FC<{
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Active Contract Selector if multiple exist */}
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Active Membership to Freeze</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Freeze From</Label>
@@ -869,6 +1133,9 @@ export const FreezeModal: React.FC<{
               <Label className="text-xs font-semibold flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-sky-500" />
                 Configured Freeze Fee
+                <span className="text-[10px] text-muted-foreground font-mono font-normal">
+                  (Default: ₹{configuredFreezeFee})
+                </span>
               </Label>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -2239,18 +2506,26 @@ export const TransactionReceiptModal: React.FC<{
   const meta = transaction.metadata || {};
   const orderRef = transaction.order_number || meta.order_number || meta.bpc_transaction_id || 'N/A';
   const bpcTxnId = meta.bpc_transaction_id || transaction.provider_transaction_id || transaction.id;
-  const rzpTxnId = meta.razorpay_payment_id || transaction.provider_transaction_id || '—';
+  const isOnlineRzp = (transaction.payment_method || '').toLowerCase().includes('razorpay') || (transaction.provider || '').toLowerCase().includes('razorpay');
+  const rzpTxnId = meta.razorpay_payment_id || (isOnlineRzp ? transaction.provider_transaction_id : '—') || '—';
   const rzpOrderId = meta.razorpay_order_id || '—';
-  const contact = meta.contact || member?.phone || '—';
-  const paymentMode = meta.payment_mode || transaction.provider || 'ONLINE';
-  const paymentMethod = meta.payment_method || transaction.payment_method || 'RAZORPAY';
-  const invoiceNum = meta.invoice_number || `INV-${orderRef}`;
-  const couponCode = meta.coupon_code || 'None';
-  const couponCost = Number(meta.coupon_discount ?? meta.coupon_cost ?? transaction.discount_amount ?? 0);
-  const agent = meta.agent || 'Direct';
-  const trainer = meta.trainer || 'N/A';
+  const contact = transaction.contact || meta.contact || member?.phone || member?.contact?.phone || '—';
+
+  // Payment mode & method
+  const paymentMode = transaction.payment_mode || meta.payment_mode || (isOnlineRzp ? 'ONLINE' : 'OFFLINE');
+  const paymentMethod = transaction.payment_method || meta.payment_method || (transaction.provider === 'CASH' ? 'Cash / UPI' : transaction.provider) || 'Direct';
+  const invoiceNum = transaction.invoice_number || meta.invoice_number || (transaction.order_number ? `INV-${transaction.order_number}` : `INV-${orderRef}`);
+
+  // Coupon & Discount Attribution
+  const couponCode = transaction.coupon_code || transaction.couponCode || meta.coupon_code || transaction.campaign_name || '';
+  const discountCost = Number(transaction.discount_amount ?? transaction.discountAmount ?? meta.coupon_discount ?? meta.coupon_cost ?? 0);
+  const discountType = transaction.discount_type || meta.discount_type || (couponCode ? 'COUPON' : (discountCost > 0 ? 'OFFLINE_BRANCH_AUTHORIZED' : 'STANDARD'));
+
+  const agent = transaction.sold_by || transaction.soldBy || meta.agent || meta.sold_by || 'Sweat Front Desk POS';
+  const trainer = meta.trainer || transaction.trainer_name || 'N/A';
 
   const baseCost = Number(meta.base_cost ?? meta.plan_base_cost ?? transaction.subtotal ?? transaction.amount ?? 0);
+  const catalogPrice = Number(transaction.catalog_price ?? transaction.originalPrice ?? meta.catalog_price ?? (discountCost > 0 ? (baseCost + discountCost) : baseCost));
   const rewardCoins = Number(meta.reward_points_used ?? meta.use_coins ?? transaction.reward_amount ?? 0);
   const taxRate = Number(meta.tax_rate ?? 18);
   const taxCost = Number(meta.tax_cost ?? transaction.tax_amount ?? (baseCost * (taxRate / 100)));
@@ -2258,7 +2533,7 @@ export const TransactionReceiptModal: React.FC<{
   const amountPaid = Number(meta.amount_paid ?? transaction.paid_amount ?? transaction.amount ?? 0);
   const pendingAmount = Number(meta.pending_amount ?? transaction.outstanding_amount ?? 0);
   const status = (meta.status || transaction.status || 'SUCCESS').toUpperCase();
-  const txnDate = transaction.paid_at || transaction.created_at || new Date().toISOString();
+  const txnDate = transaction.paid_at || transaction.created_at || transaction.date || new Date().toISOString();
 
   const handlePrint = () => {
     window.print();
@@ -2327,14 +2602,23 @@ export const TransactionReceiptModal: React.FC<{
               <span className="font-mono text-[11px] text-muted-foreground truncate block">{rzpOrderId}</span>
             </div>
             <div>
-              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Coupon Applied</span>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Coupon / Discount Applied</span>
               <span className="font-semibold text-foreground">
-                {couponCode} {couponCost > 0 ? `(-₹${couponCost.toLocaleString()})` : ''}
+                {couponCode ? (
+                  <span className="text-purple-400 font-mono font-bold">🎟️ {couponCode}</span>
+                ) : discountCost > 0 ? (
+                  <span className="text-blue-400 font-medium">🛡️ Offline Authorized Rate</span>
+                ) : (
+                  <span>None</span>
+                )}
+                {discountCost > 0 && (
+                  <span className="ml-1 text-emerald-400 font-normal">(-₹{discountCost.toLocaleString()})</span>
+                )}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Agent</span>
-              <span className="font-medium text-foreground">{agent || 'Direct'}</span>
+              <span className="text-muted-foreground text-[10px] uppercase font-bold block">Agent / Sold By</span>
+              <span className="font-medium text-foreground">{agent}</span>
             </div>
             <div>
               <span className="text-muted-foreground text-[10px] uppercase font-bold block">Trainer</span>
@@ -2356,20 +2640,28 @@ export const TransactionReceiptModal: React.FC<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {catalogPrice > baseCost && (
+                  <tr>
+                    <td className="p-3 font-medium text-foreground">Plan Catalog MRP</td>
+                    <td className="p-3 text-right font-medium text-muted-foreground">₹{catalogPrice.toLocaleString()}</td>
+                  </tr>
+                )}
+                {discountCost > 0 && (
+                  <tr>
+                    <td className="p-3 text-emerald-500 font-medium">
+                      {couponCode ? `Coupon Discount (🎟️ ${couponCode})` : `Branch Authorized Discount (${agent})`}
+                    </td>
+                    <td className="p-3 text-right text-emerald-500 font-medium">-₹{discountCost.toLocaleString()}</td>
+                  </tr>
+                )}
                 <tr>
-                  <td className="p-3 font-medium text-foreground">Plan Base Cost</td>
+                  <td className="p-3 font-medium text-foreground">Plan Base Cost (Billed)</td>
                   <td className="p-3 text-right font-medium">₹{baseCost.toLocaleString()}</td>
                 </tr>
                 {rewardCoins > 0 && (
                   <tr>
                     <td className="p-3 text-amber-500 font-medium">Reward Coins / Loyalty Redeemed</td>
                     <td className="p-3 text-right text-amber-500 font-medium">-₹{rewardCoins.toLocaleString()}</td>
-                  </tr>
-                )}
-                {couponCost > 0 && (
-                  <tr>
-                    <td className="p-3 text-emerald-500 font-medium">Coupon Cost / Promo Discount ({couponCode})</td>
-                    <td className="p-3 text-right text-emerald-500 font-medium">-₹{couponCost.toLocaleString()}</td>
                   </tr>
                 )}
                 <tr>
@@ -2412,4 +2704,433 @@ export const TransactionReceiptModal: React.FC<{
     </Dialog>
   );
 };
+
+// ----------------------------------------------------------------------------
+// 12. PURCHASE NEW PROGRAM / PACKAGE MODAL
+// ----------------------------------------------------------------------------
+export const PurchaseProgramPackageModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  member: Member;
+}> = ({ isOpen, onClose, member }) => {
+  const queryClient = useQueryClient();
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('all');
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('');
+  const [startSchedule, setStartSchedule] = useState<'CONTINUOUS' | 'FIRST_VISIT' | 'CUSTOM' | 'TODAY'>('TODAY');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(member?.home_branch_id || '');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
+  const [reason, setReason] = useState('New program & package purchase');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+
+  // Load programs
+  const { data: rawPrograms = [] } = useQuery<Array<{ id: string; name: string; status?: string; category_name?: string }>>({
+    queryKey: ['purchase-modal-programs'],
+    queryFn: () => crmApi.getPrograms(),
+    enabled: isOpen,
+  });
+
+  // Filter ONLY active programs and de-duplicate by normalized name
+  const activePrograms = useMemo(() => {
+    const list = Array.isArray(rawPrograms) ? rawPrograms : [];
+    const seen = new Set<string>();
+    return list.filter((p: any) => {
+      const isAct = !p.status || p.status.toUpperCase() === 'ACTIVE';
+      if (!isAct) return false;
+      const key = (p.name || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rawPrograms]);
+
+  // Load branches
+  const { data: branches = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['purchase-modal-branches'],
+    queryFn: () => crmApi.getBranches(),
+    enabled: isOpen,
+  });
+
+  // Load plans / packages
+  const { data: rawPlans = [], isLoading: loadingPlans } = useQuery({
+    queryKey: ['purchase-modal-plans'],
+    queryFn: () => membersApi.getPlans(),
+    enabled: isOpen,
+  });
+
+  const allPackages = useMemo(() => {
+    const list = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
+    return list
+      .filter((p: any) => p.is_active !== false && p.status !== 'INACTIVE' && p.status !== 'ARCHIVED')
+      .map((p: any) => {
+        const match = (p.name || '').match(/(\d+)\s*session/i);
+        const sCount = match
+          ? parseInt(match[1], 10)
+          : (p.total_sessions || p.session_count || (p.duration_months ? p.duration_months * 24 : 36));
+
+        return {
+          id: p.id || p.package_id,
+          name: p.name,
+          program_id: p.program_id,
+          program_name: p.program_name || 'Standard Program',
+          category_name: p.category_name || p.category || 'General',
+          price: Number(p.price || 0),
+          sessions: sCount,
+          validity_days: p.validity_days || (p.duration_months ? p.duration_months * 30 : 90),
+          description: p.description,
+        };
+      });
+  }, [rawPlans]);
+
+  // Distinct Categories derived from programs and packages
+  const categories = useMemo(() => {
+    const catMap = new Map<string, string>();
+    activePrograms.forEach((p: any) => {
+      if (p.category_name && p.category_name.trim()) {
+        const c = p.category_name.trim();
+        if (!catMap.has(c.toLowerCase())) catMap.set(c.toLowerCase(), c);
+      }
+    });
+    allPackages.forEach((pkg: any) => {
+      if (pkg.category_name && pkg.category_name.trim() && pkg.category_name !== 'General' && pkg.category_name !== 'Membership') {
+        const c = pkg.category_name.trim();
+        if (!catMap.has(c.toLowerCase())) catMap.set(c.toLowerCase(), c);
+      }
+    });
+    if (catMap.size === 0) {
+      activePrograms.forEach((p: any) => {
+        const name = (p.name || '').trim();
+        if (name && !catMap.has(name.toLowerCase())) catMap.set(name.toLowerCase(), name);
+      });
+    }
+    return Array.from(catMap.values()).sort();
+  }, [activePrograms, allPackages]);
+
+  // Filtered Programs based on Level 1 Category
+  const filteredPrograms = useMemo(() => {
+    if (selectedCategory === 'all') return activePrograms;
+    const catLower = selectedCategory.toLowerCase();
+    return activePrograms.filter((p: any) => {
+      if (p.category_name && p.category_name.trim().toLowerCase() === catLower) return true;
+      if (p.name && (p.name.toLowerCase().includes(catLower) || catLower.includes(p.name.toLowerCase()))) return true;
+      return false;
+    });
+  }, [activePrograms, selectedCategory]);
+
+  // Filtered Packages based on Level 2 Program and Level 1 Category
+  const filteredPackages = useMemo(() => {
+    let pkgs = allPackages;
+
+    if (selectedProgramId !== 'all') {
+      const selectedProg = activePrograms.find((pr) => pr.id === selectedProgramId);
+      const selectedName = selectedProg?.name?.trim().toLowerCase();
+
+      pkgs = pkgs.filter((p: any) => {
+        if (p.program_id && p.program_id === selectedProgramId) return true;
+        if (selectedName && p.program_name && p.program_name.trim().toLowerCase() === selectedName) return true;
+        if (selectedName && p.program_name && (p.program_name.toLowerCase().includes(selectedName) || selectedName.includes(p.program_name.toLowerCase()))) return true;
+        if (selectedName && p.name && p.name.toLowerCase().includes(selectedName)) return true;
+        return false;
+      });
+    } else if (selectedCategory !== 'all') {
+      const matchingProgramIds = new Set(filteredPrograms.map((p: any) => p.id));
+      const catLower = selectedCategory.toLowerCase();
+
+      pkgs = pkgs.filter((p: any) => {
+        if (p.program_id && matchingProgramIds.has(p.program_id)) return true;
+        if (p.category_name && p.category_name.toLowerCase() === catLower) return true;
+        if (p.program_name && (p.program_name.toLowerCase().includes(catLower) || catLower.includes(p.program_name.toLowerCase()))) return true;
+        if (p.name && (p.name.toLowerCase().includes(catLower) || catLower.includes(p.name.toLowerCase()))) return true;
+        return false;
+      });
+    }
+
+    return pkgs.sort((a: any, b: any) => (a.sessions || 0) - (b.sessions || 0) || a.price - b.price);
+  }, [allPackages, selectedProgramId, selectedCategory, activePrograms, filteredPrograms]);
+
+  // Auto-select first package when filtered list updates
+  React.useEffect(() => {
+    if (filteredPackages.length > 0) {
+      if (!selectedPackageId || !filteredPackages.find((p: any) => p.id === selectedPackageId)) {
+        setSelectedPackageId(filteredPackages[0].id);
+      }
+    } else {
+      setSelectedPackageId('');
+    }
+  }, [filteredPackages, selectedPackageId]);
+
+  const selectedPkg = useMemo(() => {
+    return filteredPackages.find((p: any) => p.id === selectedPackageId) || filteredPackages[0] || null;
+  }, [filteredPackages, selectedPackageId]);
+
+  const priceEstimate = useMemo(() => {
+    return selectedPkg?.price || 15000;
+  }, [selectedPkg]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      membersApi.purchasePackage(member.id, {
+        package_id: selectedPkg?.id || selectedPackageId,
+        branch_id: selectedBranchId || undefined,
+        start_schedule: startSchedule,
+        custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
+        payment_amount: priceEstimate,
+        payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
+        payment_method: paymentMethod,
+        reason: `${reason} - ${selectedPkg?.name || ''} (${selectedPkg?.program_name || ''})`,
+      }),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+
+      if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
+        setGeneratedLink({
+          paymentUrl: res.payment_url,
+          amount: res.amount || priceEstimate,
+          memberId: member.id,
+          memberName: member.name,
+          memberPhone: member.phone,
+          memberEmail: member.email,
+          packageName: selectedPkg?.name || 'Program Package',
+          orderNumber: res.order_number,
+          orderId: res.order_id,
+        });
+      } else {
+        toast.success(res.message || 'New program package purchased successfully!');
+        onClose();
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err.message || 'Failed to purchase package');
+    },
+  });
+
+  return (
+    <>
+      <Dialog open={isOpen && !generatedLink} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-primary" />
+              Purchase New Program / Package
+            </DialogTitle>
+            <DialogDescription>
+              Enroll {member.name} in a new program or add a multi-session package with immediate passbook provisioning.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* 1. Category Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">1. Select Program Category</Label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setSelectedProgramId('all');
+                  setSelectedPackageId('');
+                }}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                <option value="all">All Categories ({categories.length})</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Program Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">2. Select Active Program</Label>
+              <select
+                value={selectedProgramId}
+                onChange={(e) => {
+                  setSelectedProgramId(e.target.value);
+                  setSelectedPackageId('');
+                }}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                <option value="all">
+                  All Programs in {selectedCategory === 'all' ? 'Studio' : selectedCategory} ({filteredPrograms.length})
+                </option>
+                {filteredPrograms.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.category_name ? `(${p.category_name})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Package Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">3. Select Package Tier</Label>
+              {loadingPlans ? (
+                <div className="p-4 text-center text-xs text-muted-foreground">Loading package catalog...</div>
+              ) : filteredPackages.length === 0 ? (
+                <div className="p-4 text-center text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/20">
+                  No active package tiers found for this program. Select another program or &quot;All Programs&quot;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {filteredPackages.map((pkg: any) => {
+                    const isSelected = selectedPkg?.id === pkg.id;
+                    return (
+                      <div
+                        key={pkg.id}
+                        onClick={() => setSelectedPackageId(pkg.id)}
+                        className={`p-3 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'border-primary bg-primary/10 shadow-sm'
+                            : 'border-border/70 hover:bg-muted/40'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground flex items-center gap-2">
+                            <span>{pkg.name}</span>
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 border-primary/30 text-primary">
+                              {pkg.program_name}
+                            </Badge>
+                          </div>
+                          <div className="text-muted-foreground text-[11px] mt-0.5">
+                            {pkg.sessions} Sessions · {pkg.validity_days} Days Validity
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-sm text-foreground">₹{pkg.price.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Home Branch */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Home Branch</Label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. Start Schedule */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Start Schedule</Label>
+              <div className="space-y-1.5">
+                <label className={`flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer ${startSchedule === 'TODAY' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <input
+                    type="radio"
+                    name="start_schedule"
+                    className="mt-0.5"
+                    checked={startSchedule === 'TODAY'}
+                    onChange={() => setStartSchedule('TODAY')}
+                  />
+                  <div>
+                    <span className="font-semibold text-foreground block">Immediate (Today)</span>
+                    <span className="text-muted-foreground text-[11px]">Starts today with full validity countdown active immediately.</span>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer ${startSchedule === 'CONTINUOUS' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <input
+                    type="radio"
+                    name="start_schedule"
+                    className="mt-0.5"
+                    checked={startSchedule === 'CONTINUOUS'}
+                    onChange={() => setStartSchedule('CONTINUOUS')}
+                  />
+                  <div>
+                    <span className="font-semibold text-foreground block">Continuous</span>
+                    <span className="text-muted-foreground text-[11px]">Starts after the member's current active plan expires.</span>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer ${startSchedule === 'CUSTOM' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <input
+                    type="radio"
+                    name="start_schedule"
+                    className="mt-0.5"
+                    checked={startSchedule === 'CUSTOM'}
+                    onChange={() => setStartSchedule('CUSTOM')}
+                  />
+                  <div className="w-full">
+                    <span className="font-semibold text-foreground block">Specific Custom Start Date</span>
+                    {startSchedule === 'CUSTOM' && (
+                      <Input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="mt-1.5 h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* 5. Payment Mode */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Payment Method</Label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                <option value="PAYMENT_LINK">Send Payment Link (WhatsApp / SMS / Online)</option>
+                <option value="CARD">Credit/Debit Card (ICICI POS Terminal)</option>
+                <option value="ONLINE">UPI / Online Gateway</option>
+                <option value="CASH">Cash (Front Desk Settlement)</option>
+              </select>
+            </div>
+
+            {/* Summary Price Callout */}
+            <div className="p-3 bg-muted/30 rounded-xl border border-border flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-medium">Payable Amount:</span>
+              <span className="text-base font-bold text-foreground">₹{priceEstimate.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={mutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || !selectedPkg}
+              className="bg-primary text-primary-foreground gap-1.5"
+            >
+              {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+              Confirm Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {generatedLink && (
+        <PaymentLinkShareModal
+          isOpen={true}
+          onClose={() => {
+            setGeneratedLink(null);
+            onClose();
+          }}
+          data={generatedLink}
+        />
+      )}
+    </>
+  );
+};
+
 

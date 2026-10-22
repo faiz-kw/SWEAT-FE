@@ -63,6 +63,8 @@ export interface WorkoutContentItem {
   has_video: boolean;
   has_stored_video: boolean;
   playback_video_url: string;
+  embed_player_url?: string | null;
+  youtube_video_id?: string | null;
 
   folder_number?: string | null;
   cue_1?: string | null;

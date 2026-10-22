@@ -18,6 +18,7 @@ import { useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
   RefreshCw,
+  Plus,
   User,
   Phone,
   Mail,
@@ -96,6 +97,7 @@ import {
   CollectPaymentModal,
   CheckInModal,
   TransactionReceiptModal,
+  PurchaseProgramPackageModal,
 } from './modals/MemberActionModals';
 
 interface Member360WorkspaceProps {
@@ -229,7 +231,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   const member = data360.member || ({} as any);
   const header = {
     name: data360.header?.name || member.name || 'Member',
-    member_number: data360.header?.member_number || member.membership_number || member.member_number || '—',
+    member_number: data360.header?.member_number || (member as any).membership_number || member.member_number || '—',
     status: data360.header?.status || member.membership_status || member.status || 'INACTIVE',
     home_branch: data360.header?.home_branch || member.home_branch || 'Unassigned',
     home_branch_id: data360.header?.home_branch_id || member.home_branch_id,
@@ -243,6 +245,11 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     assigned_trainer: data360.header?.assigned_trainer || member.assigned_trainer || 'Unassigned',
     alerts: Array.isArray(data360.header?.alerts) ? data360.header.alerts : [],
     available_actions: Array.isArray(data360.header?.available_actions) ? data360.header.available_actions : [],
+    active_programs: Array.isArray((data360.header as any)?.active_programs)
+      ? (data360.header as any).active_programs
+      : (Array.isArray((data360.memberships as any)?.active_programs)
+      ? (data360.memberships as any).active_programs
+      : []),
   };
 
   const overview = {
@@ -277,12 +284,44 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   const timeline = Array.isArray(data360.timeline) ? data360.timeline : [];
   const memberships = {
     active: data360.memberships?.active || null,
+    active_list: Array.isArray((data360.memberships as any)?.active_list) ? (data360.memberships as any).active_list : [],
+    active_programs: Array.isArray((data360.memberships as any)?.active_programs) ? (data360.memberships as any).active_programs : [],
     upcoming: Array.isArray(data360.memberships?.upcoming) ? data360.memberships.upcoming : [],
     history: Array.isArray(data360.memberships?.history) ? data360.memberships.history : [],
     freezes: Array.isArray(data360.memberships?.freezes) ? data360.memberships.freezes : [],
     branch_history: Array.isArray(data360.memberships?.branch_history) ? data360.memberships.branch_history : [],
     status_history: Array.isArray(data360.memberships?.status_history) ? data360.memberships.status_history : [],
   };
+
+  const isTrialMember: boolean = Boolean(
+    (header.status || '').toUpperCase() === 'TRIAL' ||
+    (header.current_package || '').toLowerCase().includes('trial') ||
+    (header.current_program || '').toLowerCase().includes('trial') ||
+    !memberships.active
+  );
+
+  const activePrograms: any[] = (() => {
+    if (Array.isArray(header.active_programs) && header.active_programs.length > 0) {
+      return header.active_programs;
+    }
+    if (Array.isArray(memberships.active_programs) && memberships.active_programs.length > 0) {
+      return memberships.active_programs;
+    }
+    if (Array.isArray(memberships.active_list) && memberships.active_list.length > 0) {
+      return memberships.active_list;
+    }
+    if (header.current_program && header.current_program !== 'Standard') {
+      return [{
+        program_name: header.current_program,
+        package_name: header.current_package,
+        package_version: header.current_package_version,
+        home_sessions_remaining: header.home_sessions_remaining,
+        expiry_date: header.expiry_date,
+        status: header.status,
+      }];
+    }
+    return [];
+  })();
   const passbook = {
     balances: Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : [],
     ledger: Array.isArray(data360.passbook?.ledger) ? data360.passbook.ledger : [],
@@ -317,7 +356,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   };
 
   // Fully resolved authoritative Member object for Action Modals
-  const modalMember: Member = {
+  const modalMember: any = {
     ...member,
     id: member.id || memberId,
     name: header.name || 'Member',
@@ -331,9 +370,10 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     age: member.age || overview.contact?.age || 0,
     home_branch: header.home_branch,
     home_branch_id: header.home_branch_id,
-    program_name: header.current_program || memberships.active?.program_name || 'Bootcamp',
-    package_name: header.current_package || memberships.active?.package_name || 'Standard Package',
-    package_id: member.package_id || memberships.active?.package_id || '',
+    program_name: header.current_program || (memberships.active as any)?.program_name || 'Bootcamp',
+    program_id: (memberships.active as any)?.program_id || (member as any)?.program_id || '',
+    package_name: header.current_package || (memberships.active as any)?.package_name || 'Standard Package',
+    package_id: member.package_id || (memberships.active as any)?.package_id || '',
     package_version_name: header.current_package_version || memberships.active?.package_version_name || 'v1',
     expiry_date: header.expiry_date || memberships.active?.end_date || '',
     start_date: memberships.active?.start_date || member.start_date || '',
@@ -342,6 +382,37 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     sessions_remaining: header.home_sessions_remaining ?? 0,
     outstanding_balance: header.outstanding_balance ?? 0,
     membership_status: header.status,
+  };
+
+  const activeContracts: any[] =
+    Array.isArray((memberships as any)?.active_list) && (memberships as any).active_list.length > 0
+      ? (memberships as any).active_list
+      : (memberships.active ? [memberships.active] : []);
+
+  const handleViewTransaction = (txn: any) => {
+    if (!txn) return;
+    const orderNumber = txn.order_number || (txn.rawOrder && txn.rawOrder.order_number);
+    let matchedOrder: any = null;
+    if (orderNumber && finance?.orders) {
+      matchedOrder = finance.orders.find((o) => o.order_number === orderNumber);
+    }
+    const merged = {
+      ...(matchedOrder || {}),
+      ...(txn.rawOrder || {}),
+      ...txn,
+      sold_by: txn.sold_by || txn.soldBy || (matchedOrder && matchedOrder.sold_by) || (memberships.active && memberships.active.sold_by) || 'Sweat Front Desk POS',
+      coupon_code: txn.coupon_code || txn.couponCode || (matchedOrder && matchedOrder.coupon_code) || (memberships.active && memberships.active.coupon_code) || '',
+      campaign_name: txn.campaign_name || (matchedOrder && matchedOrder.campaign_name) || (memberships.active && memberships.active.campaign_name) || '',
+      discount_amount: Number(txn.discount_amount ?? txn.discountAmount ?? (matchedOrder && matchedOrder.discount_amount) ?? (memberships.active && memberships.active.discount_amount) ?? 0),
+      catalog_price: Number(txn.catalog_price ?? txn.originalPrice ?? (matchedOrder && matchedOrder.catalog_price) ?? (memberships.active && memberships.active.catalog_price) ?? 0),
+      discount_type: txn.discount_type || (matchedOrder && matchedOrder.discount_type) || (memberships.active && memberships.active.discount_type) || '',
+      discount_label: txn.discount_label || (matchedOrder && matchedOrder.discount_label) || (memberships.active && memberships.active.discount_label) || '',
+      payment_mode: txn.payment_mode || (matchedOrder && matchedOrder.payment_mode) || 'OFFLINE',
+      payment_method: txn.payment_method || (matchedOrder && matchedOrder.payment_method) || 'Direct',
+      provider_transaction_id: txn.provider_transaction_id || (matchedOrder && matchedOrder.provider_transaction_id) || '',
+      contact: overview.contact.phone || member.phone || '—',
+    };
+    setSelectedTransaction(merged);
   };
 
   // Status Badge Helper
@@ -591,7 +662,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {header.available_actions?.map((act) => {
+              {header.available_actions?.filter((act) => act.action !== 'PURCHASE_PACKAGE').map((act) => {
                 const isCheckIn = act.action === 'CHECK_IN';
                 const isUnfreeze = act.action === 'UNFREEZE';
                 const isCollect = act.action === 'COLLECT_PAYMENT';
@@ -619,15 +690,26 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   </Button>
                 );
               })}
+              {!isTrialMember && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActiveModal('BUY_PASSPORT')}
+                  className="h-8 text-xs font-medium text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
+                  title="Purchase cross-branch passport sessions"
+                >
+                  <Globe className="w-3.5 h-3.5 mr-1.5" />
+                  Buy Passport
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => setActiveModal('BUY_PASSPORT')}
-                className="h-8 text-xs font-medium text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
-                title="Purchase cross-branch passport sessions"
+                onClick={() => setActiveModal('PURCHASE_PACKAGE')}
+                className="h-8 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                title="Purchase a new program package or add sessions"
               >
-                <Globe className="w-3.5 h-3.5 mr-1.5" />
-                Buy Passport
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Purchase New Program / Package
               </Button>
             </div>
           </div>
@@ -961,11 +1043,13 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             finance={finance}
             rewards={data360?.rewards}
             passport={data360?.passport}
+            isTrialMember={isTrialMember}
             onAdjustSessions={() => setActiveModal('ADJUST_ENTITLEMENT')}
             onBuyPassport={() => setActiveModal('BUY_PASSPORT')}
+            onPurchasePackage={() => setActiveModal('PURCHASE_PACKAGE')}
             onRenew={() => setActiveModal('RENEW')}
             onUpgrade={() => setActiveModal('UPGRADE')}
-            onViewTransaction={(txn) => setSelectedTransaction(txn)}
+            onViewTransaction={handleViewTransaction}
           />
         )}
 
@@ -989,7 +1073,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             finance={finance}
             onCollectPayment={() => setActiveModal('COLLECT_PAYMENT')}
             onViewInvoice={(inv) => setSelectedInvoice(inv)}
-            onViewTransaction={(txn) => setSelectedTransaction(txn)}
+            onViewTransaction={handleViewTransaction}
           />
         )}
 
@@ -1008,11 +1092,20 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       {/* --------------------------------------------------------------------- */}
       {/* ACTION MODALS */}
       {/* --------------------------------------------------------------------- */}
+      {activeModal === 'PURCHASE_PACKAGE' && (
+        <PurchaseProgramPackageModal
+          isOpen={true}
+          onClose={() => setActiveModal(null)}
+          member={modalMember}
+        />
+      )}
+
       {activeModal === 'RENEW' && (
         <RenewModal
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={modalMember}
+          activeContracts={activeContracts}
         />
       )}
 
@@ -1021,6 +1114,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={modalMember}
+          activeContracts={activeContracts}
         />
       )}
 
@@ -1029,6 +1123,8 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={modalMember}
+          activeContracts={activeContracts}
+          pricingConfig={(data360 as any)?.config}
         />
       )}
 
@@ -1037,6 +1133,8 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={modalMember}
+          activeContracts={activeContracts}
+          pricingConfig={(data360 as any)?.config}
         />
       )}
 
@@ -1407,12 +1505,14 @@ const MemberMembershipsSection: React.FC<{
   finance: Member360Data['finance'];
   rewards?: Member360Data['rewards'];
   passport?: Member360Data['passport'];
+  isTrialMember?: boolean;
   onAdjustSessions: () => void;
   onBuyPassport?: () => void;
+  onPurchasePackage?: () => void;
   onRenew: () => void;
   onUpgrade: () => void;
   onViewTransaction: (txn: any) => void;
-}> = ({ memberships, passbook, finance, rewards, passport, onAdjustSessions, onBuyPassport, onRenew, onUpgrade, onViewTransaction }) => {
+}> = ({ memberships, passbook, finance, rewards, passport, isTrialMember, onAdjustSessions, onBuyPassport, onPurchasePackage, onRenew, onUpgrade, onViewTransaction }) => {
   const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PURCHASES' | 'EXTENSIONS' | 'COUPONS' | 'CANCELLATIONS'>('ALL');
 
   // Calculate total savings from coupons & discounts
@@ -1447,7 +1547,9 @@ const MemberMembershipsSection: React.FC<{
       finalAmount: number;
       status: string;
       reference: string;
-      notes?: string;
+      couponCode?: string | undefined;
+      soldBy?: string | undefined;
+      notes?: string | undefined;
       rawOrder?: any;
     }> = [];
 
@@ -1462,6 +1564,7 @@ const MemberMembershipsSection: React.FC<{
         (o.items && o.items.some((i) => /extension/i.test(i.item_name || '')))
       );
       const itemsList = o.items && o.items.length > 0 ? o.items.map((i) => i.item_name).join(', ') : o.order_type;
+      const coupon = o.coupon_code || o.campaign_name || '';
 
       entries.push({
         id: `order-${o.id}`,
@@ -1483,12 +1586,16 @@ const MemberMembershipsSection: React.FC<{
         finalAmount: Number(o.paid_amount || o.total_amount),
         status: o.status,
         reference: o.order_number,
+        couponCode: coupon,
+        soldBy: o.sold_by || 'Sweat Front Desk POS',
         notes: isCancelled
           ? 'Purchase Cancelled'
           : isExtension
           ? (o.notes || 'Purchased validity extension')
+          : coupon
+          ? `Coupon Applied: ${coupon}${o.discount_amount > 0 ? ` (Saved ₹${Number(o.discount_amount).toLocaleString()})` : ''}`
           : o.discount_amount > 0
-          ? `Coupon/Discount Applied: ₹${Number(o.discount_amount).toLocaleString()}`
+          ? `Offline Branch Authorized Rate (Saved ₹${Number(o.discount_amount).toLocaleString()})`
           : undefined,
         rawOrder: o,
       });
@@ -1506,6 +1613,7 @@ const MemberMembershipsSection: React.FC<{
         finalAmount: -Number(r.amount),
         status: r.status,
         reference: r.order_number,
+        soldBy: 'Branch Accounts',
         notes: r.reason ? `Cancellation Reason: ${r.reason}` : 'Refund Processed',
         rawOrder: r,
       });
@@ -1514,17 +1622,28 @@ const MemberMembershipsSection: React.FC<{
     // 3. Fallback: if no commerce orders exist yet, synthesize from active membership snapshot
     if (entries.length === 0 && memberships.active) {
       const snap = memberships.active.contract_snapshot;
+      const coupon = memberships.active.coupon_code || memberships.active.campaign_name || snap?.coupon_code || snap?.campaign_name;
+      const catPrice = Number(memberships.active.catalog_price || snap?.catalog_price || snap?.purchase_price || 0);
+      const paidPrice = Number(memberships.active.purchase_price || snap?.purchase_price || snap?.final_amount || 0);
+      const discAmt = Number(memberships.active.discount_amount || snap?.discount_amount || (catPrice > paidPrice ? catPrice - paidPrice : 0));
+
       entries.push({
         id: `mem-${memberships.active.id}`,
         date: memberships.active.start_date,
         type: 'PURCHASE',
         title: memberships.active.package_name,
-        originalPrice: Number(snap?.purchase_price || snap?.final_amount || 0),
-        discountAmount: Number(snap?.discount_amount || 0),
-        finalAmount: Number(snap?.final_amount || 0),
+        originalPrice: catPrice || paidPrice,
+        discountAmount: discAmt,
+        finalAmount: paidPrice,
         status: memberships.active.status,
         reference: memberships.active.membership_number,
-        notes: snap?.discount_amount ? `Coupon Applied: ₹${Number(snap.discount_amount).toLocaleString()}` : undefined,
+        couponCode: coupon,
+        soldBy: memberships.active.sold_by || 'Sweat Front Desk POS',
+        notes: coupon
+          ? `Coupon Applied: ${coupon}${discAmt > 0 ? ` (Saved ₹${discAmt.toLocaleString()})` : ''}`
+          : discAmt > 0
+          ? `Offline Branch Authorized Rate: ₹${discAmt.toLocaleString()}`
+          : undefined,
         rawOrder: memberships.active,
       });
     }
@@ -1573,11 +1692,11 @@ const MemberMembershipsSection: React.FC<{
         const dayMatch = text.match(/(\d+)\s*(?:day|days)/i);
         const monthMatch = text.match(/(\d+)\s*(?:month|months)/i);
         const yearMatch = text.match(/(\d+)\s*(?:year|years)/i);
-        if (dayMatch) {
+        if (dayMatch && dayMatch[1]) {
           extDays += parseInt(dayMatch[1], 10);
-        } else if (monthMatch) {
+        } else if (monthMatch && monthMatch[1]) {
           extDays += parseInt(monthMatch[1], 10) * 30;
-        } else if (yearMatch) {
+        } else if (yearMatch && yearMatch[1]) {
           extDays += parseInt(yearMatch[1], 10) * 365;
         } else {
           extDays += 30;
@@ -1591,6 +1710,13 @@ const MemberMembershipsSection: React.FC<{
 
     return snap?.end_date || memberships.active.end_date;
   }, [memberships.active, purchaseLedgerEntries]);
+
+  const activeContracts: any[] = useMemo(() => {
+    if (Array.isArray((memberships as any)?.active_list) && (memberships as any).active_list.length > 0) {
+      return (memberships as any).active_list;
+    }
+    return memberships.active ? [memberships.active] : [];
+  }, [memberships]);
 
   const filteredPurchaseLedger = purchaseLedgerEntries.filter((entry) => {
     if (ledgerFilter === 'PURCHASES') return entry.type === 'PURCHASE' || entry.type === 'RENEWAL';
@@ -1607,10 +1733,14 @@ const MemberMembershipsSection: React.FC<{
         <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
           <span className="text-[11px] text-muted-foreground font-medium">Active Membership</span>
           <div className="text-sm font-bold text-foreground mt-1 truncate">
-            {memberships.active?.package_name || 'No Active Plan'}
+            {activeContracts.length > 1
+              ? `${activeContracts.length} Active Contracts`
+              : (memberships.active?.package_name || 'No Active Plan')}
           </div>
-          <span className="text-[10px] text-muted-foreground">
-            {memberships.active ? `Status: ${memberships.active.status}` : 'Inactive'}
+          <span className="text-[10px] text-muted-foreground truncate block">
+            {activeContracts.length > 1
+              ? activeContracts.map((c: any) => c.package_name).join(', ')
+              : (memberships.active ? `Status: ${memberships.active.status}` : 'Inactive')}
           </span>
         </div>
 
@@ -1680,7 +1810,9 @@ const MemberMembershipsSection: React.FC<{
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-base text-foreground">Current Active Contract</h3>
+              <h3 className="font-semibold text-base text-foreground">
+                {activeContracts.length > 1 ? `Current Active Contracts (${activeContracts.length})` : 'Current Active Contract'}
+              </h3>
               {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
                 <Badge className="bg-purple-500/15 text-purple-400 border-purple-500/30 text-[10px]">
                   VALIDITY EXTENSION PURCHASED
@@ -1691,11 +1823,11 @@ const MemberMembershipsSection: React.FC<{
               Official membership contract snapshot with original plan pricing, validity, and coupon details.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={onRenew} className="h-8 text-xs">
               Renew Plan
             </Button>
-            {onBuyPassport && (
+            {onBuyPassport && !isTrialMember && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1705,142 +1837,191 @@ const MemberMembershipsSection: React.FC<{
                 <Globe className="w-3.5 h-3.5 mr-1" /> Buy Passport
               </Button>
             )}
-            <Button size="sm" onClick={onUpgrade} className="h-8 text-xs">
+            {onPurchasePackage && (
+              <Button size="sm" onClick={onPurchasePackage} className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90">
+                <Plus className="w-3.5 h-3.5 mr-1" /> Purchase New Program / Package
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={onUpgrade} className="h-8 text-xs">
               <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Upgrade Plan
             </Button>
           </div>
         </div>
 
-        {memberships.active ? (
-          <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
-              <div className="space-y-0.5">
-                <div className="text-lg font-bold text-foreground flex items-center gap-2">
-                  {memberships.active.package_name}
-                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
-                    <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40">
-                      Extension Active
+        {activeContracts.length > 0 ? (
+          <div className="space-y-4">
+            {activeContracts.map((contract: any, idx: number) => {
+              const hasExtension = purchaseLedgerEntries.some((e) => e.type === 'EXTENSION');
+              return (
+                <div key={contract.id || idx} className="p-4 rounded-xl bg-muted/20 border border-border space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
+                    <div className="space-y-0.5">
+                      <div className="text-lg font-bold text-foreground flex items-center gap-2">
+                        {contract.package_name}
+                        {hasExtension && (
+                          <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40">
+                            Extension Active
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Program: {contract.program_name} · Version: {contract.package_version_name || 'v1'}
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                      {contract.status}
                     </Badge>
+                  </div>
+
+                  <div className={`grid gap-4 text-xs ${
+                    hasExtension
+                      ? 'grid-cols-2 sm:grid-cols-5'
+                      : 'grid-cols-2 sm:grid-cols-4'
+                  }`}>
+                    <div>
+                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Membership #</span>
+                      <span className="font-mono font-medium text-foreground text-sm">
+                        {contract.membership_number}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Start Date</span>
+                      <span className="font-medium text-foreground text-sm">
+                        {contract.start_date ? new Date(contract.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                    </div>
+                    {hasExtension && (
+                      <div>
+                        <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                          Original Validity
+                        </span>
+                        <span className="font-medium text-foreground text-sm block mt-0.5">
+                          {originalPlanEndDate
+                            ? new Date(originalPlanEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                        {hasExtension ? 'Extended Validity' : 'Current Validity Till'}
+                        {hasExtension && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-purple-500/50 text-purple-600 dark:text-purple-400 bg-purple-500/10 font-bold">
+                            EXTENDED
+                          </Badge>
+                        )}
+                      </span>
+                      <span className={`font-bold text-sm block mt-0.5 ${
+                        hasExtension
+                          ? 'text-purple-600 dark:text-purple-400'
+                          : 'text-foreground'
+                      }`}>
+                        {contract.end_date ? new Date(contract.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Home Branch</span>
+                      <span className="font-medium text-foreground text-sm">
+                        {contract.home_branch || 'Branch'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {hasExtension && (
+                    <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+                        <div>
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">Validity Extension Active:</span>{' '}
+                          <span className="text-muted-foreground">
+                            Member purchased validity extension to preserve remaining sessions. Plan is valid till{' '}
+                            <strong className="text-foreground">
+                              {contract.end_date ? new Date(contract.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </strong>.
+                          </span>
+                        </div>
+                      </div>
+                      <Badge className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 text-[10px]">
+                        Unused Sessions Protected
+                      </Badge>
+                    </div>
                   )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Program: {memberships.active.program_name} · Version: {memberships.active.package_version_name}
-                </div>
-              </div>
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
-                {memberships.active.status}
-              </Badge>
-            </div>
 
-            <div className={`grid gap-4 text-xs ${
-              purchaseLedgerEntries.some((e) => e.type === 'EXTENSION')
-                ? 'grid-cols-2 sm:grid-cols-5'
-                : 'grid-cols-2 sm:grid-cols-4'
-            }`}>
-              <div>
-                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Membership #</span>
-                <span className="font-mono font-medium text-foreground text-sm">
-                  {memberships.active.membership_number}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Start Date</span>
-                <span className="font-medium text-foreground text-sm">
-                  {new Date(memberships.active.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
-                <div>
-                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
-                    Original Validity
-                  </span>
-                  <span className="font-medium text-foreground text-sm block mt-0.5">
-                    {originalPlanEndDate
-                      ? new Date(originalPlanEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                      : '—'}
-                  </span>
-                </div>
-              )}
-              <div>
-                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') ? 'Extended Validity' : 'Current Validity Till'}
-                  {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-purple-500/50 text-purple-600 dark:text-purple-400 bg-purple-500/10 font-bold">
-                      EXTENDED
-                    </Badge>
-                  )}
-                </span>
-                <span className={`font-bold text-sm block mt-0.5 ${
-                  purchaseLedgerEntries.some((e) => e.type === 'EXTENSION')
-                    ? 'text-purple-600 dark:text-purple-400'
-                    : 'text-foreground'
-                }`}>
-                  {new Date(memberships.active.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Home Branch</span>
-                <span className="font-medium text-foreground text-sm">
-                  {memberships.active.home_branch}
-                </span>
-              </div>
-            </div>
+                  {/* Contract Financial Breakdown & Applied Coupons */}
+                  {(() => {
+                    const snap = contract.contract_snapshot;
+                    const catPrice = Number(contract.catalog_price || snap?.catalog_price || contract.purchase_price || 0);
+                    const paidPrice = Number(contract.purchase_price || snap?.purchase_price || snap?.final_amount || 0);
+                    const discAmt = Number(contract.discount_amount || snap?.discount_amount || (catPrice > paidPrice ? catPrice - paidPrice : 0));
+                    const coupon = contract.coupon_code || snap?.coupon_code || contract.campaign_name || snap?.campaign_name;
+                    const taxAmt = Number(snap?.tax_amount || 0);
 
-            {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
-              <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
-                  <div>
-                    <span className="font-semibold text-purple-600 dark:text-purple-400">Validity Extension Active:</span>{' '}
-                    <span className="text-muted-foreground">
-                      Member purchased validity extension to preserve remaining sessions. Plan is valid till{' '}
-                      <strong className="text-foreground">
-                        {new Date(memberships.active.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </strong>.
-                    </span>
-                  </div>
-                </div>
-                <Badge className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 text-[10px]">
-                  Unused Sessions Protected
-                </Badge>
-              </div>
-            )}
+                    if (!catPrice && !paidPrice) return null;
 
-            {/* Contract Snapshot Financial Breakdown */}
-            {memberships.active.contract_snapshot && (
-              <div className="pt-3 border-t border-border/80">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Financial Breakdown & Coupon Application
+                    return (
+                      <div className="pt-3 border-t border-border/80">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 flex-wrap">
+                            <span>Financial Breakdown & Pricing</span>
+                            {coupon ? (
+                              <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                                🎟️ Coupon Applied: {coupon}
+                              </Badge>
+                            ) : discAmt > 0 ? (
+                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-blue-500/40 text-blue-400 bg-blue-500/10">
+                                🛡️ {contract.discount_label || 'Offline Branch Authorized Special Rate'}
+                              </Badge>
+                            ) : null}
+                            {contract.sold_by && (
+                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-purple-500/30 text-purple-400 bg-purple-500/10">
+                                👤 Sold by: {contract.sold_by}
+                              </Badge>
+                            )}
+                          </div>
+                          {discAmt > 0 && (
+                            <span className="text-xs text-emerald-500 font-medium">
+                              Total Savings: ₹{discAmt.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-lg border border-border text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Standard Catalog MRP</span>
+                            <div className="font-semibold text-foreground text-sm">
+                              ₹{catPrice.toLocaleString()}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Discount / Attribution</span>
+                            <div className="font-semibold text-emerald-400 flex items-center gap-1 text-sm">
+                              <Tag className="w-3 h-3" />
+                              {discAmt > 0 ? `-₹${discAmt.toLocaleString()}` : '—'}
+                            </div>
+                            {discAmt > 0 && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5">
+                                {coupon ? `Code: ${coupon}` : (contract.sold_by ? `By ${contract.sold_by}` : 'Branch Authorized Rate')}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Tax</span>
+                            <div className="font-medium text-foreground text-sm">
+                              {taxAmt > 0 ? `+₹${taxAmt.toLocaleString()}` : 'Included / ₹0'}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground font-semibold">Final Purchase Price</span>
+                            <div className="font-bold text-foreground text-sm">
+                              ₹{paidPrice.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-lg border border-border text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Base Price</span>
-                    <div className="font-medium text-foreground">
-                      ₹{Number(memberships.active.contract_snapshot.purchase_price).toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Coupon / Discount</span>
-                    <div className="font-semibold text-emerald-400 flex items-center gap-1">
-                      <Tag className="w-3 h-3" />
-                      -₹{Number(memberships.active.contract_snapshot.discount_amount).toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Tax</span>
-                    <div className="font-medium text-foreground">
-                      +₹{Number(memberships.active.contract_snapshot.tax_amount).toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Final Price Paid</span>
-                    <div className="font-bold text-foreground text-sm">
-                      ₹{Number(memberships.active.contract_snapshot.final_amount).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         ) : (
           <div className="p-6 text-center text-sm text-muted-foreground bg-muted/20 rounded-xl">
@@ -1896,6 +2077,7 @@ const MemberMembershipsSection: React.FC<{
                 <th className="py-2.5 px-3 text-right">Original Price</th>
                 <th className="py-2.5 px-3 text-right">Coupon / Discount</th>
                 <th className="py-2.5 px-3 text-right">Final Paid</th>
+                <th className="py-2.5 px-3">Sold By</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Notes & Reference</th>
                 <th className="py-2.5 px-3 text-center">Receipt</th>
@@ -1933,10 +2115,19 @@ const MemberMembershipsSection: React.FC<{
                       {row.originalPrice > 0 ? `₹${row.originalPrice.toLocaleString()}` : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-right">
-                      {row.discountAmount > 0 ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
-                          <Tag className="w-3 h-3" /> -₹{row.discountAmount.toLocaleString()}
-                        </span>
+                      {row.discountAmount > 0 || row.couponCode ? (
+                        <div className="flex flex-col items-end gap-1">
+                          {row.couponCode && (
+                            <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-emerald-500/40 text-emerald-500 bg-emerald-500/10">
+                              🎟️ {row.couponCode}
+                            </Badge>
+                          )}
+                          {row.discountAmount > 0 && (
+                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                              <Tag className="w-3 h-3" /> -₹{row.discountAmount.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -1949,6 +2140,12 @@ const MemberMembershipsSection: React.FC<{
                       {row.finalAmount < 0
                         ? `-₹${Math.abs(row.finalAmount).toLocaleString()}`
                         : `₹${row.finalAmount.toLocaleString()}`}
+                    </td>
+                    <td className="py-2.5 px-3 text-foreground whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-xs">
+                        <User className="w-3 h-3 text-muted-foreground" />
+                        {row.soldBy || 'Sweat Front Desk POS'}
+                      </span>
                     </td>
                     <td className="py-2.5 px-3">
                       <Badge
@@ -1983,8 +2180,76 @@ const MemberMembershipsSection: React.FC<{
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-8 text-center text-muted-foreground">
                     No transactions match the selected filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 4. Coupons & Promotional Usage History */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+              <Tag className="w-4 h-4 text-emerald-500" /> Coupons & Promotional Usage History
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Audit record of all promo codes, campaigns, and authorized rates redeemed or attempted by this member.
+            </p>
+          </div>
+          <Badge variant="outline" className="text-xs font-mono px-2 py-0.5 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+            {((memberships as any)?.coupon_history || (passbook as any)?.coupon_history || (finance as any)?.coupon_history || []).length} Recorded
+          </Badge>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="py-2.5 px-3">Redeemed Date</th>
+                <th className="py-2.5 px-3">Coupon Code</th>
+                <th className="py-2.5 px-3">Campaign / Promotion</th>
+                <th className="py-2.5 px-3 text-right">Discount Value</th>
+                <th className="py-2.5 px-3">Order Reference</th>
+                <th className="py-2.5 px-3">Order Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {((memberships as any)?.coupon_history || (passbook as any)?.coupon_history || (finance as any)?.coupon_history || []).length > 0 ? (
+                ((memberships as any)?.coupon_history || (passbook as any)?.coupon_history || (finance as any)?.coupon_history || []).map((cp: any) => (
+                  <tr key={cp.id} className="hover:bg-muted/30">
+                    <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                      {cp.redeemed_at ? new Date(cp.redeemed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
+                      <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded text-xs">
+                        🎟️ {cp.coupon_code}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-foreground font-medium">
+                      {cp.campaign_name || 'Direct Promotion'}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-bold text-emerald-400">
+                      ₹{Number(cp.discount_amount).toLocaleString()}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-muted-foreground">
+                      {cp.order_number || '—'}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <Badge className="text-[10px]" variant="outline">
+                        {cp.order_status || 'COMPLETED'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-xs text-muted-foreground">
+                    No promo codes or coupon redemptions recorded for this member.
                   </td>
                 </tr>
               )}
@@ -2001,7 +2266,7 @@ const MemberMembershipsSection: React.FC<{
               <Globe className="w-4 h-4 text-primary" />
               <h3 className="font-semibold text-base text-foreground">Passport & Cross-Branch Sessions</h3>
               <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
-                Home Branch: {passport?.home_branch?.name || memberships.active?.home_branch || 'Primary Branch'}
+                Home Branch: {(passport as any)?.home_branch?.name || memberships.active?.home_branch || 'Primary Branch'}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -2475,7 +2740,8 @@ const MemberBookingsSection: React.FC<{
                     <span>{new Date(b.date_time).toLocaleString()}</span>
                     <span>•</span>
                     <span>{b.branch_name}</span>
-                    {b.trainer_name && <span>• Coach: {b.trainer_name}</span>}
+                    {b.trainer_name && <span>• Coach: <span className="text-foreground font-medium">{b.trainer_name}</span></span>}
+                    {b.booked_by && <span>• Booked by: <span className="text-foreground font-medium">{b.booked_by}</span></span>}
                   </div>
                 </div>
                 <div className="text-muted-foreground font-mono text-[11px] self-start sm:self-auto">
@@ -2560,6 +2826,7 @@ const MemberBookingsSection: React.FC<{
               <tr>
                 <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-3">Session / Class</th>
+                <th className="py-2.5 px-3">Coach / Trainer</th>
                 <th className="py-2.5 px-3">Branch</th>
                 <th className="py-2.5 px-3">Check-In</th>
                 <th className="py-2.5 px-3">Check-Out</th>
@@ -2578,6 +2845,13 @@ const MemberBookingsSection: React.FC<{
                     </td>
                     <td className="py-2.5 px-3 text-foreground font-medium">
                       {a.class_name || 'Gym Access'}
+                    </td>
+                    <td className="py-2.5 px-3 text-foreground">
+                      {a.trainer_name ? (
+                        <span className="font-medium text-foreground">{a.trainer_name}</span>
+                      ) : (
+                        <span className="text-muted-foreground italic">Assigned Coach</span>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 text-muted-foreground">{a.branch_name || '—'}</td>
                     <td className="py-2.5 px-3 text-foreground font-mono">
@@ -2613,7 +2887,7 @@ const MemberBookingsSection: React.FC<{
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-8 text-center text-muted-foreground">
                     No attendance records found.
                   </td>
                 </tr>
@@ -2671,7 +2945,7 @@ const MemberFinanceSection: React.FC<{
   onViewInvoice: (inv: MemberInvoiceItem) => void;
   onViewTransaction: (txn: any) => void;
 }> = ({ finance, onCollectPayment, onViewInvoice, onViewTransaction }) => {
-  const [subTab, setSubTab] = useState<'INVOICES' | 'PAYMENTS' | 'REFUNDS'>('INVOICES');
+  const [subTab, setSubTab] = useState<'INVOICES' | 'PAYMENTS' | 'REFUNDS' | 'COUPONS'>('INVOICES');
 
   // Map order number to invoice item if exists
   const invoiceByOrder = React.useMemo(() => {
@@ -2761,6 +3035,7 @@ const MemberFinanceSection: React.FC<{
               { id: 'INVOICES', label: `Invoices & Bills (${finance.orders.length || finance.invoices.length})` },
               { id: 'PAYMENTS', label: `Payment Receipts (${finance.payments.length})` },
               { id: 'REFUNDS', label: `Refunds (${finance.refunds.length})` },
+              { id: 'COUPONS', label: `Coupons & Offers (${finance.coupon_history?.length ?? 0})` },
             ].map((t) => (
               <button
                 key={t.id}
@@ -2786,6 +3061,7 @@ const MemberFinanceSection: React.FC<{
                   <th className="py-2.5 px-3">Date</th>
                   <th className="py-2.5 px-3">Invoice / Order #</th>
                   <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3">Sold By / Channel</th>
                   <th className="py-2.5 px-3 text-right">Billed Amount</th>
                   <th className="py-2.5 px-3 text-right">Paid</th>
                   <th className="py-2.5 px-3 text-right">Balance Due</th>
@@ -2809,6 +3085,14 @@ const MemberFinanceSection: React.FC<{
                         </td>
                         <td className="py-2.5 px-3 font-medium text-foreground max-w-xs truncate">
                           {itemNames}
+                          {o.coupon_code && (
+                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                              🎟️ {o.coupon_code}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                          {o.sold_by || 'Sweat Front Desk POS'}
                         </td>
                         <td className="py-2.5 px-3 text-right font-medium text-foreground">
                           ₹{Number(o.total_amount).toLocaleString()}
@@ -2871,6 +3155,7 @@ const MemberFinanceSection: React.FC<{
                         {inv.invoice_number}
                       </td>
                       <td className="py-2.5 px-3 font-medium text-foreground">Order #{inv.order_number}</td>
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">Sweat Front Desk POS</td>
                       <td className="py-2.5 px-3 text-right font-medium text-foreground">
                         ₹{Number(inv.total_amount).toLocaleString()}
                       </td>
@@ -2907,7 +3192,7 @@ const MemberFinanceSection: React.FC<{
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-8 text-center text-muted-foreground">
                       No invoices or orders recorded for this member.
                     </td>
                   </tr>
@@ -3022,6 +3307,62 @@ const MemberFinanceSection: React.FC<{
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-muted-foreground">
                       No refunds or chargebacks issued.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Tab 4: Coupons & Promotional Offers Table */}
+        {subTab === 'COUPONS' && (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/60 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Date Applied</th>
+                  <th className="py-2.5 px-3">Coupon Code</th>
+                  <th className="py-2.5 px-3">Campaign / Promotion</th>
+                  <th className="py-2.5 px-3 text-right">Discount Applied</th>
+                  <th className="py-2.5 px-3">Order / Reference #</th>
+                  <th className="py-2.5 px-3">Authorized By / Channel</th>
+                  <th className="py-2.5 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {finance.coupon_history && finance.coupon_history.length > 0 ? (
+                  finance.coupon_history.map((c) => (
+                    <tr key={c.id} className="hover:bg-muted/30">
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(c.redeemed_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-purple-400">
+                        🎟️ {c.coupon_code || c.code}
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-foreground">
+                        {c.campaign_name || 'Direct Promotion'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-emerald-500">
+                        ₹{Number(c.discount_amount).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-muted-foreground">
+                        {c.order_number || '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-muted-foreground">
+                        {c.authorized_by || 'Sweat Front Desk POS'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                          {c.order_status || c.status || 'APPLIED'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                      No coupon redemptions recorded for this member.
                     </td>
                   </tr>
                 )}
@@ -3168,7 +3509,7 @@ const MemberHealthFormsSection: React.FC<{
               </span>
             </div>
             <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-              Latest Edit: {new Date(submissions[0].submitted_at).toLocaleDateString()}
+              Latest Edit: {submissions[0]?.submitted_at ? new Date(submissions[0].submitted_at).toLocaleDateString() : '—'}
             </span>
           </div>
         )}

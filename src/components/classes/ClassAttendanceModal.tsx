@@ -15,10 +15,20 @@ import {
   Camera,
   Scan,
   Lock,
+  Video,
+  Film,
+  Play,
+  Sparkles,
+  Dumbbell,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { ClassOccurrence } from '../../types/classes';
+import { SecureWorkoutPlayer } from './SecureWorkoutPlayer';
 import { formatOccurrenceDate, formatTime12h } from '@/utils/dateTimeUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +51,13 @@ interface ClassAttendanceModalProps {
   onClose: () => void;
 }
 
+const getInitials = (name?: string) => {
+  if (!name || !name.trim()) return 'M';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   occurrence,
   isOpen,
@@ -62,6 +79,20 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     distance?: number | null;
   } | null>(null);
 
+  // Video Streaming State
+  const [showVideoPlayer, setShowVideoPlayer] = React.useState(false);
+  const [rosterTab, setRosterTab] = React.useState<'ALL' | 'MEMBER' | 'TRIAL' | 'WAITLIST'>('ALL');
+
+  const { data: classVideoData } = useQuery({
+    queryKey: ['class-occurrence-video-stream', occurrence?.id],
+    queryFn: () => (occurrence?.id ? classesApi.getTrainerClassVideo(occurrence.id) : null),
+    enabled: isOpen && !!occurrence?.id,
+  });
+
+  React.useEffect(() => {
+    setShowVideoPlayer(false);
+  }, [occurrence?.id]);
+
   const {
     data: bookings = [],
     isLoading,
@@ -72,6 +103,37 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     queryFn: () => (occurrence?.id ? classesApi.getBookingsForOccurrence(occurrence.id) : Promise.resolve([])),
     enabled: isOpen && !!occurrence?.id,
   });
+
+  const memberBookings = React.useMemo(() => {
+    return bookings.filter((b: any) => b.booking_type !== 'TRIAL' && b.status !== 'WAITLISTED' && b.status !== 'WAITLIST');
+  }, [bookings]);
+
+  const trialBookings = React.useMemo(() => {
+    return bookings.filter((b: any) => b.booking_type === 'TRIAL');
+  }, [bookings]);
+
+  const waitlistBookings = React.useMemo(() => {
+    return bookings.filter((b: any) => b.status === 'WAITLISTED' || b.status === 'WAITLIST');
+  }, [bookings]);
+
+  const displayedBookings = React.useMemo(() => {
+    if (rosterTab === 'MEMBER') return memberBookings;
+    if (rosterTab === 'TRIAL') return trialBookings;
+    if (rosterTab === 'WAITLIST') return waitlistBookings;
+    return bookings;
+  }, [rosterTab, bookings, memberBookings, trialBookings, waitlistBookings]);
+
+  const targetedMuscles = React.useMemo(() => {
+    const raw = classVideoData?.targeted_muscles;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(',').map((s) => s.trim()) : [String(m)])).filter(Boolean);
+    }
+    if (typeof raw === 'string') {
+      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  }, [classVideoData?.targeted_muscles]);
 
   const recordAttendanceMutation = useMutation({
     mutationFn: ({
@@ -189,7 +251,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-5 pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -199,7 +261,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                   {occurrence?.status || 'SCHEDULED'}
                 </Badge>
                 <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                  Session Roster
+                  Session Details & Roster
                 </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-3">
@@ -281,28 +343,243 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
           </div>
         </DialogHeader>
 
-        {/* Member Bookings List */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* SECTION 1: Assigned Trainer & Check-In Status */}
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0 border border-primary/20">
+                  <Award className="size-5" />
+                </div>
+                <div>
+                  <div className="text-2xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Assigned Trainer
+                  </div>
+                  {(() => {
+                    const trainersList = occurrence?.trainers || occurrence?.assigned_trainers || [];
+                    if (trainersList.length === 0) {
+                      return (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">Unassigned Session</span>
+                          <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/30">
+                            Action Needed
+                          </Badge>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        {trainersList.map((t, idx) => (
+                          <div key={t.id || idx} className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-foreground">
+                              {t.trainer_name && t.trainer_name.toLowerCase() !== 'sweat' ? t.trainer_name : (t.trainer_code || 'Trainer')}
+                            </span>
+                            {t.trainer_code && (
+                              <Badge variant="outline" className="text-[10px] font-mono bg-background text-foreground/80 border-border">
+                                {t.trainer_code}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
+                              {t.trainer_role || 'LEAD'}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Trainer Live Check-in Status Badge */}
+              <div className="flex items-center gap-2">
+                {occurrence?.trainer_checked_in || occurrence?.trainer_check_in_details?.checked_in ? (
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-bold gap-1 px-2.5 py-1 inline-flex items-center">
+                    <CheckCircle2 className="size-3.5 text-emerald-500" />
+                    <span>Trainer Checked In</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs font-semibold gap-1 px-2.5 py-1 inline-flex items-center">
+                    <Clock className="size-3.5 text-amber-500" />
+                    <span>Pending Check-in</span>
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: Class Description & Format Guidance */}
+          {(classVideoData?.description || occurrence?.description || targetedMuscles.length > 0) && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Dumbbell className="size-3.5 text-primary" />
+                  <span>Class Workout Format</span>
+                </h4>
+                {targetedMuscles.length > 0 && (
+                  <span className="text-[11px] text-primary font-semibold flex items-center gap-1">
+                    <Target className="size-3" />
+                    {targetedMuscles.length} Muscle Groups Targeted
+                  </span>
+                )}
+              </div>
+              <p className="text-xs leading-relaxed text-foreground whitespace-pre-line">
+                {classVideoData?.description || occurrence?.description || 'Comprehensive functional fitness and conditioning workout session.'}
+              </p>
+              {targetedMuscles.length > 0 && (
+                <div className="pt-1">
+                  <div className="text-[11px] font-semibold text-muted-foreground mb-1.5">Targeted Muscle Groups:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {targetedMuscles.map((muscle: string) => (
+                      <Badge key={muscle} variant="secondary" className="text-[11px] px-2.5 py-0.5 bg-primary/10 text-primary border border-primary/20 font-medium">
+                        {muscle}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {classVideoData?.instructions && (
+                <div className="text-[11px] text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
+                  <span className="font-semibold text-foreground">Trainer Instructions: </span>
+                  {classVideoData.instructions}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SECTION 3: Class Workout Video Stream Banner */}
+          {classVideoData?.embed_player_url && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                    <Film className="size-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <span>Class Workout Video</span>
+                      <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-semibold">
+                        In-App Stream Ready
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Watch the complete exercise session video with instructions
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowVideoPlayer(!showVideoPlayer)}
+                  className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                >
+                  <Video className="size-3" />
+                  <span>{showVideoPlayer ? 'Hide Video' : 'Watch Workout Video'}</span>
+                  {showVideoPlayer ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                </Button>
+              </div>
+
+              {showVideoPlayer && (
+                <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                  <SecureWorkoutPlayer embedUrl={classVideoData.embed_player_url} title={occurrence?.template_name || "Class Workout Stream"} />
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    🔒 Streamed directly inside website in privacy mode. External YouTube redirection and downloads are disabled.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SECTION 4: Member Bookings & Session Roster */}
+          <div className="pt-2 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Users className="size-3.5 text-primary" />
+                <span>Enrolled Member Roster ({bookings.length} Booked)</span>
+              </h4>
+              <div className="text-2xs text-muted-foreground flex items-center gap-2">
+                <span>Total Bookings: <strong className="text-foreground">{bookings.length}</strong></span>
+                <span>•</span>
+                <span>Capacity: <strong className="text-foreground">{occurrence?.capacity || occurrence?.capacity_override || 0}</strong></span>
+              </div>
+            </div>
+
+            {/* Roster Filter Tabs */}
+            <div className="flex items-center gap-1.5 border-b border-border pb-2 overflow-x-auto">
+              <Button
+                variant={rosterTab === 'ALL' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setRosterTab('ALL')}
+                className="h-7 text-xs px-2.5 font-medium"
+              >
+                All ({bookings.length})
+              </Button>
+              <Button
+                variant={rosterTab === 'MEMBER' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setRosterTab('MEMBER')}
+                className="h-7 text-xs px-2.5 font-medium"
+              >
+                Members ({memberBookings.length})
+              </Button>
+              <Button
+                variant={rosterTab === 'TRIAL' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setRosterTab('TRIAL')}
+                className={`h-7 text-xs px-2.5 font-medium ${trialBookings.length > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : ''}`}
+              >
+                <Sparkles className="size-3 mr-1" />
+                Trials ({trialBookings.length})
+              </Button>
+              <Button
+                variant={rosterTab === 'WAITLIST' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setRosterTab('WAITLIST')}
+                className={`h-7 text-xs px-2.5 font-medium ${waitlistBookings.length > 0 ? 'text-purple-600 dark:text-purple-400 font-semibold' : ''}`}
+              >
+                <Clock className="size-3 mr-1" />
+                Waitlist ({waitlistBookings.length})
+              </Button>
+            </div>
+          </div>
+
           {isLoading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
               Loading enrolled member roster...
             </div>
-          ) : bookings.length === 0 ? (
+          ) : displayedBookings.length === 0 ? (
             <div className="py-10 text-center rounded-xl border border-dashed border-border/80 bg-muted/20 p-6">
               <Users className="size-10 text-muted-foreground/50 mx-auto mb-2" />
-              <h4 className="text-sm font-semibold text-foreground">No Members Booked</h4>
+              <h4 className="text-sm font-semibold text-foreground">
+                {rosterTab === 'TRIAL'
+                  ? 'No Trial Bookings'
+                  : rosterTab === 'WAITLIST'
+                  ? 'No Waitlisted Attendees'
+                  : rosterTab === 'MEMBER'
+                  ? 'No Regular Member Bookings'
+                  : 'No Bookings Yet'}
+              </h4>
               <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1">
-                There are no active member reservations for this class session yet.
+                {rosterTab === 'TRIAL'
+                  ? 'There are currently no trial reservation requests for this session slot.'
+                  : rosterTab === 'WAITLIST'
+                  ? 'There are currently no waitlisted candidates for this session slot.'
+                  : 'There are no member reservations matching this view.'}
               </p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {bookings.map((booking: any) => {
+              {displayedBookings.map((booking: any) => {
                 const isNoShow = booking.status === 'NO_SHOW' || booking.attendance_record?.status === 'NO_SHOW';
                 const isCompleted = booking.status === 'COMPLETED' || booking.status === 'ATTENDED' || booking.attendance_record?.status === 'PRESENT' || booking.attendance_record?.status === 'LATE' || booking.attendance_record?.status === 'LATE_SHOW';
                 const isCancelled = booking.status === 'CANCELLED';
+                const isWaitlisted = booking.status === 'WAITLISTED' || booking.status === 'WAITLIST';
+                const isTrial = booking.booking_type === 'TRIAL';
                 const attStatus = booking.attendance_record?.status;
+                const displayName = booking.member_name || booking.user_profile_name || booking.user_profile?.full_name || 'Member';
+                const displayEmail = booking.member_email || booking.user_profile_email || booking.user_profile?.email;
+                const displayPhone = booking.member_phone;
+                const displayMemberNumber = booking.member_number;
 
                 return (
                   <div
@@ -314,32 +591,57 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                         ? 'bg-rose-500/5 border-rose-500/20'
                         : isCancelled
                         ? 'bg-rose-500/5 border-rose-500/20 opacity-70'
+                        : isTrial
+                        ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-500/50'
+                        : isWaitlisted
+                        ? 'bg-purple-500/5 border-purple-500/30 hover:border-purple-500/50'
                         : 'bg-card border-border hover:border-primary/40'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`size-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                        className={`size-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                           isCompleted
                             ? (attStatus === 'LATE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400')
                             : (isNoShow || isCancelled)
                             ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            : isTrial
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                            : isWaitlisted
+                            ? 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/30'
                             : 'bg-primary/10 text-primary'
                         }`}
                       >
-                        {(booking.member_name || booking.user_profile?.full_name || 'M').substring(0, 2).toUpperCase()}
+                        {getInitials(displayName)}
                       </div>
                       <div>
                         <div className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-2 flex-wrap">
-                          <span>{booking.member_name || booking.user_profile?.full_name || 'Member'}</span>
-                          <span className="text-2xs font-mono text-muted-foreground uppercase px-1.5 py-0.5 rounded bg-muted">
-                            {booking.booking_type || 'MEMBER'}
-                          </span>
+                          <span className="font-bold text-foreground text-sm">{displayName}</span>
+                          
+                          {/* Booking Type / Trial Badge */}
+                          {isTrial ? (
+                            <Badge variant="outline" className="text-3xs py-0 h-4 px-1.5 gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40 font-bold uppercase tracking-wider">
+                              <Sparkles className="size-2.5 text-amber-500" /> Trial Booking
+                            </Badge>
+                          ) : (
+                            <span className="text-2xs font-mono text-muted-foreground uppercase px-1.5 py-0.5 rounded bg-muted">
+                              {booking.booking_type || 'MEMBER'}
+                            </span>
+                          )}
+
+                          {/* Waitlist Badge */}
+                          {isWaitlisted && (
+                            <Badge variant="outline" className="text-3xs py-0 h-4 px-1.5 gap-1 bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/40 font-semibold uppercase">
+                              <Clock className="size-2.5 text-purple-500" /> Waitlist {booking.waitlist_position ? `#${booking.waitlist_position}` : ''}
+                            </Badge>
+                          )}
+
                           {booking.package_name && (
                             <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
                               {booking.package_name}
                             </span>
                           )}
+
                           {booking.parq_status === 'CLEARED' ? (
                             <Badge variant="outline" className="text-3xs py-0 h-4 px-1.5 gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium">
                               <ShieldCheck className="size-2.5" /> PAR-Q Cleared
@@ -350,8 +652,20 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                             </Badge>
                           )}
                         </div>
+
                         <div className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-                          <span>{booking.member_email || booking.user_profile?.email}</span>
+                          {displayMemberNumber && (
+                            <span className="font-mono font-medium text-foreground/80 bg-muted/60 px-1 rounded">
+                              {displayMemberNumber}
+                            </span>
+                          )}
+                          {displayEmail && <span>{displayEmail}</span>}
+                          {displayPhone && (
+                            <>
+                              <span>•</span>
+                              <span>{displayPhone}</span>
+                            </>
+                          )}
                           <span>•</span>
                           <span>Ref: {booking.booking_number || booking.id.slice(0, 8)}</span>
                           {booking.attendance_record?.check_in_at && (
@@ -379,6 +693,10 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                       {isCancelled ? (
                         <Badge variant="outline" className="text-xs text-rose-500 border-rose-500/30 bg-rose-500/10">
                           Cancelled Booking
+                        </Badge>
+                      ) : isWaitlisted ? (
+                        <Badge variant="outline" className="text-xs text-purple-600 border-purple-500/30 bg-purple-500/10 font-medium">
+                          Waitlisted ({booking.waitlist_position ? `Queue #${booking.waitlist_position}` : 'Pending Slot'})
                         </Badge>
                       ) : isNoShow ? (
                         <div className="flex items-center gap-2">
@@ -422,7 +740,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                               size="sm"
                               onClick={() =>
                                 setPreviewSelfie({
-                                  name: booking.member_name || 'Member',
+                                  name: displayName,
                                   url: booking.attendance_record.trainer_selfie_url,
                                   distance: booking.attendance_record.geofence_distance_meters,
                                 })
@@ -458,7 +776,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                               setBiometricTarget({
                                 type: 'MEMBER',
                                 bookingId: booking.id,
-                                name: booking.member_name || booking.user_profile?.full_name || 'Member',
+                                name: displayName,
                               })
                             }
                             disabled={recordAttendanceMutation.isPending}

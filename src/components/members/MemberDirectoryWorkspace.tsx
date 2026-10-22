@@ -64,7 +64,8 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   // State
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [quickView, setQuickView] = useState<QuickViewTab>('all');
+  const [quickView, setQuickView] = useState<QuickViewTab>('active');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedProgram, setSelectedProgram] = useState<string>('all');
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
@@ -72,9 +73,18 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   const [pageSize, setPageSize] = useState(15);
 
   // Dynamic filter options
+  const { data: branches = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['member-filter-branches'],
+    queryFn: () => crmApi.getBranches(),
+    staleTime: 60000,
+  });
+
   const { data: programs = [] } = useQuery<Array<{ id: string; name: string }>>({
-    queryKey: ['member-filter-programs', locationId],
-    queryFn: () => crmApi.getPrograms(locationId && locationId !== 'all' ? locationId : undefined),
+    queryKey: ['member-filter-programs', selectedBranch !== 'all' ? selectedBranch : locationId],
+    queryFn: () => {
+      const loc = selectedBranch !== 'all' ? selectedBranch : (locationId && locationId !== 'all' ? locationId : undefined);
+      return crmApi.getPrograms(loc);
+    },
     staleTime: 60000,
   });
 
@@ -96,7 +106,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   // Global branch scope change resets to page 1
   useEffect(() => {
     setPage(1);
-  }, [locationId]);
+  }, [locationId, selectedBranch]);
 
   // New Member Modal State
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
@@ -114,7 +124,8 @@ export const MemberDirectoryWorkspace: React.FC = () => {
     page_size: pageSize,
   };
   if (debouncedSearch) queryParams.search = debouncedSearch;
-  if (locationId && locationId !== 'all') queryParams.location = locationId;
+  const activeBranch = selectedBranch !== 'all' ? selectedBranch : (locationId && locationId !== 'all' ? locationId : undefined);
+  if (activeBranch) queryParams.location = activeBranch;
   if (selectedStatus !== 'all') queryParams.status = selectedStatus;
   if (selectedProgram !== 'all') queryParams.program_id = selectedProgram;
   if (selectedPackage !== 'all') queryParams.package_id = selectedPackage;
@@ -336,6 +347,22 @@ export const MemberDirectoryWorkspace: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedBranch}
+              onChange={(e) => {
+                setSelectedBranch(e.target.value);
+                setPage(1);
+              }}
+              className="h-9 px-3 text-xs rounded-md border border-input bg-background text-foreground max-w-[160px] truncate"
+            >
+              <option value="all">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
             <select
               value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
