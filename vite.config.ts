@@ -7,10 +7,10 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { loadEnv } from "vite";
 
-const env = loadEnv(process.env.NODE_ENV || "development", process.cwd(), "");
+const env = loadEnv(process.env["NODE_ENV"] || "development", process.cwd(), "");
 const backendUrl =
-  env.VITE_BACKEND_URL ||
-  (env.VITE_API_BASE_URL ? env.VITE_API_BASE_URL.replace(/\/api\/v1\/?$/, "") : "https://api.fitness.vibecopilot.ai");
+  env["VITE_BACKEND_URL"] ||
+  (env["VITE_API_BASE_URL"] ? env["VITE_API_BASE_URL"].replace(/\/api\/v1\/?$/, "") : "https://api.fitness.vibecopilot.ai");
 
 export default defineConfig({
   vite: {
@@ -25,7 +25,7 @@ export default defineConfig({
     },
   },
   nitro: {
-    preset: process.env.NITRO_PRESET || "node-server",
+    preset: process.env["NITRO_PRESET"] || "node-server",
   },
   tanstackStart: {
     server: { entry: "server" },

@@ -198,16 +198,30 @@ export const wellnessApi = {
     api.delete(`/mobile/wellness/meal-logs/${mealLogId}/`),
 
   // Water Logs
-  logWater: (data: { amount_ml: number; date: string }) =>
-    api.post('/mobile/wellness/water-logs/', data),
+  logWater: (data: { amount_ml: number; date?: string; logged_date?: string }) =>
+    api.post('/mobile/wellness/water-logs/', {
+      amount_ml: data.amount_ml,
+      logged_date: data.logged_date || data.date || new Date().toISOString().split('T')[0],
+    }),
 
   // Sleep Logs
   logSleep: (data: {
-    date: string;
-    duration_hours: number;
-    quality_score?: number;
+    logged_date?: string;
+    date?: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes?: number;
+    quality_rating?: number;
     notes?: string;
-  }) => api.post('/mobile/wellness/sleep-logs/', data),
+  }) =>
+    api.post('/mobile/wellness/sleep-logs/', {
+      logged_date: data.logged_date || data.date || new Date().toISOString().split('T')[0],
+      start_time: data.start_time,
+      end_time: data.end_time,
+      duration_minutes: data.duration_minutes,
+      quality_rating: data.quality_rating ?? 3,
+      notes: data.notes || '',
+    }),
 
   // Targets
   getTargets: () => api.get<NutritionTargetData>('/mobile/wellness/targets/'),
