@@ -175,7 +175,17 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   };
 
   const confirmedCount = bookings.filter((b: any) => b.status === 'CONFIRMED').length;
-  const presentCount = bookings.filter((b: any) => b.status === 'COMPLETED' || b.attendance_record?.status === 'PRESENT').length;
+  const presentCount = bookings.filter((b: any) => 
+    b.status === 'COMPLETED' || 
+    b.status === 'ATTENDED' || 
+    b.attendance_record?.status === 'PRESENT' || 
+    b.attendance_record?.status === 'LATE' ||
+    b.attendance_record?.status === 'LATE_SHOW'
+  ).length;
+  const noShowCount = bookings.filter((b: any) => 
+    b.status === 'NO_SHOW' || 
+    b.attendance_record?.status === 'NO_SHOW'
+  ).length;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -250,6 +260,11 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
               <span className="text-muted-foreground">
                 Checked In: <strong className="text-emerald-500 font-semibold">{presentCount}</strong>
               </span>
+              {noShowCount > 0 && (
+                <span className="text-muted-foreground">
+                  No Shows: <strong className="text-rose-500 font-semibold">{noShowCount}</strong>
+                </span>
+              )}
             </div>
             {confirmedCount > 0 && (
               <Button
@@ -284,7 +299,8 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
           ) : (
             <div className="space-y-2.5">
               {bookings.map((booking: any) => {
-                const isCompleted = booking.status === 'COMPLETED';
+                const isNoShow = booking.status === 'NO_SHOW' || booking.attendance_record?.status === 'NO_SHOW';
+                const isCompleted = booking.status === 'COMPLETED' || booking.status === 'ATTENDED' || booking.attendance_record?.status === 'PRESENT' || booking.attendance_record?.status === 'LATE' || booking.attendance_record?.status === 'LATE_SHOW';
                 const isCancelled = booking.status === 'CANCELLED';
                 const attStatus = booking.attendance_record?.status;
 
@@ -293,7 +309,9 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                     key={booking.id}
                     className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                       isCompleted
-                        ? 'bg-emerald-500/5 border-emerald-500/20'
+                        ? (attStatus === 'LATE' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-emerald-500/5 border-emerald-500/20')
+                        : isNoShow
+                        ? 'bg-rose-500/5 border-rose-500/20'
                         : isCancelled
                         ? 'bg-rose-500/5 border-rose-500/20 opacity-70'
                         : 'bg-card border-border hover:border-primary/40'
@@ -303,8 +321,8 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                       <div
                         className={`size-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                           isCompleted
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                            : isCancelled
+                            ? (attStatus === 'LATE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400')
+                            : (isNoShow || isCancelled)
                             ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                             : 'bg-primary/10 text-primary'
                         }`}
@@ -344,6 +362,14 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                               </span>
                             </>
                           )}
+                          {booking.attendance_record?.check_out_at && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                Checked Out: {new Date(booking.attendance_record.check_out_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -354,6 +380,27 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                         <Badge variant="outline" className="text-xs text-rose-500 border-rose-500/30 bg-rose-500/10">
                           Cancelled Booking
                         </Badge>
+                      ) : isNoShow ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs gap-1 py-1 px-2.5 bg-rose-500/10 text-rose-600 border-rose-500/30">
+                            <UserX className="size-3.5" />
+                            <span>No Show</span>
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              recordAttendanceMutation.mutate({
+                                bookingId: booking.id,
+                                status: 'PRESENT',
+                              })
+                            }
+                            className="h-7 text-2xs text-muted-foreground hover:text-emerald-600"
+                            title="Override to Present"
+                          >
+                            Mark Present
+                          </Button>
+                        </div>
                       ) : isCompleted ? (
                         <div className="flex items-center gap-2">
                           <Badge
@@ -361,11 +408,13 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                             className={`text-xs gap-1 py-1 px-2.5 ${
                               attStatus === 'LATE'
                                 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                : attStatus === 'LATE_SHOW'
+                                ? 'bg-orange-500/10 text-orange-600 border-orange-500/30'
                                 : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                             }`}
                           >
                             <CheckCircle2 className="size-3.5" />
-                            <span>{attStatus || 'Attended'}</span>
+                            <span>{attStatus === 'LATE' ? 'Late Entry' : (attStatus === 'LATE_SHOW' ? 'Late Show' : 'Attended')}</span>
                           </Badge>
                           {booking.attendance_record?.trainer_selfie_url && (
                             <Button

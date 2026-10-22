@@ -427,7 +427,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const totalBookings = bookingSummary?.total_count ?? totalMatchingBookings;
   const confirmedCount = bookingSummary?.confirmed_count ?? bookings.filter((b) => b.status === 'CONFIRMED').length;
   const waitlistCount = bookingSummary?.waitlisted_count ?? waitlistBookings.length;
-  const attendedCount = bookingSummary?.attended_count ?? bookings.filter((b) => b.status === 'ATTENDED').length;
+  const attendedCount = bookingSummary?.attended_count ?? bookings.filter((b) => b.status === 'ATTENDED' || b.status === 'COMPLETED' || b.status === 'LATE').length;
   const noShowCount = bookingSummary?.no_show_count ?? bookings.filter((b) => b.status === 'NO_SHOW').length;
 
   const getStatusBadge = (status: BookingStatus | string) => {
@@ -451,9 +451,23 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
           </span>
         );
       case 'ATTENDED':
+      case 'COMPLETED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
             <UserCheck className="size-3" /> Attended
+          </span>
+        );
+      case 'LATE':
+      case 'LATE_ENTRY':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            <Clock className="size-3" /> Late Entry
+          </span>
+        );
+      case 'LATE_SHOW':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
+            <Clock className="size-3" /> Late Show
           </span>
         );
       case 'NO_SHOW':
@@ -808,73 +822,85 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               </>
                             )}
                           </td>
-                          <td className="px-4 py-3.5">{getStatusBadge(booking.status)}</td>
-                          <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
-                            {booking.is_trial || booking.booking_source === 'TRIAL' ? (
+                          {(() => {
+                            const effectiveStatus = (booking.attendance_record?.status === 'LATE' || booking.status === 'LATE')
+                              ? 'LATE'
+                              : (booking.attendance_record?.status === 'LATE_SHOW' || booking.status === 'LATE_SHOW')
+                              ? 'LATE_SHOW'
+                              : (booking.attendance_record?.status === 'NO_SHOW' || booking.status === 'NO_SHOW')
+                              ? 'NO_SHOW'
+                              : (booking.status === 'COMPLETED' || booking.status === 'ATTENDED' || booking.attendance_record?.status === 'PRESENT')
+                              ? 'ATTENDED'
+                              : booking.status;
+                            return (
                               <>
-                                {/* TRIAL ACTIONS */}
-                                {canEdit && (booking.status === 'BOOKED' || (booking as any).confirmation_status === 'PENDING') && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => confirmBookingMutation.mutate(booking.id)}
-                                    disabled={confirmBookingMutation.isPending}
-                                    className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"
-                                  >
-                                    Confirm
-                                  </Button>
-                                )}
-                                {canEdit && booking.status !== 'CANCELLED' && booking.status !== 'RESCHEDULED' && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setReschedulingTrialBooking(booking)}
-                                    className="text-xs h-7 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
-                                  >
-                                    Reschedule
-                                  </Button>
-                                )}
-                                {canEdit && (booking.status === 'CONFIRMED' || booking.status === 'BOOKED') && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'PRESENT' })}
-                                      disabled={attendanceMutation.isPending}
-                                      className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                                    >
-                                      Check In
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'NO_SHOW' })}
-                                      disabled={attendanceMutation.isPending}
-                                      className="text-xs h-7 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                                    >
-                                      No Show
-                                    </Button>
-                                  </>
-                                )}
-                                {(canDelete || canEdit) && booking.status !== 'CANCELLED' && booking.status !== 'RESCHEDULED' && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setSelectedBooking(booking);
-                                      setCancelReasonText('');
-                                      setActionError(null);
-                                      setIsCancelModalOpen(true);
-                                    }}
-                                    className="text-xs h-7 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
-                                  >
-                                    Cancel
-                                  </Button>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                {booking.status === 'CONFIRMED' && (
+                                <td className="px-4 py-3.5">{getStatusBadge(effectiveStatus)}</td>
+                                <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
+                                  {booking.is_trial || booking.booking_source === 'TRIAL' ? (
+                                    <>
+                                      {/* TRIAL ACTIONS */}
+                                      {canEdit && (booking.status === 'BOOKED' || (booking as any).confirmation_status === 'PENDING') && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => confirmBookingMutation.mutate(booking.id)}
+                                          disabled={confirmBookingMutation.isPending}
+                                          className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"
+                                        >
+                                          Confirm
+                                        </Button>
+                                      )}
+                                      {canEdit && booking.status !== 'CANCELLED' && booking.status !== 'RESCHEDULED' && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => setReschedulingTrialBooking(booking)}
+                                          className="text-xs h-7 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
+                                        >
+                                          Reschedule
+                                        </Button>
+                                      )}
+                                      {canEdit && (effectiveStatus === 'CONFIRMED' || effectiveStatus === 'BOOKED') && (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'PRESENT' })}
+                                            disabled={attendanceMutation.isPending}
+                                            className="text-xs h-7 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                          >
+                                            Check In
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => attendanceMutation.mutate({ bookingId: booking.id, status: 'NO_SHOW' })}
+                                            disabled={attendanceMutation.isPending}
+                                            className="text-xs h-7 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                                          >
+                                            No Show
+                                          </Button>
+                                        </>
+                                      )}
+                                      {(canDelete || canEdit) && !['CANCELLED', 'RESCHEDULED', 'ATTENDED', 'COMPLETED', 'NO_SHOW', 'LATE'].includes(effectiveStatus) && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setSelectedBooking(booking);
+                                            setCancelReasonText('');
+                                            setActionError(null);
+                                            setIsCancelModalOpen(true);
+                                          }}
+                                          className="text-xs h-7 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
+                                        >
+                                          Cancel
+                                        </Button>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {(effectiveStatus === 'CONFIRMED' || effectiveStatus === 'BOOKED') && (
                                   <>
                                     {canEdit && (
                                       <Button
@@ -967,7 +993,10 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               Details
                             </Button>
                           </td>
-                        </tr>
+                        </>
+                      );
+                    })()}
+                  </tr>
                       ))
                     )}
                   </tbody>
@@ -2014,24 +2043,24 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
 
       {/* CONFIGURE POLICY MODAL (Real Backend Fields) */}
       <Dialog open={isPolicyModalOpen} onOpenChange={setIsPolicyModalOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sliders className="size-5 text-primary" />
-              Configure Booking Policy Set
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Sliders className="size-5 text-primary shrink-0" />
+              <span>Configure Booking Policy Set</span>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 text-xs sm:text-sm">
+          <div className="space-y-4 py-1 text-xs sm:text-sm">
             {policyError && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs rounded-lg">
                 {policyError}
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-semibold">Policy Name</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Policy Name</Label>
                 <Input
                   type="text"
                   value={policyForm.name || ''}
@@ -2049,130 +2078,132 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     });
                   }}
                   placeholder="e.g. Standard Member Policy"
-                  className="text-xs"
+                  className="text-xs sm:text-sm h-9"
                 />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="font-semibold">Policy Code</Label>
-                  <span className="text-[10px] text-muted-foreground">Backend-managed</span>
+              <div className="min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="font-semibold text-xs sm:text-sm">Policy Code</Label>
+                  <span className="text-[10px] text-muted-foreground font-mono bg-muted/40 px-1.5 py-0.5 rounded">Backend-managed</span>
                 </div>
                 <Input
                   type="text"
                   value={policyForm.code || ''}
                   onChange={(e) => setPolicyForm({ ...policyForm, code: e.target.value })}
                   placeholder="e.g. POL_STD_01"
-                  className="text-xs font-mono bg-muted/20"
+                  className="text-xs sm:text-sm font-mono bg-muted/20 h-9"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-semibold">Rule Behavior</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Rule Behavior</Label>
                 <select
                   value={policyForm.rule_behavior || 'OPERATIONAL'}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, rule_behavior: e.target.value as RuleBehavior })
                   }
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                 >
                   <option value="OPERATIONAL">OPERATIONAL</option>
                   <option value="CONTRACTUAL">CONTRACTUAL</option>
                   <option value="TRANSACTIONAL">TRANSACTIONAL</option>
                 </select>
               </div>
-              <div>
-                <Label className="mb-1 block font-semibold">Max Upcoming Bookings</Label>
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Max Upcoming Bookings</Label>
                 <Input
                   type="number"
+                  min={1}
                   value={policyForm.max_upcoming_bookings || 3}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, max_upcoming_bookings: parseInt(e.target.value) || 1 })
                   }
-                  className="text-xs"
+                  className="text-xs sm:text-sm h-9"
                 />
               </div>
             </div>
 
             {/* Friendly Booking Windows with Units */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-semibold">Booking Opens</Label>
-                <div className="flex gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Booking Opens</Label>
+                <div className="flex items-center gap-2">
                   <Input
                     type="number"
                     min={1}
                     value={bookingOpenValue}
                     onChange={(e) => setBookingOpenValue(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="text-xs w-24"
+                    className="text-xs sm:text-sm w-20 sm:w-24 shrink-0 h-9"
                   />
                   <select
                     value={bookingOpenUnit}
                     onChange={(e) => setBookingOpenUnit(e.target.value as 'MINUTES' | 'HOURS' | 'DAYS')}
-                    className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1 min-w-0 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9 truncate"
                   >
                     <option value="DAYS">Days before session</option>
                     <option value="HOURS">Hours before session</option>
                     <option value="MINUTES">Minutes before session</option>
                   </select>
                 </div>
-                <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                  ({bookingOpenUnit === 'DAYS' ? bookingOpenValue * 1440 : bookingOpenUnit === 'HOURS' ? bookingOpenValue * 60 : bookingOpenValue} minutes)
+                <span className="text-[11px] text-muted-foreground mt-1 block">
+                  ({bookingOpenUnit === 'DAYS' ? bookingOpenValue * 1440 : bookingOpenUnit === 'HOURS' ? bookingOpenValue * 60 : bookingOpenValue} minutes before class)
                 </span>
               </div>
-              <div>
-                <Label className="mb-1 block font-semibold">Booking Closes</Label>
-                <div className="flex gap-2">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Booking Closes</Label>
+                <div className="flex items-center gap-2">
                   <Input
                     type="number"
                     min={0}
                     value={bookingCloseValue}
                     onChange={(e) => setBookingCloseValue(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="text-xs w-24"
+                    className="text-xs sm:text-sm w-20 sm:w-24 shrink-0 h-9"
                   />
                   <select
                     value={bookingCloseUnit}
                     onChange={(e) => setBookingCloseUnit(e.target.value as 'MINUTES' | 'HOURS')}
-                    className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1 min-w-0 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9 truncate"
                   >
                     <option value="MINUTES">Minutes before session</option>
                     <option value="HOURS">Hours before session</option>
                   </select>
                 </div>
-                <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                  ({bookingCloseUnit === 'HOURS' ? bookingCloseValue * 60 : bookingCloseValue} minutes)
+                <span className="text-[11px] text-muted-foreground mt-1 block">
+                  ({bookingCloseUnit === 'HOURS' ? bookingCloseValue * 60 : bookingCloseValue} minutes before class)
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <Label className="mb-1 block font-semibold">Allow Waitlist</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Allow Waitlist</Label>
                 <select
                   value={policyForm.allow_waitlist ? 'true' : 'false'}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, allow_waitlist: e.target.value === 'true' })
                   }
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                 >
                   <option value="true">Enabled</option>
                   <option value="false">Disabled</option>
                 </select>
               </div>
-              <div>
-                <Label className="mb-1 block font-semibold">Waitlist Capacity</Label>
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Waitlist Capacity</Label>
                 <Input
                   type="number"
-                  value={policyForm.waitlist_capacity || 10}
+                  min={0}
+                  value={policyForm.waitlist_capacity ?? 10}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, waitlist_capacity: parseInt(e.target.value) || 0 })
                   }
-                  className="text-xs"
+                  className="text-xs sm:text-sm h-9"
                 />
               </div>
-              <div>
-                <Label className="mb-1 block font-semibold">Promotion Mode</Label>
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Promotion Mode</Label>
                 <select
                   value={policyForm.waitlist_promotion_mode || 'FIFO'}
                   onChange={(e) =>
@@ -2181,35 +2212,36 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       waitlist_promotion_mode: e.target.value as WaitlistPromotionMode,
                     })
                   }
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                 >
-                  <option value="FIFO">FIFO</option>
-                  <option value="PRIORITY">PRIORITY</option>
-                  <option value="MANUAL">MANUAL</option>
+                  <option value="FIFO">FIFO (First-In, First-Out)</option>
+                  <option value="PRIORITY">VIP / Priority</option>
+                  <option value="MANUAL">Manual Review</option>
                 </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-semibold">Max Reschedules</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Max Reschedules</Label>
                 <Input
                   type="number"
-                  value={policyForm.max_reschedules || 2}
+                  min={0}
+                  value={policyForm.max_reschedules ?? 2}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, max_reschedules: parseInt(e.target.value) || 0 })
                   }
-                  className="text-xs"
+                  className="text-xs sm:text-sm h-9"
                 />
               </div>
-              <div>
-                <Label className="mb-1 block font-semibold">Status</Label>
+              <div className="min-w-0">
+                <Label className="mb-1.5 block font-semibold text-xs sm:text-sm">Status</Label>
                 <select
                   value={policyForm.status || 'ACTIVE'}
                   onChange={(e) =>
                     setPolicyForm({ ...policyForm, status: e.target.value as PolicyStatus })
                   }
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="DRAFT">DRAFT</option>

@@ -39,7 +39,10 @@ import {
   Package,
   Building2,
   ChevronDown,
+  Utensils,
+  Ticket,
 } from "lucide-react";
+// import { MemberNutritionTab } from "@/components/member-portal/MemberNutritionTab";
 import { toast } from "sonner";
 import {
   mobileApi,
@@ -54,6 +57,7 @@ import {
   MobileMembershipActionOptions,
 } from "@/api/endpoints/mobileApi";
 import { openRazorpayCheckout, cleanupRazorpayDOM, loadRazorpayScript } from "@/utils/razorpayCheckout";
+import { QRCodeSvg } from "@/components/common/QRCodeSvg";
 import { useAuth } from "@/contexts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -246,6 +250,7 @@ function WebMemberPortalWorkspaceInner() {
 
   const [showQRPassModal, setShowQRPassModal] = React.useState<boolean>(false);
   const [qrPassData, setQrPassData] = React.useState<any>(null);
+  const [isQRPassLoading, setIsQRPassLoading] = React.useState<boolean>(false);
 
   const [ptTrainerToBook, setPtTrainerToBook] = React.useState<MobileTrainer | null>(null);
   const [ptBookingForm, setPtBookingForm] = React.useState({
@@ -906,8 +911,68 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
-  const handleOpenQRPass = () => {
+  const handleOpenQRPass = async () => {
     setShowQRPassModal(true);
+    setIsQRPassLoading(true);
+    try {
+      const res = await mobileApi.getQRPass();
+      setQrPassData({
+        pass_id: res.data.pass_id,
+        booking_id: (res.data as any).booking_id,
+        booking_number: (res.data as any).booking_number,
+        qr_token: (res.data as any).compact_token || res.data.qr_payload,
+        class_name: (res.data as any).class_name,
+        branch_name: (res.data as any).branch_name,
+        start_at: (res.data as any).start_at,
+        valid_from: (res.data as any).valid_from,
+        valid_until: res.data.valid_until,
+        member_name: res.data.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member"),
+        membership_number: res.data.membership_number || profile?.membership_number || "MEM-1CCA18",
+        status: (res.data as any).status || "CONFIRMED",
+        pass_type: 'CLASS_BOOKING',
+        has_booking: true,
+      });
+    } catch (err: any) {
+      console.warn("[SWEAT Member Portal] getQRPass:", err);
+      const detailMsg = err?.response?.data?.detail || "No confirmed class booking found for today. Please reserve a class session to generate your turnstile access key.";
+      setQrPassData({
+        has_booking: false,
+        detail: detailMsg,
+        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member",
+        membership_number: profile?.membership_number || "MEM-1CCA18",
+      });
+    } finally {
+      setIsQRPassLoading(false);
+    }
+  };
+
+  const handleOpenBookingQRPass = async (booking: MobileBooking) => {
+    setShowQRPassModal(true);
+    setIsQRPassLoading(true);
+    try {
+      const res = await mobileApi.getBookingQRPass(booking.id);
+      setQrPassData({
+        pass_id: res.data.pass_id,
+        booking_id: res.data.booking_id,
+        booking_number: res.data.booking_number,
+        qr_token: res.data.qr_token || res.data.compact_token || res.data.qr_payload,
+        class_name: res.data.class_name || booking.class_name,
+        branch_name: res.data.branch_name || booking.branch?.name,
+        valid_from: (res.data as any).valid_from,
+        valid_until: res.data.valid_until,
+        status: res.data.status || "CONFIRMED",
+        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member",
+        membership_number: profile?.membership_number || "MEM-1CCA18",
+        pass_type: 'CLASS_BOOKING',
+        has_booking: true,
+      });
+    } catch (err: any) {
+      console.warn("[SWEAT Member Portal] getBookingQRPass error:", err);
+      toast.error(err?.response?.data?.detail || "Failed to load booking access pass.");
+      setShowQRPassModal(false);
+    } finally {
+      setIsQRPassLoading(false);
+    }
   };
 
   const handleConfirmBookClass = async () => {
@@ -1140,20 +1205,45 @@ function WebMemberPortalWorkspaceInner() {
   const daysRemaining = endIso ? Math.max(0, Math.ceil((new Date(endIso).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 45;
 
   const upcomingBookings = React.useMemo(() => {
-    return (bookings || []).filter(
-      (b) => b.status === "CONFIRMED" || b.status === "BOOKED" || b.status === "SCHEDULED"
-    );
+    const now = new Date();
+    return (bookings || []).filter((b) => {
+      const isConfirmed = b.status === "CONFIRMED" || b.status === "BOOKED" || b.status === "SCHEDULED";
+      if (!isConfirmed) return false;
+      const endTime = b.end_time || b.start_time;
+      if (endTime) {
+        return new Date(endTime) > now;
+      }
+      return true;
+    });
   }, [bookings]);
 
   const attendanceHistory = React.useMemo(() => {
-    return (bookings || []).filter(
-      (b) => b.status === "ATTENDED" || b.status === "COMPLETED" || b.status === "NO_SHOW" || b.status === "CANCELLED"
-    );
+    const now = new Date();
+    return (bookings || []).filter((b) => {
+      const isHistoricalStatus = b.status === "ATTENDED" || b.status === "COMPLETED" || b.status === "NO_SHOW" || b.status === "CANCELLED" || b.status === "LATE" || b.status === "LATE_ENTRY" || b.status === "LATE_SHOW";
+      if (isHistoricalStatus) return true;
+      const endTime = b.end_time || b.start_time;
+      if (endTime && new Date(endTime) <= now) return true;
+      return false;
+    });
   }, [bookings]);
 
   const nextWorkout = React.useMemo(() => {
     return upcomingBookings.length > 0 ? upcomingBookings[0] : null;
   }, [upcomingBookings]);
+
+  const todayConfirmedBooking = React.useMemo(() => {
+    const now = new Date();
+    const todayStr = format(now, "yyyy-MM-dd");
+    return (bookings || []).find((b) => {
+      if (b.status !== "CONFIRMED" && b.status !== "BOOKED" && b.status !== "SCHEDULED") return false;
+      const bDate = b.start_time ? b.start_time.split("T")[0] : "";
+      if (bDate !== todayStr) return false;
+      const endTime = b.end_time || b.start_time;
+      if (endTime && new Date(endTime) <= now) return false;
+      return true;
+    });
+  }, [bookings]);
 
   const primaryPass = React.useMemo(() => {
     return {
@@ -1294,6 +1384,7 @@ function WebMemberPortalWorkspaceInner() {
                 <HeartPulse className="h-4 w-4" />
                 PAR-Q Health Clearance
               </TabsTrigger>
+              {/* Parallel Nutrition & Wellness tab isolated */}
               <TabsTrigger value="profile" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                 <User className="h-4 w-4" />
                 My Profile
@@ -1331,14 +1422,6 @@ function WebMemberPortalWorkspaceInner() {
                   >
                     <CalendarIcon className="h-4 w-4" />
                     Book Today&apos;s Class
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleOpenQRPass}
-                    className="gap-2 border-border/80 hover:bg-accent font-medium"
-                  >
-                    <QrCode className="h-4 w-4 text-primary" />
-                    Turnstile Pass
                   </Button>
                 </div>
               </div>
@@ -2027,6 +2110,15 @@ function WebMemberPortalWorkspaceInner() {
 
                         <div className="flex items-center gap-2">
                           <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => void handleOpenBookingQRPass(b)}
+                            className="text-xs font-semibold gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                          >
+                            <QrCode className="h-3.5 w-3.5" />
+                            Turnstile QR
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
@@ -2035,7 +2127,7 @@ function WebMemberPortalWorkspaceInner() {
                             }}
                             className="flex-1 text-xs font-semibold hover:border-primary"
                           >
-                            Reschedule Slot
+                            Reschedule
                           </Button>
                           <Button
                             variant="ghost"
@@ -2080,7 +2172,10 @@ function WebMemberPortalWorkspaceInner() {
                       <tbody className="divide-y divide-border/40">
                         {attendanceHistory.map((item) => {
                           const isCancelled = item.status === "CANCELLED";
-                          const isAttended = item.status === "ATTENDED";
+                          const isAttended = item.status === "ATTENDED" || item.status === "COMPLETED";
+                          const isLate = item.status === "LATE" || item.status === "LATE_ENTRY";
+                          const isLateShow = item.status === "LATE_SHOW";
+                          const isNoShow = item.status === "NO_SHOW";
                           return (
                             <tr key={item.id} className="hover:bg-muted/30 transition-colors">
                               <td className="py-3 px-4 font-medium text-foreground whitespace-nowrap">
@@ -2104,9 +2199,21 @@ function WebMemberPortalWorkspaceInner() {
                                   <Badge className="bg-emerald-500 text-white text-[10px]">
                                     Attended
                                   </Badge>
+                                ) : isLate ? (
+                                  <Badge className="bg-amber-500 text-white text-[10px]">
+                                    Late Entry
+                                  </Badge>
+                                ) : isLateShow ? (
+                                  <Badge className="bg-orange-500 text-white text-[10px]">
+                                    Late Show
+                                  </Badge>
+                                ) : isNoShow ? (
+                                  <Badge className="bg-rose-500 text-white text-[10px]">
+                                    No Show
+                                  </Badge>
                                 ) : (
                                   <Badge variant="secondary" className="text-[10px]">
-                                    Completed
+                                    {item.status}
                                   </Badge>
                                 )}
                               </td>
@@ -2377,54 +2484,81 @@ function WebMemberPortalWorkspaceInner() {
                 </CardContent>
               </Card>
 
-              {/* Digital Pass Card */}
+              {/* Digital Turnstile Pass Card */}
               <Card className="border-border/70 bg-card shadow-xs flex flex-col justify-between">
                 <CardHeader className="pb-3 border-b border-border/40">
                   <CardTitle className="text-base font-bold flex items-center gap-2">
                     <QrCode className="h-4 w-4 text-primary" />
-                    Turnstile QR Card
+                    Turnstile QR Access
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Scan for automated studio check-in
+                    {todayConfirmedBooking
+                      ? `Session: ${todayConfirmedBooking.class_name || "Workout"} today`
+                      : "Booking required for turnstile entry"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 flex flex-col items-center text-center">
-                  <div className="p-4 rounded-2xl bg-white border border-border shadow-md">
-                    {/* SVG Vector QR Code Graphic */}
-                    <div className="w-36 h-36 bg-black flex flex-col items-center justify-center text-white rounded-lg p-2 font-mono text-[9px] select-none">
-                      <div className="grid grid-cols-6 gap-1 w-full h-full p-1 bg-white">
-                        {Array.from({ length: 36 }).map((_, i) => (
-                          <div
-                            key={i}
-                            className={`rounded-xs ${
-                              [0, 1, 4, 5, 6, 7, 10, 11, 14, 17, 20, 24, 25, 29, 30, 31, 34, 35].includes(i)
-                                ? "bg-black"
-                                : "bg-white"
-                            }`}
-                          />
-                        ))}
+                  {todayConfirmedBooking ? (
+                    <>
+                      <div className="p-3 rounded-2xl bg-white border border-border shadow-md">
+                        <QRCodeSvg
+                          value={todayConfirmedBooking.booking_number ? `BKG_${todayConfirmedBooking.booking_number}` : "SWT_PASS"}
+                          size={140}
+                          className="rounded-md"
+                          title="Today's Session Pass"
+                        />
                       </div>
+                      <div className="mt-3">
+                        <span className="text-sm font-bold text-foreground">
+                          {todayConfirmedBooking.class_name || "Reserved Workout"}
+                        </span>
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {todayConfirmedBooking.booking_number || profile?.membership_number || "MEM-1CCA18"}
+                        </p>
+                      </div>
+                      <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 mt-2">
+                        CONFIRMED FOR TODAY
+                      </Badge>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleOpenBookingQRPass(todayConfirmedBooking)}
+                        className="w-full text-xs font-semibold mt-4 gap-2"
+                      >
+                        <QrCode className="h-4 w-4" />
+                        Open Turnstile Pass
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="w-full py-2 flex flex-col items-center text-center space-y-3">
+                      <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+                        <Ticket className="h-8 w-8" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-foreground">
+                          No Workout Booked Today
+                        </h4>
+                        <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                          Turnstile access keys are strictly generated for confirmed class bookings. Book your slot to unlock your pass.
+                        </p>
+                      </div>
+                      {remainingCredits > 0 && (
+                        <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary text-[11px] font-semibold px-2.5 py-1">
+                          <Zap className="h-3 w-3 fill-primary mr-1" />
+                          {remainingCredits} Sessions in Active Package
+                        </Badge>
+                      )}
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setActiveTab("schedule")}
+                        className="w-full text-xs font-semibold mt-2 gap-1.5"
+                      >
+                        <CalendarIcon className="h-3.5 w-3.5" />
+                        Book Today's Workout
+                      </Button>
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-sm font-bold text-foreground">
-                      {profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Maya Sen"}
-                    </span>
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                      {profile?.membership_number || "MEM-1CCA18"}
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-3 max-w-xs">
-                    Present this code at any SWEAT studio gate scanner for contactless access.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenQRPass}
-                    className="w-full text-xs font-semibold mt-4"
-                  >
-                    Enlarge Access Code
-                  </Button>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -3224,6 +3358,8 @@ function WebMemberPortalWorkspaceInner() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Parallel Nutrition & Wellness tab isolated */}
         </Tabs>
       </main>
 
@@ -4625,51 +4761,132 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 5: DIGITAL MEMBER QR PASS                                           */}
       {/* ========================================================================= */}
       <Dialog open={showQRPassModal} onOpenChange={setShowQRPassModal}>
-        <DialogContent className="w-[90vw] sm:max-w-xs max-h-[90dvh] overflow-y-auto p-4 sm:p-6 rounded-2xl text-center flex flex-col items-center">
+        <DialogContent className="w-[92vw] sm:max-w-sm max-h-[90dvh] overflow-y-auto p-4 sm:p-6 rounded-2xl text-center flex flex-col items-center border border-border/80 shadow-2xl bg-card">
           <DialogHeader className="items-center">
-            <DialogTitle className="text-base font-bold flex items-center gap-1.5">
+            <DialogTitle className="text-base font-bold flex items-center gap-1.5 text-foreground">
               <Flame className="h-5 w-5 text-primary" />
-              SWEAT Access Pass
+              {qrPassData?.has_booking === false ? "Turnstile Access Key" : "Session Access Pass"}
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Studio Turnstile Access
+            <DialogDescription className="text-xs text-muted-foreground">
+              {qrPassData?.has_booking === false
+                ? "Booking Required for Studio Entry"
+                : (qrPassData?.class_name || "Reserved Workout")}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-4 my-2 rounded-2xl bg-white border border-border shadow-lg">
-            <div className="w-48 h-48 bg-black flex flex-col items-center justify-center text-white rounded-lg p-2 font-mono text-[9px] select-none">
-              <div className="grid grid-cols-6 gap-1 w-full h-full p-1.5 bg-white">
-                {Array.from({ length: 36 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`rounded-xs ${
-                      [0, 1, 4, 5, 6, 7, 10, 11, 14, 17, 20, 24, 25, 29, 30, 31, 34, 35].includes(i)
-                        ? "bg-black"
-                        : "bg-white"
-                    }`}
-                  />
-                ))}
-              </div>
+          {isQRPassLoading ? (
+            <div className="w-56 h-56 my-3 rounded-2xl bg-muted/40 border border-border flex flex-col items-center justify-center gap-2">
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Verifying workout schedule...</span>
             </div>
-          </div>
+          ) : qrPassData?.has_booking === false ? (
+            <div className="w-full my-3 p-5 rounded-2xl bg-muted/30 border border-border/80 flex flex-col items-center text-center space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+                <Ticket className="h-7 w-7" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-foreground">
+                  No Workout Scheduled Today
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Turnstile QR passes are generated exclusively for confirmed workouts. Book your class slot from your package to unlock instant gate access.
+                </p>
+              </div>
 
-          <div className="space-y-1">
-            <h4 className="text-base font-bold text-foreground">
-              {profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Maya Sen"}
-            </h4>
-            <Badge variant="outline" className="font-mono text-xs font-semibold px-2 py-0.5">
-              {profile?.membership_number || "MEM-1CCA18"}
-            </Badge>
-          </div>
+              {remainingCredits > 0 && (
+                <div className="w-full py-2 px-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between text-xs font-semibold text-primary">
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 fill-primary" />
+                    Package Balance:
+                  </span>
+                  <span>{remainingCredits} Sessions Available</span>
+                </div>
+              )}
 
-          <p className="text-[11px] text-muted-foreground mt-2">
-            Valid at all SWEAT locations across India.
-          </p>
+              <Button
+                onClick={() => {
+                  setShowQRPassModal(false);
+                  setActiveTab("schedule");
+                }}
+                className="w-full gap-2 text-xs font-semibold mt-1"
+              >
+                <CalendarIcon className="h-4 w-4" />
+                Browse Schedule & Book Class
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="p-3 my-2 rounded-2xl bg-white border border-border/80 shadow-md flex flex-col items-center justify-center">
+                <QRCodeSvg
+                  value={qrPassData?.qr_token || "SWT-PASS"}
+                  size={184}
+                  className="rounded-md"
+                  title="Turnstile QR Pass"
+                />
+              </div>
+
+              <div className="w-full space-y-2 mt-1">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-foreground">
+                    {qrPassData?.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member")}
+                  </h4>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="font-mono text-[11px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/5 text-primary">
+                      {qrPassData?.membership_number || profile?.membership_number || "MEM-1CCA18"}
+                    </Badge>
+                    {qrPassData?.booking_number && (
+                      <Badge variant="secondary" className="font-mono text-[10px] px-2 py-0.5">
+                        {qrPassData.booking_number}
+                      </Badge>
+                    )}
+                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      {qrPassData?.status || "CONFIRMED"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {qrPassData?.qr_token && (
+                  <div className="p-2 rounded-lg bg-muted/50 border border-border/60 text-left space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground font-medium">Turnstile Token (Base62):</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(qrPassData.qr_token);
+                          toast.success("Turnstile token copied to clipboard!");
+                        }}
+                        className="text-primary hover:underline font-semibold text-[10px] flex items-center gap-1 cursor-pointer"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="font-mono text-[11px] text-foreground font-semibold break-all leading-tight select-all">
+                      {qrPassData.qr_token}
+                    </p>
+                  </div>
+                )}
+
+                <div className="text-[11px] text-muted-foreground space-y-1 pt-1">
+                  <p className="font-medium text-foreground flex items-center justify-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    Hold phone ~10cm in front of scanner
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {qrPassData?.valid_until ? (
+                      <>Valid until {format(new Date(qrPassData.valid_until), "hh:mm a, dd MMM yyyy")}</>
+                    ) : (
+                      "Active for booked workout window"
+                    )}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
 
           <Button
             size="sm"
             onClick={() => setShowQRPassModal(false)}
-            className="w-full mt-4 text-xs font-semibold"
+            className="w-full mt-3 text-xs font-semibold"
           >
             Done
           </Button>

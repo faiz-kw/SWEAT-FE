@@ -71,8 +71,9 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
 
   // Metrics
   const totalCheckIns = attendanceRecords.length;
-  const presentCount = attendanceRecords.filter((r) => r.status === 'PRESENT').length;
-  const lateCount = attendanceRecords.filter((r) => r.status === 'LATE').length;
+  const presentCount = attendanceRecords.filter((r) => r.status === 'PRESENT' || r.status === 'ATTENDED').length;
+  const lateCount = attendanceRecords.filter((r) => r.status === 'LATE' || r.status === 'LATE_ENTRY' || r.status === 'LATE_SHOW').length;
+  const noShowCount = attendanceRecords.filter((r) => r.status === 'NO_SHOW').length;
   const suspendedMembers = memberStates.filter((s) => s.is_booking_suspended).length;
   const deniedAccessCount = accessEvents.filter((e) => e.status === 'DENIED').length;
 
@@ -123,10 +124,11 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
 
       <PageBody>
         {/* Responsive KPI Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          <KpiTile label="Total Check-Ins" value={totalCheckIns} hint="Session attendance logs" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          <KpiTile label="Total Records" value={totalCheckIns} hint="Session attendance logs" />
           <KpiTile label="Present On-Time" value={presentCount} hint="Verified entries" tone="positive" />
           <KpiTile label="Late Arrivals" value={lateCount} hint="Checked in after start" tone="warning" />
+          <KpiTile label="No-Shows" value={noShowCount} hint="Penalty strikes logged" tone="negative" />
           <KpiTile label="Active Suspensions" value={suspendedMembers} hint="Strike lockouts" tone="negative" />
           <KpiTile label="Turnstile Denials" value={deniedAccessCount} hint="Blocked access events" tone="negative" />
         </div>
@@ -236,46 +238,67 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
                         </td>
                       </tr>
                     ) : (
-                      filteredAttendance.map((record) => (
-                        <tr key={record.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3.5 font-mono text-xs text-foreground">
-                            {new Date(record.check_in_time).toLocaleString([], {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="font-medium text-foreground">{record.user_profile_name || 'Member'}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono">{record.booking_number}</div>
-                          </td>
-                          <td className="px-4 py-3.5 text-foreground">{record.occurrence_title || 'Class Session'}</td>
-                          <td className="px-4 py-3.5">
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-foreground border border-border">
-                              {record.check_in_method === 'QR_CODE' && <QrCode className="w-3 h-3 text-emerald-500" />}
-                              {record.check_in_method === 'NFC_RFID' && <Radio className="w-3 h-3 text-primary" />}
-                              {record.check_in_method}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-xs">
-                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{record.verification_status}</span>
-                          </td>
+                      filteredAttendance.map((record) => {
+                        const checkInTime = record.check_in_at || record.check_in_time;
+                        const memberName = record.member_name || record.user_profile_name || 'Member';
+                        const className = record.class_name || record.occurrence_title || 'Class Session';
+                        const verification = record.check_in_status || record.verification_status || 'RECORDED';
+
+                        return (
+                          <tr key={record.id} className="hover:bg-muted/40 transition-colors">
+                            <td className="px-4 py-3.5 font-mono text-xs text-foreground">
+                              {checkInTime ? (
+                                new Date(checkInTime).toLocaleString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              ) : (
+                                <span className="text-muted-foreground italic text-2xs">Not checked in</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-foreground">{memberName}</div>
+                              <div className="text-[11px] text-muted-foreground font-mono">{record.booking_number}</div>
+                            </td>
+                            <td className="px-4 py-3.5 text-foreground">{className}</td>
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-foreground border border-border">
+                                {record.check_in_method === 'QR_CODE' && <QrCode className="w-3 h-3 text-emerald-500" />}
+                                {record.check_in_method === 'NFC_RFID' && <Radio className="w-3 h-3 text-primary" />}
+                                {record.check_in_method}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-xs">
+                              <span className="text-muted-foreground font-medium">{verification}</span>
+                            </td>
                           <td className="px-4 py-3.5">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                record.status === 'PRESENT'
+                                record.status === 'PRESENT' || record.status === 'ATTENDED'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                  : record.status === 'LATE'
+                                  : record.status === 'LATE' || record.status === 'LATE_ENTRY'
                                   ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                  : record.status === 'LATE_SHOW'
+                                  ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20'
                                   : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                               }`}
                             >
-                              {record.status}
+                              {record.status === 'PRESENT'
+                                ? 'Attended'
+                                : record.status === 'LATE'
+                                ? 'Late Entry'
+                                : record.status === 'LATE_SHOW'
+                                ? 'Late Show'
+                                : record.status === 'NO_SHOW'
+                                ? 'No Show'
+                                : record.status}
                             </span>
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

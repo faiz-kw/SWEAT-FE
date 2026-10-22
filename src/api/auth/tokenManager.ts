@@ -118,6 +118,8 @@ export interface AuthUser {
   initials: string;
   isImpersonating?: boolean;
   realUserEmail?: string;
+  is_member?: boolean;
+  user_type?: string;
 }
 
 // -----------------------------------------------------------------
@@ -187,8 +189,9 @@ const EXPLICIT_LOGOUT_KEY = 'pos_explicit_logout';
  *   v1 → initial shape
  *   v2 → added enabledModules field (tenant module permission matrix)
  *   v3 → added branding profile (custom brand theme, logo, colors)
+ *   v4 → added is_member flag & member role isolation
  */
-const PROFILE_SCHEMA_VERSION = 3;
+const PROFILE_SCHEMA_VERSION = 4;
 
 // Strictly in-memory access token storage
 let _accessToken: string | null = null;
@@ -467,6 +470,8 @@ export function getCurrentUser(): AuthUser | null {
     branding: _userProfile?.branding ?? null,
     isImpersonating: !!payload.is_impersonating,
     realUserEmail: payload.real_user_email ?? undefined,
+    is_member: (_userProfile as any)?.is_member ?? (resolvedRole.toUpperCase().includes('MEMBER')),
+    user_type: (_userProfile as any)?.user_type ?? userType,
   };
 
   return base;

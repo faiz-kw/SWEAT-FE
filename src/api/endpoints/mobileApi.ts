@@ -372,7 +372,25 @@ export const mobileApi = {
       membership_number: string;
       qr_payload: string;
       valid_until: string;
+      compact_token?: string;
     }>('/mobile/qr-pass/'),
+
+  getBookingQRPass: (bookingId: string) =>
+    api.get<{
+      pass_id: string;
+      booking_id: string;
+      booking_number: string;
+      qr_token: string;
+      compact_token?: string;
+      qr_payload: string;
+      class_name: string;
+      start_at: string;
+      end_at: string;
+      branch_name: string;
+      valid_from: string;
+      valid_until: string;
+      status: string;
+    }>(`/mobile/bookings/${bookingId}/qr-pass/`),
 
   // Personal Training (PT)
   getTrainers: () => api.get<MobileTrainer[]>('/mobile/trainers/'),

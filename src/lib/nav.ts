@@ -43,6 +43,20 @@ export function isOrganizationAdmin(user: any): boolean {
   if (user.userType === "platform") return true;
 
   const roleName = String(user.role || user.role_code || "").toUpperCase().trim();
+
+  // Explicit members are NEVER organization admins
+  if (
+    roleName === "MEMBER" ||
+    roleName === "GYM MEMBER" ||
+    roleName === "CLIENT" ||
+    roleName.includes("MEMBER") ||
+    roleName.includes("CUSTOMER") ||
+    user.is_member === true ||
+    String(user.user_type || "").toUpperCase() === "MEMBER"
+  ) {
+    return false;
+  }
+
   if (
     roleName === "ORG_ADMIN" ||
     roleName === "ORGANIZATION ADMIN" ||
@@ -153,15 +167,23 @@ export function isTrainerUser(user: any, trainers?: any[]): boolean {
 export function isMemberUser(user: any): boolean {
   if (!user) return false;
   if (user.isSuperAdmin || user.userType === "platform") return false;
-  if (isOrganizationAdmin(user)) return false;
-  if (isTrainerUser(user)) return false;
 
   const roleName = String(user.role || user.role_code || "").toUpperCase().trim();
   if (
     roleName === "MEMBER" ||
+    roleName === "GYM MEMBER" ||
     roleName === "CLIENT" ||
     roleName.includes("MEMBER") ||
     roleName.includes("CUSTOMER")
+  ) {
+    return true;
+  }
+
+  if (
+    user.membership_number ||
+    user.is_member === true ||
+    String(user.user_type || "").toLowerCase() === "member" ||
+    String(user.tenant_user_type || "").toLowerCase() === "member"
   ) {
     return true;
   }
@@ -180,9 +202,8 @@ export function isMemberUser(user: any): boolean {
     if (hasMemberRole) return true;
   }
 
-  if (user.membership_number || user.is_member || user.user_type === "member") {
-    return true;
-  }
+  if (isOrganizationAdmin(user)) return false;
+  if (isTrainerUser(user)) return false;
 
   return false;
 }
