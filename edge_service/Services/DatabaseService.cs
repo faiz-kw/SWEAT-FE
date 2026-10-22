@@ -14,9 +14,12 @@ public class DatabaseService
     private readonly string _outboxDbPath;
     private readonly object _dbLock = new();
 
+    private readonly int _offlineGraceHours;
+
     public DatabaseService(IConfiguration config, ILogger<DatabaseService> logger)
     {
         _logger = logger;
+        _offlineGraceHours = Math.Max(1, config.GetValue<int>("EdgeConfig:OfflineGraceHours", 12));
         var dataDir = config.GetValue<string>("EdgeConfig:DataDirectory") ?? "data";
         if (!Directory.Exists(dataDir))
         {
@@ -54,6 +57,12 @@ public class DatabaseService
                         last_updated_at INTEGER
                     );
                     CREATE INDEX IF NOT EXISTS idx_passes_status_validity ON passes (status, valid_from_unix, valid_until_unix);
+
+                    CREATE TABLE IF NOT EXISTS edge_sync_state (
+                        state_key TEXT PRIMARY KEY,
+                        state_value_int INTEGER,
+                        updated_at_unix INTEGER
+                    );
                 ";
                 cmd.ExecuteNonQuery();
             }
@@ -80,12 +89,31 @@ public class DatabaseService
                 cmd.ExecuteNonQuery();
             }
         }
-        _logger.LogInformation("Local SQLite databases initialized successfully (passes.db & outbox.db).");
+        _logger.LogInformation("Local SQLite databases initialized successfully (passes.db, outbox.db, & edge_sync_state).");
+    }
+
+    public void RecordSuccessfulSync(long syncUnix)
+    {
+        lock (_dbLock)
+        {
+            using var conn = new SqliteConnection(PassesConnStr);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT INTO edge_sync_state (state_key, state_value_int, updated_at_unix)
+                VALUES ('last_successful_sync_unix', @syncUnix, @syncUnix)
+                ON CONFLICT(state_key) DO UPDATE SET
+                    state_value_int = excluded.state_value_int,
+                    updated_at_unix = excluded.updated_at_unix;
+            ";
+            cmd.Parameters.AddWithValue("@syncUnix", syncUnix);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public static string ComputeSha256(string raw)
     {
-        var bytes = Encoding.ASCII.GetBytes(raw.Trim());
+        var bytes = Encoding.UTF8.GetBytes(raw.Trim());
         var hashBytes = SHA256.HashData(bytes);
         var sb = new StringBuilder(64);
         foreach (var b in hashBytes)
@@ -173,90 +201,219 @@ public class DatabaseService
         string? memberName = null;
         string? bookingId = null;
 
-        lock (_dbLock)
+        try
         {
-            using var conn = new SqliteConnection(PassesConnStr);
-            conn.Open();
-
-            if (direction.Equals("ENTRY", StringComparison.OrdinalIgnoreCase))
+            lock (_dbLock)
             {
-                // Atomic conditional transition: Only active passes within valid window transition to CONSUMED_ENTERED
-                using var updateCmd = conn.CreateCommand();
-                updateCmd.CommandText = @"
-                    UPDATE passes
-                    SET status = 'CONSUMED_ENTERED', last_updated_at = @now
-                    WHERE token_hash = @hash
-                      AND status = 'ACTIVE'
-                      AND valid_from_unix <= @now
-                      AND valid_until_unix >= @now;
-                ";
-                updateCmd.Parameters.AddWithValue("@hash", tokenHash);
-                updateCmd.Parameters.AddWithValue("@now", nowUnix);
-                int rows = updateCmd.ExecuteNonQuery();
+                using var conn = new SqliteConnection(PassesConnStr);
+                conn.Open();
 
-                if (rows > 0)
+                // Read edge sync state & clock integrity
+                long lastSyncUnix = 0;
+                long lastKnownClockUnix = 0;
+                using (var stateCmd = conn.CreateCommand())
                 {
-                    granted = true;
-                    eventType = "GRANTED";
-                    reconStatus = "NORMAL";
+                    stateCmd.CommandText = "SELECT state_key, state_value_int FROM edge_sync_state WHERE state_key IN ('last_successful_sync_unix', 'last_known_clock_unix');";
+                    using var sReader = stateCmd.ExecuteReader();
+                    while (sReader.Read())
+                    {
+                        var k = sReader.GetString(0);
+                        var v = sReader.GetInt64(1);
+                        if (k == "last_successful_sync_unix") lastSyncUnix = v;
+                        if (k == "last_known_clock_unix") lastKnownClockUnix = v;
+                    }
                 }
 
-                // Query pass metadata for audit logging
-                using var readCmd = conn.CreateCommand();
-                readCmd.CommandText = "SELECT member_name, booking_id, status, valid_until_unix FROM passes WHERE token_hash = @hash LIMIT 1;";
-                readCmd.Parameters.AddWithValue("@hash", tokenHash);
-                using var reader = readCmd.ExecuteReader();
-                if (reader.Read())
-                {
-                    memberName = reader.IsDBNull(0) ? null : reader.GetString(0);
-                    bookingId = reader.IsDBNull(1) ? null : reader.GetString(1);
-                    var passStatus = reader.GetString(2);
-                    var validUntil = reader.GetInt64(3);
+                bool isEntry = direction.Equals("ENTRY", StringComparison.OrdinalIgnoreCase);
 
-                    if (!granted)
+                // Check 1: Clock Rollback Detection (anti-tampering)
+                if (isEntry && lastKnownClockUnix > 0 && nowUnix < (lastKnownClockUnix - 60))
+                {
+                    _logger.LogCritical("[SECURITY AUDIT] Clock rollback detected! Current={Now}, LastCheckpoint={LastKnown}. Denying entry.", nowUnix, lastKnownClockUnix);
+                    reconStatus = "CLOCK_ROLLBACK_DETECTED";
+                    EnqueueOutboxEvent(eventId, direction, tokenHash, nowUtcStr, deviceReference, "DENIED", reconStatus, null, null);
+                    return (false, "DENIED", reconStatus, null, null);
+                }
+
+                // Check 2: Offline Grace Cutoff (Default 12 hours)
+                // Fails closed on fresh installation before first verified cloud sync or when cutoff exceeded.
+                long maxOfflineSeconds = _offlineGraceHours * 3600L;
+                if (isEntry && (lastSyncUnix == 0 || (nowUnix - lastSyncUnix > maxOfflineSeconds)))
+                {
+                    reconStatus = lastSyncUnix == 0 ? "NO_INITIAL_SYNC" : "OFFLINE_CUTOFF_EXCEEDED";
+                    _logger.LogWarning("[SECURITY AUDIT] Entry denied: {Status} (LastSync={Sync}, Now={Now})", reconStatus, lastSyncUnix, nowUnix);
+                    EnqueueOutboxEvent(eventId, direction, tokenHash, nowUtcStr, deviceReference, "DENIED", reconStatus, null, null);
+                    return (false, "DENIED", reconStatus, null, null);
+                }
+
+                // Update last known clock checkpoint
+                using (var clockCmd = conn.CreateCommand())
+                {
+                    clockCmd.CommandText = @"
+                        INSERT INTO edge_sync_state (state_key, state_value_int, updated_at_unix)
+                        VALUES ('last_known_clock_unix', @now, @now)
+                        ON CONFLICT(state_key) DO UPDATE SET
+                            state_value_int = excluded.state_value_int,
+                            updated_at_unix = excluded.updated_at_unix;
+                    ";
+                    clockCmd.Parameters.AddWithValue("@now", nowUnix);
+                    clockCmd.ExecuteNonQuery();
+                }
+
+                if (direction.Equals("ENTRY", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Atomic conditional transition: Only active passes within valid window transition to CONSUMED_ENTERED
+                    using var updateCmd = conn.CreateCommand();
+                    updateCmd.CommandText = @"
+                        UPDATE passes
+                        SET status = 'CONSUMED_ENTERED', last_updated_at = @now
+                        WHERE token_hash = @hash
+                          AND status = 'ACTIVE'
+                          AND valid_from_unix <= @now
+                          AND valid_until_unix >= @now;
+                    ";
+                    updateCmd.Parameters.AddWithValue("@hash", tokenHash);
+                    updateCmd.Parameters.AddWithValue("@now", nowUnix);
+                    int rows = updateCmd.ExecuteNonQuery();
+
+                    if (rows > 0)
                     {
-                        if (passStatus == "CONSUMED_ENTERED" || passStatus == "CONSUMED_EXITED")
+                        granted = true;
+                        eventType = "GRANTED";
+                        reconStatus = "NORMAL";
+                    }
+
+                    // Query pass metadata for audit logging
+                    using var readCmd = conn.CreateCommand();
+                    readCmd.CommandText = "SELECT member_name, booking_id, status, valid_until_unix FROM passes WHERE token_hash = @hash LIMIT 1;";
+                    readCmd.Parameters.AddWithValue("@hash", tokenHash);
+                    using var reader = readCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        memberName = reader.IsDBNull(0) ? null : reader.GetString(0);
+                        bookingId = reader.IsDBNull(1) ? null : reader.GetString(1);
+                        var passStatus = reader.GetString(2);
+                        var validUntil = reader.GetInt64(3);
+
+                        if (!granted)
                         {
-                            reconStatus = "REPLAY_ATTEMPT";
+                            if (passStatus == "CONSUMED_ENTERED" || passStatus == "CONSUMED_EXITED")
+                            {
+                                reconStatus = "REPLAY_ATTEMPT";
+                            }
+                            else if (nowUnix > validUntil)
+                            {
+                                reconStatus = "EXPIRED";
+                            }
                         }
-                        else if (nowUnix > validUntil)
+                    }
+                }
+                else
+                {
+                    // EXIT direction: Normal QR exit scanning
+                    // Enforces strict anti-passback: Only passes in CONSUMED_ENTERED can exit.
+                    // An ACTIVE pass that has never entered is strictly DENIED at the exit reader.
+                    // Note: Class expiry (valid_until) does not block exit for a member who entered.
+                    using var updateCmd = conn.CreateCommand();
+                    updateCmd.CommandText = @"
+                        UPDATE passes
+                        SET status = 'CONSUMED_EXITED', last_updated_at = @now
+                        WHERE token_hash = @hash
+                          AND status = 'CONSUMED_ENTERED';
+                    ";
+                    updateCmd.Parameters.AddWithValue("@hash", tokenHash);
+                    updateCmd.Parameters.AddWithValue("@now", nowUnix);
+                    int rows = updateCmd.ExecuteNonQuery();
+
+                    if (rows > 0)
+                    {
+                        granted = true;
+                        eventType = "GRANTED";
+                        reconStatus = "NORMAL";
+                    }
+                    else
+                    {
+                        // Check pass state in passes.db for audit diagnostics
+                        using var checkCmd = conn.CreateCommand();
+                        checkCmd.CommandText = "SELECT status, member_name, booking_id FROM passes WHERE token_hash = @hash LIMIT 1;";
+                        checkCmd.Parameters.AddWithValue("@hash", tokenHash);
+                        using var checkReader = checkCmd.ExecuteReader();
+                        if (checkReader.Read())
                         {
-                            reconStatus = "EXPIRED";
+                            var existingStatus = checkReader.GetString(0);
+                            memberName = checkReader.IsDBNull(1) ? null : checkReader.GetString(1);
+                            bookingId = checkReader.IsDBNull(2) ? null : checkReader.GetString(2);
+
+                            granted = false;
+                            eventType = "DENIED";
+
+                            if (existingStatus == "ACTIVE")
+                            {
+                                // Pass was never scanned for entry
+                                reconStatus = "NOT_ENTERED";
+                            }
+                            else if (existingStatus == "CONSUMED_EXITED")
+                            {
+                                // Pass was already used to exit
+                                reconStatus = "ALREADY_EXITED";
+                            }
+                            else
+                            {
+                                reconStatus = "INVALID_STATE";
+                            }
+                        }
+                        else
+                        {
+                            // Completely unknown token scanned at exit reader -> DENY
+                            // Software must never open gates for arbitrary unknown barcodes.
+                            // Emergency egress is guaranteed separately by independent physical hardware.
+                            granted = false;
+                            eventType = "DENIED";
+                            reconStatus = "UNAUTHORIZED";
+                        }
+                    }
+
+                    if (memberName == null && rows > 0)
+                    {
+                        using var readCmd = conn.CreateCommand();
+                        readCmd.CommandText = "SELECT member_name, booking_id FROM passes WHERE token_hash = @hash LIMIT 1;";
+                        readCmd.Parameters.AddWithValue("@hash", tokenHash);
+                        using var reader = readCmd.ExecuteReader();
+                        if (reader.Read())
+                        {
+                            memberName = reader.IsDBNull(0) ? null : reader.GetString(0);
+                            bookingId = reader.IsDBNull(1) ? null : reader.GetString(1);
                         }
                     }
                 }
             }
-            else
-            {
-                // EXIT direction
-                using var updateCmd = conn.CreateCommand();
-                updateCmd.CommandText = @"
-                    UPDATE passes
-                    SET status = 'CONSUMED_EXITED', last_updated_at = @now
-                    WHERE token_hash = @hash
-                      AND (status = 'CONSUMED_ENTERED' OR status = 'ACTIVE');
-                ";
-                updateCmd.Parameters.AddWithValue("@hash", tokenHash);
-                updateCmd.Parameters.AddWithValue("@now", nowUnix);
-                int rows = updateCmd.ExecuteNonQuery();
 
-                granted = true; // Exit is fail-safe open
-                eventType = "GRANTED";
-                reconStatus = rows > 0 ? "NORMAL" : "OFFLINE_OVERRIDE";
-
-                using var readCmd = conn.CreateCommand();
-                readCmd.CommandText = "SELECT member_name, booking_id FROM passes WHERE token_hash = @hash LIMIT 1;";
-                readCmd.Parameters.AddWithValue("@hash", tokenHash);
-                using var reader = readCmd.ExecuteReader();
-                if (reader.Read())
-                {
-                    memberName = reader.IsDBNull(0) ? null : reader.GetString(0);
-                    bookingId = reader.IsDBNull(1) ? null : reader.GetString(1);
-                }
-            }
+            // Durably enqueue in outbox.db
+            EnqueueOutboxEvent(eventId, direction, tokenHash, nowUtcStr, deviceReference, eventType, reconStatus, bookingId, memberName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "[SECURITY AUDIT] Fatal database/storage error during scan authorization. Failing closed for safety.");
+            return (false, "DENIED", "STORAGE_ERROR", null, null);
         }
 
-        // Durably enqueue in outbox.db
+        _logger.LogInformation("[ACCESS DECISION] TokenHash={TokenHash} Direction={Direction} Granted={Granted} Recon={Recon} Member={Member}",
+            tokenHash[..10], direction, granted, reconStatus, memberName ?? "Unknown");
+
+        return (granted, eventType, reconStatus, memberName, bookingId);
+    }
+
+    public void EnqueueOutboxEvent(
+        string eventId,
+        string direction,
+        string tokenHash,
+        string nowUtcStr,
+        string deviceReference,
+        string eventType,
+        string reconStatus,
+        string? bookingId,
+        string? memberName)
+    {
         lock (_dbLock)
         {
             using var conn = new SqliteConnection(OutboxConnStr);
@@ -284,11 +441,6 @@ public class DatabaseService
             cmd.Parameters.AddWithValue("@member_name", (object?)memberName ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         }
-
-        _logger.LogInformation("[ACCESS DECISION] TokenHash={TokenHash} Direction={Direction} Granted={Granted} Recon={Recon} Member={Member}",
-            tokenHash[..10], direction, granted, reconStatus, memberName ?? "Unknown");
-
-        return (granted, eventType, reconStatus, memberName, bookingId);
     }
 
     public List<AccessEventRecord> GetUnsyncedOutboxEvents(int maxBatchSize = 100)

@@ -16,6 +16,11 @@ export interface MobileMemberProfile {
   onboarding_completed: boolean;
   parq_status?: string;
   role?: string;
+  membership_plan?: string;
+  total_sessions?: number;
+  remaining_sessions?: number;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface MobilePassbookCredit {
@@ -82,8 +87,9 @@ export interface MobileBooking {
   category: string;
   start_time: string;
   end_time: string;
-  status: 'CONFIRMED' | 'ATTENDED' | 'CANCELLED' | 'NO_SHOW' | 'WAITLISTED';
+  status: 'CONFIRMED' | 'ATTENDED' | 'CANCELLED' | 'NO_SHOW' | 'WAITLISTED' | 'BOOKED' | 'SCHEDULED' | 'COMPLETED' | 'LATE' | 'LATE_ENTRY' | 'LATE_SHOW' | string;
   booked_at: string;
+  booking_number?: string;
   check_in_at?: string | null;
   branch: {
     id: string;
@@ -184,11 +190,13 @@ export interface PARQSurveyResponse {
   agreement_title?: string;
   agreement_text?: string;
   is_completed: boolean;
+  has_completed_parq?: boolean;
   is_cleared: boolean;
   status_badge: string;
   saved_responses: Record<string, any>;
   questions: any[];
   sections?: any[];
+  submission_history?: any[];
   submission?: {
     id: string;
     submitted_at?: string | null;
@@ -345,7 +353,7 @@ export const mobileApi = {
 
   // Class Schedule & Booking
   getSchedule: (params?: { date?: string; branch_id?: string; category?: string }) =>
-    api.get<MobileScheduleOccurrence[]>('/mobile/schedule/', { params }),
+    api.get<MobileScheduleOccurrence[]>('/mobile/schedule/', params ? { params } : undefined),
 
   bookClass: (occurrenceId: string) =>
     api.post<{ detail: string; booking_id: string; remaining_credits: number }>(
@@ -397,9 +405,12 @@ export const mobileApi = {
   getPTAppointments: () => api.get<MobilePTAppointment[]>('/mobile/pt/appointments/'),
   bookPTAppointment: (data: {
     trainer_id?: string;
-    start_at: string;
+    start_at?: string;
+    appointment_date?: string;
+    start_time?: string;
     duration_minutes?: number;
     focus?: string;
+    focus_area?: string;
     notes?: string;
   }) =>
     api.post<{ detail: string; appointment_id: string; appointment_number: string; start_at: string }>(
@@ -419,7 +430,7 @@ export const mobileApi = {
 
   // Membership Self-Service Lifecycle Actions
   getMembershipActions: (params?: { branch_id?: string }) =>
-    api.get<MobileMembershipActionOptions>('/mobile/memberships/actions/', { params }),
+    api.get<MobileMembershipActionOptions>('/mobile/memberships/actions/', params ? { params } : undefined),
 
   renewMembership: (data: {
     branch_id?: string;

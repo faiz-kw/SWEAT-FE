@@ -440,8 +440,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Even if that call fails, we still clear the local state — the user is logged out.
    */
   async function logout(): Promise<void> {
-    const currentToken = getCurrentUser();
-    const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
+    const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+    const isMobileLan = typeof window !== 'undefined' && window.location?.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    const BASE_URL = (isMobileLan && (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1')))
+      ? '/api/v1'
+      : (envUrl || '/api/v1');
 
     // Immediately clear all local auth state, mark explicit logout, and purge query cache
     queryClient.clear();

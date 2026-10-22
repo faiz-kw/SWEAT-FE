@@ -41,9 +41,11 @@ import {
   ChevronDown,
   Utensils,
   Ticket,
+  Menu,
 } from "lucide-react";
 import { MemberNutritionTab } from "@/components/member-portal/MemberNutritionTab";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   mobileApi,
   MobileMemberProfile,
@@ -71,6 +73,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -208,6 +217,7 @@ function WebMemberPortalWorkspaceInner() {
 
   // Core State
   const [activeTab, setActiveTab] = React.useState<string>("overview");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState<boolean>(false);
 
   // Redirect guard: if PT is deferred/hidden and somehow active, redirect to overview
   React.useEffect(() => {
@@ -256,7 +266,7 @@ function WebMemberPortalWorkspaceInner() {
   const [ptBookingForm, setPtBookingForm] = React.useState({
     date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
     time: "10:00",
-    focus: "Pilates Core & Functional Conditioning",
+    focus: "",
     notes: "",
   });
   const [isPtSubmitting, setIsPtSubmitting] = React.useState<boolean>(false);
@@ -270,9 +280,9 @@ function WebMemberPortalWorkspaceInner() {
     bone_joint_problem: "no",
     blood_pressure_meds: "no",
     other_reason: "no",
-    emergency_contact_name: "Anita Sen",
-    emergency_contact_phone: "+91 98200 44556",
-    primary_fitness_goal: "Core strength, athletic endurance and injury prevention",
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
+    primary_fitness_goal: "",
   });
   const [isParqSubmitting, setIsParqSubmitting] = React.useState<boolean>(false);
   const parqCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -326,7 +336,10 @@ function WebMemberPortalWorkspaceInner() {
   React.useEffect(() => {
     if (isUpgradeModalOpen && filteredUpgradeOptions.length > 0) {
       if (!filteredUpgradeOptions.some((opt) => opt.package_id === selectedUpgradePackageId)) {
-        setSelectedUpgradePackageId(filteredUpgradeOptions[0].package_id);
+        const firstOption = filteredUpgradeOptions[0];
+        if (firstOption?.package_id) {
+          setSelectedUpgradePackageId(firstOption.package_id);
+        }
       }
     }
   }, [isUpgradeModalOpen, filteredUpgradeOptions, selectedUpgradePackageId]);
@@ -367,21 +380,17 @@ function WebMemberPortalWorkspaceInner() {
           last_name: raw.user?.last_name || raw.last_name || "",
           phone: raw.user?.phone || raw.phone || "",
           avatar_url: raw.user?.avatar_url || raw.avatar_url || "",
-          membership_number: raw.profile?.member_number || raw.membership_number || "MEM-1CCA18",
-          home_branch: raw.user?.home_branch || raw.home_branch || {
-            id: "default",
-            name: "SWEAT Bootcamp & Pilates",
-            code: "SW-01",
-          },
-          onboarding_completed: true,
-          parq_status: "PAR-Q Cleared",
+          membership_number: raw.profile?.member_number || raw.membership_number || "",
+          home_branch: raw.user?.home_branch || raw.home_branch || raw.profile?.preferred_branch || null,
+          onboarding_completed: Boolean(raw.profile?.onboarding_completed ?? true),
+          parq_status: raw.active_membership?.parq_status || raw.profile?.parq_status || raw.parq_status || "PENDING",
         };
         setProfile(normalizedProfile);
         setProfileForm({
           first_name: normalizedProfile.first_name,
           last_name: normalizedProfile.last_name,
           phone: normalizedProfile.phone,
-          emergency_contact: "Anita Sen (+91 98200 44556)",
+          emergency_contact: raw.user?.emergency_contact || raw.profile?.emergency_contact || "",
         });
       }
 
@@ -393,15 +402,15 @@ function WebMemberPortalWorkspaceInner() {
         } else if (raw?.packs && Array.isArray(raw.packs)) {
           list = raw.packs.map((p: any, idx: number) => ({
             id: p.membership_id || `pack-${idx}`,
-            package_name: p.package_name || "Sweat Bootcamp",
-            package_type: "Monthly Passbook",
-            total_credits: Number(p.allocated_sessions) || 16,
+            package_name: cleanPackageDisplayName(undefined, p.package_name) || "Passbook",
+            package_type: p.is_unlimited ? "Unlimited Pass" : "Session Passbook",
+            total_credits: Number(p.allocated_sessions) || 0,
             used_credits: Number(p.consumed_sessions) || 0,
-            remaining_credits: Number(p.remaining_sessions) || 16,
-            valid_from: p.start_date || "2026-10-05",
-            valid_until: p.end_date || "2026-11-04",
-            days_remaining: p.days_remaining ?? 32,
-            status: "ACTIVE",
+            remaining_credits: p.remaining_sessions === "Unlimited" ? 9999 : (Number(p.remaining_sessions) || 0),
+            valid_from: p.start_date || "",
+            valid_until: p.end_date || "",
+            days_remaining: p.days_remaining ?? 0,
+            status: p.status || "ACTIVE",
           }));
         }
         setCredits(list);
@@ -417,9 +426,9 @@ function WebMemberPortalWorkspaceInner() {
             ...b,
             start_time: b.start_at || b.start_time,
             end_time: b.end_at || b.end_time,
-            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "SWEAT Studio" },
+            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "Studio" },
             trainer: {
-              name: b.trainer?.name || b.trainer_name || "SWEAT Coach",
+              name: b.trainer?.name || b.trainer_name || "Coach",
               avatar_url: b.trainer?.avatar_url || "",
               designation: b.trainer?.title || "Coach",
             },
@@ -428,9 +437,9 @@ function WebMemberPortalWorkspaceInner() {
             ...b,
             start_time: b.start_at || b.start_time,
             end_time: b.end_at || b.end_time,
-            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "SWEAT Studio" },
+            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "Studio" },
             trainer: {
-              name: b.trainer?.name || b.trainer_name || "SWEAT Coach",
+              name: b.trainer?.name || b.trainer_name || "Coach",
               avatar_url: b.trainer?.avatar_url || "",
               designation: b.trainer?.title || "Coach",
             },
@@ -439,9 +448,9 @@ function WebMemberPortalWorkspaceInner() {
             ...b,
             start_time: b.start_at || b.start_time,
             end_time: b.end_at || b.end_time,
-            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "SWEAT Studio" },
+            branch: { id: b.branch_id || "", name: b.branch_name || b.branch?.name || "Studio" },
             trainer: {
-              name: b.trainer?.name || b.trainer_name || "SWEAT Coach",
+              name: b.trainer?.name || b.trainer_name || "Coach",
               avatar_url: b.trainer?.avatar_url || "",
               designation: b.trainer?.title || "Coach",
             },
@@ -455,12 +464,12 @@ function WebMemberPortalWorkspaceInner() {
         const rawTrainers = Array.isArray(trainRes.value.data) ? trainRes.value.data : [];
         const normalizedTrainers: MobileTrainer[] = rawTrainers.map((t: any) => ({
           id: t.id || "",
-          name: t.name || t.full_name || "SWEAT Coach",
-          designation: t.designation || t.title || "Elite Performance Coach",
+          name: t.name || t.full_name || "Coach",
+          designation: t.designation || t.title || "Performance Coach",
           avatar_url: t.avatar_url || "",
           bio: t.bio || "",
           specialties: Array.isArray(t.specialties) ? t.specialties : [],
-          experience_years: t.experience_years || t.years_of_experience || 5,
+          experience_years: t.experience_years || t.years_of_experience || 0,
         }));
         setTrainers(normalizedTrainers);
       }
@@ -470,15 +479,15 @@ function WebMemberPortalWorkspaceInner() {
         setPtAppointments(
           rawPt.map((a: any) => ({
             id: a.id || "",
-            appointment_number: a.appointment_number || "PT-101",
+            appointment_number: a.appointment_number || "—",
             type_name: a.type_name || "1-on-1 Personal Training",
             status: a.status || "CONFIRMED",
             start_at: a.start_at || a.start_time || "",
             end_at: a.end_at || a.end_time || "",
-            trainer_name: a.trainer_name || "SWEAT Coach",
+            trainer_name: a.trainer_name || "Coach",
             trainer_avatar: a.trainer_avatar || "",
             trainer_designation: a.trainer_designation || "Personal Trainer",
-            branch_name: a.branch_name || "SWEAT Studio",
+            branch_name: a.branch_name || "Studio",
             notes: a.notes || "",
           }))
         );
@@ -567,7 +576,6 @@ function WebMemberPortalWorkspaceInner() {
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || data.total_amount || 0,
-          amountInPaise: data.amount_paise,
           currency: data.currency || 'INR',
           keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
           name: 'SWEAT Membership Renewal',
@@ -577,12 +585,13 @@ function WebMemberPortalWorkspaceInner() {
             email: user?.email || '',
             contact: profile?.phone || '',
           },
+          ...(data.amount_paise !== undefined ? { amountInPaise: data.amount_paise } : {}),
           onSuccess: async (paymentId, signature) => {
             const verifyRes = await mobileApi.verifyCheckout({
-              order_id: data.order_id,
-              razorpay_order_id: data.razorpay_order_id,
+              order_id: data.order_id!,
               razorpay_payment_id: paymentId,
               razorpay_signature: signature,
+              ...(data.razorpay_order_id ? { razorpay_order_id: data.razorpay_order_id } : {}),
             });
             toast.success(verifyRes.data.detail || "Membership renewed and activated successfully!");
             setIsRenewModalOpen(false);
@@ -640,7 +649,6 @@ function WebMemberPortalWorkspaceInner() {
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || data.price_difference || 0,
-          amountInPaise: data.amount_paise,
           currency: data.currency || 'INR',
           keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
           name: 'SWEAT Package Upgrade',
@@ -650,12 +658,13 @@ function WebMemberPortalWorkspaceInner() {
             email: user?.email || '',
             contact: profile?.phone || '',
           },
+          ...(data.amount_paise !== undefined ? { amountInPaise: data.amount_paise } : {}),
           onSuccess: async (paymentId, signature) => {
             const verifyRes = await mobileApi.verifyCheckout({
               order_id: data.order_id!,
-              razorpay_order_id: data.razorpay_order_id,
               razorpay_payment_id: paymentId,
               razorpay_signature: signature,
+              ...(data.razorpay_order_id ? { razorpay_order_id: data.razorpay_order_id } : {}),
             });
             toast.success(verifyRes.data.detail || "Membership upgraded successfully!");
             setIsUpgradeModalOpen(false);
@@ -697,7 +706,6 @@ function WebMemberPortalWorkspaceInner() {
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || 0,
-          amountInPaise: data.amount_paise,
           currency: data.currency || 'INR',
           keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
           name: 'SWEAT Validity Extension',
@@ -707,12 +715,13 @@ function WebMemberPortalWorkspaceInner() {
             email: user?.email || '',
             contact: profile?.phone || '',
           },
+          ...(data.amount_paise !== undefined ? { amountInPaise: data.amount_paise } : {}),
           onSuccess: async (paymentId, signature) => {
             const verifyRes = await mobileApi.verifyCheckout({
               order_id: data.order_id!,
-              razorpay_order_id: data.razorpay_order_id,
               razorpay_payment_id: paymentId,
               razorpay_signature: signature,
+              ...(data.razorpay_order_id ? { razorpay_order_id: data.razorpay_order_id } : {}),
             });
             toast.success(verifyRes.data.detail || `Validity extended by ${extendDays} days!`);
             setIsExtendModalOpen(false);
@@ -759,7 +768,6 @@ function WebMemberPortalWorkspaceInner() {
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || 0,
-          amountInPaise: data.amount_paise,
           currency: data.currency || 'INR',
           keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
           name: 'SWEAT Membership Freeze',
@@ -769,12 +777,13 @@ function WebMemberPortalWorkspaceInner() {
             email: user?.email || '',
             contact: profile?.phone || '',
           },
+          ...(data.amount_paise !== undefined ? { amountInPaise: data.amount_paise } : {}),
           onSuccess: async (paymentId, signature) => {
             const verifyRes = await mobileApi.verifyCheckout({
               order_id: data.order_id!,
-              razorpay_order_id: data.razorpay_order_id,
               razorpay_payment_id: paymentId,
               razorpay_signature: signature,
+              ...(data.razorpay_order_id ? { razorpay_order_id: data.razorpay_order_id } : {}),
             });
             toast.success(verifyRes.data.detail || "Membership frozen successfully.");
             setIsFreezeModalOpen(false);
@@ -844,6 +853,32 @@ function WebMemberPortalWorkspaceInner() {
       toast.error(err.response?.data?.detail || err.message || "Failed to update PAR-Q. Please verify required fields.");
     } finally {
       setIsParqSubmitting(false);
+    }
+  };
+
+  const getParqCanvasCoords = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    canvas: HTMLCanvasElement
+  ) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / (rect.width || 1);
+    const scaleY = canvas.height / (rect.height || 1);
+    const touch = 'touches' in e && e.touches.length > 0 ? e.touches[0] : null;
+    const clientX = touch ? touch.clientX : (e as React.MouseEvent).clientX;
+    const clientY = touch ? touch.clientY : (e as React.MouseEvent).clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
+
+  const setupParqCanvas = () => {
+    const canvas = parqCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
     }
   };
 
@@ -926,8 +961,8 @@ function WebMemberPortalWorkspaceInner() {
         start_at: (res.data as any).start_at,
         valid_from: (res.data as any).valid_from,
         valid_until: res.data.valid_until,
-        member_name: res.data.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member"),
-        membership_number: res.data.membership_number || profile?.membership_number || "MEM-1CCA18",
+        member_name: res.data.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member")),
+        membership_number: res.data.membership_number || profile?.membership_number || "—",
         status: (res.data as any).status || "CONFIRMED",
         pass_type: 'CLASS_BOOKING',
         has_booking: true,
@@ -938,8 +973,8 @@ function WebMemberPortalWorkspaceInner() {
       setQrPassData({
         has_booking: false,
         detail: detailMsg,
-        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member",
-        membership_number: profile?.membership_number || "MEM-1CCA18",
+        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+        membership_number: profile?.membership_number || "—",
       });
     } finally {
       setIsQRPassLoading(false);
@@ -961,8 +996,8 @@ function WebMemberPortalWorkspaceInner() {
         valid_from: (res.data as any).valid_from,
         valid_until: res.data.valid_until,
         status: res.data.status || "CONFIRMED",
-        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member",
-        membership_number: profile?.membership_number || "MEM-1CCA18",
+        member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+        membership_number: profile?.membership_number || "—",
         pass_type: 'CLASS_BOOKING',
         has_booking: true,
       });
@@ -1029,10 +1064,15 @@ function WebMemberPortalWorkspaceInner() {
     if (!ptTrainerToBook) return;
     setIsPtSubmitting(true);
     try {
+      const startAt = ptBookingForm.date && ptBookingForm.time
+        ? `${ptBookingForm.date}T${ptBookingForm.time}:00`
+        : new Date().toISOString();
       await mobileApi.bookPTAppointment({
         trainer_id: ptTrainerToBook.id,
+        start_at: startAt,
         appointment_date: ptBookingForm.date,
         start_time: ptBookingForm.time,
+        focus: ptBookingForm.focus,
         focus_area: ptBookingForm.focus,
         notes: ptBookingForm.notes,
       });
@@ -1116,9 +1156,9 @@ function WebMemberPortalWorkspaceInner() {
           description: s.description || "",
           start_time: s.start_at || s.start_time,
           end_time: s.end_at || s.end_time,
-          capacity: s.capacity?.total_capacity ?? (typeof s.capacity === "number" ? s.capacity : 10),
+          capacity: s.capacity?.total_capacity ?? (typeof s.capacity === "number" ? s.capacity : 0),
           booked_count: s.capacity?.booked_count ?? s.booked_count ?? 0,
-          available_spots: s.capacity?.available_seats ?? s.available_spots ?? 10,
+          available_spots: s.capacity?.available_seats ?? s.available_spots ?? 0,
           is_full: s.capacity?.is_full ?? s.is_full ?? false,
           is_waitlist_open: s.capacity?.is_waitlist_open ?? s.can_waitlist ?? false,
           booking_state: s.booking_state || (s.capacity?.is_full ? "FULL" : "AVAILABLE"),
@@ -1191,18 +1231,22 @@ function WebMemberPortalWorkspaceInner() {
     });
   }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
 
-  const totalCredits = membershipActions?.active_membership?.total_sessions ?? profile?.total_sessions ?? 20;
-  const remainingCredits = membershipActions?.active_membership?.remaining_sessions ?? profile?.remaining_sessions ?? 12;
+  const totalCredits = membershipActions?.active_membership?.total_sessions 
+    ?? profile?.total_sessions 
+    ?? (credits.length > 0 ? credits.reduce((acc, c) => acc + c.total_credits, 0) : 0);
+  const remainingCredits = membershipActions?.active_membership?.remaining_sessions 
+    ?? profile?.remaining_sessions 
+    ?? (credits.length > 0 ? credits.reduce((acc, c) => acc + c.remaining_credits, 0) : 0);
   const usedCredits = Math.max(0, totalCredits - remainingCredits);
   const passUsagePercent = totalCredits > 0 ? Math.round((usedCredits / totalCredits) * 100) : 0;
-  const validityUntil = membershipActions?.active_membership?.end_date
-    ? new Date(membershipActions.active_membership.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : profile?.end_date
-    ? new Date(profile.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : "Nov 30, 2026";
+  const endIso = membershipActions?.active_membership?.end_date 
+    ?? profile?.end_date 
+    ?? credits[0]?.valid_until;
+  const validityUntil = endIso
+    ? new Date(endIso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "No Active Expiry";
 
-  const endIso = membershipActions?.active_membership?.end_date ?? profile?.end_date;
-  const daysRemaining = endIso ? Math.max(0, Math.ceil((new Date(endIso).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 45;
+  const daysRemaining = endIso ? Math.max(0, Math.ceil((new Date(endIso).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
   const upcomingBookings = React.useMemo(() => {
     const now = new Date();
@@ -1247,11 +1291,39 @@ function WebMemberPortalWorkspaceInner() {
 
   const primaryPass = React.useMemo(() => {
     return {
-      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || "Strength & Conditioning",
-      valid_from: profile?.start_date || new Date().toISOString(),
-      valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || new Date(Date.now() + 30 * 86400000).toISOString(),
+      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || credits[0]?.package_name || "Active Membership",
+      valid_from: membershipActions?.active_membership?.start_date || profile?.start_date || credits[0]?.valid_from || new Date().toISOString(),
+      valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || credits[0]?.valid_until || new Date().toISOString(),
     };
-  }, [membershipActions, profile]);
+  }, [membershipActions, profile, credits]);
+
+  const branchDisplayName = React.useMemo(() => {
+    if (!profile?.home_branch) return "SWEAT Studio";
+    const locName = branches.find((b) => b.id === profile.home_branch?.id)?.location_name;
+    if (locName && !profile.home_branch.name.includes(locName)) {
+      return `${profile.home_branch.name} (${locName})`;
+    }
+    return profile.home_branch.name;
+  }, [profile?.home_branch, branches]);
+
+  const memberDisplayName = profile?.first_name
+    ? `${profile.first_name} ${profile.last_name || ""}`.trim()
+    : (user?.fullName || "Member");
+  const memberInitials = profile?.first_name
+    ? profile.first_name.slice(0, 1).toUpperCase()
+    : (user?.fullName ? user.fullName.slice(0, 1).toUpperCase() : "M");
+  const membershipNo = profile?.membership_number || "—";
+
+  const navTabs = React.useMemo(() => [
+    { id: "overview", label: "Studio Hub", icon: Activity },
+    { id: "schedule", label: "Class Schedule & Booking", icon: CalendarIcon },
+    { id: "bookings", label: "My Bookings & Attendance", icon: CalendarCheck },
+    ...(SHOW_MEMBER_PT ? [{ id: "pt", label: "Personal Training (PT)", icon: Dumbbell }] : []),
+    { id: "passbook", label: "Membership & Passbook", icon: CreditCard },
+    { id: "parq", label: "PAR-Q Health Clearance", icon: HeartPulse },
+    { id: "nutrition", label: "Nutrition & Wellness", icon: Utensils, iconColor: "text-emerald-500" },
+    { id: "profile", label: "My Profile", icon: User },
+  ], []);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col antialiased selection:bg-primary/20">
@@ -1259,96 +1331,285 @@ function WebMemberPortalWorkspaceInner() {
       {/* 1. TOP HEADER BRANDING & QUICK MEMBER SUMMARY                             */}
       {/* ========================================================================= */}
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/95 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-4">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between gap-2 sm:gap-4">
             {/* Left: Brand & Studio */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-orange-500 text-primary-foreground shadow-md shadow-primary/25">
-                <Flame className="h-6 w-6 stroke-[2.5]" />
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-orange-500 text-primary-foreground shadow-md shadow-primary/25">
+                <Flame className="h-5 w-5 sm:h-6 sm:w-6 stroke-[2.5]" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold tracking-tight text-lg text-foreground">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="font-extrabold tracking-tight text-base sm:text-lg text-foreground">
                     SWEAT
                   </span>
-                  <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5">
+                  <Badge variant="outline" className="hidden xs:inline-flex border-primary/40 bg-primary/10 text-primary font-semibold text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 whitespace-nowrap">
                     Member Portal
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1 font-medium">
-                  <MapPin className="h-3 w-3 text-primary" />
-                  {profile?.home_branch ? (
-                    branches.find((b) => b.id === profile.home_branch?.id)?.location_name
-                      ? `${profile.home_branch.name} (${branches.find((b) => b.id === profile.home_branch?.id)?.location_name})`
-                      : profile.home_branch.name
-                  ) : "Bandra West Flagship"}
+                <p className="text-[11px] sm:text-xs text-muted-foreground flex items-center gap-1 font-medium truncate max-w-[130px] xs:max-w-[180px] sm:max-w-[260px] md:max-w-none" title={branchDisplayName}>
+                  <MapPin className="h-3 w-3 text-primary shrink-0" />
+                  <span className="truncate">{branchDisplayName}</span>
                 </p>
               </div>
             </div>
 
-            {/* Center / Right: Quick Credits & Digital ID & Actions */}
-            <div className="flex items-center gap-2 sm:gap-4">
-              {/* Live Credit Pill */}
+            {/* Right: Quick Credits, Digital Pass, Member Summary & Mobile Menu */}
+            <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
+              {/* Live Credit Pill - Compact on Mobile (< sm) */}
               <div
                 onClick={() => setActiveTab("passbook")}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/80 bg-card hover:border-primary/50 transition-colors cursor-pointer shadow-xs"
+                className="flex sm:hidden items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors cursor-pointer text-xs font-bold shadow-2xs"
+                title="Workout Sessions Left (Click to view passbook)"
               >
-                <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                <Zap className="h-3.5 w-3.5 fill-amber-500 shrink-0" />
+                <span>{remainingCredits}</span>
+              </div>
+
+              {/* Tablet medium credit pill (sm to xl) */}
+              <div
+                onClick={() => setActiveTab("passbook")}
+                className="hidden sm:flex xl:hidden items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/80 bg-card hover:border-primary/50 transition-colors cursor-pointer shadow-xs"
+                title="Click to view passbook"
+              >
+                <Zap className="h-4 w-4 text-amber-500 fill-amber-500 shrink-0" />
+                <span className="text-xs font-semibold text-foreground">
+                  {remainingCredits} Sessions
+                </span>
+              </div>
+
+              {/* Desktop full credit pill (>= xl) */}
+              <div
+                onClick={() => setActiveTab("passbook")}
+                className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/80 bg-card hover:border-primary/50 transition-colors cursor-pointer shadow-xs"
+                title="Click to view passbook"
+              >
+                <Zap className="h-4 w-4 text-amber-500 fill-amber-500 shrink-0" />
                 <span className="text-xs font-semibold text-foreground">
                   {remainingCredits} Sessions Left
                 </span>
                 <span className="text-[11px] text-muted-foreground">({validityUntil})</span>
               </div>
 
-              {/* Digital Member QR Pass Button */}
+              {/* Digital Member QR Pass Button (Tablet / Desktop: with text) */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleOpenQRPass}
-                className="gap-2 border-primary/30 hover:border-primary hover:bg-primary/5 text-xs font-medium"
+                className="hidden md:flex items-center gap-1.5 border-primary/30 hover:border-primary hover:bg-primary/5 text-xs font-medium"
               >
                 <QrCode className="h-4 w-4 text-primary" />
-                <span className="hidden md:inline">Access Pass</span>
+                <span>Access Pass</span>
               </Button>
 
-              {/* Sync / Refresh Button */}
+              {/* Digital Member QR Pass Button (Mobile: icon only) */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleOpenQRPass}
+                className="flex md:hidden h-9 w-9 border-primary/30 hover:border-primary hover:bg-primary/5 text-primary"
+                title="Digital Access Pass"
+              >
+                <QrCode className="h-4 w-4" />
+              </Button>
+
+              {/* Sync / Refresh Button (hidden on mobile, available in mobile drawer) */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => void fetchAllData(true)}
                 disabled={isRefreshing}
                 title="Sync with cloud"
-                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                className="hidden sm:inline-flex h-9 w-9 text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
               </Button>
 
-              {/* User Avatar & Logout */}
-              <div className="flex items-center gap-2 pl-2 border-l border-border/60">
-                <div className="flex flex-col text-right hidden lg:block">
-                  <span className="text-xs font-semibold text-foreground leading-tight">
-                    {profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : user?.fullName || "Member"}
+              {/* Desktop & Tablet Member Profile & Logout */}
+              <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border/60">
+                <div className="hidden lg:flex flex-col text-right">
+                  <span className="block text-xs font-semibold text-foreground leading-tight truncate max-w-[150px]">
+                    {memberDisplayName}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    {profile?.membership_number || "MEM-1CCA18"}
+                  <span className="block text-[10px] text-muted-foreground font-mono leading-tight">
+                    {membershipNo}
                   </span>
                 </div>
-                <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center font-bold text-xs text-primary shadow-xs">
-                  {profile?.first_name ? profile.first_name.slice(0, 1).toUpperCase() : (user?.fullName ? user.fullName.slice(0, 1).toUpperCase() : "M")}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("profile")}
+                  title="View My Profile"
+                  className="h-9 w-9 rounded-full bg-primary/10 border border-primary/30 hover:border-primary flex items-center justify-center font-bold text-xs text-primary shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  {memberInitials}
+                </button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => logout()}
                   title="Sign out of Member Portal"
-                  className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                  className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
+
+              {/* Mobile / Tablet Menu Trigger (Hamburger) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="lg:hidden h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted ml-0.5"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Sheet Drawer */}
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <SheetContent side="right" className="w-[85vw] sm:w-[380px] p-0 flex flex-col gap-0 border-l border-border bg-background shadow-2xl">
+            {/* Sheet Header */}
+            <SheetHeader className="p-4 sm:p-5 border-b border-border/60 bg-card/60 backdrop-blur-xs text-left">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-orange-500 text-primary-foreground shadow-xs">
+                    <Flame className="h-5 w-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <SheetTitle className="text-base font-extrabold tracking-tight text-foreground">
+                      SWEAT
+                    </SheetTitle>
+                    <SheetDescription className="text-xs text-muted-foreground font-medium">
+                      Member Portal
+                    </SheetDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-semibold text-[10px]">
+                  Active
+                </Badge>
+              </div>
+            </SheetHeader>
+
+            {/* Sheet Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {/* Member Profile Card */}
+              <div className="p-3.5 rounded-xl border border-border/80 bg-card/80 space-y-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-bold text-sm text-primary shadow-xs shrink-0">
+                    {memberInitials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-bold text-foreground truncate">{memberDisplayName}</h4>
+                    <p className="text-xs text-muted-foreground font-mono">{membershipNo}</p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-border/60 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="truncate">{branchDisplayName}</span>
+                </div>
+              </div>
+
+              {/* Entitlement & Passbook Quick Card */}
+              <div
+                onClick={() => {
+                  setActiveTab("passbook");
+                  setIsMobileMenuOpen(false);
+                }}
+                className="p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent hover:border-amber-500/60 transition-all cursor-pointer shadow-xs space-y-2 group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-amber-500 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 fill-amber-500" />
+                    Workout Entitlement
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xl font-extrabold text-foreground">{remainingCredits} Sessions</span>
+                  <span className="text-[11px] text-muted-foreground">Expires {validityUntil}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Tap to view passbook history, upgrade, or renew</p>
+              </div>
+
+              {/* Quick Digital Access Pass Action */}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleOpenQRPass();
+                }}
+                className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold py-2.5 shadow-sm"
+              >
+                <QrCode className="h-4 w-4" />
+                Open Digital Access Pass (QR)
+              </Button>
+
+              {/* Navigation Tabs List */}
+              <div className="space-y-1 pt-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-2 pb-1">
+                  Portal Sections
+                </p>
+                {navTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-left",
+                        isActive
+                          ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Icon className={cn("h-4 w-4 shrink-0", tab.iconColor || (isActive ? "text-primary" : "text-muted-foreground"))} />
+                        <span>{tab.label}</span>
+                      </div>
+                      {isActive && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sheet Footer */}
+            <div className="p-4 border-t border-border/60 bg-card/60 backdrop-blur-xs space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void fetchAllData(true)}
+                disabled={isRefreshing}
+                className="w-full gap-2 text-xs"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
+                {isRefreshing ? "Syncing..." : "Sync Cloud Data"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  logout();
+                }}
+                className="w-full gap-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out of Member Portal
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </header>
 
       {/* ========================================================================= */}
@@ -1356,7 +1617,7 @@ function WebMemberPortalWorkspaceInner() {
       {/* ========================================================================= */}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="overflow-x-auto scrollbar-none pb-1">
+          <div className="overflow-x-auto scrollbar-none pb-1 overscroll-x-contain -mx-4 px-4 sm:mx-0 sm:px-0">
             <TabsList className="bg-card border border-border/60 p-1 rounded-xl shadow-xs inline-flex min-w-max">
               <TabsTrigger value="overview" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                 <Activity className="h-4 w-4" />
@@ -1404,15 +1665,15 @@ function WebMemberPortalWorkspaceInner() {
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+                    {/* <span className="text-xs uppercase tracking-wider font-semibold text-primary">
                       Member Command Hub
-                    </span>
+                    </span> */}
                     <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-semibold">
                       Active Membership
                     </Badge>
                   </div>
                   <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                    Welcome back, {profile?.first_name || "Maya"}!
+                    Welcome back, {profile?.first_name || user?.firstName || "Member"}!
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground max-w-xl">
                     You have <span className="font-semibold text-foreground">{remainingCredits} workout sessions</span> available in your current package. Check today&apos;s schedule or view your upcoming booked workouts below.
@@ -1549,11 +1810,11 @@ function WebMemberPortalWorkspaceInner() {
                             </span>
                             <span className="flex items-center gap-1">
                               <MapPin className="h-3.5 w-3.5 text-primary" />
-                              {nextWorkout.branch?.name || "Bandra West"}
+                              {nextWorkout.branch?.name || "Studio"}
                             </span>
                             <span className="flex items-center gap-1 font-medium text-foreground">
                               <User className="h-3.5 w-3.5 text-primary" />
-                              Coach {nextWorkout.trainer?.name || "SWEAT Coach"}
+                              Coach {nextWorkout.trainer?.name || "Coach"}
                             </span>
                           </div>
                         </div>
@@ -1617,10 +1878,10 @@ function WebMemberPortalWorkspaceInner() {
                       Membership Plan
                     </span>
                     <h4 className="text-sm font-bold text-foreground">
-                      {primaryPass?.package_name || "Sweat Bootcamp - 16 Sessions (Monthly)"}
+                      {primaryPass?.package_name || "Active Membership"}
                     </h4>
                     <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                      ID: {profile?.membership_number || "MEM-1CCA18"}
+                      ID: {profile?.membership_number || "—"}
                     </p>
                   </div>
 
@@ -2103,11 +2364,11 @@ function WebMemberPortalWorkspaceInner() {
                         <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-3">
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3 w-3 text-primary" />
-                            {b.branch?.name || "Bandra West"}
+                            {b.branch?.name || "Studio"}
                           </span>
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3 text-primary" />
-                            Coach {b.trainer?.name || "SWEAT Coach"}
+                            Coach {b.trainer?.name || "Coach"}
                           </span>
                         </div>
 
@@ -2188,10 +2449,10 @@ function WebMemberPortalWorkspaceInner() {
                                 {item.class_name}
                               </td>
                               <td className="py-3 px-4 text-muted-foreground">
-                                {item.branch?.name || "Bandra West"}
+                                {item.branch?.name || "Studio"}
                               </td>
                               <td className="py-3 px-4 text-foreground font-medium">
-                                {item.trainer?.name || "Master Coach"}
+                                {item.trainer?.name || "Coach"}
                               </td>
                               <td className="py-3 px-4">
                                 {isCancelled ? (
@@ -2306,7 +2567,7 @@ function WebMemberPortalWorkspaceInner() {
                         <div className="flex items-center justify-between pt-2 border-t border-border/40">
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <MapPin className="h-3 w-3 text-primary" />
-                            {appt.branch_name || "Bandra Studio"}
+                            {appt.branch_name || "Studio"}
                           </span>
                           <Button
                             variant="ghost"
@@ -2378,7 +2639,7 @@ function WebMemberPortalWorkspaceInner() {
                           setPtBookingForm({
                             date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
                             time: "10:00",
-                            focus: "Pilates Core & Functional Conditioning",
+                            focus: t.specialties?.[0] || t.designation || "Personal Training",
                             notes: "",
                           });
                         }}
@@ -2416,10 +2677,10 @@ function WebMemberPortalWorkspaceInner() {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-lg font-bold text-foreground">
-                        {primaryPass?.package_name || "Sweat Bootcamp - 16 Sessions (Monthly)"}
+                        {primaryPass?.package_name || "Active Membership"}
                       </CardTitle>
                       <CardDescription className="text-xs font-mono mt-0.5">
-                        Membership #{profile?.membership_number || "MEM-1CCA18"}
+                        Membership #{profile?.membership_number || "—"}
                       </CardDescription>
                     </div>
                     <Badge className="bg-emerald-500 text-white font-semibold text-xs">
@@ -2516,7 +2777,7 @@ function WebMemberPortalWorkspaceInner() {
                           {todayConfirmedBooking.class_name || "Reserved Workout"}
                         </span>
                         <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                          {todayConfirmedBooking.booking_number || profile?.membership_number || "MEM-1CCA18"}
+                          {todayConfirmedBooking.booking_number || profile?.membership_number || "—"}
                         </p>
                       </div>
                       <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 mt-2">
@@ -3342,7 +3603,7 @@ function WebMemberPortalWorkspaceInner() {
                     <Label htmlFor="home_branch" className="text-xs">Home Studio Branch</Label>
                     <Input
                       id="home_branch"
-                      value={profile?.home_branch?.name || "Bandra West Flagship"}
+                      value={profile?.home_branch?.name || "Not Assigned"}
                       disabled
                       className="text-xs bg-muted/50 cursor-not-allowed"
                     />
@@ -3404,11 +3665,11 @@ function WebMemberPortalWorkspaceInner() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <MapPin className="h-3.5 w-3.5 text-primary" />
-                    <span>{bookingSlotToConfirm.branch?.name || "Bandra West"}</span>
+                    <span>{bookingSlotToConfirm.branch?.name || "Studio"}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 text-primary" />
-                    <span>Coach {bookingSlotToConfirm.trainer?.name || "Master Coach"}</span>
+                    <span>Coach {bookingSlotToConfirm.trainer?.name || "Coach"}</span>
                   </div>
                 </div>
               </div>
@@ -4464,31 +4725,32 @@ function WebMemberPortalWorkspaceInner() {
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Select Extension Duration</label>
               <div className="grid grid-cols-2 gap-2">
-                {(membershipActions?.extend_options?.available_options || [
-                  { days: 7, base_fee: 500, tax_pct: 18, tax_amount: 90, total_fee: 590, name: "7 Days" },
-                  { days: 14, base_fee: 900, tax_pct: 18, tax_amount: 162, total_fee: 1062, name: "14 Days" },
-                  { days: 30, base_fee: 1500, tax_pct: 18, tax_amount: 270, total_fee: 1770, name: "30 Days" },
-                  { days: 60, base_fee: 2800, tax_pct: 18, tax_amount: 504, total_fee: 3304, name: "60 Days" },
-                ]).map((opt) => (
-                  <button
-                    key={opt.days}
-                    type="button"
-                    onClick={() => setExtendDays(opt.days)}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      extendDays === opt.days
-                        ? "border-indigo-500 bg-indigo-500/15 ring-1 ring-indigo-500 shadow-sm"
-                        : "border-border bg-card hover:bg-muted/50"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-xs text-foreground">+{opt.days} Days</span>
-                      <span className="text-xs font-mono font-bold text-indigo-400">₹{opt.total_fee}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground block mt-0.5">
-                      Base: ₹{opt.base_fee} + 18% GST
-                    </span>
-                  </button>
-                ))}
+                {(membershipActions?.extend_options?.available_options && membershipActions.extend_options.available_options.length > 0) ? (
+                  membershipActions.extend_options.available_options.map((opt) => (
+                    <button
+                      key={opt.days}
+                      type="button"
+                      onClick={() => setExtendDays(opt.days)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        extendDays === opt.days
+                          ? "border-indigo-500 bg-indigo-500/15 ring-1 ring-indigo-500 shadow-sm"
+                          : "border-border bg-card hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-xs text-foreground">+{opt.days} Days</span>
+                        <span className="text-xs font-mono font-bold text-indigo-400">₹{opt.total_fee}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground block mt-0.5">
+                        Base: ₹{opt.base_fee} + {opt.tax_pct ?? 18}% GST
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="col-span-2 p-4 text-center text-xs text-muted-foreground border border-dashed border-border rounded-xl">
+                    No validity extension options configured for this membership plan.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4672,7 +4934,8 @@ function WebMemberPortalWorkspaceInner() {
                       const fixedFee = membershipActions?.freeze_options?.fee_fixed || 0;
                       const perDayFee = membershipActions?.freeze_options?.fee_per_day || 0;
                       const baseFee = fixedFee + perDayFee * days;
-                      const tax = Math.round(baseFee * 0.18);
+                      const taxPct = membershipActions?.freeze_options?.tax_pct ?? 18;
+                      const tax = Math.round(baseFee * (taxPct / 100));
                       const totalFreezeFee = baseFee + tax;
 
                       return (
@@ -4746,7 +5009,8 @@ function WebMemberPortalWorkspaceInner() {
                   const fixedFee = membershipActions?.freeze_options?.fee_fixed || 0;
                   const perDayFee = membershipActions?.freeze_options?.fee_per_day || 0;
                   const baseFee = fixedFee + perDayFee * days;
-                  const totalFreezeFee = baseFee + Math.round(baseFee * 0.18);
+                  const taxPct = membershipActions?.freeze_options?.tax_pct ?? 18;
+                  const totalFreezeFee = baseFee + Math.round(baseFee * (taxPct / 100));
 
                   return (
                     <Button
@@ -4836,11 +5100,11 @@ function WebMemberPortalWorkspaceInner() {
               <div className="w-full space-y-2 mt-1">
                 <div className="space-y-0.5">
                   <h4 className="text-sm font-bold text-foreground">
-                    {qrPassData?.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}` : "Studio Member")}
+                    {qrPassData?.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"))}
                   </h4>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
                     <Badge variant="outline" className="font-mono text-[11px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/5 text-primary">
-                      {qrPassData?.membership_number || profile?.membership_number || "MEM-1CCA18"}
+                      {qrPassData?.membership_number || profile?.membership_number || "—"}
                     </Badge>
                     {qrPassData?.booking_number && (
                       <Badge variant="secondary" className="font-mono text-[10px] px-2 py-0.5">

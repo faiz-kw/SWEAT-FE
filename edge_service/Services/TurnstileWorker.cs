@@ -145,8 +145,9 @@ public class TurnstileWorker : BackgroundService
 
                 if (!string.IsNullOrEmpty(scannedToken))
                 {
-                    _logger.LogInformation("[TURNSTILE SCAN] Raw Token={Token} Direction={Dir} Door={Door}",
-                        scannedToken, direction, eventInfo.nDoor);
+                    var tokenHashPrefix = DatabaseService.ComputeSha256(scannedToken)[..10];
+                    _logger.LogInformation("[TURNSTILE SCAN] TokenHash={TokenHash} Direction={Dir} Door={Door}",
+                        tokenHashPrefix, direction, eventInfo.nDoor);
 
                     ProcessTurnstileScan(scannedToken, direction, $"TURNSTILE-GATE-{eventInfo.nDoor}");
                 }
@@ -172,8 +173,9 @@ public class TurnstileWorker : BackgroundService
         }
         else
         {
-            _logger.LogWarning(">>> [ACCESS DENIED] Token={Token} Status={Status}",
-                rawToken, reconStatus);
+            var tokenHashPrefix = DatabaseService.ComputeSha256(rawToken)[..10];
+            _logger.LogWarning(">>> [ACCESS DENIED] TokenHash={TokenHash} Status={Status}",
+                tokenHashPrefix, reconStatus);
         }
 
         return granted;

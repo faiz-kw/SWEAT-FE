@@ -5,7 +5,18 @@
 
 import { getAccessToken, refreshAccessToken } from '../auth/tokenManager';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
+function getBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1' && (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+      return '/api/v1';
+    }
+  }
+  return envUrl || '/api/v1';
+}
+
+const BASE_URL = getBaseUrl();
 
 export interface ApiResponse<T> {
   data: T;

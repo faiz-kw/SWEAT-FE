@@ -103,6 +103,7 @@ public class CloudSyncWorker : BackgroundService
             {
                 var result = await response.Content.ReadFromJsonAsync<BulkIngestResponse>(cancellationToken: stoppingToken);
                 _db.MarkOutboxEventsSynced(pendingEvents.Select(e => e.EventId));
+                _db.RecordSuccessfulSync(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
                 _logger.LogInformation("[CLOUD SYNC] Successfully synced {Count} events to NeevCloud.", result?.SyncedCount ?? pendingEvents.Count);
             }
             else
@@ -134,6 +135,7 @@ public class CloudSyncWorker : BackgroundService
                     _db.UpsertPasses(syncData.Passes);
                     _logger.LogInformation("[CLOUD SYNC] Updated local passes cache with {Count} passes from NeevCloud.", syncData.Passes.Count);
                 }
+                _db.RecordSuccessfulSync(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             }
             else
             {

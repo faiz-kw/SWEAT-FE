@@ -269,6 +269,17 @@ export function isExplicitlyLoggedOut(): boolean {
   return false;
 }
 
+function getBaseApiUrl(): string {
+  const envUrl = (typeof import.meta !== 'undefined' && (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined))?.trim();
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1' && (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+      return '/api/v1';
+    }
+  }
+  return envUrl || '/api/v1';
+}
+
 /**
  * Deduplicated token refresh function.
  * Ensures concurrent requests share a single refresh network call.
@@ -283,10 +294,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 
   _refreshPromise = (async () => {
     try {
-      const BASE_URL =
-        (typeof import.meta !== 'undefined' &&
-          (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined)) ??
-        '/api/v1';
+      const BASE_URL = getBaseApiUrl();
 
       const res = await fetch(`${BASE_URL}/auth/token/refresh/`, {
         method: 'POST',
@@ -499,10 +507,7 @@ export async function refreshAndHydrateSession(): Promise<boolean> {
   // Demo mode — always "authenticated", no refresh needed
   if (_demoMode) return true;
 
-  const BASE_URL =
-    (typeof import.meta !== 'undefined' &&
-      (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined)) ??
-    '/api/v1';
+  const BASE_URL = getBaseApiUrl();
 
   // 1. Check if we already have a valid unexpired access token in memory
   const token = getAccessToken();
@@ -616,10 +621,7 @@ async function _hydrateUserProfile(baseUrl: string, token: string): Promise<void
 export async function fetchUserProfileFromApi(explicitToken?: string): Promise<boolean> {
   const token = explicitToken || getAccessToken();
   if (!token) return false;
-  const BASE_URL =
-    (typeof import.meta !== 'undefined' &&
-      (import.meta.env?.['VITE_API_BASE_URL'] as string | undefined)) ??
-    '/api/v1';
+  const BASE_URL = getBaseApiUrl();
   await _hydrateUserProfile(BASE_URL, token);
   return true;
 }
