@@ -209,6 +209,16 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
       { id: "/reports/performance", label: "Performance Reports", to: "/reports/performance", description: "Workout volume and member fitness milestone trends." },
     ],
   },
+  {
+    id: "community",
+    label: "Community & Social Transformations",
+    description: "Transformation feed, coach comments, suggestions Kanban, content moderation, and member voice.",
+    icon: "Flame",
+    badge: "NEW",
+    submodules: [
+      { id: "/community", label: "Community Command Center", to: "/community", description: "Feed moderation, transformation post approvals, and member suggestions." },
+    ],
+  },
 ];
 
 /** Set of all module IDs in the catalog for fast lookup */
@@ -216,6 +226,7 @@ const CATALOG_MODULE_IDS = new Set(FEATURE_MODULES_CATALOG.map((m) => m.id));
 
 /** Canonical path aliases for submodules whose route path differs from DB submodule_code */
 const SUBMODULE_PATH_ALIASES: Record<string, string[]> = {
+  "/community": ["/community", "community"],
   "/members": ["/members", "/members/client-360", "/members/memberships", "/members/directory"],
   "/members/client-360": ["/members/client-360", "/members", "/members/memberships"],
   "/crm/dashboard": ["/crm/dashboard", "/crm/leads", "/crm/pipeline"],

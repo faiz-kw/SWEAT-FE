@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Search,
   Cpu,
+  Flame,
 } from "lucide-react";
 
 import { NAV, getFilteredNav, isOrganizationAdmin } from "@/lib/nav";
@@ -39,11 +40,12 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Target, Users, CalendarRange, Activity, Apple, Package, Wallet,
-  HeartPulse, Megaphone, Workflow, BarChart3, Settings, Building2, Sparkles, Dumbbell, LifeBuoy,
+  HeartPulse, Megaphone, Workflow, BarChart3, Settings, Building2, Sparkles, Dumbbell, LifeBuoy, Flame,
 };
 
 // Subtle colorful category tags
 const SECTION_BADGES: Record<string, { label: string; color: string }> = {
+  "community": { label: "NEW", color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" },
   "platform": { label: "CORE", color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20" },
   "admin": { label: "ADMIN", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" },
   "ai": { label: "AI", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },

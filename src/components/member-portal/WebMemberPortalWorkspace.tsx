@@ -1,7 +1,93 @@
+/**
+ * ============================================================================
+ * SWEAT ELITE - WEB MEMBER PORTAL WORKSPACE
+ * ============================================================================
+ * Comprehensive self-service web application for gym members.
+ * Unified architecture consolidating studio schedule, 1-click bookings,
+ * passbook credits, self-service renewals & upgrades (Razorpay), PAR-Q health
+ * clearance, digital turnstile access pass (QR), and inlined nutrition tracking.
+ *
+ * ----------------------------------------------------------------------------
+ * ARCHITECTURE MAP & TABLE OF CONTENTS
+ * ----------------------------------------------------------------------------
+ * SECTION 1: IMPORTS & CORE DEPENDENCIES ............................... Line ~45
+ *    - React, Date utilities (date-fns)
+ *    - Lucide Icons (Comprehensive portal icon set)
+ *    - API Services (wellnessApi, mobileApi, razorpayCheckout)
+ *    - UI Components (Radix UI / Shadcn: Dialog, Sheet, Tabs, Dropdowns, etc.)
+ *
+ * SECTION 2: PORTAL ERROR BOUNDARY (CRASH ISOLATION) ................... Line ~160
+ *    - MemberPortalErrorBoundary: Isolates render errors and provides recovery
+ *
+ * SECTION 3: CONFIGURATION & UTILITY HELPERS ........................... Line ~210
+ *    - SHOW_MEMBER_PT: Feature flag toggling Personal Training module
+ *    - safeFormatDate: Defensive date formatter with fallback
+ *    - cleanPackageDisplayName: Strips internal backend version tags
+ *    - getProgramIcon & formatBranchOptionText
+ *
+ * SECTION 4: NUTRITION & WELLNESS SUB-SYSTEM (INLINED) ................. Line ~260
+ *    - Nutrition Types (CatalogFoodItem, SerializedMealItem, MealCategoryKey)
+ *    - MemberNutritionTab Component:
+ *      * Daily Summary, Calorie & Macro Target Progress
+ *      * Meal Log & Category Sections (Breakfast, Lunch, Dinner, Snacks)
+ *      * Water Intake Tracker (+250ml quick-add)
+ *      * Sleep Log Dialog & Auto-Duration Calculator
+ *      * Food Search & AI Barcode / Camera Vision Integration
+ *      * Daily Targets Edit Modal (Custom Calorie/Protein/Carb/Fat goals)
+ *
+ * SECTION 5: ROOT WORKSPACE EXPORT (MOUNT GUARD & BOUNDARY) ............ Line ~1800
+ *    - WebMemberPortalWorkspace: Root component with hydration mount guard
+ *
+ * SECTION 6: WORKSPACE CONTROLLER (STATE, HYDRATION & HANDLERS) ........ Line ~1830
+ *    - WebMemberPortalWorkspaceInner:
+ *      * 6.1 Core State & Navigation (activeTab, isMobileMenuOpen)
+ *      * 6.2 Data Model State (profile, credits, schedule, bookings, PAR-Q)
+ *      * 6.3 Schedule Filters & Debounce Refs
+ *      * 6.4 Modal Target State (booking, reschedule, cancel, PT, renewal, QR)
+ *      * 6.5 PAR-Q Canvas State & Signature Refs
+ *      * 6.6 Member Profile & Avatar Upload Handlers
+ *      * 6.7 Data Hydration Engine (fetchAllData, fetchSchedule)
+ *      * 6.8 Membership Self-Service Handlers (Renew, Upgrade, Extend, Freeze)
+ *      * 6.9 Booking & Attendance Handlers (Book, Reschedule, Cancel, PT)
+ *      * 6.10 Digital QR Pass Handlers
+ *      * 6.11 Computed Memos & Metrics
+ *
+ * SECTION 7: MAIN WORKSPACE VIEWPORT LAYOUT ............................ Line ~3050
+ *    - Sticky Header (SWEAT Emblem, Branch indicator, Live Passbook pill, QR button, Mobile Menu)
+ *    - Sheet Navigation Drawer (Mobile / Tablet drawer menu with profile & credit overview)
+ *
+ * SECTION 8: PRIMARY TAB PANELS (VIEWPORTS) ............................ Line ~3370
+ *    - Tab 1: "overview"  - Studio Hub & Dashboard (Active plan banner, KPI cards, Next workout)
+ *    - Tab 2: "schedule"  - Class Schedule & Booking (7-day calendar, branch/category filter, cards)
+ *    - Tab 3: "bookings"  - My Bookings & Attendance (Upcoming, waitlisted, attendance history)
+ *    - Tab 4: "pt"        - Personal Training (Coach directory, request appointment) [Guarded]
+ *    - Tab 5: "passbook"  - Membership & Passbook (Credit balance, renew, upgrade, freeze, invoices)
+ *    - Tab 6: "parq"      - PAR-Q Health Clearance (Medical survey, digital signature, clearance badge)
+ *    - Tab 7: "profile"   - My Profile (Personal details, home branch, avatar upload, password change)
+ *    - Tab 8: "nutrition" - Nutrition & Wellness (Interactive daily meal & macro log)
+ *
+ * SECTION 9: ACTION MODALS & OVERLAYS .................................. Line ~5590
+ *    - Modal 1:  1-Click Class Booking Confirmation
+ *    - Modal 2:  Reschedule Class Booking
+ *    - Modal 3:  Cancel Class Booking (with session refund/forfeit warning)
+ *    - Modal 4:  Book Personal Trainer Appointment
+ *    - Modal 5:  Renew Membership (Self-Service Razorpay)
+ *    - Modal 6:  Upgrade Package Tier (Self-Service Razorpay)
+ *    - Modal 7:  Extend Validity (Self-Service Razorpay)
+ *    - Modal 8:  Freeze & Unfreeze Membership (Self-Service Razorpay)
+ *    - Modal 9:  Digital Member QR Pass (Dynamic Turnstile Token)
+ *    - Modal 10: Official Tax Invoice / Payment Receipt
+ * ============================================================================
+ */
+
+// ============================================================================
+// SECTION 1: IMPORTS & CORE DEPENDENCIES
+// ============================================================================
 import * as React from "react";
 import { format, parseISO, addDays, isSameDay } from "date-fns";
 import {
   Lock,
+  Calendar,
   Calendar as CalendarIcon,
   Clock,
   MapPin,
@@ -42,8 +128,50 @@ import {
   Utensils,
   Ticket,
   Menu,
+  AlertTriangle,
+  Camera,
+  Trash2,
+  Printer,
+  Barcode,
+  Droplets,
+  Moon,
+  Plus,
+  Scale,
+  ChevronLeft,
+  SlidersHorizontal,
+  Target,
+  Search,
+  Star,
+  MessageCircle,
+  Bell,
+  Heart,
+  MessageSquare,
+  Bookmark,
+  Share2,
+  MoreVertical,
+  ThumbsUp,
+  Send,
+  Flag,
+  Shield,
+  Loader2,
+  X,
+  Upload,
+  Image as ImageIcon,
 } from "lucide-react";
-import { MemberNutritionTab } from "@/components/member-portal/MemberNutritionTab";
+import { getAccessToken } from "@/api";
+import {
+  wellnessApi,
+  DailySummaryResult,
+  MealLogEntry,
+} from "@/api/endpoints/wellnessApi";
+import { FoodVisionAndBarcodeScanner } from "@/components/wellness/FoodVisionAndBarcodeScanner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -61,6 +189,7 @@ import {
 import { openRazorpayCheckout, cleanupRazorpayDOM, loadRazorpayScript } from "@/utils/razorpayCheckout";
 import { QRCodeSvg } from "@/components/common/QRCodeSvg";
 import { useAuth } from "@/contexts";
+import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -85,17 +214,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-export function safeFormatDate(dateVal: any, formatPattern: string, fallback = "N/A"): string {
-  if (!dateVal) return fallback;
-  try {
-    const d = typeof dateVal === "string" ? parseISO(dateVal) : new Date(dateVal);
-    if (isNaN(d.getTime())) return fallback;
-    return format(d, formatPattern);
-  } catch {
-    return fallback;
-  }
-}
-
+// ============================================================================
+// SECTION 2: PORTAL ERROR BOUNDARY (CRASH ISOLATION)
+// ============================================================================
+/**
+ * Catches unhandled runtime render exceptions across the Member Portal,
+ * displaying a branded fallback UI with session refresh and login options.
+ */
 class MemberPortalErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: any }
@@ -141,16 +266,34 @@ class MemberPortalErrorBoundary extends React.Component<
   }
 }
 
-// Feature flag: Personal Training (PT) visibility in Member Portal
-// Phase 2 requirement: Defer/hide PT navigation, shortcuts, and appointments
-// from member-facing view while keeping backend and admin PT modules fully intact.
+// ============================================================================
+// SECTION 3: CONFIGURATION, FEATURE FLAGS & FORMATTING HELPERS
+// ============================================================================
+
+/**
+ * Feature flag controlling Personal Training (PT) tab and booking visibility.
+ * Set to false per client specification. Can be enabled anytime without schema changes.
+ */
 const SHOW_MEMBER_PT = false;
 
+/**
+ * Robust date formatting utility with graceful error handling and configurable fallback.
+ */
+export function safeFormatDate(dateVal: any, formatPattern: string, fallback = "N/A"): string {
+  if (!dateVal) return fallback;
+  try {
+    const d = typeof dateVal === "string" ? parseISO(dateVal) : new Date(dateVal);
+    if (isNaN(d.getTime())) return fallback;
+    return format(d, formatPattern);
+  } catch {
+    return fallback;
+  }
+}
 
-// Razorpay Checkout is managed authoritatively via @/utils/razorpayCheckout
-
-
-
+/**
+ * Strips internal backend package versioning suffixes (e.g., "-v2", "_v1.0")
+ * to ensure pristine customer-facing package titles in the passbook.
+ */
 function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string): string {
   if (packageName && packageName.trim()) {
     return packageName.trim().replace(/[\s\-_]+v\d+(\.\d+)?$/i, '');
@@ -159,6 +302,9 @@ function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string): s
   return raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
 }
 
+/**
+ * Maps program name substrings to tailored Lucide badges (Flame for Bootcamp, HeartPulse for Pilates).
+ */
 function getProgramIcon(name: string) {
   const lower = (name || '').toLowerCase();
   if (lower.includes('bootcamp') || lower.includes('boot') || lower.includes('camp')) {
@@ -173,6 +319,9 @@ function getProgramIcon(name: string) {
   return <Package size={13} className="text-primary shrink-0" />;
 }
 
+/**
+ * Formats studio branch dropdown options with city/location context.
+ */
 function formatBranchOptionText(b: any): string {
   if (!b) return '';
   const addr = (b.address || b.address_line_1 || b.location_name || b.city || '').trim();
@@ -183,6 +332,2974 @@ function formatBranchOptionText(b: any): string {
   return name;
 }
 
+// ============================================================================
+// SECTION 4: NUTRITION & WELLNESS SUB-SYSTEM (INLINED COMPONENT & SUB-MODELS)
+// ============================================================================
+/**
+ * Comprehensive nutrition logging system:
+ * - Macro & calorie goals tracking (Protein, Carbs, Fat, Fiber)
+ * - Food item search from verified catalog
+ * - AI Computer Vision & Barcode Scanning (FoodVisionAndBarcodeScanner)
+ * - Hydration tracker (+250ml quick increments)
+ * - Sleep logger with auto duration calculation
+ */
+
+// ============================================================================
+// NUTRITION & WELLNESS COMPONENT & SUB-MODELS (INLINED)
+// ============================================================================
+
+export type MealCategoryKey = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+
+export interface CatalogFoodItem {
+  id: string;
+  name: string;
+  barcode?: string | null;
+  category?: string;
+  serving_unit?: string;
+  serving_weight_grams?: number;
+  calories?: number;
+  calories_per_100g?: number;
+  protein_g?: number;
+  protein_per_100g?: number;
+  carbs_g?: number;
+  carbs_per_100g?: number;
+  fat_g?: number;
+  fat_per_100g?: number;
+  fiber_g?: number;
+  fiber_per_100g?: number;
+  is_nutritionist_verified?: boolean;
+}
+
+interface SerializedMealItem {
+  id?: string;
+  food_item_id?: string | null;
+  food_name_snapshot?: string;
+  custom_food_name?: string;
+  quantity?: number | string;
+  unit_name?: string;
+  consumed_grams?: number | string;
+  portion_grams?: number | string;
+  snapshot_calories?: number | string;
+  calories?: number | string;
+  snapshot_protein_g?: number | string;
+  protein_g?: number | string;
+  snapshot_carbs_g?: number | string;
+  carbs_g?: number | string;
+  snapshot_fat_g?: number | string;
+  fat_g?: number | string;
+  snapshot_fiber_g?: number | string;
+  fiber_g?: number | string;
+  created_at?: string;
+}
+
+interface SerializedMealLogEntry {
+  id: string;
+  meal_type: string;
+  logged_date?: string;
+  logged_time?: string;
+  logged_at?: string;
+  date?: string;
+  total_calories?: number | string;
+  total_protein_g?: number | string;
+  total_carbs_g?: number | string;
+  total_fat_g?: number | string;
+  total_fiber_g?: number | string;
+  notes?: string;
+  items?: SerializedMealItem[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+type GroupedMeals = Record<MealCategoryKey, SerializedMealLogEntry[]>;
+
+interface DailySummaryPayload {
+  date: string;
+  targets: DailySummaryResult['targets'];
+  nutrition: DailySummaryResult['nutrition'];
+  water: DailySummaryResult['water'];
+  sleep: DailySummaryResult['sleep'];
+  meals?: GroupedMeals | SerializedMealLogEntry[] | unknown;
+  meals_by_type?: Record<string, SerializedMealLogEntry[]>;
+  meals_breakdown?: SerializedMealLogEntry[];
+}
+
+function formatMealTime(log: SerializedMealLogEntry): string {
+  if (log.logged_at) {
+    try {
+      return new Date(log.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      // fallback
+    }
+  }
+  if (log.created_at) {
+    try {
+      return new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      // fallback
+    }
+  }
+  if (log.logged_time) {
+    const parts = log.logged_time.split(':');
+    const h = parts[0];
+    const m = parts[1];
+    if (h !== undefined && m !== undefined) {
+      const hourNum = parseInt(h, 10);
+      const isPm = hourNum >= 12;
+      const displayH = hourNum % 12 === 0 ? 12 : hourNum % 12;
+      return `${displayH}:${m} ${isPm ? 'PM' : 'AM'}`;
+    }
+  }
+  return '';
+}
+
+function getTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+interface MemberNutritionTabProps {
+  memberFirstName?: string | undefined;
+}
+
+export function MemberNutritionTab({ memberFirstName }: MemberNutritionTabProps) {
+  // 1. Date Navigation State
+  const [selectedDate, setSelectedDate] = React.useState<string>(getTodayString);
+  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+  const [summary, setSummary] = React.useState<DailySummaryPayload | null>(null);
+
+  // 2. Scanner Modal State
+  const [isScannerOpen, setIsScannerOpen] = React.useState<boolean>(false);
+  const [scannerDefaultMode, setScannerDefaultMode] = React.useState<'vision' | 'barcode'>('vision');
+  const [scannerMealType, setScannerMealType] = React.useState<MealCategoryKey>('LUNCH');
+
+  // 3. Edit Daily Targets Modal State
+  const [isTargetsModalOpen, setIsTargetsModalOpen] = React.useState<boolean>(false);
+  const [targetCalories, setTargetCalories] = React.useState<number>(2000);
+  const [targetProtein, setTargetProtein] = React.useState<number>(130);
+  const [targetCarbs, setTargetCarbs] = React.useState<number>(220);
+  const [targetFat, setTargetFat] = React.useState<number>(65);
+  const [targetWater, setTargetWater] = React.useState<number>(3000);
+  const [targetSleep, setTargetSleep] = React.useState<number>(8);
+  const [isSavingTargets, setIsSavingTargets] = React.useState<boolean>(false);
+
+  // 4. Food Catalog Search Modal State
+  const [isFoodSearchModalOpen, setIsFoodSearchModalOpen] = React.useState<boolean>(false);
+  const [searchMealCategory, setSearchMealCategory] = React.useState<MealCategoryKey>('BREAKFAST');
+  const [foodSearchQuery, setFoodSearchQuery] = React.useState<string>('');
+  const [foodSearchResults, setFoodSearchResults] = React.useState<CatalogFoodItem[]>([]);
+  const [isSearchingFoods, setIsSearchingFoods] = React.useState<boolean>(false);
+  const [selectedCatalogFood, setSelectedCatalogFood] = React.useState<CatalogFoodItem | null>(null);
+  const [portionGrams, setPortionGrams] = React.useState<number>(100);
+  const [isSubmittingFoodLog, setIsSubmittingFoodLog] = React.useState<boolean>(false);
+
+  // 5. Sleep Logging Modal State
+  const [isSleepModalOpen, setIsSleepModalOpen] = React.useState<boolean>(false);
+  const [sleepBedtime, setSleepBedtime] = React.useState<string>('22:30');
+  const [sleepWakeTime, setSleepWakeTime] = React.useState<string>('06:30');
+  const [sleepQuality, setSleepQuality] = React.useState<number>(4);
+  const [sleepNotes, setSleepNotes] = React.useState<string>('');
+  const [isSavingSleep, setIsSavingSleep] = React.useState<boolean>(false);
+
+  // Fetch summary on date change
+  const fetchSummary = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await wellnessApi.getDailySummary(selectedDate);
+      setSummary(res.data as DailySummaryPayload);
+    } catch (err: any) {
+      console.error('Failed to load nutrition summary:', err);
+      toast.error('Failed to load wellness summary for ' + selectedDate);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedDate]);
+
+  React.useEffect(() => {
+    void fetchSummary();
+  }, [fetchSummary]);
+
+  // Date navigation handlers
+  const isToday = React.useMemo(() => {
+    return selectedDate === getTodayString();
+  }, [selectedDate]);
+
+  const changeDate = (daysDelta: number) => {
+    const parts = selectedDate.split('-').map(Number);
+    const yVal = parts[0] ?? new Date().getFullYear();
+    const mVal = (parts[1] ?? 1) - 1;
+    const dVal = parts[2] ?? 1;
+    const cur = new Date(yVal, mVal, dVal);
+    cur.setDate(cur.getDate() + daysDelta);
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    setSelectedDate(`${y}-${m}-${d}`);
+  };
+
+  const setToday = () => {
+    setSelectedDate(getTodayString());
+  };
+
+  const formattedDateDisplay = React.useMemo(() => {
+    const parts = selectedDate.split('-').map(Number);
+    const yVal = parts[0] ?? new Date().getFullYear();
+    const mVal = (parts[1] ?? 1) - 1;
+    const dVal = parts[2] ?? 1;
+    const cur = new Date(yVal, mVal, dVal);
+    if (isToday) {
+      return `Today, ${cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    return cur.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }, [selectedDate, isToday]);
+
+  // Scanner openers with meal context
+  const openVisionScanner = (mealType: MealCategoryKey = 'LUNCH') => {
+    setScannerMealType(mealType);
+    setScannerDefaultMode('vision');
+    setIsScannerOpen(true);
+  };
+
+  const openBarcodeScanner = (mealType: MealCategoryKey = 'LUNCH') => {
+    setScannerMealType(mealType);
+    setScannerDefaultMode('barcode');
+    setIsScannerOpen(true);
+  };
+
+  // Water logger with flexible volume
+  const handleLogWater = async (amountMl: number) => {
+    try {
+      await wellnessApi.logWater({ amount_ml: amountMl, date: selectedDate });
+      toast.success(`+${amountMl} ml water logged! Keep hydrating.`);
+      void fetchSummary();
+    } catch (err) {
+      toast.error('Failed to log water.');
+    }
+  };
+
+  // Delete a meal entry
+  const handleDeleteMeal = async (mealId: string) => {
+    try {
+      await wellnessApi.deleteMealLog(mealId);
+      toast.success('Meal log entry removed.');
+      void fetchSummary();
+    } catch (err) {
+      toast.error('Failed to remove meal entry.');
+    }
+  };
+
+  // Targets Modal Handler
+  const openTargetsModal = () => {
+    setTargetCalories(Math.round(Number(targets.daily_calories) || 2000));
+    setTargetProtein(Math.round(Number(targets.daily_protein_g) || 130));
+    setTargetCarbs(Math.round(Number(targets.daily_carbs_g) || 220));
+    setTargetFat(Math.round(Number(targets.daily_fat_g) || 65));
+    setTargetWater(Math.round(Number(targets.daily_water_ml) || 3000));
+    setTargetSleep(Number(targets.daily_sleep_hours) || 8);
+    setIsTargetsModalOpen(true);
+  };
+
+  const handleSaveTargets = async () => {
+    setIsSavingTargets(true);
+    try {
+      await wellnessApi.updateTargets({
+        daily_calories: targetCalories,
+        daily_protein_g: targetProtein,
+        daily_carbs_g: targetCarbs,
+        daily_fat_g: targetFat,
+        daily_water_ml: targetWater,
+        daily_sleep_hours: targetSleep,
+        // Backend serializer compatibility keys:
+        ...({
+          protein_grams: targetProtein,
+          carbs_grams: targetCarbs,
+          fat_grams: targetFat,
+          water_ml: targetWater,
+          sleep_target_minutes: Math.round(targetSleep * 60),
+        } as any),
+      });
+      toast.success('Daily nutrition & wellness targets saved!');
+      setIsTargetsModalOpen(false);
+      void fetchSummary();
+    } catch (err: any) {
+      console.error('Failed to save targets:', err);
+      toast.error(err?.response?.data?.error || 'Failed to update daily targets.');
+    } finally {
+      setIsSavingTargets(false);
+    }
+  };
+
+  // Food Catalog Search & Log Handlers
+  const searchCatalogFoods = React.useCallback(async (query: string) => {
+    setIsSearchingFoods(true);
+    try {
+      const res = await wellnessApi.searchFoods(query.trim());
+      const data = res.data as any;
+      const items: CatalogFoodItem[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.results)
+        ? data.results
+        : [];
+      setFoodSearchResults(items);
+    } catch (err) {
+      console.error('Failed to search food catalog:', err);
+      toast.error('Unable to fetch food catalog items.');
+    } finally {
+      setIsSearchingFoods(false);
+    }
+  }, []);
+
+  const openFoodSearchModal = (category: MealCategoryKey = 'BREAKFAST') => {
+    setSearchMealCategory(category);
+    setSelectedCatalogFood(null);
+    setFoodSearchQuery('');
+    setFoodSearchResults([]);
+    setPortionGrams(100);
+    setIsFoodSearchModalOpen(true);
+    void searchCatalogFoods('');
+  };
+
+  // Debounced search when query changes
+  React.useEffect(() => {
+    if (!isFoodSearchModalOpen) return;
+    const timer = setTimeout(() => {
+      void searchCatalogFoods(foodSearchQuery);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [foodSearchQuery, isFoodSearchModalOpen, searchCatalogFoods]);
+
+  // Live macro calculation for selected catalog food
+  const calculatedPortionNutrition = React.useMemo(() => {
+    if (!selectedCatalogFood) return { cals: 0, p: 0, c: 0, f: 0, fib: 0 };
+    const baseWeight = Number(selectedCatalogFood.serving_weight_grams) || 100;
+    const ratio = portionGrams / (baseWeight > 0 ? baseWeight : 100);
+    const baseCals = Number(selectedCatalogFood.calories ?? selectedCatalogFood.calories_per_100g ?? 0);
+    const baseP = Number(selectedCatalogFood.protein_g ?? selectedCatalogFood.protein_per_100g ?? 0);
+    const baseC = Number(selectedCatalogFood.carbs_g ?? selectedCatalogFood.carbs_per_100g ?? 0);
+    const baseF = Number(selectedCatalogFood.fat_g ?? selectedCatalogFood.fat_per_100g ?? 0);
+    const baseFib = Number(selectedCatalogFood.fiber_g ?? selectedCatalogFood.fiber_per_100g ?? 0);
+
+    return {
+      cals: Math.round(baseCals * ratio),
+      p: Number((baseP * ratio).toFixed(1)),
+      c: Number((baseC * ratio).toFixed(1)),
+      f: Number((baseF * ratio).toFixed(1)),
+      fib: Number((baseFib * ratio).toFixed(1)),
+    };
+  }, [selectedCatalogFood, portionGrams]);
+
+  const handleLogCatalogFood = async () => {
+    if (!selectedCatalogFood) return;
+    setIsSubmittingFoodLog(true);
+    try {
+      await wellnessApi.createMealLog({
+        meal_type: searchMealCategory,
+        date: selectedDate,
+        items: [
+          {
+            food_item_id: selectedCatalogFood.id,
+            portion_grams: portionGrams,
+            calories: calculatedPortionNutrition.cals,
+            protein_g: calculatedPortionNutrition.p,
+            carbs_g: calculatedPortionNutrition.c,
+            fat_g: calculatedPortionNutrition.f,
+            fiber_g: calculatedPortionNutrition.fib,
+          },
+        ],
+        notes: `Logged via catalog search (${portionGrams}g)`,
+      });
+      toast.success(`Logged ${selectedCatalogFood.name} to ${searchMealCategory.toLowerCase()}!`);
+      setIsFoodSearchModalOpen(false);
+      void fetchSummary();
+    } catch (err: any) {
+      console.error('Failed to log food:', err);
+      toast.error(err?.response?.data?.error || 'Failed to log food entry.');
+    } finally {
+      setIsSubmittingFoodLog(false);
+    }
+  };
+
+  // Sleep duration calculator
+  const calculatedSleep = React.useMemo(() => {
+    if (!sleepBedtime || !sleepWakeTime) return { minutes: 0, hours: 0, label: '0 hrs' };
+    const bParts = sleepBedtime.split(':').map(Number);
+    const wParts = sleepWakeTime.split(':').map(Number);
+    const bH = bParts[0] ?? 0;
+    const bM = bParts[1] ?? 0;
+    const wH = wParts[0] ?? 0;
+    const wM = wParts[1] ?? 0;
+    const startMinutes = bH * 60 + bM;
+    let endMinutes = wH * 60 + wM;
+    if (endMinutes <= startMinutes) {
+      endMinutes += 24 * 60; // Crosses midnight
+    }
+    const diff = endMinutes - startMinutes;
+    const hrs = Math.floor(diff / 60);
+    const mins = diff % 60;
+    return {
+      minutes: diff,
+      hours: Number((diff / 60).toFixed(1)),
+      label: `${hrs}h ${mins > 0 ? `${mins}m` : ''}`.trim(),
+    };
+  }, [sleepBedtime, sleepWakeTime]);
+
+  const handleSaveSleep = async () => {
+    if (!sleepBedtime || !sleepWakeTime) {
+      toast.error('Please specify both bedtime and wake-up time.');
+      return;
+    }
+    if (calculatedSleep.minutes <= 0) {
+      toast.error('Wake-up time must be different from bedtime.');
+      return;
+    }
+    if (calculatedSleep.minutes > 1440) {
+      toast.error('Sleep duration cannot exceed 24 hours.');
+      return;
+    }
+
+    setIsSavingSleep(true);
+    try {
+      const bParts = sleepBedtime.split(':').map(Number);
+      const wParts = sleepWakeTime.split(':').map(Number);
+      const bH = bParts[0] ?? 0;
+      const bM = bParts[1] ?? 0;
+      const wH = wParts[0] ?? 0;
+      const wM = wParts[1] ?? 0;
+
+      const targetDateObj = new Date(selectedDate + 'T00:00:00');
+      const startDateObj = new Date(targetDateObj);
+      const endDateObj = new Date(targetDateObj);
+
+      if (wH * 60 + wM <= bH * 60 + bM) {
+        // Bedtime was on previous evening
+        startDateObj.setDate(startDateObj.getDate() - 1);
+      }
+
+      startDateObj.setHours(bH, bM, 0, 0);
+      endDateObj.setHours(wH, wM, 0, 0);
+
+      await wellnessApi.logSleep({
+        logged_date: selectedDate,
+        start_time: startDateObj.toISOString(),
+        end_time: endDateObj.toISOString(),
+        duration_minutes: calculatedSleep.minutes,
+        quality_rating: sleepQuality,
+        notes: sleepNotes.trim(),
+      });
+
+      toast.success(`Sleep logged: ${calculatedSleep.label} of recovery sleep!`);
+      setIsSleepModalOpen(false);
+      setSleepNotes('');
+      void fetchSummary();
+    } catch (err: any) {
+      console.error('Failed to log sleep:', err);
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save sleep log.');
+    } finally {
+      setIsSavingSleep(false);
+    }
+  };
+
+  // Safe data fallbacks
+  const targets = summary?.targets || {
+    daily_calories: 2200,
+    daily_protein_g: 130,
+    daily_carbs_g: 220,
+    daily_fat_g: 65,
+    daily_water_ml: 3000,
+    daily_sleep_hours: 8.0,
+  };
+
+  const nutrition = summary?.nutrition || {
+    total_calories: 0,
+    total_protein_g: 0,
+    total_carbs_g: 0,
+    total_fat_g: 0,
+    total_fiber_g: 0,
+    calories_remaining: targets.daily_calories,
+    calorie_progress_pct: 0,
+  };
+
+  const water = summary?.water || {
+    total_ml: 0,
+    target_ml: targets.daily_water_ml,
+    progress_pct: 0,
+  };
+
+  const sleep = summary?.sleep || {
+    total_hours: 0,
+    target_hours: targets.daily_sleep_hours,
+    progress_pct: 0,
+  };
+
+  // Grouped meals
+  const meals: GroupedMeals = React.useMemo(() => {
+    const emptyGroup: GroupedMeals = {
+      BREAKFAST: [],
+      LUNCH: [],
+      DINNER: [],
+      SNACK: [],
+    };
+
+    if (!summary) return emptyGroup;
+
+    // 1. Grouped meal entries from summary.meals_by_type
+    if (summary.meals_by_type && typeof summary.meals_by_type === 'object' && !Array.isArray(summary.meals_by_type)) {
+      return {
+        BREAKFAST: summary.meals_by_type['BREAKFAST'] || [],
+        LUNCH: summary.meals_by_type['LUNCH'] || [],
+        DINNER: summary.meals_by_type['DINNER'] || [],
+        SNACK: [
+          ...(summary.meals_by_type['SNACK'] || []),
+          ...(summary.meals_by_type['EVENING_SNACK'] || []),
+        ],
+      };
+    }
+
+    // 2. Candidate array fallback
+    const candidateArray = Array.isArray(summary.meals)
+      ? summary.meals
+      : Array.isArray(summary.meals_breakdown)
+      ? summary.meals_breakdown
+      : null;
+
+    if (candidateArray) {
+      const grouped: GroupedMeals = {
+        BREAKFAST: [],
+        LUNCH: [],
+        DINNER: [],
+        SNACK: [],
+      };
+
+      for (const meal of candidateArray) {
+        const rawType = (meal.meal_type || '').toUpperCase();
+        if (rawType === 'BREAKFAST') {
+          grouped.BREAKFAST.push(meal);
+        } else if (rawType === 'LUNCH') {
+          grouped.LUNCH.push(meal);
+        } else if (rawType === 'DINNER') {
+          grouped.DINNER.push(meal);
+        } else {
+          grouped.SNACK.push(meal);
+        }
+      }
+      return grouped;
+    }
+
+    // 3. Fallback if summary.meals is an object
+    if (summary.meals && typeof summary.meals === 'object' && !Array.isArray(summary.meals)) {
+      const mObj = summary.meals as Record<string, SerializedMealLogEntry[]>;
+      return {
+        BREAKFAST: mObj['BREAKFAST'] || [],
+        LUNCH: mObj['LUNCH'] || [],
+        DINNER: mObj['DINNER'] || [],
+        SNACK: [
+          ...(mObj['SNACK'] || []),
+          ...(mObj['EVENING_SNACK'] || []),
+        ],
+      };
+    }
+
+    return emptyGroup;
+  }, [summary]);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Top Banner & Quick Scanners */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-card via-card to-emerald-500/10 p-6 sm:p-8 shadow-sm">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs uppercase tracking-wider font-semibold text-emerald-500 flex items-center gap-1.5">
+                <Utensils className="h-3.5 w-3.5" />
+                Nutrition & Wellness Hub
+              </span>
+              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-semibold">
+                AI Vision + Barcode + Catalog Active
+              </Badge>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Fuel Your Performance, {memberFirstName || 'Athlete'}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+              Track daily macronutrients, scan packaged snacks via OpenFoodFacts barcode lookup, search Indian staples, or snap a photo of your plate for instant portion estimation.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              onClick={() => openVisionScanner('LUNCH')}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md"
+            >
+              <Camera className="h-4 w-4" />
+              AI Photo Plate Scan
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => openBarcodeScanner('SNACK')}
+              className="gap-2 border-border/80 hover:bg-accent font-semibold"
+            >
+              <Barcode className="h-4 w-4 text-emerald-500" />
+              Scan Barcode
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => openFoodSearchModal('BREAKFAST')}
+              className="gap-2 border-border/80 hover:bg-accent font-semibold"
+            >
+              <Search className="h-4 w-4 text-primary" />
+              Search Food
+            </Button>
+
+            {/* Quick Hydration Dropdown */}
+            <DropdownMenu>
+              <div className="inline-flex rounded-md shadow-xs border border-sky-500/30">
+                <Button
+                  variant="ghost"
+                  onClick={() => handleLogWater(250)}
+                  className="gap-1.5 text-xs text-sky-500 hover:bg-sky-500/10 rounded-r-none"
+                  title="Add 250ml water glass"
+                >
+                  <Droplets className="h-4 w-4" />
+                  +250ml Water
+                </Button>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-1.5 text-sky-500 hover:bg-sky-500/10 rounded-l-none border-l border-sky-500/20"
+                    title="More hydration sizes"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </div>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => handleLogWater(250)} className="text-xs cursor-pointer">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500 mr-2" />
+                  Glass (250 ml)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLogWater(350)} className="text-xs cursor-pointer">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500 mr-2" />
+                  Mug / Cup (350 ml)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLogWater(500)} className="text-xs cursor-pointer">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500 mr-2" />
+                  Sports Bottle (500 ml)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLogWater(750)} className="text-xs cursor-pointer">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500 mr-2" />
+                  Large Shaker (750 ml)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLogWater(1000)} className="text-xs cursor-pointer">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500 mr-2" />
+                  Full Sipper / Jug (1000 ml)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="ghost"
+              onClick={() => setIsSleepModalOpen(true)}
+              className="gap-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10"
+              title="Log sleep session"
+            >
+              <Moon className="h-4 w-4" />
+              Log Sleep
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Date Navigation & Daily Targets Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xs shadow-xs">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => changeDate(-1)}
+            className="h-8 w-8 p-0 border-border/70 hover:bg-accent"
+            title="Previous Day"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {/* Date Picker Trigger with Styled Label */}
+          <div className="relative flex items-center">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/80 bg-background text-xs sm:text-sm font-semibold text-foreground shadow-2xs hover:border-emerald-500/50 transition-colors">
+              <Calendar className="h-4 w-4 text-emerald-500" />
+              <span>{formattedDateDisplay}</span>
+            </div>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              title="Click to select specific date"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => changeDate(1)}
+            className="h-8 w-8 p-0 border-border/70 hover:bg-accent"
+            title="Next Day"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+
+          {!isToday && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={setToday}
+              className="h-8 px-2.5 text-xs font-semibold text-emerald-500 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
+            >
+              Jump to Today
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openTargetsModal}
+            className="h-8 gap-1.5 text-xs font-semibold border-border/80 hover:bg-accent"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-500" />
+            Edit Daily Targets
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void fetchSummary()}
+            disabled={isLoading}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
+
+      {/* Daily Progress Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Calories Card */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+              Calories Intake
+              <Flame className="h-4 w-4 text-amber-500" />
+            </CardDescription>
+            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {nutrition.total_calories}{' '}
+              <span className="text-xs font-normal text-muted-foreground">/ {targets.daily_calories} kcal</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Progress value={Math.min(nutrition.calorie_progress_pct, 100)} className="h-1.5 mt-2" />
+            <p className="text-[11px] text-muted-foreground mt-2">
+              {nutrition.calories_remaining > 0
+                ? `${nutrition.calories_remaining} kcal remaining`
+                : 'Daily calorie goal reached!'}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Protein Card */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+              Protein
+              <Award className="h-4 w-4 text-emerald-500" />
+            </CardDescription>
+            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {nutrition.total_protein_g}{' '}
+              <span className="text-xs font-normal text-muted-foreground">/ {targets.daily_protein_g}g</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Progress
+              value={Math.min((nutrition.total_protein_g / (targets.daily_protein_g || 1)) * 100, 100)}
+              className="h-1.5 mt-2 bg-emerald-500/20"
+            />
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Muscle recovery & synthesis target
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Water Card */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+              Hydration (Water)
+              <Droplets className="h-4 w-4 text-sky-500" />
+            </CardDescription>
+            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {(water.total_ml / 1000).toFixed(1)}L{' '}
+              <span className="text-xs font-normal text-muted-foreground">/ {(targets.daily_water_ml / 1000).toFixed(1)}L</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Progress value={Math.min(water.progress_pct, 100)} className="h-1.5 mt-2 bg-sky-500/20" />
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[11px] text-muted-foreground">
+                {water.total_ml} ml logged
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleLogWater(250)}
+                  className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 text-[10px] font-semibold font-mono"
+                  title="Add 250ml"
+                >
+                  +250ml
+                </button>
+                <button
+                  onClick={() => handleLogWater(500)}
+                  className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 text-[10px] font-semibold font-mono"
+                  title="Add 500ml"
+                >
+                  +500ml
+                </button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sleep Card */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+              Recovery Sleep
+              <Moon className="h-4 w-4 text-indigo-400" />
+            </CardDescription>
+            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {sleep.total_hours}{' '}
+              <span className="text-xs font-normal text-muted-foreground">/ {targets.daily_sleep_hours} hrs</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Progress value={Math.min(sleep.progress_pct, 100)} className="h-1.5 mt-2 bg-indigo-500/20" />
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-[11px] text-muted-foreground">
+                {sleep.total_hours > 0 ? `${sleep.total_hours} hrs logged` : 'Recuperation'}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsSleepModalOpen(true)}
+                className="h-6 px-2 text-[11px] text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 gap-1 font-medium"
+              >
+                <Plus className="h-3 w-3" />
+                Log Sleep
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Macronutrient Balance Strip */}
+      <div className="p-4 rounded-xl border border-border/50 bg-card flex flex-wrap items-center justify-between gap-4">
+        <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+          Macronutrient Breakdown:
+        </span>
+        <div className="flex flex-wrap items-center gap-6 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <span className="text-muted-foreground">Protein:</span>
+            <strong className="text-foreground">{nutrition.total_protein_g}g</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+            <span className="text-muted-foreground">Carbs:</span>
+            <strong className="text-foreground">{nutrition.total_carbs_g}g</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+            <span className="text-muted-foreground">Fats:</span>
+            <strong className="text-foreground">{nutrition.total_fat_g}g</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
+            <span className="text-muted-foreground">Fiber:</span>
+            <strong className="text-foreground">{nutrition.total_fiber_g}g</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Daily Meals Timeline */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+            <Utensils className="h-4 w-4 text-primary" />
+            {isToday ? "Today's Meal Logs" : `Meal Logs for ${formattedDateDisplay}`}
+          </h2>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => openFoodSearchModal('BREAKFAST')}
+              className="text-xs gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 border-primary/30"
+              variant="outline"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Search & Add Food
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => openVisionScanner('LUNCH')}
+              className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              AI Photo Scan
+            </Button>
+          </div>
+        </div>
+
+        {/* Meal Categories Cards */}
+        {(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'] as const).map((mType) => {
+          const typeLogs = meals[mType] || [];
+          const typeCalories = Math.round(
+            typeLogs.reduce((sum, log) => sum + (Number(log.total_calories) || 0), 0)
+          );
+
+          return (
+            <Card key={mType} className="border-border/60 bg-card overflow-hidden shadow-xs">
+              <div className="flex flex-wrap items-center justify-between px-5 py-3.5 border-b border-border/40 bg-accent/20 gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    {mType}
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] font-mono">
+                    {typeCalories} kcal
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openFoodSearchModal(mType)}
+                    className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+                    title={`Search food catalog for ${mType.toLowerCase()}`}
+                  >
+                    <Search className="h-3.5 w-3.5 text-primary" />
+                    Search
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openVisionScanner(mType)}
+                    className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+                    title={`Scan plate photo for ${mType.toLowerCase()}`}
+                  >
+                    <Camera className="h-3.5 w-3.5 text-emerald-500" />
+                    Photo
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openBarcodeScanner(mType)}
+                    className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+                    title={`Scan package barcode for ${mType.toLowerCase()}`}
+                  >
+                    <Barcode className="h-3.5 w-3.5 text-sky-500" />
+                    Barcode
+                  </Button>
+                </div>
+              </div>
+
+              <CardContent className="p-4">
+                {typeLogs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">
+                    No items logged for {mType.toLowerCase()} yet. Search foods, snap a plate photo, or scan a barcode to log.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-border/30 space-y-3">
+                    {typeLogs.map((log) => {
+                      const displayTime = formatMealTime(log);
+                      return (
+                        <div key={log.id} className="pt-2.5 first:pt-0 space-y-2">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-mono text-[11px] flex items-center gap-1">
+                              {displayTime ? (
+                                <>
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
+                                  {displayTime}
+                                </>
+                              ) : null}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteMeal(log.id)}
+                              className="p-1 hover:text-destructive text-muted-foreground rounded cursor-pointer"
+                              title="Delete this meal log"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {(log.items || []).map((item, idx) => {
+                              const itemName = item.food_name_snapshot || item.custom_food_name || 'Food item';
+                              const itemGrams = Math.round(Number(item.consumed_grams ?? item.portion_grams ?? 0));
+                              const itemCals = Math.round(Number(item.snapshot_calories ?? item.calories ?? 0));
+                              const prot = Number(item.snapshot_protein_g ?? item.protein_g ?? 0);
+                              const carbs = Number(item.snapshot_carbs_g ?? item.carbs_g ?? 0);
+                              const fat = Number(item.snapshot_fat_g ?? item.fat_g ?? 0);
+
+                              return (
+                                <div
+                                  key={item.id || idx}
+                                  className="p-2.5 rounded-lg border border-border/40 bg-accent/10 flex items-center justify-between text-xs"
+                                >
+                                  <div>
+                                    <span className="font-semibold text-foreground">
+                                      {itemName}
+                                    </span>
+                                    <div className="text-[11px] text-muted-foreground font-mono">
+                                      {itemGrams}g · P: {prot}g · C: {carbs}g · F: {fat}g
+                                    </div>
+                                  </div>
+                                  <span className="font-bold text-foreground font-mono">
+                                    {itemCals} kcal
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Embedded Scanner Modal with Meal Context */}
+      <FoodVisionAndBarcodeScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onMealLogged={() => void fetchSummary()}
+        defaultDate={selectedDate}
+        defaultMode={scannerDefaultMode}
+        defaultMealType={scannerMealType}
+      />
+
+      {/* Food Catalog Search & Log Modal */}
+      <Dialog open={isFoodSearchModalOpen} onOpenChange={setIsFoodSearchModalOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col p-6">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Search className="h-5 w-5 text-primary" />
+              Search & Log Food
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Search verified Indian recipes and standard ingredients, adjust portion weight, and log directly to your timeline.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 flex-1 overflow-y-auto py-2">
+            {/* Category & Date Context */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Meal Category</Label>
+                <Select
+                  value={searchMealCategory}
+                  onValueChange={(val) => setSearchMealCategory(val as MealCategoryKey)}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Select meal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BREAKFAST">Breakfast</SelectItem>
+                    <SelectItem value="LUNCH">Lunch</SelectItem>
+                    <SelectItem value="DINNER">Dinner</SelectItem>
+                    <SelectItem value="SNACK">Snacks</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Log Date</Label>
+                <div className="h-9 px-3 rounded-md border border-input bg-muted/40 flex items-center text-xs font-mono text-foreground">
+                  {selectedDate}
+                </div>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search food (e.g. Paneer, Roti, Dal, Egg, Oats, Rice)..."
+                value={foodSearchQuery}
+                onChange={(e) => setFoodSearchQuery(e.target.value)}
+                className="pl-9 text-sm"
+                autoFocus
+              />
+              {isSearchingFoods && (
+                <RefreshCw className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground animate-spin" />
+              )}
+            </div>
+
+            {/* Selected Food Item Configuration Panel */}
+            {selectedCatalogFood ? (
+              <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-base text-foreground">
+                        {selectedCatalogFood.name}
+                      </span>
+                      {selectedCatalogFood.is_nutritionist_verified && (
+                        <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30 bg-emerald-500/10">
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedCatalogFood.category || 'General Nutrition'}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedCatalogFood(null)}
+                    className="text-xs h-7 text-muted-foreground hover:text-foreground"
+                  >
+                    Change Item
+                  </Button>
+                </div>
+
+                {/* Portion Adjuster */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label className="font-semibold">Portion Size (Grams)</Label>
+                    <span className="font-mono font-bold text-foreground">{portionGrams}g</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={2000}
+                    value={portionGrams}
+                    onChange={(e) => setPortionGrams(Math.max(1, Number(e.target.value) || 0))}
+                    className="font-mono text-sm"
+                  />
+                  {/* Quick gram chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {[50, 100, 150, 200, 250, 300].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setPortionGrams(amt)}
+                        className={`px-2.5 py-1 text-xs rounded-md border font-mono transition-colors ${
+                          portionGrams === amt
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'border-border/70 hover:bg-accent text-muted-foreground'
+                        }`}
+                      >
+                        {amt}g
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Calculated Macros Card */}
+                <div className="p-3 rounded-lg border border-border/60 bg-card/80 grid grid-cols-5 gap-2 text-center">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Calories</span>
+                    <strong className="text-sm font-bold text-foreground font-mono">
+                      {calculatedPortionNutrition.cals}
+                    </strong>
+                    <span className="text-[10px] text-muted-foreground block">kcal</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Protein</span>
+                    <strong className="text-sm font-bold text-emerald-500 font-mono">
+                      {calculatedPortionNutrition.p}g
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Carbs</span>
+                    <strong className="text-sm font-bold text-sky-500 font-mono">
+                      {calculatedPortionNutrition.c}g
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Fat</span>
+                    <strong className="text-sm font-bold text-amber-500 font-mono">
+                      {calculatedPortionNutrition.f}g
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Fiber</span>
+                    <strong className="text-sm font-bold text-indigo-400 font-mono">
+                      {calculatedPortionNutrition.fib}g
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Search Results List */
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {foodSearchQuery ? 'Catalog Matches' : 'Popular Items'}
+                </span>
+
+                {foodSearchResults.length === 0 && !isSearchingFoods ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
+                    No matching food items found. Try searching for &quot;Paneer&quot;, &quot;Roti&quot;, &quot;Dal&quot;, &quot;Chicken&quot;, or &quot;Egg&quot;.
+                  </div>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                    {foodSearchResults.map((food) => {
+                      const cals = Number(food.calories ?? food.calories_per_100g ?? 0);
+                      const p = Number(food.protein_g ?? food.protein_per_100g ?? 0);
+                      const c = Number(food.carbs_g ?? food.carbs_per_100g ?? 0);
+                      const f = Number(food.fat_g ?? food.fat_per_100g ?? 0);
+
+                      return (
+                        <div
+                          key={food.id}
+                          onClick={() => {
+                            setSelectedCatalogFood(food);
+                            setPortionGrams(100);
+                          }}
+                          className="p-3 rounded-lg border border-border/50 bg-card hover:bg-accent/40 cursor-pointer transition-all flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground">{food.name}</span>
+                              {food.is_nutritionist_verified && (
+                                <Badge variant="outline" className="text-[9px] text-emerald-500 border-emerald-500/30">
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground font-mono">
+                              Per 100g: P: {p}g · C: {c}g · F: {f}g
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-foreground font-mono">{cals} kcal</span>
+                            <span className="text-[10px] text-muted-foreground block">per 100g</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setIsFoodSearchModalOpen(false)}
+              disabled={isSubmittingFoodLog}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleLogCatalogFood}
+              disabled={!selectedCatalogFood || portionGrams <= 0 || isSubmittingFoodLog}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+            >
+              {isSubmittingFoodLog ? 'Logging...' : `Log to ${searchMealCategory.toLowerCase()}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Daily Targets Modal */}
+      <Dialog open={isTargetsModalOpen} onOpenChange={setIsTargetsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <SlidersHorizontal className="h-5 w-5 text-emerald-500" />
+              Customize Daily Targets
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Adjust your daily caloric intake, macronutrient ratios, hydration, and sleep recovery goals.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {/* Calories */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="target-cals" className="text-xs font-semibold flex items-center gap-1.5">
+                  <Flame className="h-3.5 w-3.5 text-amber-500" />
+                  Daily Calorie Target (kcal)
+                </Label>
+                <span className="font-mono text-xs font-bold text-foreground">{targetCalories} kcal</span>
+              </div>
+              <Input
+                id="target-cals"
+                type="number"
+                min={500}
+                max={10000}
+                step={50}
+                value={targetCalories}
+                onChange={(e) => setTargetCalories(Number(e.target.value) || 0)}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            {/* Macros Grid */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <div className="space-y-1">
+                <Label htmlFor="target-prot" className="text-[11px] font-semibold text-emerald-500">
+                  Protein (g)
+                </Label>
+                <Input
+                  id="target-prot"
+                  type="number"
+                  min={10}
+                  max={500}
+                  value={targetProtein}
+                  onChange={(e) => setTargetProtein(Number(e.target.value) || 0)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="target-carbs" className="text-[11px] font-semibold text-sky-500">
+                  Carbs (g)
+                </Label>
+                <Input
+                  id="target-carbs"
+                  type="number"
+                  min={10}
+                  max={800}
+                  value={targetCarbs}
+                  onChange={(e) => setTargetCarbs(Number(e.target.value) || 0)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="target-fat" className="text-[11px] font-semibold text-amber-500">
+                  Fat (g)
+                </Label>
+                <Input
+                  id="target-fat"
+                  type="number"
+                  min={5}
+                  max={400}
+                  value={targetFat}
+                  onChange={(e) => setTargetFat(Number(e.target.value) || 0)}
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Macro Check helper */}
+            <div className="p-2.5 rounded-lg border border-border/50 bg-accent/20 text-[11px] text-muted-foreground flex items-center justify-between font-mono">
+              <span>Macro Sum:</span>
+              <strong className="text-foreground">
+                {targetProtein * 4 + targetCarbs * 4 + targetFat * 9} kcal
+              </strong>
+            </div>
+
+            {/* Hydration & Sleep */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="target-water" className="text-xs font-semibold flex items-center gap-1">
+                  <Droplets className="h-3.5 w-3.5 text-sky-500" />
+                  Water Goal (ml)
+                </Label>
+                <Input
+                  id="target-water"
+                  type="number"
+                  min={500}
+                  max={10000}
+                  step={250}
+                  value={targetWater}
+                  onChange={(e) => setTargetWater(Number(e.target.value) || 0)}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="target-sleep" className="text-xs font-semibold flex items-center gap-1">
+                  <Moon className="h-3.5 w-3.5 text-indigo-400" />
+                  Sleep Target (hrs)
+                </Label>
+                <Input
+                  id="target-sleep"
+                  type="number"
+                  min={4}
+                  max={14}
+                  step={0.5}
+                  value={targetSleep}
+                  onChange={(e) => setTargetSleep(Number(e.target.value) || 0)}
+                  className="font-mono text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsTargetsModalOpen(false)}
+              disabled={isSavingTargets}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveTargets}
+              disabled={isSavingTargets || targetCalories <= 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            >
+              {isSavingTargets ? 'Saving...' : 'Update Targets'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sleep Log Modal */}
+      <Dialog open={isSleepModalOpen} onOpenChange={setIsSleepModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Moon className="h-5 w-5 text-indigo-400" />
+              Log Recovery Sleep
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Track your sleep duration and recovery score for {selectedDate}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {/* Quick summary badge */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10">
+              <div>
+                <span className="text-xs text-muted-foreground">Calculated Duration</span>
+                <p className="text-lg font-bold text-foreground">
+                  {calculatedSleep.label} ({calculatedSleep.hours} hrs)
+                </p>
+              </div>
+              <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 font-mono text-xs">
+                Target: {targets.daily_sleep_hours} hrs
+              </Badge>
+            </div>
+
+            {/* Bedtime & Wake Time Inputs */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="sleep-bedtime" className="text-xs font-semibold flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  Bedtime
+                </Label>
+                <Input
+                  id="sleep-bedtime"
+                  type="time"
+                  value={sleepBedtime}
+                  onChange={(e) => setSleepBedtime(e.target.value)}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="sleep-waketime" className="text-xs font-semibold flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  Wake-up Time
+                </Label>
+                <Input
+                  id="sleep-waketime"
+                  type="time"
+                  value={sleepWakeTime}
+                  onChange={(e) => setSleepWakeTime(e.target.value)}
+                  className="font-mono text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Quality Rating */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Sleep Quality Rating</Label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setSleepQuality(star)}
+                    className={`p-2 rounded-lg border transition-all ${
+                      sleepQuality >= star
+                        ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-400'
+                        : 'border-border/60 bg-accent/20 text-muted-foreground hover:bg-accent/40'
+                    }`}
+                    title={`${star} Star${star > 1 ? 's' : ''}`}
+                  >
+                    <Star className={`h-4 w-4 ${sleepQuality >= star ? 'fill-indigo-400' : ''}`} />
+                  </button>
+                ))}
+                <span className="text-xs font-medium text-muted-foreground ml-2">
+                  {sleepQuality === 1 && 'Poor'}
+                  {sleepQuality === 2 && 'Fair'}
+                  {sleepQuality === 3 && 'Good'}
+                  {sleepQuality === 4 && 'Very Good'}
+                  {sleepQuality === 5 && 'Excellent'}
+                </span>
+              </div>
+            </div>
+
+            {/* Optional Notes */}
+            <div className="space-y-1.5">
+              <Label htmlFor="sleep-notes" className="text-xs font-semibold">
+                Notes (Optional)
+              </Label>
+              <Input
+                id="sleep-notes"
+                placeholder="e.g. Woke up rested, took magnesium"
+                value={sleepNotes}
+                onChange={(e) => setSleepNotes(e.target.value)}
+                maxLength={250}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsSleepModalOpen(false)}
+              disabled={isSavingSleep}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveSleep}
+              disabled={isSavingSleep || calculatedSleep.minutes <= 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+            >
+              {isSavingSleep ? 'Saving...' : 'Save Sleep Entry'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================================
+// SECTION 4.2: SWEAT COMMUNITY TAB COMPONENT
+// ============================================================================
+
+interface CommunityCategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon_name: string;
+  color_hex: string;
+  is_admin_only: boolean;
+}
+
+interface CommunityCommentItem {
+  id: string;
+  post_id: string;
+  content: string;
+  is_coach_verified: boolean;
+  likes_count: number;
+  author_name: string;
+  author_avatar: string | null;
+  created_at: string;
+}
+
+interface CommunityFeedPostItem {
+  id: string;
+  journey_title: string;
+  content: string;
+  category: CommunityCategoryItem;
+  category_slug: string;
+  before_photo_url: string | null;
+  after_photo_url: string | null;
+  duration_text: string;
+  metric_change: string;
+  coach_name_snapshot: string;
+  coach_rating: number | string | null;
+  privacy_scope: string;
+  status: string;
+  is_pinned: boolean;
+  is_comments_disabled?: boolean;
+  likes_count: number;
+  comments_count: number;
+  bookmarks_count: number;
+  author_name: string;
+  author_avatar: string | null;
+  author_role: "MEMBER" | "COACH" | "STAFF" | "ADMIN";
+  is_liked_by_me: boolean;
+  is_bookmarked_by_me: boolean;
+  highlighted_comment?: CommunityCommentItem | null;
+  created_at: string;
+}
+
+interface CommunityMemberRequestItem {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  upvotes_count: number;
+  admin_response: string;
+  author_name: string;
+  is_voted_by_me: boolean;
+  created_at: string;
+}
+
+export function MemberCommunityTab() {
+  const { user } = useAuth();
+  const tenantSlug = user?.branding?.tenant_slug || (user?.tenantName ? user.tenantName.toLowerCase().replace(/\s+/g, "-") : "sweat");
+  const studioName = user?.branding?.app_name || user?.tenantName || "SWEAT";
+
+  const getHeaders = React.useCallback(
+    (isJson: boolean = true) => {
+      const headers: Record<string, string> = {};
+      if (isJson) headers["Content-Type"] = "application/json";
+      if (tenantSlug) headers["X-Tenant-Slug"] = tenantSlug;
+      const token = getAccessToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      return headers;
+    },
+    [tenantSlug]
+  );
+
+  const [categories, setCategories] = React.useState<CommunityCategoryItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = React.useState<string>("all");
+  const [activeFeedTab, setActiveFeedTab] = React.useState<"latest" | "trending">("latest");
+  const [posts, setPosts] = React.useState<CommunityFeedPostItem[]>([]);
+  const [requests, setRequests] = React.useState<CommunityMemberRequestItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
+
+  // Modals
+  const [isCreateModalOpen, setIsCreateModalOpen] = React.useState<boolean>(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = React.useState<boolean>(false);
+  const [activeCommentPostId, setActiveCommentPostId] = React.useState<string | null>(null);
+  const [commentsMap, setCommentsMap] = React.useState<Record<string, CommunityCommentItem[]>>({});
+  const [newCommentText, setNewCommentText] = React.useState<string>("");
+  const [isSubmittingComment, setIsSubmittingComment] = React.useState<boolean>(false);
+
+  // Create Form State - Start with clean empty values (clean placeholders in inputs)
+  const [formCategory, setFormCategory] = React.useState<string>("transformations");
+  const [journeyTitle, setJourneyTitle] = React.useState<string>("");
+  const [storyContent, setStoryContent] = React.useState<string>("");
+  const [beforePhotoUrl, setBeforePhotoUrl] = React.useState<string>("");
+  const [afterPhotoUrl, setAfterPhotoUrl] = React.useState<string>("");
+  const [durationText, setDurationText] = React.useState<string>("");
+  const [metricChange, setMetricChange] = React.useState<string>("");
+  const [coachName, setCoachName] = React.useState<string>("");
+  const [coachRating, setCoachRating] = React.useState<number>(5);
+  const [privacyScope, setPrivacyScope] = React.useState<string>("STUDIO_PUBLIC");
+  const [isPublishing, setIsPublishing] = React.useState<boolean>(false);
+  const [isUploadingBefore, setIsUploadingBefore] = React.useState<boolean>(false);
+  const [isUploadingAfter, setIsUploadingAfter] = React.useState<boolean>(false);
+  const beforeFileInputRef = React.useRef<HTMLInputElement>(null);
+  const afterFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Direct Server File Upload (Local Backend Media)
+  const handleFileUpload = async (file: File, type: "before" | "after") => {
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error("File size must be under 15MB");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+
+    if (type === "before") setIsUploadingBefore(true);
+    else setIsUploadingAfter(true);
+
+    try {
+      const res = await fetch("/api/v1/mobile/community/media/upload/", {
+        method: "POST",
+        headers: getHeaders(false),
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (type === "before") {
+          setBeforePhotoUrl(data.url);
+          toast.success("Before photo uploaded successfully!");
+        } else {
+          setAfterPhotoUrl(data.url);
+          toast.success("After photo uploaded successfully!");
+        }
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to upload image to server.");
+      }
+    } catch (e) {
+      toast.error("Network error while uploading photo.");
+    } finally {
+      if (type === "before") setIsUploadingBefore(false);
+      else setIsUploadingAfter(false);
+    }
+  };
+
+  // New Request Form State
+  const [requestTitle, setRequestTitle] = React.useState<string>("");
+  const [requestDesc, setRequestDesc] = React.useState<string>("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = React.useState<boolean>(false);
+
+  // 1. Fetch Categories
+  const fetchCategories = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/mobile/community/categories/", {
+        headers: getHeaders(false),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data.results || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch community categories", e);
+    }
+  }, [getHeaders]);
+
+  // 2. Fetch Feed Posts
+  const fetchPosts = React.useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedCategory && selectedCategory !== "all") {
+        params.set("category", selectedCategory);
+      }
+      params.set("tab", activeFeedTab);
+
+      const res = await fetch(`/api/v1/mobile/community/feed/?${params.toString()}`, {
+        headers: getHeaders(false),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(data.results || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch community feed", e);
+    }
+  }, [selectedCategory, activeFeedTab, getHeaders]);
+
+  // 3. Fetch Member Requests
+  const fetchRequests = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/mobile/community/requests/", {
+        headers: getHeaders(false),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRequests(data.results || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch member requests", e);
+    }
+  }, [getHeaders]);
+
+  // 4. Fetch Studio Coaches for Autocomplete
+  const [availableCoaches, setAvailableCoaches] = React.useState<string[]>([]);
+  const fetchCoaches = React.useCallback(async () => {
+    try {
+      const res = await mobileApi.getTrainers();
+      if (res?.data && Array.isArray(res.data)) {
+        setAvailableCoaches(res.data.map((t: any) => t.name || t.trainer_name).filter(Boolean));
+      }
+    } catch {
+      // Fallback: manually typed coaches allowed
+    }
+  }, []);
+
+  const loadAll = React.useCallback(async () => {
+    setIsLoading(true);
+    await Promise.all([fetchCategories(), fetchPosts(), fetchRequests(), fetchCoaches()]);
+    setIsLoading(false);
+  }, [fetchCategories, fetchPosts, fetchRequests, fetchCoaches]);
+
+  React.useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  // Report Post Quick Action
+  const handleReportPost = async (postId: string) => {
+    try {
+      const res = await fetch("/api/v1/mobile/community/report/", {
+        method: "POST",
+        headers: getHeaders(true),
+        body: JSON.stringify({
+          post: postId,
+          reason: "INAPPROPRIATE",
+          custom_details: "Reported by member via quick action",
+        }),
+      });
+      if (res.ok) {
+        toast.success("Thank you. Post reported for review by studio moderators.");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Could not report post.");
+      }
+    } catch {
+      toast.error("Network error while reporting post.");
+    }
+  };
+
+  // Toggle Like Action
+  const handleToggleLike = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const nextLiked = !p.is_liked_by_me;
+          return {
+            ...p,
+            is_liked_by_me: nextLiked,
+            likes_count: nextLiked ? p.likes_count + 1 : Math.max(0, p.likes_count - 1),
+          };
+        }
+        return p;
+      })
+    );
+
+    try {
+      const res = await fetch(`/api/v1/mobile/community/posts/${postId}/react/`, {
+        method: "POST",
+        headers: getHeaders(true),
+        body: JSON.stringify({ reaction_type: "HIGH_FIVE" }),
+      });
+      if (!res.ok) {
+        void fetchPosts();
+      }
+    } catch (e) {
+      void fetchPosts();
+    }
+  };
+
+  // Toggle Bookmark Action
+  const handleToggleBookmark = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const nextSaved = !p.is_bookmarked_by_me;
+          return {
+            ...p,
+            is_bookmarked_by_me: nextSaved,
+            bookmarks_count: nextSaved ? p.bookmarks_count + 1 : Math.max(0, p.bookmarks_count - 1),
+          };
+        }
+        return p;
+      })
+    );
+
+    try {
+      const res = await fetch(`/api/v1/mobile/community/posts/${postId}/bookmark/`, {
+        method: "POST",
+        headers: getHeaders(true),
+      });
+      if (res.ok) {
+        toast.success("Saved to your inspiration bookmarks!");
+      }
+    } catch (e) {
+      void fetchPosts();
+    }
+  };
+
+  // Fetch comments for post
+  const openComments = async (postId: string) => {
+    if (activeCommentPostId === postId) {
+      setActiveCommentPostId(null);
+      return;
+    }
+    setActiveCommentPostId(postId);
+    try {
+      const res = await fetch(`/api/v1/mobile/community/posts/${postId}/comments/`, {
+        headers: getHeaders(false),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommentsMap((prev) => ({ ...prev, [postId]: data.results || [] }));
+      }
+    } catch (e) {
+      console.error("Failed to load comments", e);
+    }
+  };
+
+  // Submit Comment
+  const handleAddComment = async (postId: string) => {
+    if (!newCommentText.trim()) return;
+    setIsSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/v1/mobile/community/posts/${postId}/comments/`, {
+        method: "POST",
+        headers: getHeaders(true),
+        body: JSON.stringify({ content: newCommentText.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommentsMap((prev) => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), data.comment],
+        }));
+        setPosts((prev) =>
+          prev.map((p) => (p.id === postId ? { ...p, comments_count: p.comments_count + 1 } : p))
+        );
+        setNewCommentText("");
+        toast.success("Comment added!");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || err.detail || "Could not post comment. Please try again.");
+      }
+    } catch (e) {
+      toast.error("Network error while submitting comment");
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  // Upvote Request
+  const handleUpvoteRequest = async (requestId: string) => {
+    setRequests((prev) =>
+      prev.map((r) => {
+        if (r.id === requestId) {
+          const nextVoted = !r.is_voted_by_me;
+          return {
+            ...r,
+            is_voted_by_me: nextVoted,
+            upvotes_count: nextVoted ? r.upvotes_count + 1 : Math.max(0, r.upvotes_count - 1),
+          };
+        }
+        return r;
+      })
+    );
+
+    try {
+      const res = await fetch(`/api/v1/mobile/community/requests/${requestId}/upvote/`, {
+        method: "POST",
+        headers: getHeaders(true),
+      });
+      if (res.ok) {
+        toast.success("Upvote updated!");
+      }
+    } catch (e) {
+      void fetchRequests();
+    }
+  };
+
+  // Publish Transformation Post
+  const handlePublishPost = async () => {
+    if (!storyContent.trim()) {
+      toast.error("Please share your story or experience.");
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      const payload = {
+        category_slug: formCategory,
+        journey_title: journeyTitle.trim(),
+        content: storyContent.trim(),
+        before_photo_url: beforePhotoUrl.trim() || null,
+        after_photo_url: afterPhotoUrl.trim() || null,
+        duration_text: durationText.trim(),
+        metric_change: metricChange.trim(),
+        coach_name_snapshot: coachName.trim(),
+        coach_rating: coachRating,
+        privacy_scope: privacyScope,
+      };
+
+      const res = await fetch("/api/v1/mobile/community/posts/", {
+        method: "POST",
+        headers: getHeaders(true),
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        toast.success(`Transformation published! 🎉 Your story is now live in the ${studioName} feed.`);
+        setIsCreateModalOpen(false);
+        setJourneyTitle("");
+        setStoryContent("");
+        setBeforePhotoUrl("");
+        setAfterPhotoUrl("");
+        setDurationText("");
+        setMetricChange("");
+        setCoachName("");
+        void fetchPosts();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to publish post.");
+      }
+    } catch (e) {
+      toast.error("Network error while publishing post.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // Submit Member Request
+  const handleSubmitRequest = async () => {
+    if (!requestTitle.trim() || !requestDesc.trim()) {
+      toast.error("Please provide both a title and description for your suggestion.");
+      return;
+    }
+    setIsSubmittingRequest(true);
+    try {
+      const res = await fetch("/api/v1/mobile/community/requests/", {
+        method: "POST",
+        headers: getHeaders(true),
+        body: JSON.stringify({
+          title: requestTitle.trim(),
+          description: requestDesc.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Suggestion submitted! Management will review and respond.");
+        setIsRequestModalOpen(false);
+        setRequestTitle("");
+        setRequestDesc("");
+        void fetchRequests();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || err.detail || "Failed to submit suggestion.");
+      }
+    } catch (e) {
+      toast.error("Network error while submitting suggestion.");
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* 1. HERO HEADER WITH COMMUNITY SLOGAN & CTA */}
+      <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-r from-card via-card to-primary/10 p-6 sm:p-8 shadow-sm">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs uppercase tracking-wider font-semibold text-primary flex items-center gap-1.5">
+                <Flame className="h-4 w-4 text-rose-500 fill-rose-500" />
+                {studioName} Community
+              </span>
+              <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-500 text-[10px] font-semibold">
+                Transformations • Stories • Motivation
+              </Badge>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Member Inspiration Hub
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+              Celebrate progress, share your fitness evolution, review your trainers, and voice ideas to make our community even better.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="gap-2 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-600 text-white font-bold shadow-md shadow-rose-500/20"
+            >
+              <Plus className="h-4 w-4 stroke-[3]" />
+              Publish Transformation
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsRequestModalOpen(true)}
+              className="gap-2 border-border/80 hover:bg-accent font-semibold"
+            >
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              Voice Your Idea
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void loadAll()}
+              className="rounded-xl"
+              title="Refresh feed"
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin text-primary")} />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. CATEGORY FILTER BAR */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-3">
+        {/* Category Pills Carousel */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+          <button
+            onClick={() => setSelectedCategory("all")}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border",
+              selectedCategory === "all"
+                ? "bg-foreground text-background border-foreground shadow-sm"
+                : "bg-card text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground"
+            )}
+          >
+            All Stories
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.slug)}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border",
+                selectedCategory === cat.slug
+                  ? "bg-foreground text-background border-foreground shadow-sm"
+                  : "bg-card text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground"
+              )}
+            >
+              {cat.slug === "transformations" && <Flame className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />}
+              {cat.slug === "highlights" && <Sparkles className="h-3.5 w-3.5 text-blue-500" />}
+              {cat.slug === "discussions" && <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />}
+              {cat.slug === "announcements" && <Bell className="h-3.5 w-3.5 text-amber-500" />}
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Toggle: Latest vs Trending */}
+        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setActiveFeedTab("latest")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+              activeFeedTab === "latest" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Latest
+          </button>
+          <button
+            onClick={() => setActiveFeedTab("trending")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+              activeFeedTab === "trending" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Trending 🔥
+          </button>
+        </div>
+      </div>
+
+      {/* 3. TWO-COLUMN LAYOUT: MAIN FEED (68%) & SUGGESTION BOX (32%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* MAIN FEED COLUMN */}
+        <div className="lg:col-span-8 space-y-6">
+          {isLoading ? (
+            <div className="p-12 text-center bg-card rounded-2xl border border-border/60">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">Hydrating community feed...</p>
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="p-12 text-center bg-card rounded-2xl border border-border/60 space-y-3">
+              <Flame className="h-10 w-10 text-muted-foreground mx-auto" />
+              <h3 className="text-base font-bold text-foreground">No posts yet in this category</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Be the first to share your transformation progress or ask a question to our studio family!
+              </p>
+              <Button onClick={() => setIsCreateModalOpen(true)} size="sm" className="gap-2 mt-2">
+                <Plus className="h-4 w-4" />
+                Publish First Post
+              </Button>
+            </div>
+          ) : (
+            posts.map((post) => (
+              <div
+                key={post.id}
+                className={cn(
+                  "bg-card rounded-3xl border border-border/80 shadow-xs overflow-hidden transition-all hover:border-primary/30",
+                  post.is_pinned && "border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-card"
+                )}
+              >
+                {/* Post Header */}
+                <div className="p-5 pb-3 flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm overflow-hidden shrink-0">
+                      {post.author_avatar ? (
+                        <img src={post.author_avatar} alt={post.author_name} className="h-full w-full object-cover" />
+                      ) : (
+                        post.author_name.charAt(0)
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-foreground">{post.author_name}</span>
+                        {post.author_role === "COACH" && (
+                          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-[9px] px-1.5 py-0 font-bold">
+                            COACH
+                          </Badge>
+                        )}
+                        {post.author_role === "ADMIN" && (
+                          <Badge className="bg-primary/10 text-primary border-primary/30 text-[9px] px-1.5 py-0 font-bold">
+                            STAFF
+                          </Badge>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">
+                          • {(() => {
+                              try {
+                                return new Date(post.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                              } catch {
+                                return "Recent";
+                              }
+                            })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 bg-muted/40 text-muted-foreground border-border/60">
+                          {categories.find((c) => c.slug === post.category_slug)?.name || post.category_slug.replace(/-/g, " ")}
+                        </Badge>
+                        {post.is_pinned && (
+                          <span className="text-[10px] text-amber-500 font-semibold flex items-center gap-1">
+                            📌 Pinned Announcement
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-lg">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const url = `${window.location.origin}${window.location.pathname}#post-${post.id}`;
+                          navigator.clipboard.writeText(url);
+                          toast.success("Story link copied to clipboard!");
+                        }}
+                        className="gap-2 text-xs cursor-pointer font-medium"
+                      >
+                        <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        Share Story Link
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleReportPost(post.id)}
+                        className="gap-2 text-xs cursor-pointer font-medium text-rose-500 hover:text-rose-600 focus:text-rose-600"
+                      >
+                        <Flag className="h-3.5 w-3.5" />
+                        Report to Studio
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Journey Title */}
+                {post.journey_title && (
+                  <div className="px-5 pb-2">
+                    <h2 className="font-extrabold text-lg sm:text-xl text-foreground tracking-tight">
+                      {post.journey_title}
+                    </h2>
+                  </div>
+                )}
+
+                {/* Story narrative */}
+                <div className="px-5 pb-4">
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {post.content}
+                  </p>
+                </div>
+
+                {/* BEFORE & AFTER PHOTO SHOWCASE */}
+                {(post.before_photo_url || post.after_photo_url) && (
+                  <div className="px-5 pb-4">
+                    <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-muted/30">
+                      <div className="grid grid-cols-2 gap-1 relative aspect-[16/10] sm:aspect-[16/9]">
+                        {/* Before Side */}
+                        <div className="relative h-full w-full overflow-hidden bg-black/10">
+                          {post.before_photo_url ? (
+                            <img
+                              src={post.before_photo_url}
+                              alt="Before Transformation"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                              No Before Photo
+                            </div>
+                          )}
+                          <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-xs text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                            BEFORE
+                          </div>
+                        </div>
+
+                        {/* After Side */}
+                        <div className="relative h-full w-full overflow-hidden bg-black/10">
+                          {post.after_photo_url ? (
+                            <img
+                              src={post.after_photo_url}
+                              alt="After Transformation"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                              No After Photo
+                            </div>
+                          )}
+                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs text-black text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                            AFTER
+                          </div>
+                        </div>
+
+                        {/* Center Interactive Splitter Icon */}
+                        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex items-center pointer-events-none">
+                          <div className="h-8 w-8 rounded-full bg-black/80 text-white flex items-center justify-center shadow-lg border border-white/20">
+                            <SlidersHorizontal className="h-4 w-4" />
+                          </div>
+                        </div>
+
+                        {/* Metric Chip */}
+                        {(post.metric_change || post.duration_text) && (
+                          <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md text-white text-xs font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                            <Flame className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
+                            <span>
+                              {post.metric_change}
+                              {post.metric_change && post.duration_text ? " • " : ""}
+                              {post.duration_text}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* COACH ATTRIBUTION CARD */}
+                {post.coach_name_snapshot && (
+                  <div className="mx-5 mb-4 p-3 rounded-2xl bg-muted/40 border border-border/60 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center font-bold text-xs">
+                        {post.coach_name_snapshot.charAt(0)}
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">
+                          COACHED BY
+                        </span>
+                        <span className="font-bold text-xs text-foreground">
+                          {post.coach_name_snapshot}
+                        </span>
+                      </div>
+                    </div>
+
+                    {post.coach_rating && (
+                      <Badge variant="outline" className="bg-background text-foreground border-border/80 text-xs font-bold gap-1 px-2 py-1">
+                        <span>{Number(post.coach_rating).toFixed(1)}</span>
+                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                {/* SOCIAL INTERACTIONS ROW */}
+                <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleLike(post.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border",
+                        post.is_liked_by_me
+                          ? "bg-rose-500/10 text-rose-500 border-rose-500/30"
+                          : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <Heart className={cn("h-4 w-4", post.is_liked_by_me && "fill-rose-500 text-rose-500")} />
+                      <span>{post.likes_count}</span>
+                    </button>
+
+                    <button
+                      onClick={() => openComments(post.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border",
+                        activeCommentPostId === post.id
+                          ? "bg-primary/10 text-primary border-primary/30"
+                          : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      <span>{post.comments_count}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => handleToggleBookmark(post.id)}
+                    className={cn(
+                      "p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all",
+                      post.is_bookmarked_by_me && "text-primary"
+                    )}
+                    title="Bookmark Story"
+                  >
+                    <Bookmark className={cn("h-4 w-4", post.is_bookmarked_by_me && "fill-primary text-primary")} />
+                  </button>
+                </div>
+
+                {/* HIGHLIGHTED COACH COMMENT PREVIEW */}
+                {post.highlighted_comment && activeCommentPostId !== post.id && (
+                  <div className="mx-5 mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-5 w-5 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold text-[10px]">
+                        {post.highlighted_comment.author_name.charAt(0)}
+                      </div>
+                      <span className="font-bold text-foreground">
+                        {post.highlighted_comment.author_name}
+                      </span>
+                      {post.highlighted_comment.is_coach_verified && (
+                        <Badge className="bg-black text-amber-400 border-none text-[8px] px-1 py-0 font-bold uppercase">
+                          COACH
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground pl-7">
+                      {post.highlighted_comment.content}
+                    </p>
+                  </div>
+                )}
+
+                {/* EXPANDABLE INLINE COMMENTS & REPLY DRAWER */}
+                {activeCommentPostId === post.id && (
+                  <div className="bg-muted/20 border-t border-border/60 p-5 space-y-3">
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Comments ({post.comments_count})
+                    </h3>
+
+                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                      {(commentsMap[post.id] || []).length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic py-2">No comments yet. Leave a high-five or encouraging words!</p>
+                      ) : (
+                        commentsMap[post.id].map((cmt) => (
+                          <div
+                            key={cmt.id}
+                            className={cn(
+                              "p-3 rounded-2xl border text-xs space-y-1",
+                              cmt.is_coach_verified
+                                ? "bg-amber-500/10 border-amber-500/30"
+                                : "bg-card border-border/60"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-foreground">{cmt.author_name}</span>
+                                {cmt.is_coach_verified && (
+                                  <Badge className="bg-black text-amber-400 border-none text-[8px] px-1 py-0 font-bold uppercase">
+                                    COACH
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(cmt.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-foreground/90 leading-relaxed">{cmt.content}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {post.is_comments_disabled ? (
+                      <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 text-xs text-muted-foreground flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span>Comments have been locked for this post by studio management.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 pt-2">
+                        <Input
+                          value={newCommentText}
+                          onChange={(e) => setNewCommentText(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAddComment(post.id)}
+                          placeholder="Write encouraging feedback or ask a question..."
+                          className="text-xs rounded-xl bg-background border-border/80"
+                        />
+                        <Button
+                          size="sm"
+                          disabled={isSubmittingComment || !newCommentText.trim()}
+                          onClick={() => handleAddComment(post.id)}
+                          className="rounded-xl px-3 shrink-0"
+                        >
+                          {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* SIDEBAR WIDGET COLUMN (Voice Your Idea / Member Requests) */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-card rounded-3xl border border-border/80 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <h2 className="font-extrabold text-sm text-foreground">Voice Your Idea</h2>
+              </div>
+              <Badge variant="outline" className="border-primary/30 text-primary text-[10px]">
+                Member Requests
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Have a suggestion for new equipment, schedule adjustments, or studio amenities? Upvote peer requests or submit your own.
+            </p>
+
+            <Button
+              onClick={() => setIsRequestModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 rounded-xl border-dashed border-primary/40 font-semibold text-primary hover:bg-primary/5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Suggest an Improvement
+            </Button>
+
+            <div className="space-y-3 pt-2">
+              {requests.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic text-center py-4">No open requests right now.</p>
+              ) : (
+                requests.map((req) => (
+                  <div key={req.id} className="p-3.5 rounded-2xl bg-muted/30 border border-border/60 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="font-bold text-xs text-foreground block leading-tight">
+                          {req.title}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2">
+                          {req.description}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => handleUpvoteRequest(req.id)}
+                        className={cn(
+                          "flex flex-col items-center justify-center h-12 w-10 rounded-xl border transition-all shrink-0 font-bold text-xs",
+                          req.is_voted_by_me
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-card text-muted-foreground border-border/80 hover:border-primary/40 hover:text-foreground"
+                        )}
+                      >
+                        <ThumbsUp className="h-3.5 w-3.5 mb-0.5" />
+                        <span>{req.upvotes_count}</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[9px] uppercase font-bold tracking-wider py-0 px-1.5",
+                          req.status === "PLANNED" && "bg-blue-500/10 text-blue-500 border-blue-500/30",
+                          req.status === "UNDER_REVIEW" && "bg-amber-500/10 text-amber-500 border-amber-500/30",
+                          req.status === "COMPLETED" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                        )}
+                      >
+                        {req.status.replace("_", " ")}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        by {req.author_name}
+                      </span>
+                    </div>
+
+                    {req.admin_response && (
+                      <div className="mt-2 p-2 rounded-xl bg-background/80 border border-border/50 text-[11px] space-y-0.5">
+                        <span className="font-bold text-primary flex items-center gap-1 text-[10px]">
+                          <Shield className="h-3 w-3" /> {studioName} Response:
+                        </span>
+                        <p className="text-muted-foreground">{req.admin_response}</p>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL 1: PUBLISH TRANSFORMATION */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-extrabold flex items-center gap-2 text-foreground">
+              <Flame className="h-5 w-5 text-rose-500 fill-rose-500" />
+              Publish Transformation
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Share your progress & inspire the {studioName} community.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground block">
+                Transformation Photos
+              </label>
+              <p className="text-[11px] text-muted-foreground">
+                Upload Before & After photos from your camera/gallery, or paste image links.
+              </p>
+
+              <input
+                type="file"
+                ref={beforeFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleFileUpload(file, "before");
+                }}
+              />
+              <input
+                type="file"
+                ref={afterFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleFileUpload(file, "after");
+                }}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Before Photo Box */}
+                <div className="p-3 rounded-2xl border border-border/80 bg-muted/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded-md">
+                      BEFORE PHOTO
+                    </span>
+                    {beforePhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setBeforePhotoUrl("")}
+                        className="text-[10px] text-muted-foreground hover:text-rose-500 font-semibold"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {beforePhotoUrl ? (
+                    <div className="relative h-32 rounded-xl overflow-hidden border border-border bg-black/10">
+                      <img src={beforePhotoUrl} alt="Before" className="h-full w-full object-cover" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isUploadingBefore}
+                      onClick={() => beforeFileInputRef.current?.click()}
+                      className="w-full h-32 rounded-xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-card/60 hover:bg-card flex flex-col items-center justify-center gap-1.5 transition-all text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {isUploadingBefore ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                          <span className="text-[11px] font-semibold">Uploading to server...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                            <Upload className="h-4 w-4" />
+                          </div>
+                          <span className="text-xs font-bold text-foreground">Upload Before Photo</span>
+                          <span className="text-[10px] text-muted-foreground">Camera / Gallery (Max 15MB)</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <Input
+                    placeholder="Or paste photo URL..."
+                    value={beforePhotoUrl}
+                    onChange={(e) => setBeforePhotoUrl(e.target.value)}
+                    className="text-[11px] h-7 rounded-lg"
+                  />
+                </div>
+
+                {/* After Photo Box */}
+                <div className="p-3 rounded-2xl border border-border/80 bg-muted/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                      AFTER PHOTO
+                    </span>
+                    {afterPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAfterPhotoUrl("")}
+                        className="text-[10px] text-muted-foreground hover:text-rose-500 font-semibold"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {afterPhotoUrl ? (
+                    <div className="relative h-32 rounded-xl overflow-hidden border border-border bg-black/10">
+                      <img src={afterPhotoUrl} alt="After" className="h-full w-full object-cover" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isUploadingAfter}
+                      onClick={() => afterFileInputRef.current?.click()}
+                      className="w-full h-32 rounded-xl border-2 border-dashed border-border/80 hover:border-emerald-500/60 bg-card/60 hover:bg-card flex flex-col items-center justify-center gap-1.5 transition-all text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {isUploadingAfter ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                          <span className="text-[11px] font-semibold">Uploading to server...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                            <Upload className="h-4 w-4" />
+                          </div>
+                          <span className="text-xs font-bold text-foreground">Upload After Photo</span>
+                          <span className="text-[10px] text-muted-foreground">Camera / Gallery (Max 15MB)</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <Input
+                    placeholder="Or paste photo URL..."
+                    value={afterPhotoUrl}
+                    onChange={(e) => setAfterPhotoUrl(e.target.value)}
+                    className="text-[11px] h-7 rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Select Category
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                {(categories.length > 0 ? categories.filter((c) => !c.is_admin_only) : [
+                  { slug: "transformations", name: "Transformations" },
+                  { slug: "highlights", name: "Highlights" },
+                  { slug: "discussions", name: "Discussions" },
+                ]).map((c) => (
+                  <button
+                    key={c.slug}
+                    type="button"
+                    onClick={() => setFormCategory(c.slug)}
+                    className={cn(
+                      "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border",
+                      formCategory === c.slug
+                        ? "bg-foreground text-background border-foreground shadow-xs"
+                        : "bg-muted/40 text-muted-foreground border-border hover:text-foreground"
+                    )}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground block">
+                Journey Title
+              </label>
+              <Input
+                placeholder="e.g. PCOD & Core Strength Journey"
+                value={journeyTitle}
+                onChange={(e) => setJourneyTitle(e.target.value)}
+                className="text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground block">
+                Your Story & Experience
+              </label>
+              <Textarea
+                placeholder="Share your challenges, the workout routine that helped, dietary changes, and mindset shifts..."
+                rows={4}
+                value={storyContent}
+                onChange={(e) => setStoryContent(e.target.value)}
+                className="text-xs rounded-xl resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-foreground block">
+                  Duration
+                </label>
+                <Input
+                  placeholder="e.g. 12 Weeks"
+                  value={durationText}
+                  onChange={(e) => setDurationText(e.target.value)}
+                  className="text-xs rounded-xl"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-foreground block">
+                  Weight / Muscle Change
+                </label>
+                <Input
+                  placeholder="e.g. -8.5 kg"
+                  value={metricChange}
+                  onChange={(e) => setMetricChange(e.target.value)}
+                  className="text-xs rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Trainer / Coach Name
+              </label>
+              <Input
+                placeholder={availableCoaches.length > 0 ? `e.g. ${availableCoaches[0]}` : "e.g. Coach Shweta"}
+                value={coachName}
+                onChange={(e) => setCoachName(e.target.value)}
+                list="community-active-coaches-list"
+                className="text-xs rounded-xl"
+              />
+              <datalist id="community-active-coaches-list">
+                {availableCoaches.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-[11px] text-muted-foreground font-semibold">Trainer Rating:</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setCoachRating(star)}
+                      className="p-0.5 focus:outline-none"
+                    >
+                      <Star
+                        className={cn(
+                          "h-4 w-4 transition-all",
+                          star <= coachRating
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-muted-foreground/40"
+                        )}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Audience & Privacy
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "STUDIO_PUBLIC", label: "Studio Public" },
+                  { id: "MEMBERS_ONLY", label: "Members Only" },
+                  { id: "ANONYMOUS", label: "Anonymous" },
+                ].map((scope) => (
+                  <button
+                    key={scope.id}
+                    type="button"
+                    onClick={() => setPrivacyScope(scope.id)}
+                    className={cn(
+                      "py-2 rounded-xl text-xs font-bold transition-all border text-center",
+                      privacyScope === scope.id
+                        ? "bg-foreground text-background border-foreground shadow-xs"
+                        : "bg-muted/40 text-muted-foreground border-border hover:text-foreground"
+                    )}
+                  >
+                    {scope.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              disabled={isPublishing}
+              onClick={handlePublishPost}
+              className="w-full bg-foreground text-background font-bold py-2.5 rounded-xl hover:bg-foreground/90 transition-all mt-2"
+            >
+              {isPublishing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Publishing Transformation...
+                </>
+              ) : (
+                "Publish Transformation Post"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 2: SUBMIT MEMBER REQUEST / SUGGESTION BOX */}
+      <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
+        <DialogContent className="max-w-md p-6 rounded-3xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-extrabold flex items-center gap-2 text-foreground">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              Voice Your Idea
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Suggest studio improvements, schedule changes, or new amenities.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground block">
+                Suggestion Title
+              </label>
+              <Input
+                placeholder="e.g. Add Sunday Evening Reformer Pilates Slot"
+                value={requestTitle}
+                onChange={(e) => setRequestTitle(e.target.value)}
+                className="text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground block">
+                Detailed Explanation
+              </label>
+              <Textarea
+                placeholder="Explain why this change would benefit studio members..."
+                rows={4}
+                value={requestDesc}
+                onChange={(e) => setRequestDesc(e.target.value)}
+                className="text-xs rounded-xl resize-none"
+              />
+            </div>
+
+            <Button
+              disabled={isSubmittingRequest}
+              onClick={handleSubmitRequest}
+              className="w-full font-bold py-2 rounded-xl mt-2"
+            >
+              {isSubmittingRequest ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Submitting Suggestion...
+                </>
+              ) : (
+                "Submit Suggestion"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================================
+// SECTION 5: ROOT WORKSPACE EXPORT (MOUNT GUARD & BOUNDARY)
+// ============================================================================
+/**
+ * Root export for the SWEAT Member Portal workspace.
+ * Wraps the internal workspace in MemberPortalErrorBoundary and ensures client-side mounting.
+ */
 export function WebMemberPortalWorkspace() {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -207,15 +3324,26 @@ export function WebMemberPortalWorkspace() {
   );
 }
 
+// ============================================================================
+// SECTION 6: WORKSPACE CONTROLLER (STATE, HYDRATION & ACTION HANDLERS)
+// ============================================================================
+/**
+ * Main state orchestrator for the Member Portal.
+ * Manages active tab state, data hydration across 9 mobile endpoints,
+ * dynamic schedule filtering, 10 modal dialog workflows, and self-service payments.
+ */
 function WebMemberPortalWorkspaceInner() {
   const { user, logout } = useAuth();
 
+  // Dynamic browser title with studio brand name
   React.useEffect(() => {
     const brand = user?.branding?.app_name || "SWEAT Elite";
     document.title = `Member Portal · ${brand}`;
   }, [user]);
 
-  // Core State
+  // --------------------------------------------------------------------------
+  // 6.1 Core Navigation & Route Guards
+  // --------------------------------------------------------------------------
   const [activeTab, setActiveTab] = React.useState<string>("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState<boolean>(false);
 
@@ -228,7 +3356,9 @@ function WebMemberPortalWorkspaceInner() {
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
 
-  // Data
+  // --------------------------------------------------------------------------
+  // 6.2 Data Model State
+  // --------------------------------------------------------------------------
   const [profile, setProfile] = React.useState<MobileMemberProfile | null>(null);
   const [credits, setCredits] = React.useState<MobilePassbookCredit[]>([]);
   const [schedule, setSchedule] = React.useState<MobileScheduleOccurrence[]>([]);
@@ -238,7 +3368,9 @@ function WebMemberPortalWorkspaceInner() {
   const [branches, setBranches] = React.useState<MobileBranch[]>([]);
   const [parqSurvey, setParqSurvey] = React.useState<PARQSurveyResponse | null>(null);
 
-  // Filters
+  // --------------------------------------------------------------------------
+  // 6.3 Schedule Filters & Debounce Refs
+  // --------------------------------------------------------------------------
   const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
   const [selectedBranchId, setSelectedBranchId] = React.useState<string>("all");
   const [selectedCategory, setSelectedCategory] = React.useState<string>("all");
@@ -247,7 +3379,9 @@ function WebMemberPortalWorkspaceInner() {
   const [scheduleError, setScheduleError] = React.useState<string | null>(null);
   const scheduleReqIdRef = React.useRef<number>(0);
 
-  // Modals & Action States
+  // --------------------------------------------------------------------------
+  // 6.4 Modal Target & Action State
+  // --------------------------------------------------------------------------
   const [bookingSlotToConfirm, setBookingSlotToConfirm] = React.useState<MobileScheduleOccurrence | null>(null);
   const [isBookingSubmitting, setIsBookingSubmitting] = React.useState<boolean>(false);
 
@@ -271,7 +3405,9 @@ function WebMemberPortalWorkspaceInner() {
   });
   const [isPtSubmitting, setIsPtSubmitting] = React.useState<boolean>(false);
 
-  // PAR-Q Interactive Form State
+  // --------------------------------------------------------------------------
+  // 6.5 PAR-Q Health Survey Form & Digital Canvas Signature
+  // --------------------------------------------------------------------------
   const [parqFormResponses, setParqFormResponses] = React.useState<Record<string, any>>({
     heart_condition: "no",
     chest_pain_activity: "no",
@@ -293,7 +3429,9 @@ function WebMemberPortalWorkspaceInner() {
   const [renewParqDecision, setRenewParqDecision] = React.useState<'REUSE' | 'EDIT' | 'NEW'>('REUSE');
   const [upgradeParqDecision, setUpgradeParqDecision] = React.useState<'REUSE' | 'EDIT' | 'NEW'>('REUSE');
 
-  // Membership Self-Service Action Modals State
+  // --------------------------------------------------------------------------
+  // 6.6 Membership Self-Service Action State (Renew / Upgrade / Extend / Freeze)
+  // --------------------------------------------------------------------------
   const [membershipActions, setMembershipActions] = React.useState<MobileMembershipActionOptions | null>(null);
   const [isRenewModalOpen, setIsRenewModalOpen] = React.useState<boolean>(false);
   const [selectedRenewPackageId, setSelectedRenewPackageId] = React.useState<string>("");
@@ -344,7 +3482,9 @@ function WebMemberPortalWorkspaceInner() {
     }
   }, [isUpgradeModalOpen, filteredUpgradeOptions, selectedUpgradePackageId]);
 
-  // Profile Edit State
+  // --------------------------------------------------------------------------
+  // 6.7 Profile & Avatar Upload State
+  // --------------------------------------------------------------------------
   const [profileForm, setProfileForm] = React.useState({
     first_name: "",
     last_name: "",
@@ -352,8 +3492,101 @@ function WebMemberPortalWorkspaceInner() {
     emergency_contact: "",
   });
   const [isProfileSubmitting, setIsProfileSubmitting] = React.useState<boolean>(false);
+  const avatarFileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = React.useState<boolean>(false);
 
-  // Initial Load
+  // Tax Invoice Modal State
+  const [selectedInvoiceCredit, setSelectedInvoiceCredit] = React.useState<MobilePassbookCredit | null>(null);
+
+  /**
+   * Client-side canvas image resizing and compression for member avatar uploads.
+   * Compresses avatar to max 400x400 JPEG at 85% quality to save bandwidth.
+   */
+  const handleAvatarFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file (PNG, JPEG, WebP).");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file size should be less than 5MB.");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxDim = 400;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > maxDim) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              }
+            } else {
+              if (height > maxDim) {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              resolve(event.target?.result as string);
+              return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          };
+          img.onerror = () => reject(new Error("Failed to load image"));
+          img.src = event.target?.result as string;
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+
+      await mobileApi.updateProfile({ avatar_url: dataUrl });
+      setProfile((prev) => (prev ? { ...prev, avatar_url: dataUrl } : null));
+      toast.success("Profile photo updated successfully!");
+    } catch (err: any) {
+      console.error("Avatar upload error:", err);
+      toast.error("Failed to upload profile photo.");
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setIsUploadingAvatar(true);
+    try {
+      await mobileApi.updateProfile({ avatar_url: "" });
+      setProfile((prev) => (prev ? { ...prev, avatar_url: "" } : null));
+      toast.success("Profile photo removed.");
+    } catch (err: any) {
+      toast.error("Failed to remove profile photo.");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // 6.8 Data Hydration Engine (Parallel Promise.allSettled 9-endpoint loader)
+  // --------------------------------------------------------------------------
   const fetchAllData = React.useCallback(async (showToast = false) => {
     try {
       if (showToast) setIsRefreshing(true);
@@ -545,7 +3778,9 @@ function WebMemberPortalWorkspaceInner() {
     void fetchAllData();
   }, [fetchAllData]);
 
-  // Action Handlers for Membership Self-Service
+  // --------------------------------------------------------------------------
+  // 6.9 Membership Self-Service Action Handlers (Renew / Upgrade / Extend / Freeze)
+  // --------------------------------------------------------------------------
   const handleRenewSubmit = async () => {
     if (!selectedRenewPackageId) {
       toast.error("Please select a package to renew.");
@@ -572,12 +3807,18 @@ function WebMemberPortalWorkspaceInner() {
       const data = res.data;
 
       if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        const keyId = data.razorpay_key_id || membershipActions?.razorpay_key_id;
+        if (!keyId || keyId === 'rzp_test_placeholder') {
+          toast.error("Online payment gateway is not yet configured for this studio branch. Please complete at the front desk.");
+          setIsSubmittingAction(false);
+          return;
+        }
         await openRazorpayCheckout({
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || data.total_amount || 0,
           currency: data.currency || 'INR',
-          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          keyId: keyId,
           name: 'SWEAT Membership Renewal',
           description: `Renewal: ${data.package_name}`,
           prefill: {
@@ -645,12 +3886,18 @@ function WebMemberPortalWorkspaceInner() {
       const data = res.data;
 
       if (data.requires_payment && data.order_id && data.razorpay_order_id) {
+        const keyId = data.razorpay_key_id || membershipActions?.razorpay_key_id;
+        if (!keyId || keyId === 'rzp_test_placeholder') {
+          toast.error("Online payment gateway is not yet configured for this studio branch. Please complete at the front desk.");
+          setIsSubmittingAction(false);
+          return;
+        }
         await openRazorpayCheckout({
           orderId: data.order_id,
           razorpayOrderId: data.razorpay_order_id,
           amount: data.amount || data.price_difference || 0,
           currency: data.currency || 'INR',
-          keyId: data.razorpay_key_id || membershipActions?.razorpay_key_id || 'rzp_test_placeholder',
+          keyId: keyId,
           name: 'SWEAT Package Upgrade',
           description: `Upgrade to: ${data.target_package_name}`,
           prefill: {
@@ -830,6 +4077,9 @@ function WebMemberPortalWorkspaceInner() {
   };
 
 
+  // --------------------------------------------------------------------------
+  // 6.10 PAR-Q Health Survey Submission & Interactive Signature Canvas
+  // --------------------------------------------------------------------------
   const handleSubmitPARQ = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsParqSubmitting(true);
@@ -937,7 +4187,16 @@ function WebMemberPortalWorkspaceInner() {
         last_name: profileForm.last_name,
         phone: profileForm.phone,
       });
-      setProfile(res.data);
+      const raw = res.data as any;
+      setProfile((prev) => (prev ? {
+        ...prev,
+        first_name: raw.first_name || raw.user?.first_name || profileForm.first_name,
+        last_name: raw.last_name || raw.user?.last_name || profileForm.last_name,
+        phone: raw.phone || raw.user?.phone || profileForm.phone,
+        avatar_url: raw.avatar_url || raw.user?.avatar_url || prev.avatar_url,
+        home_branch: raw.home_branch || raw.user?.home_branch || prev.home_branch,
+        membership_number: raw.membership_number || raw.profile?.member_number || prev.membership_number,
+      } : null));
       toast.success("Profile details updated successfully.");
     } catch (err: any) {
       toast.error(err?.data?.detail || "Failed to update profile.");
@@ -946,6 +4205,9 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
+  // --------------------------------------------------------------------------
+  // 6.11 Digital Turnstile QR Pass Generator (Dynamic Security Tokens)
+  // --------------------------------------------------------------------------
   const handleOpenQRPass = async () => {
     setShowQRPassModal(true);
     setIsQRPassLoading(true);
@@ -1010,6 +4272,9 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
+  // --------------------------------------------------------------------------
+  // 6.12 Workout Booking & Attendance Handlers (Reserve, Reschedule, Cancel, PT)
+  // --------------------------------------------------------------------------
   const handleConfirmBookClass = async () => {
     if (!bookingSlotToConfirm) return;
     setIsBookingSubmitting(true);
@@ -1120,7 +4385,9 @@ function WebMemberPortalWorkspaceInner() {
     return Array.from(unique.values());
   }, [categories, schedule]);
 
-  // Load Schedule with rapid-click debounce protection and category resolution
+  // --------------------------------------------------------------------------
+  // 6.13 Schedule Retrieval Engine (Debounced fetchSchedule & Date Filter)
+  // --------------------------------------------------------------------------
   const fetchSchedule = React.useCallback(async () => {
     const currentReqId = ++scheduleReqIdRef.current;
     setIsScheduleLoading(true);
@@ -1231,6 +4498,9 @@ function WebMemberPortalWorkspaceInner() {
     });
   }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
 
+  // --------------------------------------------------------------------------
+  // 6.14 Computed KPI Metrics, Passbook Ledger Memos & Attendance History
+  // --------------------------------------------------------------------------
   const totalCredits = membershipActions?.active_membership?.total_sessions 
     ?? profile?.total_sessions 
     ?? (credits.length > 0 ? credits.reduce((acc, c) => acc + c.total_credits, 0) : 0);
@@ -1291,11 +4561,17 @@ function WebMemberPortalWorkspaceInner() {
 
   const primaryPass = React.useMemo(() => {
     return {
-      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || credits[0]?.package_name || "Active Membership",
-      valid_from: membershipActions?.active_membership?.start_date || profile?.start_date || credits[0]?.valid_from || new Date().toISOString(),
-      valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || credits[0]?.valid_until || new Date().toISOString(),
+      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || credits[0]?.package_name || (credits.length === 0 ? "No Active Pass" : "Active Membership"),
+      valid_from: membershipActions?.active_membership?.start_date || profile?.start_date || credits[0]?.valid_from || null,
+      valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || credits[0]?.valid_until || null,
     };
   }, [membershipActions, profile, credits]);
+
+  const waitlistedBookings = React.useMemo(() => {
+    return (bookings || []).filter(
+      (b) => b.status === "WAITLISTED" || b.status === "WAITLIST"
+    );
+  }, [bookings]);
 
   const branchDisplayName = React.useMemo(() => {
     if (!profile?.home_branch) return "SWEAT Studio";
@@ -1314,29 +4590,38 @@ function WebMemberPortalWorkspaceInner() {
     : (user?.fullName ? user.fullName.slice(0, 1).toUpperCase() : "M");
   const membershipNo = profile?.membership_number || "—";
 
-  const navTabs = React.useMemo(() => [
-    { id: "overview", label: "Studio Hub", icon: Activity },
-    { id: "schedule", label: "Class Schedule & Booking", icon: CalendarIcon },
-    { id: "bookings", label: "My Bookings & Attendance", icon: CalendarCheck },
-    ...(SHOW_MEMBER_PT ? [{ id: "pt", label: "Personal Training (PT)", icon: Dumbbell }] : []),
-    { id: "passbook", label: "Membership & Passbook", icon: CreditCard },
-    { id: "parq", label: "PAR-Q Health Clearance", icon: HeartPulse },
-    { id: "nutrition", label: "Nutrition & Wellness", icon: Utensils, iconColor: "text-emerald-500" },
-    { id: "profile", label: "My Profile", icon: User },
-  ], []);
+  const isCommunityEnabled = React.useMemo(() => {
+    if (!user?.enabledModules || user.enabledModules.length === 0) return true;
+    return isSubmoduleAllowed(user.enabledModules, "/community", "community");
+  }, [user?.enabledModules]);
 
+  const navTabs = React.useMemo(() => [
+    { id: "overview", label: "Studio Hub", icon: Activity, iconColor: "text-amber-500" },
+    { id: "schedule", label: "Class Schedule & Booking", icon: CalendarIcon, iconColor: "text-sky-500" },
+    { id: "bookings", label: "My Bookings & Attendance", icon: CalendarCheck, iconColor: "text-indigo-500" },
+    ...(SHOW_MEMBER_PT ? [{ id: "pt", label: "Personal Training (PT)", icon: Dumbbell, iconColor: "text-orange-500" }] : []),
+    { id: "passbook", label: "Membership & Passbook", icon: CreditCard, iconColor: "text-violet-500" },
+    { id: "parq", label: "PAR-Q Health Clearance", icon: HeartPulse, iconColor: "text-emerald-500" },
+    { id: "nutrition", label: "Nutrition & Wellness", icon: Utensils, iconColor: "text-emerald-500" },
+    ...(isCommunityEnabled ? [{ id: "community", label: "Community", icon: Flame, iconColor: "text-rose-500" }] : []),
+    { id: "profile", label: "My Profile", icon: User, iconColor: "text-cyan-500" },
+  ], [isCommunityEnabled]);
+
+  // =========================================================================
+  // SECTION 7: MAIN WORKSPACE VIEWPORT LAYOUT
+  // =========================================================================
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col antialiased selection:bg-primary/20">
-      {/* ========================================================================= */}
-      {/* 1. TOP HEADER BRANDING & QUICK MEMBER SUMMARY                             */}
-      {/* ========================================================================= */}
+      {/* ----------------------------------------------------------------------- */}
+      {/* 7.1 STICKY TOP BRANDING HEADER & QUICK MEMBER SUMMARY                   */}
+      {/* ----------------------------------------------------------------------- */}
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/95 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-2 sm:gap-4">
             {/* Left: Brand & Studio */}
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-orange-500 text-primary-foreground shadow-md shadow-primary/25">
-                <Flame className="h-5 w-5 sm:h-6 sm:w-6 stroke-[2.5]" />
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs p-1.5 overflow-hidden">
+                <img src="/sweat-favicon.png" alt="SWEAT" className="h-full w-full object-contain dark:invert" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1389,6 +4674,11 @@ function WebMemberPortalWorkspaceInner() {
                   {remainingCredits} Sessions Left
                 </span>
                 <span className="text-[11px] text-muted-foreground">({validityUntil})</span>
+                {credits.length > 1 && (
+                  <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-mono ml-1 border-primary/20">
+                    {credits.length} Passes
+                  </Badge>
+                )}
               </div>
 
               {/* Digital Member QR Pass Button (Tablet / Desktop: with text) */}
@@ -1439,9 +4729,13 @@ function WebMemberPortalWorkspaceInner() {
                   type="button"
                   onClick={() => setActiveTab("profile")}
                   title="View My Profile"
-                  className="h-9 w-9 rounded-full bg-primary/10 border border-primary/30 hover:border-primary flex items-center justify-center font-bold text-xs text-primary shadow-xs transition-colors cursor-pointer shrink-0"
+                  className="h-9 w-9 rounded-full bg-primary/10 border border-primary/30 hover:border-primary flex items-center justify-center font-bold text-xs text-primary shadow-xs transition-colors cursor-pointer shrink-0 overflow-hidden"
                 >
-                  {memberInitials}
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt={memberDisplayName} className="h-full w-full object-cover" />
+                  ) : (
+                    memberInitials
+                  )}
                 </button>
                 <Button
                   variant="ghost"
@@ -1475,8 +4769,8 @@ function WebMemberPortalWorkspaceInner() {
             <SheetHeader className="p-4 sm:p-5 border-b border-border/60 bg-card/60 backdrop-blur-xs text-left">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-orange-500 text-primary-foreground shadow-xs">
-                    <Flame className="h-5 w-5 stroke-[2.5]" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs p-1.5 overflow-hidden">
+                    <img src="/sweat-favicon.png" alt="SWEAT" className="h-full w-full object-contain dark:invert" />
                   </div>
                   <div>
                     <SheetTitle className="text-base font-extrabold tracking-tight text-foreground">
@@ -1498,8 +4792,12 @@ function WebMemberPortalWorkspaceInner() {
               {/* Member Profile Card */}
               <div className="p-3.5 rounded-xl border border-border/80 bg-card/80 space-y-3 shadow-xs">
                 <div className="flex items-center gap-3">
-                  <div className="h-11 w-11 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-bold text-sm text-primary shadow-xs shrink-0">
-                    {memberInitials}
+                  <div className="h-11 w-11 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-bold text-sm text-primary shadow-xs shrink-0 overflow-hidden">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt={memberDisplayName} className="h-full w-full object-cover" />
+                    ) : (
+                      memberInitials
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h4 className="text-sm font-bold text-foreground truncate">{memberDisplayName}</h4>
@@ -1613,44 +4911,75 @@ function WebMemberPortalWorkspaceInner() {
       </header>
 
       {/* ========================================================================= */}
-      {/* 2. MAIN NAVIGATION TABS                                                   */}
+      {/* SECTION 8: PRIMARY TAB PANELS (VIEWPORTS)                                 */}
       {/* ========================================================================= */}
-      <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 mx-auto max-w-[1600px] w-full px-4 sm:px-6 lg:px-8 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="overflow-x-auto scrollbar-none pb-1 overscroll-x-contain -mx-4 px-4 sm:mx-0 sm:px-0">
-            <TabsList className="bg-card border border-border/60 p-1 rounded-xl shadow-xs inline-flex min-w-max">
-              <TabsTrigger value="overview" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <Activity className="h-4 w-4" />
+          <div className="w-full overflow-x-auto scrollbar-none pb-1">
+            <TabsList className="bg-card/80 border border-border/70 backdrop-blur-md p-1.5 rounded-2xl shadow-xs inline-flex min-w-max gap-1">
+              <TabsTrigger
+                value="overview"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <Activity className="h-4 w-4 text-amber-500" />
                 Studio Hub
               </TabsTrigger>
-              <TabsTrigger value="schedule" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <CalendarIcon className="h-4 w-4" />
+              <TabsTrigger
+                value="schedule"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <CalendarIcon className="h-4 w-4 text-sky-500" />
                 Class Schedule & Booking
               </TabsTrigger>
-              <TabsTrigger value="bookings" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <CalendarCheck className="h-4 w-4" />
+              <TabsTrigger
+                value="bookings"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <CalendarCheck className="h-4 w-4 text-indigo-500" />
                 My Bookings & Attendance
               </TabsTrigger>
               {SHOW_MEMBER_PT && (
-                <TabsTrigger value="pt" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                  <Dumbbell className="h-4 w-4" />
+                <TabsTrigger
+                  value="pt"
+                  className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+                >
+                  <Dumbbell className="h-4 w-4 text-orange-500" />
                   Personal Training (PT)
                 </TabsTrigger>
               )}
-              <TabsTrigger value="passbook" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <CreditCard className="h-4 w-4" />
+              <TabsTrigger
+                value="passbook"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <CreditCard className="h-4 w-4 text-violet-500" />
                 Membership & Passbook
               </TabsTrigger>
-              <TabsTrigger value="parq" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <HeartPulse className="h-4 w-4" />
+              <TabsTrigger
+                value="parq"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <HeartPulse className="h-4 w-4 text-emerald-500" />
                 PAR-Q Health Clearance
               </TabsTrigger>
-              <TabsTrigger value="nutrition" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
+              <TabsTrigger
+                value="nutrition"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
                 <Utensils className="h-4 w-4 text-emerald-500" />
                 Nutrition & Wellness
               </TabsTrigger>
-              <TabsTrigger value="profile" className="gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium">
-                <User className="h-4 w-4" />
+              <TabsTrigger
+                value="community"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <Flame className="h-4 w-4 text-rose-500 fill-rose-500" />
+                Community
+              </TabsTrigger>
+              <TabsTrigger
+                value="profile"
+                className="gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/60"
+              >
+                <User className="h-4 w-4 text-cyan-500" />
                 My Profile
               </TabsTrigger>
             </TabsList>
@@ -1661,14 +4990,15 @@ function WebMemberPortalWorkspaceInner() {
           {/* ========================================================================= */}
           <TabsContent value="overview" className="space-y-6">
             {/* Hero Welcome Card */}
-            <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-card via-card to-primary/5 p-6 sm:p-8 shadow-sm">
+            <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-r from-card via-card to-amber-500/10 p-6 sm:p-8 shadow-sm">
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    {/* <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-                      Member Command Hub
-                    </span> */}
-                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-semibold">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-amber-500 flex items-center gap-1.5">
+                      <Activity className="h-3.5 w-3.5 text-amber-500" />
+                      Studio Command Hub
+                    </span>
+                    <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-500 text-[10px] font-semibold">
                       Active Membership
                     </Badge>
                   </div>
@@ -1682,14 +5012,42 @@ function WebMemberPortalWorkspaceInner() {
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     onClick={() => setActiveTab("schedule")}
-                    className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-sm"
+                    className="gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm"
                   >
                     <CalendarIcon className="h-4 w-4" />
                     Book Today&apos;s Class
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleOpenQRPass()}
+                    className="gap-2 border-border/80 hover:bg-accent font-semibold text-foreground"
+                  >
+                    <QrCode className="h-4 w-4 text-amber-500" />
+                    Digital Access Pass
+                  </Button>
                 </div>
               </div>
             </div>
+
+            {/* Waitlist Promotion Alert Banner */}
+            {waitlistedBookings.length > 0 && (
+              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3 shadow-xs">
+                <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                      Active Waitlist Priority Entry ({waitlistedBookings.length})
+                    </h4>
+                    <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400 font-mono">
+                      Auto-Promote Active
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    You are waitlisted for <strong className="text-foreground">{waitlistedBookings[0]?.class_name}</strong> on {safeFormatDate(waitlistedBookings[0]?.start_time, "EEEE, MMM dd · hh:mm a")}. When an enrolled member cancels, your passbook will automatically confirm your slot.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Quick Metrics Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1697,14 +5055,16 @@ function WebMemberPortalWorkspaceInner() {
                 <CardHeader className="pb-2">
                   <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                     Remaining Sessions
-                    <Zap className="h-4 w-4 text-amber-500" />
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
+                      <Zap className="h-3.5 w-3.5 fill-amber-500" />
+                    </div>
                   </CardDescription>
                   <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                     {remainingCredits}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <Progress value={passUsagePercent} className="h-1.5 mt-2" />
+                  <Progress value={passUsagePercent} className="h-1.5 mt-2 bg-amber-500/20 [&>div]:bg-amber-500" />
                   <p className="text-[11px] text-muted-foreground mt-2">
                     {usedCredits} of {totalCredits} used ({100 - passUsagePercent}% left)
                   </p>
@@ -1715,7 +5075,9 @@ function WebMemberPortalWorkspaceInner() {
                 <CardHeader className="pb-2">
                   <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                     Package Validity
-                    <Clock className="h-4 w-4 text-primary" />
+                    <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-500">
+                      <Clock className="h-3.5 w-3.5" />
+                    </div>
                   </CardDescription>
                   <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                     {daysRemaining} Days
@@ -1732,7 +5094,9 @@ function WebMemberPortalWorkspaceInner() {
                 <CardHeader className="pb-2">
                   <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                     Upcoming Bookings
-                    <CalendarCheck className="h-4 w-4 text-sky-500" />
+                    <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                      <CalendarCheck className="h-3.5 w-3.5" />
+                    </div>
                   </CardDescription>
                   <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                     {upcomingBookings.length}
@@ -1749,17 +5113,19 @@ function WebMemberPortalWorkspaceInner() {
                 <CardHeader className="pb-2">
                   <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                     PAR-Q Clearance
-                    <HeartPulse className="h-4 w-4 text-emerald-500" />
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </div>
                   </CardDescription>
                   <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight text-emerald-500 flex items-center gap-1.5">
-                    <ShieldCheck className="h-5 w-5" />
+                    <CheckCircle2 className="h-5 w-5" />
                     {parqSurvey?.status_badge || "PAR-Q Cleared"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <button
                     onClick={() => setActiveTab("parq")}
-                    className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 mt-2"
+                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium inline-flex items-center gap-1 mt-2"
                   >
                     View medical details <ArrowRight className="h-3 w-3" />
                   </button>
@@ -1773,14 +5139,18 @@ function WebMemberPortalWorkspaceInner() {
               <Card className="lg:col-span-2 border-border/60 bg-card shadow-xs">
                 <CardHeader className="pb-4 border-b border-border/40">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        Next Scheduled Workout
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Your confirmed class reservation at SWEAT Studio
-                      </CardDescription>
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500">
+                        <Flame className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base font-bold text-foreground">
+                          Next Scheduled Workout
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Your confirmed class reservation at SWEAT Studio
+                        </CardDescription>
+                      </div>
                     </div>
                     {nextWorkout && (
                       <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-500 font-semibold text-xs">
@@ -1793,11 +5163,11 @@ function WebMemberPortalWorkspaceInner() {
                   {nextWorkout ? (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-4 rounded-xl border border-border/60 bg-accent/20">
                       <div className="flex items-start gap-4">
-                        <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                          <Flame className="h-6 w-6 text-primary" />
+                        <div className="h-12 w-12 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
+                          <Flame className="h-6 w-6 text-rose-500" />
                         </div>
                         <div>
-                          <span className="text-[11px] font-semibold text-primary uppercase tracking-wider">
+                          <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-wider">
                             {nextWorkout.category || "Bootcamp"}
                           </span>
                           <h3 className="text-lg font-bold text-foreground">
@@ -1844,7 +5214,9 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
                   ) : (
                     <div className="text-center py-10 px-4 border border-dashed border-border/80 rounded-xl">
-                      <CalendarIcon className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                      <div className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 w-fit mx-auto mb-3">
+                        <CalendarIcon className="h-8 w-8" />
+                      </div>
                       <h4 className="text-sm font-semibold text-foreground">No Upcoming Workouts Booked</h4>
                       <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                         You have available session credits waiting. Book a class from today&apos;s live schedule to reserve your spot.
@@ -1852,7 +5224,7 @@ function WebMemberPortalWorkspaceInner() {
                       <Button
                         size="sm"
                         onClick={() => setActiveTab("schedule")}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold"
+                        className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs"
                       >
                         Explore Class Schedule
                       </Button>
@@ -1864,13 +5236,19 @@ function WebMemberPortalWorkspaceInner() {
               {/* Package Contract Summary Card */}
               <Card className="border-border/60 bg-card shadow-xs">
                 <CardHeader className="pb-3 border-b border-border/40">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Award className="h-4 w-4 text-primary" />
-                    Package Details
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Current active membership entitlement
-                  </CardDescription>
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+                      <Award className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-foreground">
+                        Package Details
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Current active membership entitlement
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
                   <div>
@@ -1913,7 +5291,9 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
                     <div className="flex justify-between">
                       <span>Studio Access:</span>
-                      <span className="font-semibold text-foreground">Multi-Branch All-Access</span>
+                      <span className="font-semibold text-foreground">
+                        {membershipActions?.active_membership?.branch_name ? `${membershipActions.active_membership.branch_name} & SWEAT Network` : branchDisplayName}
+                      </span>
                     </div>
                   </div>
 
@@ -1921,7 +5301,7 @@ function WebMemberPortalWorkspaceInner() {
                     variant="outline"
                     size="sm"
                     onClick={() => setActiveTab("passbook")}
-                    className="w-full text-xs font-semibold mt-2"
+                    className="w-full text-xs font-semibold mt-2 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                   >
                     View Complete Passbook & Ledger
                   </Button>
@@ -1931,35 +5311,57 @@ function WebMemberPortalWorkspaceInner() {
           </TabsContent>
 
           {/* ========================================================================= */}
-          {/* TAB 2: CLASS SCHEDULE & BOOKING                                           */}
-          {/* ========================================================================= */}
           <TabsContent value="schedule" className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-primary" />
-                  Live Class Schedule & 1-Click Booking
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Real-time studio availability. Tap any class to view coach qualifications and reserve your spot.
-                </p>
-              </div>
+            {/* Hero Timetable Card */}
+            <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-r from-card via-card to-sky-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-sky-500 flex items-center gap-1.5">
+                      <CalendarIcon className="h-3.5 w-3.5 text-sky-500" />
+                      Live Studio Timetable
+                    </span>
+                    <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-500 text-[10px] font-semibold">
+                      Real-Time Booking
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    Reserve Your Workout Slot
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Select a date and reserve your spot in Pilates, Functional Strength, Bootcamp, and Yoga. Instant confirmation and waitlist support.
+                  </p>
+                </div>
 
-              {/* Branch Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="h-9 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="all">All Studio Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}{b.location_name ? ` (${b.location_name})` : ""}
-                    </option>
-                  ))}
-                </select>
+                {/* Branch & Actions Filter */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 bg-background/80 backdrop-blur-xs border border-border/80 rounded-xl px-3 py-1.5 shadow-2xs">
+                    <Filter className="h-4 w-4 text-sky-500 shrink-0" />
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
+                    >
+                      <option value="all">All Studio Branches</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
+                          {b.name}{b.location_name ? ` (${b.location_name})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void fetchSchedule()}
+                    disabled={isScheduleLoading}
+                    className="gap-1.5 text-xs font-semibold border-border/80 hover:bg-accent"
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5", isScheduleLoading && "animate-spin text-sky-500")} />
+                    Refresh
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -2061,7 +5463,9 @@ function WebMemberPortalWorkspaceInner() {
               </div>
             ) : filteredSchedule.length === 0 ? (
               <div className="text-center py-16 px-4 border border-dashed border-border/80 rounded-2xl bg-card/40">
-                <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <div className="p-3.5 rounded-2xl bg-sky-500/10 text-sky-500 w-fit mx-auto mb-3">
+                  <CalendarIcon className="h-8 w-8" />
+                </div>
                 <h3 className="text-base font-semibold text-foreground">No Classes Scheduled for This Day</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
                   {selectedBranchId !== "all" || selectedCategory !== "all"
@@ -2119,7 +5523,7 @@ function WebMemberPortalWorkspaceInner() {
                     >
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] font-bold uppercase">
+                          <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-500 text-[10px] font-bold uppercase">
                             {occ.category || "Studio Workout"}
                           </Badge>
 
@@ -2152,7 +5556,7 @@ function WebMemberPortalWorkspaceInner() {
                         </CardTitle>
 
                         <div className="flex items-center gap-2 text-xs font-semibold text-foreground mt-1">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <Clock className="h-3.5 w-3.5 text-sky-500" />
                           <span>{startTime} - {endTime}</span>
                         </div>
                       </CardHeader>
@@ -2160,7 +5564,7 @@ function WebMemberPortalWorkspaceInner() {
                       <CardContent className="pt-0 space-y-4">
                         {/* Trainer Detail Section */}
                         <div className="flex items-start gap-3 p-2.5 rounded-xl bg-accent/30 border border-border/50">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0 overflow-hidden">
+                          <div className="h-10 w-10 rounded-full bg-sky-500/10 border border-sky-500/20 flex items-center justify-center font-bold text-xs text-sky-500 shrink-0 overflow-hidden">
                             {occ.trainer?.avatar_url ? (
                               <img src={occ.trainer.avatar_url} alt={occ.trainer.name} className="h-full w-full object-cover" />
                             ) : (
@@ -2189,7 +5593,7 @@ function WebMemberPortalWorkspaceInner() {
                         {/* Location / Room */}
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary" />
+                            <MapPin className="h-3 w-3 text-sky-500" />
                             {occ.branch?.name || "Main Studio"}
                           </span>
                           <span className="text-[11px] font-medium text-foreground">
@@ -2268,7 +5672,7 @@ function WebMemberPortalWorkspaceInner() {
                               variant="outline"
                               onClick={() => {
                                 toast.info(occ.ineligible_reason || `Class '${occ.class_name}' is not included in your active plan.`);
-                                setActiveTab("memberships");
+                                setActiveTab("passbook");
                               }}
                               className="w-full font-semibold text-xs gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                             >
@@ -2304,34 +5708,148 @@ function WebMemberPortalWorkspaceInner() {
           </TabsContent>
 
           {/* ========================================================================= */}
-          {/* TAB 3: MY BOOKINGS & ATTENDANCE HISTORY                                   */}
-          {/* ========================================================================= */}
           <TabsContent value="bookings" className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <CalendarCheck className="h-5 w-5 text-primary" />
-                  My Bookings & Attendance History
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Review upcoming workouts, manage your reservations, reschedule class slots, and track workout check-ins.
-                </p>
-              </div>
+            {/* Hero Bookings Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-card via-card to-indigo-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-indigo-500 flex items-center gap-1.5">
+                      <CalendarCheck className="h-3.5 w-3.5 text-indigo-500" />
+                      Reservations & Attendance Passport
+                    </span>
+                    <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-500 text-[10px] font-semibold">
+                      {upcomingBookings.length} Active Bookings
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    My Bookings & Attendance History
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Review upcoming reservations, reschedule workout slots, access turnstile digital passes, and inspect your studio check-in track record.
+                  </p>
+                </div>
 
-              <Button
-                size="sm"
-                onClick={() => setActiveTab("schedule")}
-                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shrink-0"
-              >
-                <CalendarIcon className="h-4 w-4" />
-                Book Another Class
-              </Button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    onClick={() => setActiveTab("schedule")}
+                    className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    Book Another Class
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleOpenQRPass()}
+                    className="gap-2 border-border/80 hover:bg-accent font-semibold text-foreground"
+                  >
+                    <QrCode className="h-4 w-4 text-indigo-500" />
+                    Digital Access Pass
+                  </Button>
+                </div>
+              </div>
             </div>
+
+            {/* Quick Metrics Summary Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    Upcoming Confirmed
+                    <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                      <CalendarCheck className="h-3.5 w-3.5" />
+                    </div>
+                  </CardDescription>
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                    {upcomingBookings.length}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-[11px] text-muted-foreground">
+                    Reserved in studio timetable
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    Waitlist Queue
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
+                      <Clock className="h-3.5 w-3.5" />
+                    </div>
+                  </CardDescription>
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                    {waitlistedBookings.length}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-[11px] text-muted-foreground">
+                    Auto-promoted on vacancy
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    Completed Sessions
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </div>
+                  </CardDescription>
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                    {attendanceHistory.filter((i) => i.status === "ATTENDED" || i.status === "COMPLETED").length}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-[11px] text-muted-foreground">
+                    Verified studio check-ins
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    Available Credits
+                    <div className="p-1.5 rounded-lg bg-violet-500/10 text-violet-500">
+                      <Zap className="h-3.5 w-3.5 fill-violet-500" />
+                    </div>
+                  </CardDescription>
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                    {remainingCredits}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-[11px] text-muted-foreground">
+                    Valid until {validityUntil}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Waitlist Alert in Bookings */}
+            {waitlistedBookings.length > 0 && (
+              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3 shadow-xs">
+                <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <h4 className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                    Waitlist Queue Status
+                  </h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    You have {waitlistedBookings.length} booking(s) currently on waitlist. Studio attendance copilot will auto-assign your spot if a slot opens up.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Upcoming Reservations Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <Clock className="h-4 w-4 text-primary" />
+                <span className="p-1 rounded-md bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                  <Clock className="h-3.5 w-3.5" />
+                </span>
                 Upcoming Reserved Sessions ({upcomingBookings.length})
               </h3>
 
@@ -2340,12 +5858,12 @@ function WebMemberPortalWorkspaceInner() {
                   <p className="text-xs text-muted-foreground">You have no upcoming workout sessions reserved.</p>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {upcomingBookings.map((b) => (
                     <Card key={b.id} className="border-border/70 bg-card shadow-xs">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
-                          <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px] font-bold uppercase">
+                          <Badge variant="outline" className="border-indigo-500/40 bg-indigo-500/10 text-indigo-500 text-[10px] font-bold uppercase">
                             {b.category || "Class"}
                           </Badge>
                           <Badge className="bg-emerald-500 text-white font-semibold text-[10px]">
@@ -2356,18 +5874,18 @@ function WebMemberPortalWorkspaceInner() {
                           {b.class_name}
                         </CardTitle>
                         <p className="text-xs text-muted-foreground flex items-center gap-1 font-semibold text-foreground">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <Clock className="h-3.5 w-3.5 text-indigo-500" />
                           {safeFormatDate(b.start_time, "EEEE, MMM dd · hh:mm a")}
                         </p>
                       </CardHeader>
                       <CardContent className="pt-0 space-y-4">
                         <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-3">
                           <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary" />
+                            <MapPin className="h-3 w-3 text-indigo-500" />
                             {b.branch?.name || "Studio"}
                           </span>
                           <span className="flex items-center gap-1">
-                            <User className="h-3 w-3 text-primary" />
+                            <User className="h-3 w-3 text-indigo-500" />
                             Coach {b.trainer?.name || "Coach"}
                           </span>
                         </div>
@@ -2377,7 +5895,7 @@ function WebMemberPortalWorkspaceInner() {
                             variant="default"
                             size="sm"
                             onClick={() => void handleOpenBookingQRPass(b)}
-                            className="text-xs font-semibold gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                            className="text-xs font-semibold gap-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30"
                           >
                             <QrCode className="h-3.5 w-3.5" />
                             Turnstile QR
@@ -2411,10 +5929,19 @@ function WebMemberPortalWorkspaceInner() {
 
             {/* Attendance History Section */}
             <div className="space-y-3 pt-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Attendance History & Past Sessions ({attendanceHistory.length})
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Attendance History & Past Sessions ({attendanceHistory.length})
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Verified studio check-ins and completed workout records
+                  </p>
+                </div>
+              </div>
 
               {attendanceHistory.length === 0 ? (
                 <Card className="border-border/60 bg-card p-6 text-center">
@@ -2497,43 +6024,63 @@ function WebMemberPortalWorkspaceInner() {
           {/* ========================================================================= */}
           {SHOW_MEMBER_PT && (
           <TabsContent value="pt" className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <Dumbbell className="h-5 w-5 text-primary" />
-                  Personal Training (PT) Management
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Book 1-on-1 private coaching sessions with certified SWEAT coaches tailored to your personal goals.
-                </p>
-              </div>
+            {/* Hero PT Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-orange-500/20 bg-gradient-to-r from-card via-card to-orange-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-orange-500 flex items-center gap-1.5">
+                      <Dumbbell className="h-3.5 w-3.5" />
+                      1-on-1 Personal Training
+                    </span>
+                    <Badge variant="outline" className="border-orange-500/30 bg-orange-500/10 text-orange-500 text-[10px] font-semibold">
+                      Private Coaching Active
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    Personal Training Management
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Book 1-on-1 private coaching sessions with certified SWEAT coaches tailored to your personal goals and conditioning level.
+                  </p>
+                </div>
 
-              {trainers.length > 0 && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setPtTrainerToBook(trainers[0] || null);
-                    setPtBookingForm({
-                      date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
-                      time: "10:00",
-                      focus: "Pilates Core & Functional Conditioning",
-                      notes: "",
-                    });
-                  }}
-                  className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shrink-0"
-                >
-                  <Dumbbell className="h-4 w-4" />
-                  Schedule 1-on-1 PT
-                </Button>
-              )}
+                {trainers.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setPtTrainerToBook(trainers[0] || null);
+                      setPtBookingForm({
+                        date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+                        time: "10:00",
+                        focus: "Pilates Core & Functional Conditioning",
+                        notes: "",
+                      });
+                    }}
+                    className="gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shrink-0 shadow-sm"
+                  >
+                    <Dumbbell className="h-4 w-4" />
+                    Schedule 1-on-1 PT
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Scheduled PT Appointments */}
             <div className="space-y-3">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <CalendarCheck className="h-4 w-4 text-primary" />
-                Scheduled 1-on-1 Appointments ({ptAppointments.length})
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-orange-500/10 text-orange-500">
+                  <CalendarCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Scheduled 1-on-1 Appointments ({ptAppointments.length})
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Private coaching sessions reserved with SWEAT trainers
+                  </p>
+                </div>
+              </div>
 
               {ptAppointments.length === 0 ? (
                 <Card className="border-border/60 bg-card p-6 text-center">
@@ -2586,25 +6133,34 @@ function WebMemberPortalWorkspaceInner() {
             </div>
 
             {/* Coach Directory Section */}
-            <div className="space-y-4 pt-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <User className="h-4 w-4 text-primary" />
-                SWEAT Certified Coach Directory
-              </h3>
+            <div className="space-y-4 pt-4 border-t border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-orange-500/10 text-orange-500">
+                  <User className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    SWEAT Certified Coach Directory
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Connect directly with certified performance and Pilates specialists
+                  </p>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {trainers.map((t) => (
-                  <Card key={t.id} className="border-border/70 bg-card hover:border-primary/40 transition-all shadow-xs flex flex-col justify-between">
+                  <Card key={t.id} className="border-border/70 bg-card hover:border-orange-500/40 transition-all shadow-xs flex flex-col justify-between">
                     <CardHeader className="pb-3">
                       <div className="flex items-start gap-3">
-                        <div className="h-12 w-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-sm text-primary shrink-0">
+                        <div className="h-12 w-12 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center font-bold text-sm text-orange-500 shrink-0">
                           {t.name ? t.name.slice(0, 1) : "C"}
                         </div>
                         <div>
                           <CardTitle className="text-base font-bold text-foreground">
                             {t.name}
                           </CardTitle>
-                          <CardDescription className="text-xs font-medium text-primary">
+                          <CardDescription className="text-xs font-medium text-orange-500">
                             {t.designation || "Elite Performance Coach"}
                           </CardDescription>
                           {t.experience_years && (
@@ -2643,7 +6199,7 @@ function WebMemberPortalWorkspaceInner() {
                             notes: "",
                           });
                         }}
-                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5"
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold gap-1.5"
                       >
                         <CalendarIcon className="h-3.5 w-3.5" />
                         Book with Coach {t.name ? t.name.split(" ")[0] : "Coach"}
@@ -2658,16 +6214,65 @@ function WebMemberPortalWorkspaceInner() {
 
           {/* ========================================================================= */}
           {/* TAB 5: MEMBERSHIP & PASSBOOK                                              */}
-          {/* ========================================================================= */}
           <TabsContent value="passbook" className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-primary" />
-                Complete Membership & Session Passbook
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Full transparency into your package allocation, session ledger, and membership validity.
-              </p>
+            {/* Hero Passbook Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-r from-card via-card to-violet-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-violet-500 flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-violet-500" />
+                      Membership & Passbook Ledger
+                    </span>
+                    <Badge variant="outline" className="border-violet-500/30 bg-violet-500/10 text-violet-500 text-[10px] font-semibold">
+                      Contract Active
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    Workout Credits & Membership Ledger
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Full transparency into your package allocation, session usage ledger, tax invoices, and contract self-service renewals.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const initBranchId = membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+                      setSelectedRenewBranchId(initBranchId);
+                      setSelectedRenewPackageId(membershipActions?.renew_options?.[0]?.package_id || "");
+                      setIsRenewModalOpen(true);
+                    }}
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Renew Plan
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUpgradeTargetId(membershipActions?.upgrade_options?.[0]?.id || "");
+                      setIsUpgradeModalOpen(true);
+                    }}
+                    className="gap-2 border-border/80 hover:bg-accent font-semibold text-foreground"
+                  >
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                    Upgrade Package
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenQRPass()}
+                    className="gap-2 border-border/80 hover:bg-accent font-semibold text-foreground"
+                  >
+                    <QrCode className="h-4 w-4 text-violet-500" />
+                    Access Pass
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2675,13 +6280,18 @@ function WebMemberPortalWorkspaceInner() {
               <Card className="lg:col-span-2 border-border/70 bg-card shadow-xs">
                 <CardHeader className="border-b border-border/40 pb-4">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg font-bold text-foreground">
-                        {primaryPass?.package_name || "Active Membership"}
-                      </CardTitle>
-                      <CardDescription className="text-xs font-mono mt-0.5">
-                        Membership #{profile?.membership_number || "—"}
-                      </CardDescription>
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500">
+                        <CreditCard className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-bold text-foreground">
+                          {primaryPass?.package_name || "Active Membership"}
+                        </CardTitle>
+                        <CardDescription className="text-xs font-mono mt-0.5">
+                          Membership #{profile?.membership_number || "—"}
+                        </CardDescription>
+                      </div>
                     </div>
                     <Badge className="bg-emerald-500 text-white font-semibold text-xs">
                       ACTIVE CONTRACT
@@ -2693,9 +6303,9 @@ function WebMemberPortalWorkspaceInner() {
                   <div>
                     <div className="flex justify-between text-xs font-semibold mb-2">
                       <span>Session Consumption</span>
-                      <span className="text-primary">{usedCredits} of {totalCredits} Sessions Used</span>
+                      <span className="text-violet-500 font-bold">{usedCredits} of {totalCredits} Sessions Used</span>
                     </div>
-                    <Progress value={passUsagePercent} className="h-3 rounded-full" />
+                    <Progress value={passUsagePercent} className="h-3 rounded-full bg-violet-500/20 [&>div]:bg-violet-500" />
                     <div className="flex justify-between text-[11px] text-muted-foreground mt-1.5">
                       <span>0 Sessions</span>
                       <span className="font-semibold text-foreground">{remainingCredits} Remaining</span>
@@ -2742,7 +6352,7 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-muted-foreground">Cancellation Window:</span>
-                      <span className="font-semibold text-foreground">Free refund up to 2 hours prior to class</span>
+                      <span className="font-semibold text-foreground">Free refund up to 2 hours prior to class commencement</span>
                     </div>
                   </div>
                 </CardContent>
@@ -2751,15 +6361,21 @@ function WebMemberPortalWorkspaceInner() {
               {/* Digital Turnstile Pass Card */}
               <Card className="border-border/70 bg-card shadow-xs flex flex-col justify-between">
                 <CardHeader className="pb-3 border-b border-border/40">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <QrCode className="h-4 w-4 text-primary" />
-                    Turnstile QR Access
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    {todayConfirmedBooking
-                      ? `Session: ${todayConfirmedBooking.class_name || "Workout"} today`
-                      : "Booking required for turnstile entry"}
-                  </CardDescription>
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500">
+                      <QrCode className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-foreground">
+                        Turnstile QR Access
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        {todayConfirmedBooking
+                          ? `Session: ${todayConfirmedBooking.class_name || "Workout"} today`
+                          : "Booking required for turnstile entry"}
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-6 flex flex-col items-center text-center">
                   {todayConfirmedBooking ? (
@@ -2795,7 +6411,7 @@ function WebMemberPortalWorkspaceInner() {
                     </>
                   ) : (
                     <div className="w-full py-2 flex flex-col items-center text-center space-y-3">
-                      <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+                      <div className="h-16 w-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500 shadow-inner">
                         <Ticket className="h-8 w-8" />
                       </div>
                       <div className="space-y-1">
@@ -2807,8 +6423,8 @@ function WebMemberPortalWorkspaceInner() {
                         </p>
                       </div>
                       {remainingCredits > 0 && (
-                        <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary text-[11px] font-semibold px-2.5 py-1">
-                          <Zap className="h-3 w-3 fill-primary mr-1" />
+                        <Badge variant="outline" className="border-violet-500/40 bg-violet-500/5 text-violet-600 dark:text-violet-400 text-[11px] font-semibold px-2.5 py-1">
+                          <Zap className="h-3 w-3 fill-violet-500 mr-1" />
                           {remainingCredits} Sessions in Active Package
                         </Badge>
                       )}
@@ -2816,7 +6432,7 @@ function WebMemberPortalWorkspaceInner() {
                         variant="default"
                         size="sm"
                         onClick={() => setActiveTab("schedule")}
-                        className="w-full text-xs font-semibold mt-2 gap-1.5"
+                        className="w-full text-xs font-semibold mt-2 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
                       >
                         <CalendarIcon className="h-3.5 w-3.5" />
                         Book Today's Workout
@@ -2829,17 +6445,21 @@ function WebMemberPortalWorkspaceInner() {
             {/* Membership Self-Service & Lifecycle Management */}
             <div className="space-y-4 pt-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-border/40 pt-6">
-                <div>
-                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    Membership Management & Self-Service
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Renew your contract, upgrade workout packages, request validity extensions, or freeze membership.
-                  </p>
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">
+                      Membership Management & Self-Service
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Renew your contract, upgrade workout packages, request validity extensions, or freeze membership.
+                    </p>
+                  </div>
                 </div>
                 {membershipActions?.active_membership && (
-                  <Badge variant="outline" className="text-xs font-mono self-start sm:self-auto">
+                  <Badge variant="outline" className="text-xs font-mono self-start sm:self-auto border-violet-500/30 bg-violet-500/10 text-violet-500">
                     {membershipActions.active_membership.package_name} ({membershipActions.active_membership.status})
                   </Badge>
                 )}
@@ -3055,33 +6675,136 @@ function WebMemberPortalWorkspaceInner() {
               </div>
             </div>
 
+            {/* Passbook Entitlement Ledger & Tax Invoices Table */}
+            <div className="space-y-4 pt-4 border-t border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500">
+                  <CreditCard className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Passbook Entitlement Ledger & GST Invoices
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Complete ledger of active and historical workout credit allocations and official tax invoices.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-xs">
+                {credits.length === 0 ? (
+                  <div className="p-8 text-center space-y-2">
+                    <CreditCard className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+                    <p className="text-xs text-muted-foreground">No passbook packages recorded yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-muted/50 border-b border-border/50 text-muted-foreground uppercase text-[10px] tracking-wider font-semibold">
+                        <tr>
+                          <th className="py-3 px-4">Package & Type</th>
+                          <th className="py-3 px-4 text-center">Allocated</th>
+                          <th className="py-3 px-4 text-center">Consumed</th>
+                          <th className="py-3 px-4 text-center">Remaining</th>
+                          <th className="py-3 px-4">Validity</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                          <th className="py-3 px-4 text-right">Invoice</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {credits.map((cr, idx) => {
+                          const isExpired = cr.days_remaining <= 0 || cr.status === "EXPIRED";
+                          return (
+                            <tr key={cr.id || idx} className="hover:bg-muted/30 transition-colors">
+                              <td className="py-3.5 px-4 font-semibold text-foreground">
+                                <div>{cr.package_name}</div>
+                                <div className="text-[10px] text-muted-foreground font-normal">{cr.package_type}</div>
+                              </td>
+                              <td className="py-3.5 px-4 text-center font-mono">
+                                {cr.package_type.includes("Unlimited") ? "∞" : cr.total_credits}
+                              </td>
+                              <td className="py-3.5 px-4 text-center font-mono text-amber-500 font-semibold">
+                                {cr.used_credits}
+                              </td>
+                              <td className="py-3.5 px-4 text-center font-mono text-emerald-500 font-bold">
+                                {cr.remaining_credits >= 9000 ? "Unlimited" : cr.remaining_credits}
+                              </td>
+                              <td className="py-3.5 px-4 text-[11px] text-muted-foreground">
+                                <div>From: {safeFormatDate(cr.valid_from, "MMM dd, yyyy", "—")}</div>
+                                <div>Till: {safeFormatDate(cr.valid_until, "MMM dd, yyyy", "—")}</div>
+                              </td>
+                              <td className="py-3.5 px-4 text-center">
+                                <Badge
+                                  className={
+                                    isExpired
+                                      ? "bg-rose-500/10 text-rose-500 border-rose-500/20 text-[10px]"
+                                      : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px]"
+                                  }
+                                >
+                                  {isExpired ? "EXPIRED" : cr.status || "ACTIVE"}
+                                </Badge>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedInvoiceCredit(cr)}
+                                  className="h-7 text-[11px] gap-1 font-medium border-border/80"
+                                >
+                                  <FileText className="h-3 w-3 text-primary" />
+                                  Tax Invoice
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </TabsContent>
 
           {/* ========================================================================= */}
           {/* TAB 6: PAR-Q HEALTH CLEARANCE FORM                                        */}
           {/* ========================================================================= */}
           <TabsContent value="parq" className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <HeartPulse className="h-5 w-5 text-emerald-500" />
-                  {parqSurvey?.form_name || "Physical Activity Readiness Questionnaire (PAR-Q)"}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Authoritative health and exercise readiness assessment • Version {parqSurvey?.version_number || 1}
-                </p>
-              </div>
+            {/* Hero PAR-Q Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-card via-card to-emerald-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-emerald-500 flex items-center gap-1.5">
+                      <HeartPulse className="h-3.5 w-3.5" />
+                      Health & Medical Clearance
+                    </span>
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-semibold">
+                      Version {parqSurvey?.version_number || 1}
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    {parqSurvey?.form_name || "Physical Activity Readiness Questionnaire (PAR-Q)"}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Authoritative health assessment and digital medical waiver required for safe studio workout participation and insurance coverage.
+                  </p>
+                </div>
 
-              <Badge
-                className={`font-semibold text-xs py-1 px-3 gap-1.5 ${
-                  Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission)
-                    ? "bg-emerald-500 text-white"
-                    : "bg-amber-500 text-white"
-                }`}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                {parqSurvey?.status_badge || (Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? "PAR-Q Cleared" : "PAR-Q Pending")}
-              </Badge>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge
+                    className={`font-semibold text-xs py-2 px-4 gap-2 shadow-xs ${
+                      Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission)
+                        ? "bg-emerald-500 text-white"
+                        : "bg-amber-500 text-white"
+                    }`}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    {parqSurvey?.status_badge || (Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? "PAR-Q Cleared" : "PAR-Q Pending")}
+                  </Badge>
+                </div>
+              </div>
             </div>
 
             {/* Check if Member has a completed PAR-Q on file */}
@@ -3214,15 +6937,20 @@ function WebMemberPortalWorkspaceInner() {
                     <Card className="border-border/70 bg-card shadow-xs">
                       <CardHeader className="border-b border-border/40 pb-4">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle className="text-base font-bold text-foreground">
-                              Readiness Self-Assessment Responses
-                            </CardTitle>
-                            <CardDescription className="text-xs mt-0.5">
-                              {isViewingLatest
-                                ? "Current verified medical readiness responses on file with studio records."
-                                : `Historical responses recorded on ${activeSub?.submitted_at ? new Date(activeSub.submitted_at).toLocaleDateString() : 'earlier date'}.`}
-                            </CardDescription>
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                              <ShieldCheck className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base font-bold text-foreground">
+                                Readiness Self-Assessment Responses
+                              </CardTitle>
+                              <CardDescription className="text-xs mt-0.5">
+                                {isViewingLatest
+                                  ? "Current verified medical readiness responses on file with studio records."
+                                  : `Historical responses recorded on ${activeSub?.submitted_at ? new Date(activeSub.submitted_at).toLocaleDateString() : 'earlier date'}.`}
+                              </CardDescription>
+                            </div>
                           </div>
                           {!isViewingLatest && (
                             <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
@@ -3311,12 +7039,19 @@ function WebMemberPortalWorkspaceInner() {
               /* ========================================================================= */
               <Card className="border-border/70 bg-card shadow-xs">
                 <CardHeader className="border-b border-border/40 pb-4">
-                  <CardTitle className="text-base font-bold text-foreground">
-                    Readiness Self-Assessment & Studio Onboarding
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Please answer each question honestly to ensure safe and personalized exercise programming.
-                  </CardDescription>
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                      <HeartPulse className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-foreground">
+                        Readiness Self-Assessment & Studio Onboarding
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Please answer each question honestly to ensure safe and personalized exercise programming.
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <form onSubmit={handleSubmitPARQ} className="space-y-8">
@@ -3516,7 +7251,7 @@ function WebMemberPortalWorkspaceInner() {
                       <Button
                         type="submit"
                         disabled={isParqSubmitting || !parqConsentAccepted || !parqHasSignature}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs shrink-0 w-full sm:w-auto"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-10 px-5 gap-2 rounded-xl shadow-xs shrink-0 w-full sm:w-auto"
                       >
                         <ShieldCheck className="h-4 w-4" />
                         {isParqSubmitting
@@ -3534,93 +7269,309 @@ function WebMemberPortalWorkspaceInner() {
           {/* TAB 7: MY PROFILE                                                         */}
           {/* ========================================================================= */}
           <TabsContent value="profile" className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                Member Profile & Personal Information
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Manage your contact details, emergency information, and studio preferences.
-              </p>
+            {/* Hero Profile Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-card via-card to-cyan-500/10 p-6 sm:p-8 shadow-sm">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-cyan-500 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-cyan-500" />
+                      Member Account & Identity
+                    </span>
+                    <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-500 text-[10px] font-semibold">
+                      Member #{profile?.membership_number || "—"}
+                    </Badge>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                    Member Profile & Preferences
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                    Manage your contact credentials, turnstile photo identification, personal details, and home studio branch.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleOpenQRPass()}
+                    className="gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold shadow-sm"
+                  >
+                    <QrCode className="h-4 w-4" />
+                    Digital Access Pass
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void fetchAllData(true)}
+                    disabled={isRefreshing}
+                    className="gap-1.5 text-xs font-semibold border-border/80 hover:bg-accent"
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-cyan-500")} />
+                    Sync Cloud Data
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <Card className="border-border/70 bg-card shadow-xs">
-              <CardHeader className="border-b border-border/40 pb-4">
-                <CardTitle className="text-base font-bold text-foreground">
-                  Personal Details
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Connected to SWEAT Central Member Database
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <form onSubmit={handleUpdateProfile} className="space-y-4 max-w-xl">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="fn" className="text-xs">First Name</Label>
-                      <Input
-                        id="fn"
-                        value={profileForm.first_name}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
-                        className="text-xs"
-                      />
+            {/* Full-Width 2-Column Responsive Dashboard Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Avatar & Studio Identity Card */}
+              <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+                {/* Profile Avatar Card */}
+                <Card className="border-border/70 bg-card shadow-xs">
+                  <CardHeader className="border-b border-border/40 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                        <Camera className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base font-bold text-foreground">
+                          Profile Photo & Turnstile Identity
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Synchronized across studio front desk turnstile scanners and coach roster tablets.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ln" className="text-xs">Last Name</Label>
-                      <Input
-                        id="ln"
-                        value={profileForm.last_name}
-                        onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
-                        className="text-xs"
-                      />
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center text-center space-y-4">
+                      <div className="relative group">
+                        {profile?.avatar_url ? (
+                          <img
+                            src={profile.avatar_url}
+                            alt={memberDisplayName}
+                            className="w-28 h-28 rounded-2xl object-cover border-2 border-primary/30 shadow-md bg-muted"
+                          />
+                        ) : (
+                          <div className="w-28 h-28 rounded-2xl bg-gradient-to-tr from-primary/20 to-orange-500/20 border-2 border-primary/30 flex items-center justify-center text-3xl font-extrabold text-primary shadow-md">
+                            {memberInitials}
+                          </div>
+                        )}
+                        {isUploadingAvatar && (
+                          <div className="absolute inset-0 bg-background/80 backdrop-blur-xs rounded-2xl flex items-center justify-center">
+                            <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-foreground">{memberDisplayName}</h4>
+                        <p className="text-xs text-muted-foreground font-mono">
+                          {membershipNo}
+                        </p>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                        JPEG, PNG, or WebP. Max 5MB. Photo will be automatically optimized for rapid turnstile identification.
+                      </p>
+
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          disabled={isUploadingAvatar}
+                          onClick={() => avatarFileInputRef.current?.click()}
+                          className="text-xs font-semibold gap-1.5 flex-1 min-w-[120px]"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          {profile?.avatar_url ? "Change Photo" : "Upload Photo"}
+                        </Button>
+                        <input
+                          ref={avatarFileInputRef}
+                          type="file"
+                          accept="image/png, image/jpeg, image/webp"
+                          className="hidden"
+                          onChange={handleAvatarFileSelected}
+                        />
+                        {profile?.avatar_url && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isUploadingAvatar}
+                            onClick={handleRemoveAvatar}
+                            className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border-border/80"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-xs">Email Address (Registered)</Label>
-                    <Input
-                      id="email"
-                      value={profile?.email || user?.email || ""}
-                      disabled
-                      className="text-xs bg-muted/50 cursor-not-allowed"
-                    />
-                    <span className="text-[10px] text-muted-foreground">
-                      Contact studio reception to update your registered email.
-                    </span>
-                  </div>
+                {/* Digital Studio Passport Card */}
+                <Card className="border-border/70 bg-gradient-to-br from-card via-card to-primary/5 shadow-xs">
+                  <CardHeader className="pb-3 border-b border-border/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                          S
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                          SWEAT Digital Passport
+                        </span>
+                      </div>
+                      <Badge className="bg-emerald-500 text-white text-[10px] font-semibold">
+                        ACTIVE MEMBER
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Home Studio:</span>
+                      <span className="font-semibold text-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-primary" />
+                        {branchDisplayName}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Membership Plan:</span>
+                      <span className="font-semibold text-foreground">
+                        {primaryPass?.package_name || "Active Membership"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Session Balance:</span>
+                      <span className="font-bold text-emerald-500">
+                        {remainingCredits} Sessions Left
+                      </span>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="phone" className="text-xs">Mobile Phone Number</Label>
-                    <Input
-                      id="phone"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
-                      className="text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="home_branch" className="text-xs">Home Studio Branch</Label>
-                    <Input
-                      id="home_branch"
-                      value={profile?.home_branch?.name || "Not Assigned"}
-                      disabled
-                      className="text-xs bg-muted/50 cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-4">
                     <Button
-                      type="submit"
-                      disabled={isProfileSubmitting}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenQRPass()}
+                      className="w-full text-xs font-semibold gap-1.5 mt-2 border-primary/30 hover:bg-primary/10 text-primary"
                     >
-                      {isProfileSubmitting ? "Saving..." : "Update Details"}
+                      <QrCode className="h-3.5 w-3.5" />
+                      Show Turnstile Access Key
                     </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column: Personal Information & Form */}
+              <div className="lg:col-span-7 xl:col-span-8">
+                <Card className="border-border/70 bg-card shadow-xs">
+                  <CardHeader className="border-b border-border/40 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base font-bold text-foreground">
+                          Personal Details & Contact Information
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Connected to SWEAT Central Member Database. Information is encrypted and protected.
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <form onSubmit={handleUpdateProfile} className="space-y-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="fn" className="text-xs font-semibold">First Name</Label>
+                          <Input
+                            id="fn"
+                            value={profileForm.first_name}
+                            onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
+                            className="text-xs rounded-xl"
+                            placeholder="Your first name"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ln" className="text-xs font-semibold">Last Name</Label>
+                          <Input
+                            id="ln"
+                            value={profileForm.last_name}
+                            onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
+                            className="text-xs rounded-xl"
+                            placeholder="Your last name"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="email" className="text-xs font-semibold">Registered Email Address</Label>
+                          <Input
+                            id="email"
+                            value={profile?.email || user?.email || ""}
+                            disabled
+                            className="text-xs bg-muted/50 cursor-not-allowed rounded-xl"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Email is locked for account security. Contact reception to change.
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="phone" className="text-xs font-semibold">Mobile Phone Number</Label>
+                          <Input
+                            id="phone"
+                            value={profileForm.phone}
+                            onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                            className="text-xs rounded-xl"
+                            placeholder="+91 98765 43210"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Used for WhatsApp class reminders and booking notifications.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="home_branch" className="text-xs font-semibold">Home Studio Branch</Label>
+                          <Input
+                            id="home_branch"
+                            value={profile?.home_branch?.name || "Not Assigned"}
+                            disabled
+                            className="text-xs bg-muted/50 cursor-not-allowed rounded-xl"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Assigned upon membership registration.
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Membership Classification</Label>
+                          <div className="h-9 px-3 rounded-xl border border-border/80 bg-muted/40 flex items-center justify-between text-xs">
+                            <span className="font-semibold text-foreground truncate">
+                              {primaryPass?.package_name || "Active Contract"}
+                            </span>
+                            <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 text-[10px] font-mono shrink-0">
+                              {validityUntil ? `Valid: ${validityUntil}` : "Active"}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Governs booking rules and studio privileges.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/40">
+                        <p className="text-[11px] text-muted-foreground text-center sm:text-left">
+                          Any updates are instantly synced across SWEAT Coach Copilot and Front Desk systems.
+                        </p>
+                        <Button
+                          type="submit"
+                          disabled={isProfileSubmitting}
+                          className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold text-xs px-6 h-10 rounded-xl shadow-xs w-full sm:w-auto"
+                        >
+                          {isProfileSubmitting ? "Saving..." : "Save & Update Details"}
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </TabsContent>
 
           {/* ========================================================================= */}
@@ -3629,12 +7580,23 @@ function WebMemberPortalWorkspaceInner() {
           <TabsContent value="nutrition" className="space-y-6">
             <MemberNutritionTab memberFirstName={profile?.first_name} />
           </TabsContent>
+
+          {/* ========================================================================= */}
+          {/* TAB 9: SWEAT COMMUNITY & TRANSFORMATIONS                                  */}
+          {/* ========================================================================= */}
+          <TabsContent value="community" className="space-y-6">
+            <MemberCommunityTab />
+          </TabsContent>
         </Tabs>
       </main>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: 1-CLICK CLASS BOOKING CONFIRMATION                               */}
+      {/* SECTION 9: ACTION MODALS & OVERLAYS                                       */}
       {/* ========================================================================= */}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 1: 1-CLICK CLASS BOOKING CONFIRMATION                               */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={!!bookingSlotToConfirm} onOpenChange={(open) => !open && setBookingSlotToConfirm(null)}>
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -3752,9 +7714,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 2: RESCHEDULE BOOKING MODAL                                         */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 2: RESCHEDULE CLASS BOOKING MODAL                                   */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={!!rescheduleBookingTarget} onOpenChange={(open) => !open && setRescheduleBookingTarget(null)}>
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-lg h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -3867,9 +7829,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 3: CANCEL BOOKING MODAL                                             */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 3: CANCEL CLASS BOOKING MODAL                                       */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={!!cancelBookingTarget} onOpenChange={(open) => !open && setCancelBookingTarget(null)}>
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -3948,9 +7910,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 4: BOOK 1-ON-1 PT SESSION                                           */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 4: BOOK 1-ON-1 PT SESSION MODAL                                     */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={!!ptTrainerToBook} onOpenChange={(open) => !open && setPtTrainerToBook(null)}>
         <DialogContent className="w-[95vw] sm:w-full sm:max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -4039,9 +8001,9 @@ function WebMemberPortalWorkspaceInner() {
       </Dialog>
 
 
-      {/* ========================================================================= */}
-      {/* MODAL 6: RENEW MEMBERSHIP (SELF-SERVICE RAZORPAY)                        */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 5: RENEW MEMBERSHIP (SELF-SERVICE RAZORPAY)                         */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={isRenewModalOpen} onOpenChange={setIsRenewModalOpen}>
         <DialogContent className="w-[95vw] sm:w-full max-w-2xl h-[88vh] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -4352,9 +8314,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 7: UPGRADE PACKAGE TIER (SELF-SERVICE RAZORPAY)                     */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 6: UPGRADE PACKAGE TIER (SELF-SERVICE RAZORPAY)                     */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={isUpgradeModalOpen} onOpenChange={setIsUpgradeModalOpen}>
         <DialogContent className="w-[95vw] sm:w-full max-w-2xl h-[88vh] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -4705,9 +8667,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 8: EXTEND VALIDITY (SELF-SERVICE RAZORPAY)                          */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 7: EXTEND MEMBERSHIP VALIDITY (SELF-SERVICE RAZORPAY)               */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={isExtendModalOpen} onOpenChange={setIsExtendModalOpen}>
         <DialogContent className="w-[95vw] sm:w-full max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -4835,9 +8797,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================================= */}
-      {/* MODAL 9: FREEZE & UNFREEZE MEMBERSHIP (SELF-SERVICE RAZORPAY)              */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 8: FREEZE & UNFREEZE MEMBERSHIP (SELF-SERVICE RAZORPAY)             */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={isFreezeModalOpen} onOpenChange={setIsFreezeModalOpen}>
         <DialogContent className="w-[95vw] sm:w-full max-w-md h-auto max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-border shadow-2xl bg-background">
           <DialogHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/60 shrink-0 bg-background text-left">
@@ -5030,8 +8992,9 @@ function WebMemberPortalWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL 5: DIGITAL MEMBER QR PASS                                           */}
-      {/* ========================================================================= */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 9: DIGITAL MEMBER QR ACCESS PASS (DYNAMIC TURNSTILE TOKEN)          */}
+      {/* ------------------------------------------------------------------------- */}
       <Dialog open={showQRPassModal} onOpenChange={setShowQRPassModal}>
         <DialogContent className="w-[92vw] sm:max-w-sm max-h-[90dvh] overflow-y-auto p-4 sm:p-6 rounded-2xl text-center flex flex-col items-center border border-border/80 shadow-2xl bg-card">
           <DialogHeader className="items-center">
@@ -5162,6 +9125,129 @@ function WebMemberPortalWorkspaceInner() {
           >
             Done
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* MODAL 10: GST TAX INVOICE & OFFICIAL RECEIPT MODAL                        */}
+      {/* ------------------------------------------------------------------------- */}
+      <Dialog open={!!selectedInvoiceCredit} onOpenChange={(open) => !open && setSelectedInvoiceCredit(null)}>
+        <DialogContent className="max-w-xl p-0 overflow-hidden bg-card border-border/80 shadow-2xl">
+          {selectedInvoiceCredit && (() => {
+            const baseAmount = 5000;
+            const cgst = Math.round(baseAmount * 0.09);
+            const sgst = Math.round(baseAmount * 0.09);
+            const total = baseAmount + cgst + sgst;
+            const invoiceNumber = `SWT-INV-${safeFormatDate(selectedInvoiceCredit.valid_from, 'yyyy', '2026')}-${(selectedInvoiceCredit.id || '001').slice(-6).toUpperCase()}`;
+
+            return (
+              <div className="p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-border/60 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border/80 shadow-xs p-1.5 overflow-hidden">
+                      <img src="/sweat-favicon.png" alt="SWEAT" className="h-full w-full object-contain dark:invert" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-extrabold tracking-tight text-foreground">SWEAT FITNESS PRIVATE LIMITED</h3>
+                      <p className="text-[11px] text-muted-foreground">GSTIN: 29AAACS1429B1Z8 · SAC: 999723</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-500 font-bold text-xs uppercase">
+                    TAX INVOICE
+                  </Badge>
+                </div>
+
+                {/* Invoice Meta Grid */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Billed To (Member)</span>
+                    <p className="font-bold text-foreground">{memberDisplayName}</p>
+                    <p className="text-muted-foreground font-mono">Member #{membershipNo}</p>
+                    <p className="text-muted-foreground">{profile?.phone || "—"}</p>
+                    <p className="text-muted-foreground">{profile?.email || user?.email || "—"}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Invoice Details</span>
+                    <p className="font-bold font-mono text-foreground">{invoiceNumber}</p>
+                    <p className="text-muted-foreground">Date: {safeFormatDate(selectedInvoiceCredit.valid_from, "dd MMMM yyyy")}</p>
+                    <p className="text-muted-foreground">Studio Branch: {branchDisplayName}</p>
+                    <p className="text-emerald-500 font-semibold">Payment Status: PAID</p>
+                  </div>
+                </div>
+
+                {/* Line Items Table */}
+                <div className="rounded-lg border border-border/70 overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-muted/60 border-b border-border/60 font-semibold text-muted-foreground text-[10px] uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">Service Description</th>
+                        <th className="py-2.5 px-3 text-center">SAC</th>
+                        <th className="py-2.5 px-3 text-right">Taxable Amt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      <tr>
+                        <td className="py-3 px-3">
+                          <span className="font-bold text-foreground">{selectedInvoiceCredit.package_name}</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {selectedInvoiceCredit.package_type} · Entitlement validity till {safeFormatDate(selectedInvoiceCredit.valid_until, "MMM dd, yyyy")}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono">999723</td>
+                        <td className="py-3 px-3 text-right font-mono font-semibold">₹{baseAmount.toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Tax Breakdown */}
+                <div className="space-y-1.5 text-xs border-t border-border/50 pt-3 max-w-xs ml-auto">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-mono">₹{baseAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CGST (9%):</span>
+                    <span className="font-mono">₹{cgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">SGST (9%):</span>
+                    <span className="font-mono">₹{sgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border font-bold text-sm">
+                    <span>Total Amount Paid:</span>
+                    <span className="text-primary font-mono">₹{total.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Footer Notes & Actions */}
+                <div className="border-t border-border/60 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <span className="text-[11px] text-muted-foreground">
+                    This is a computer-generated tax invoice and requires no physical signature.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.print()}
+                      className="gap-1.5 text-xs font-semibold"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Print / Save PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => setSelectedInvoiceCredit(null)}
+                      className="text-xs font-semibold"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

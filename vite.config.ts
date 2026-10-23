@@ -21,6 +21,10 @@ export default defineConfig({
           target: backendUrl,
           changeOrigin: true,
         },
+        "/media": {
+          target: backendUrl,
+          changeOrigin: true,
+        },
       },
     },
   },

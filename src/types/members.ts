@@ -366,6 +366,7 @@ export interface Member360Data {
     cross_branch_sessions_remaining: number;
     outstanding_balance: number;
     assigned_trainer: string;
+    avatar_url?: string;
     alerts: MemberAlert[];
     available_actions: AvailableAction[];
   };
@@ -374,6 +375,7 @@ export interface Member360Data {
       full_name: string;
       email: string;
       phone: string;
+      avatar_url?: string;
       gender: string;
       age: number | null;
       date_of_birth?: string | null;

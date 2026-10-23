@@ -60,9 +60,15 @@ import {
   PenTool,
   Edit3,
   Globe,
+  Utensils,
+  Droplets,
+  Moon,
+  Flame,
+  Coffee,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { wellnessApi } from '@/api/endpoints/wellnessApi';
 import { EditMemberProfileModal } from './modals/EditMemberProfileModal';
 import { EditAttendanceModal } from './modals/EditAttendanceModal';
 import type {
@@ -105,11 +111,12 @@ interface Member360WorkspaceProps {
   initialTab?: string | undefined;
 }
 
-type TabKey = 'overview' | 'timeline' | 'memberships' | 'bookings' | 'finance' | 'health';
+type TabKey = 'overview' | 'timeline' | 'memberships' | 'bookings' | 'finance' | 'health' | 'wellness';
 
 const resolveInitialTab = (tab?: string): TabKey => {
   if (!tab) return 'overview';
   const lower = tab.toLowerCase();
+  if (lower === 'wellness' || lower === 'nutrition') return 'wellness';
   if (lower === 'parq_form' || lower === 'health' || lower === 'parq') return 'health';
   if (lower === 'memberships' || lower === 'membership') return 'memberships';
   if (lower === 'bookings' || lower === 'booking') return 'bookings';
@@ -243,6 +250,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     cross_branch_sessions_remaining: data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0,
     outstanding_balance: Number(data360.header?.outstanding_balance ?? member.outstanding_balance ?? 0),
     assigned_trainer: data360.header?.assigned_trainer || member.assigned_trainer || 'Unassigned',
+    avatar_url: data360.header?.avatar_url || (member as any)?.avatar_url || '',
     alerts: Array.isArray(data360.header?.alerts) ? data360.header.alerts : [],
     available_actions: Array.isArray(data360.header?.available_actions) ? data360.header.available_actions : [],
     active_programs: Array.isArray((data360.header as any)?.active_programs)
@@ -513,9 +521,17 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             {/* Identity & Basic Info */}
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center font-bold text-xl text-indigo-400 shrink-0 shadow-inner">
-                {header.name ? header.name.charAt(0).toUpperCase() : 'M'}
-              </div>
+              {header.avatar_url ? (
+                <img
+                  src={header.avatar_url}
+                  alt={header.name}
+                  className="w-16 h-16 rounded-xl object-cover border border-indigo-500/30 shadow-inner shrink-0 bg-muted"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center font-bold text-xl text-indigo-400 shrink-0 shadow-inner">
+                  {header.name ? header.name.charAt(0).toUpperCase() : 'M'}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -736,6 +752,11 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                 label: 'PAR-Q Form',
                 icon: HeartPulse,
                 count: (par_q_form?.submissions || health_and_forms?.submissions || []).length,
+              },
+              {
+                key: 'wellness',
+                label: 'Nutrition & Wellness',
+                icon: Utensils,
               },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -1087,6 +1108,13 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             onRefresh={() => refetch()}
           />
         )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* TAB 7: NUTRITION & WELLNESS */}
+        {/* ------------------------------------------------------------------- */}
+        {activeTab === 'wellness' && (
+          <MemberWellnessSection memberId={memberId} />
+        )}
       </div>
 
       {/* --------------------------------------------------------------------- */}
@@ -1250,7 +1278,7 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 10;
 
-  const categories = ['ALL', 'CRM', 'COMMERCE', 'MEMBERSHIP', 'BOOKING', 'ATTENDANCE', 'AUDIT'];
+  const categories = ['ALL', 'CRM', 'COMMERCE', 'MEMBERSHIP', 'ENTITLEMENT', 'BOOKING', 'ATTENDANCE', 'HEALTH', 'AUDIT'];
 
   // Reset to first page when search or category filter changes
   React.useEffect(() => {
@@ -3742,6 +3770,323 @@ const MemberHealthFormsSection: React.FC<{
             onRefresh?.();
           }}
         />
+      )}
+    </div>
+  );
+};
+
+/**
+ * MemberWellnessSection — Real-time Nutrition, Macros, Water, Sleep, and Meal Logs
+ * Enables trainers, nutritionists, and gym admins to monitor a member's daily diet intake.
+ */
+const MemberWellnessSection: React.FC<{ memberId: string }> = ({ memberId }) => {
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['member-wellness-summary', memberId, selectedDate],
+    queryFn: async () => {
+      const res = await wellnessApi.getDailySummary(selectedDate, memberId);
+      return res.data;
+    },
+    enabled: Boolean(memberId),
+  });
+
+  const handlePrevDay = () => {
+    const d = new Date(`${selectedDate}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleNextDay = () => {
+    const d = new Date(`${selectedDate}T00:00:00`);
+    d.setDate(d.getDate() + 1);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const anyData = data as any;
+  const cals = anyData?.nutrition
+    ? {
+        consumed: anyData.nutrition.total_calories || 0,
+        target: anyData.targets?.daily_calorie_target || 2000,
+        remaining: anyData.nutrition.calories_remaining || 2000,
+      }
+    : (anyData?.calories || { consumed: 0, target: 2000, remaining: 2000 });
+  const calPercent = Math.min(100, Math.round(((cals.consumed || 0) / (cals.target || 2000)) * 100));
+
+  const macros = anyData?.nutrition
+    ? {
+        protein: { consumed_g: anyData.nutrition.total_protein_g || 0, target_g: anyData.targets?.protein_target_g || 120 },
+        carbs: { consumed_g: anyData.nutrition.total_carbs_g || 0, target_g: anyData.targets?.carbs_target_g || 220 },
+        fat: { consumed_g: anyData.nutrition.total_fat_g || 0, target_g: anyData.targets?.fat_target_g || 65 },
+        fiber: { consumed_g: anyData.nutrition.total_fiber_g || 0, target_g: 30 },
+      }
+    : (anyData?.macros || {
+        protein: { consumed_g: 0, target_g: 120 },
+        carbs: { consumed_g: 0, target_g: 220 },
+        fat: { consumed_g: 0, target_g: 65 },
+        fiber: { consumed_g: 0, target_g: 30 },
+      });
+
+  const water = data?.water || { total_ml: 0, target_ml: 2500, progress_pct: 0 };
+  const sleep = data?.sleep || { total_hours: 0, target_hours: 8, progress_pct: 0 };
+  const meals = data?.meals || { BREAKFAST: [], LUNCH: [], DINNER: [], SNACK: [] };
+
+  const totalMealCount =
+    (meals.BREAKFAST?.length || 0) +
+    (meals.LUNCH?.length || 0) +
+    (meals.DINNER?.length || 0) +
+    (meals.SNACK?.length || 0);
+
+  const mealTypes = [
+    { key: 'BREAKFAST', label: 'Breakfast', icon: Coffee, items: meals.BREAKFAST || [] },
+    { key: 'LUNCH', label: 'Lunch', icon: Utensils, items: meals.LUNCH || [] },
+    { key: 'DINNER', label: 'Dinner', icon: Flame, items: meals.DINNER || [] },
+    { key: 'SNACK', label: 'Snacks & Supplements', icon: Activity, items: meals.SNACK || [] },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Date Navigation & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-card border border-border rounded-xl">
+        <div className="flex items-center gap-2">
+          <Utensils className="h-5 w-5 text-emerald-500" />
+          <div>
+            <h3 className="text-base font-bold text-foreground">Member Nutrition & Wellness Journal</h3>
+            <p className="text-xs text-muted-foreground">
+              Daily diet intake, macro tracking, hydration, and sleep logs recorded by member
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrevDay} className="h-8 w-8 p-0">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="px-3 py-1 bg-muted/60 border border-border/80 rounded-lg text-xs font-mono font-semibold">
+            {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </div>
+          <Button variant="outline" size="sm" onClick={handleNextDay} className="h-8 w-8 p-0">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleToday} className="h-8 text-xs font-semibold">
+            Today
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => refetch()} className="h-8 w-8 p-0" title="Refresh Log">
+            <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Top 4 KPI Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Calories Card */}
+            <div className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                <span className="flex items-center gap-1.5 text-amber-500">
+                  <Flame className="h-4 w-4 fill-amber-500/20" />
+                  Calories
+                </span>
+                <span className="font-mono text-[11px]">{calPercent}% Target</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-extrabold text-foreground">{Math.round(cals.consumed || 0)}</span>
+                <span className="text-xs text-muted-foreground">/ {Math.round(cals.target || 2000)} kcal</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-amber-500 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, calPercent)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {cals.remaining && cals.remaining > 0 ? `${Math.round(cals.remaining)} kcal remaining` : 'Target reached'}
+              </p>
+            </div>
+
+            {/* Protein Card */}
+            <div className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                <span className="flex items-center gap-1.5 text-blue-500">
+                  <Activity className="h-4 w-4" />
+                  Protein
+                </span>
+                <span className="font-mono text-[11px]">
+                  {Math.round(((macros.protein.consumed_g || 0) / (macros.protein.target_g || 1)) * 100)}%
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-extrabold text-foreground">{Math.round(macros.protein.consumed_g || 0)}g</span>
+                <span className="text-xs text-muted-foreground">/ {Math.round(macros.protein.target_g || 120)}g</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, Math.round(((macros.protein.consumed_g || 0) / (macros.protein.target_g || 1)) * 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Essential for muscle recovery</p>
+            </div>
+
+            {/* Hydration Card */}
+            <div className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                <span className="flex items-center gap-1.5 text-cyan-500">
+                  <Droplets className="h-4 w-4 fill-cyan-500/20" />
+                  Hydration
+                </span>
+                <span className="font-mono text-[11px]">{Math.round(water.progress_pct || 0)}%</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-extrabold text-foreground">{(water.total_ml / 1000).toFixed(1)}L</span>
+                <span className="text-xs text-muted-foreground">/ {(water.target_ml / 1000).toFixed(1)}L</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-cyan-500 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, water.progress_pct || 0)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">{water.total_ml} ml logged today</p>
+            </div>
+
+            {/* Sleep Card */}
+            <div className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
+                <span className="flex items-center gap-1.5 text-purple-500">
+                  <Moon className="h-4 w-4" />
+                  Sleep Recovery
+                </span>
+                <span className="font-mono text-[11px]">{Math.round(sleep.progress_pct || 0)}%</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-extrabold text-foreground">{sleep.total_hours.toFixed(1)}h</span>
+                <span className="text-xs text-muted-foreground">/ {sleep.target_hours}h target</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-purple-500 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, sleep.progress_pct || 0)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Rest & hormonal balance</p>
+            </div>
+          </div>
+
+          {/* Macro Breakdown Bar */}
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Macronutrient Breakdown (Grams)
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 bg-muted/40 rounded-lg">
+                <span className="text-xs text-muted-foreground">Protein</span>
+                <div className="text-lg font-bold text-blue-500 mt-0.5">{Math.round(macros.protein.consumed_g || 0)}g</div>
+                <span className="text-[10px] text-muted-foreground">Target: {macros.protein.target_g}g</span>
+              </div>
+              <div className="p-3 bg-muted/40 rounded-lg">
+                <span className="text-xs text-muted-foreground">Carbs</span>
+                <div className="text-lg font-bold text-amber-500 mt-0.5">{Math.round(macros.carbs.consumed_g || 0)}g</div>
+                <span className="text-[10px] text-muted-foreground">Target: {macros.carbs.target_g}g</span>
+              </div>
+              <div className="p-3 bg-muted/40 rounded-lg">
+                <span className="text-xs text-muted-foreground">Fats</span>
+                <div className="text-lg font-bold text-rose-500 mt-0.5">{Math.round(macros.fat.consumed_g || 0)}g</div>
+                <span className="text-[10px] text-muted-foreground">Target: {macros.fat.target_g}g</span>
+              </div>
+              <div className="p-3 bg-muted/40 rounded-lg">
+                <span className="text-xs text-muted-foreground">Fiber</span>
+                <div className="text-lg font-bold text-emerald-500 mt-0.5">{Math.round(macros.fiber.consumed_g || 0)}g</div>
+                <span className="text-[10px] text-muted-foreground">Target: {macros.fiber.target_g}g</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Detailed Meal Logs */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-bold text-foreground flex items-center justify-between">
+              <span>Logged Meals ({totalMealCount})</span>
+              <Badge variant="outline" className="text-xs font-mono font-medium">
+                {selectedDate}
+              </Badge>
+            </h4>
+
+            {totalMealCount === 0 ? (
+              <div className="p-10 text-center bg-card border border-dashed border-border rounded-xl space-y-2">
+                <Utensils className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm font-medium text-foreground">No meals logged for this date</p>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  When the member logs breakfast, lunch, dinner, or snacks via the member portal, they will display here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {mealTypes.map((mt) => {
+                  const MealIcon = mt.icon;
+                  if (mt.items.length === 0) return null;
+                  return (
+                    <div key={mt.key} className="bg-card border border-border rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <div className="flex items-center gap-2">
+                          <MealIcon className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-bold text-foreground">{mt.label}</span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          {mt.items.length} item{mt.items.length > 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2">
+                        {mt.items.map((meal) => (
+                          <div key={meal.id} className="p-2.5 rounded-lg bg-muted/40 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-foreground">
+                                {meal.items?.map((it: any) => it.food_name || it.custom_name || it.custom_food_name).filter(Boolean).join(', ') || 'Logged meal'}
+                              </span>
+                              <span className="font-bold text-primary font-mono">{Math.round(meal.total_calories || 0)} kcal</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                              <span>P: {Math.round(meal.total_protein_g || 0)}g</span>
+                              <span>•</span>
+                              <span>C: {Math.round(meal.total_carbs_g || 0)}g</span>
+                              <span>•</span>
+                              <span>F: {Math.round(meal.total_fat_g || 0)}g</span>
+                              {((meal as any).logged_time || meal.logged_at) && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-mono">{((meal as any).logged_time || meal.logged_at).slice(0, 5)}</span>
+                                </>
+                              )}
+                            </div>
+                            {meal.notes && <p className="text-[11px] text-muted-foreground italic">Note: {meal.notes}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

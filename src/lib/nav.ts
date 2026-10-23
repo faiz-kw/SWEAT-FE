@@ -470,6 +470,14 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    id: "community",
+    label: "Community Hub",
+    icon: "Flame",
+    items: [
+      { label: "Community Hub", to: "/community", permission: "community.view" },
+    ],
+  },
+  {
     id: "admin",
     label: "Administration",
     icon: "Settings",

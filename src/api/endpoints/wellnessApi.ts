@@ -167,9 +167,12 @@ export const wellnessApi = {
   },
 
   // Daily Summary Dashboard
-  getDailySummary: (dateStr?: string) =>
+  getDailySummary: (dateStr?: string, memberId?: string) =>
     api.get<DailySummaryResult>('/mobile/wellness/daily-summary/', {
-      params: dateStr ? { date: dateStr } : {},
+      params: {
+        ...(dateStr ? { date: dateStr } : {}),
+        ...(memberId ? { member_id: memberId } : {}),
+      },
     }),
 
   // Meal Logs CRUD

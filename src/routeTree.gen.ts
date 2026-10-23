@@ -13,6 +13,7 @@ import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as ActivateRouteImport } from './routes/activate'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
+import { Route as ShellCommunityRouteImport } from './routes/_shell/community'
 import { Route as ShellLifecycleRouteImport } from './routes/_shell/lifecycle'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
 import { Route as ShellAdminApiRouteImport } from './routes/_shell/admin.api'
@@ -138,6 +139,11 @@ const LoginRoute = LoginRouteImport.update({
 const ShellIndexRoute = ShellIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellCommunityRoute = ShellCommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellLifecycleRoute = ShellLifecycleRouteImport.update({
@@ -698,6 +704,7 @@ export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
   '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
+  '/community': typeof ShellCommunityRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/admin/api': typeof ShellAdminApiRoute
@@ -809,6 +816,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
+  '/community': typeof ShellCommunityRoute
   '/lifecycle': typeof ShellLifecycleRoute
   '/members': typeof ShellMembersRouteWithChildren
   '/': typeof ShellIndexRoute
@@ -923,6 +931,7 @@ export interface FileRoutesById {
   '/_shell': typeof ShellRouteWithChildren
   '/activate': typeof ActivateRoute
   '/login': typeof LoginRoute
+  '/_shell/community': typeof ShellCommunityRoute
   '/_shell/lifecycle': typeof ShellLifecycleRoute
   '/_shell/members': typeof ShellMembersRouteWithChildren
   '/_shell/': typeof ShellIndexRoute
@@ -1038,6 +1047,7 @@ export interface FileRouteTypes {
     | '/'
     | '/activate'
     | '/login'
+    | '/community'
     | '/lifecycle'
     | '/members'
     | '/admin/api'
@@ -1149,6 +1159,7 @@ export interface FileRouteTypes {
   to:
     | '/activate'
     | '/login'
+    | '/community'
     | '/lifecycle'
     | '/members'
     | '/'
@@ -1262,6 +1273,7 @@ export interface FileRouteTypes {
     | '/_shell'
     | '/activate'
     | '/login'
+    | '/_shell/community'
     | '/_shell/lifecycle'
     | '/_shell/members'
     | '/_shell/'
@@ -1406,6 +1418,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/community': {
+      id: '/_shell/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof ShellCommunityRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/lifecycle': {
@@ -2194,6 +2213,7 @@ const ShellPlatformTenantsRouteWithChildren =
   ShellPlatformTenantsRoute._addFileChildren(ShellPlatformTenantsRouteChildren)
 
 interface ShellRouteChildren {
+  ShellCommunityRoute: typeof ShellCommunityRoute
   ShellLifecycleRoute: typeof ShellLifecycleRoute
   ShellMembersRoute: typeof ShellMembersRouteWithChildren
   ShellIndexRoute: typeof ShellIndexRoute
@@ -2298,6 +2318,7 @@ interface ShellRouteChildren {
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
+  ShellCommunityRoute: ShellCommunityRoute,
   ShellLifecycleRoute: ShellLifecycleRoute,
   ShellMembersRoute: ShellMembersRouteWithChildren,
   ShellIndexRoute: ShellIndexRoute,
