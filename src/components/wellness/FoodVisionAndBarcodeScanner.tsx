@@ -279,6 +279,7 @@ export function FoodVisionAndBarcodeScanner({
     setEditableItems((prev) => {
       const updated = [...prev];
       const item = updated[index];
+      if (!item) return prev;
       const oldGrams = item.estimated_grams || 100;
       const ratio = newGrams > 0 ? newGrams / oldGrams : 1;
 
@@ -307,7 +308,7 @@ export function FoodVisionAndBarcodeScanner({
 
     setIsLoggingMeal(true);
     try {
-      const todayStr = defaultDate || new Date().toISOString().split('T')[0];
+      const todayStr: string = defaultDate || new Date().toISOString().split('T')[0]!;
       const itemsPayload = editableItems.map((item) => {
         const grams = item.estimated_grams || 100;
         const ratio = grams > 0 ? grams / 100 : 1;
@@ -318,7 +319,7 @@ export function FoodVisionAndBarcodeScanner({
         const fibPer100g = Number(((item.fiber_g || 0) / ratio).toFixed(2));
 
         return {
-          food_item_id: item.matched_catalog_item?.id,
+          ...(item.matched_catalog_item?.id ? { food_item_id: item.matched_catalog_item.id } : {}),
           custom_food_name: item.food_name,
           portion_grams: grams,
           calories_per_100g: calPer100g,
@@ -383,15 +384,18 @@ export function FoodVisionAndBarcodeScanner({
             Html5QrcodeSupportedFormats.QR_CODE,
           ],
           verbose: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
         });
         barcodeScannerRef.current = scannerInstance;
 
         const config = {
-          fps: 10,
+          fps: 20,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const width = Math.floor(viewfinderWidth * 0.78);
-            const height = Math.floor(viewfinderHeight * 0.55);
-            return { width: Math.max(width, 220), height: Math.max(height, 130) };
+            const width = Math.floor(viewfinderWidth * 0.85);
+            const height = Math.floor(viewfinderHeight * 0.65);
+            return { width: Math.max(width, 250), height: Math.max(height, 150) };
           },
           aspectRatio: 1.3333,
         };
@@ -446,7 +450,7 @@ export function FoodVisionAndBarcodeScanner({
   const handleBarcodeLookup = async (codeToLookup?: string) => {
     const cleanCode = (codeToLookup || barcodeInput).trim();
     if (!cleanCode) {
-      toast.error('Please enter or scan a barcode number.');
+      toast.error('Please enter barcode digits (e.g. 8901764012280) or click "Scan Barcode with Camera".');
       return;
     }
 
@@ -485,13 +489,15 @@ export function FoodVisionAndBarcodeScanner({
 
     setIsLoggingMeal(true);
     try {
-      const todayStr = defaultDate || new Date().toISOString().split('T')[0];
+      const todayStr: string = defaultDate || new Date().toISOString().split('T')[0]!;
       await wellnessApi.createMealLog({
         meal_type: mealType,
         date: todayStr,
         items: [
           {
-            food_item_id: (prod as any).food_item_id || (prod as any).id,
+            ...(((prod as any).food_item_id || (prod as any).id)
+              ? { food_item_id: String((prod as any).food_item_id || (prod as any).id) }
+              : {}),
             custom_food_name: `${prod.product_name} (${prod.brand || 'Packaged'})`,
             portion_grams: barcodeServingGrams,
             calories: Math.round((prod.calories_100g || 0) * ratio),
@@ -847,6 +853,12 @@ export function FoodVisionAndBarcodeScanner({
                       </div>
                     </div>
 
+                    <div className="absolute top-2 left-2 right-2 pointer-events-none text-center">
+                      <span className="bg-black/75 backdrop-blur-xs text-white/90 text-[10px] px-2.5 py-1 rounded-md border border-white/10 shadow-xs">
+                        💡 Hold bottles ~20cm away & tilt slightly to avoid shiny light reflections
+                      </span>
+                    </div>
+
                     {/* Camera Controls */}
                     <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-10">
                       <Button
@@ -904,7 +916,7 @@ export function FoodVisionAndBarcodeScanner({
                     <div className="flex items-center gap-2">
                       <Input
                         type="text"
-                        placeholder="e.g. 8901030383786 (Amul Milk / Protein Bar)"
+                        placeholder="e.g. 8901764012280 (Maaza / Amul Milk)"
                         value={barcodeInput}
                         onChange={(e) => setBarcodeInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && void handleBarcodeLookup()}
@@ -925,8 +937,48 @@ export function FoodVisionAndBarcodeScanner({
                         )}
                       </Button>
                     </div>
+
+                    {/* Quick test sample pills */}
+                    <div className="pt-1 space-y-1.5">
+                      <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block">
+                        Tap sample to test instant lookup:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBarcodeInput('8901764012280');
+                            void handleBarcodeLookup('8901764012280');
+                          }}
+                          className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          🥭 Maaza (8901764012280)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBarcodeInput('8901030383786');
+                            void handleBarcodeLookup('8901030383786');
+                          }}
+                          className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/30 transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          🥛 Amul Milk (8901030383786)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBarcodeInput('8901719101038');
+                            void handleBarcodeLookup('8901719101038');
+                          }}
+                          className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          🍪 Parle-G (8901719101038)
+                        </button>
+                      </div>
+                    </div>
+
                     <p className="text-[11px] text-muted-foreground">
-                      Connects directly to the global Open Food Facts catalog (ODbL open-source database).
+                      Connects directly to SWEAT Verified Catalog & global Open Food Facts database.
                     </p>
                   </div>
                 )}
@@ -1020,13 +1072,28 @@ export function FoodVisionAndBarcodeScanner({
                         </Button>
                       </>
                     ) : (
-                      <div className="text-center py-6 text-muted-foreground space-y-2">
+                      <div className="text-center py-6 text-muted-foreground space-y-3">
                         <AlertCircle className="h-8 w-8 mx-auto text-amber-500" />
-                        <h4 className="text-sm font-semibold text-foreground">Product Not Found</h4>
-                        <p className="text-xs max-w-sm mx-auto">
-                          No product matched barcode <code className="font-mono">{barcodeResult.barcode}</code> in Open
-                          Food Facts.
-                        </p>
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">Product Not Found in Barcode Database</h4>
+                          <p className="text-xs max-w-sm mx-auto mt-1">
+                            No product matched barcode <code className="font-mono text-primary font-bold">{barcodeResult.barcode}</code>.
+                          </p>
+                        </div>
+                        <div className="pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setActiveMode('vision');
+                              startMealCamera();
+                            }}
+                            className="text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Scan Bottle with AI Photo Recognition Instead
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

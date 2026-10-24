@@ -4212,6 +4212,16 @@ function WebMemberPortalWorkspaceInner() {
     setIsQRPassLoading(true);
     try {
       const res = await mobileApi.getQRPass();
+      if (res.data?.has_booking === false) {
+        setQrPassData({
+          has_booking: false,
+          status: res.data.status || 'EXPIRED',
+          detail: res.data.detail || "No upcoming workout scheduled today. Please reserve a class session to generate your turnstile access key.",
+          member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+          membership_number: profile?.membership_number || "—",
+        });
+        return;
+      }
       setQrPassData({
         pass_id: res.data.pass_id,
         booking_id: (res.data as any).booking_id,
@@ -4247,6 +4257,16 @@ function WebMemberPortalWorkspaceInner() {
     setIsQRPassLoading(true);
     try {
       const res = await mobileApi.getBookingQRPass(booking.id);
+      if (res.data?.has_booking === false) {
+        setQrPassData({
+          has_booking: false,
+          status: res.data.status || 'EXPIRED',
+          detail: res.data.detail || "This session has concluded and the access pass has expired.",
+          member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+          membership_number: profile?.membership_number || "—",
+        });
+        return;
+      }
       setQrPassData({
         pass_id: res.data.pass_id,
         booking_id: res.data.booking_id,
