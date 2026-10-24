@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SWEAT - TimeWatch On-Site Hardware Test</title>
+  <title>SWEAT - Live Turnstile Pass & Access Verification</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -12,7 +12,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px;
+      padding: 24px 16px;
       margin: 0;
       text-align: center;
     }
@@ -25,19 +25,34 @@
       border-radius: 20px;
       text-transform: uppercase;
       margin-bottom: 8px;
+      display: inline-block;
     }
     .card {
       background: #161822;
       border: 1px solid #2a2e43;
       border-radius: 20px;
-      padding: 20px;
-      max-width: 340px;
+      padding: 24px;
+      max-width: 360px;
       width: 100%;
       margin-bottom: 20px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    h2 { margin: 8px 0; font-size: 18px; }
-    p { color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0; }
+    h2 { margin: 8px 0; font-size: 20px; }
+    p { color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0; line-height: 1.5; }
+    .meta-box {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 16px;
+      text-align: left;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .meta-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .meta-row:last-child { margin-bottom: 0; }
+    .meta-label { color: #64748b; font-weight: 600; }
+    .meta-val { color: #f8fafc; font-weight: 700; }
     .qr-container {
       background: #fff;
       padding: 16px;
@@ -46,26 +61,27 @@
       margin-bottom: 12px;
     }
     .qr-container img {
-      width: 200px;
-      height: 200px;
+      width: 220px;
+      height: 220px;
       display: block;
     }
     .token-text {
       font-family: monospace;
-      font-size: 14px;
+      font-size: 16px;
+      font-weight: bold;
       color: #38bdf8;
       background: #0f172a;
-      padding: 6px 12px;
+      padding: 8px 16px;
       border-radius: 8px;
       display: inline-block;
     }
     .btn {
       background: #22c55e;
       color: #000;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       border: none;
-      padding: 14px 28px;
+      padding: 12px 24px;
       border-radius: 12px;
       cursor: pointer;
       width: 100%;
@@ -75,6 +91,11 @@
     .btn:active {
       transform: scale(0.97);
       background: #16a34a;
+    }
+    .btn-secondary {
+      background: #1e293b;
+      color: #38bdf8;
+      border: 1px solid #334155;
     }
     .status-msg {
       margin-top: 10px;
@@ -86,30 +107,40 @@
 </head>
 <body>
 
-  <div class="card">
-    <div class="badge">Hardware Pre-Authorized</div>
-    <h2>TimeWatch Guest Pass (1001)</h2>
-    <p>Pre-programmed in TimeWatch onboard memory. Hold 20–30 cm facing the top camera.</p>
-    <div class="qr-container">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=1001" alt="Guest 1001 QR">
+  <div class="card" style="border: 2px solid #10b981;">
+    <div class="badge">Live Confirmed Booking Pass</div>
+    <h2>Faiz Khan (Check-In Pass)</h2>
+    <p>Hold this code <strong>25–30 cm (approx. 1 foot)</strong> in front of the top camera on the turnstile pole.</p>
+    
+    <div class="meta-box">
+      <div class="meta-row"><span class="meta-label">Class:</span><span class="meta-val">Sweat Athletic (Pilates)</span></div>
+      <div class="meta-row"><span class="meta-label">Branch:</span><span class="meta-val">SWEAT Pilates & Studio</span></div>
+      <div class="meta-row"><span class="meta-label">Booking No:</span><span class="meta-val">BKG-20261024-F30B45</span></div>
+      <div class="meta-row"><span class="meta-label">Status:</span><span class="meta-val" style="color: #10b981;">CONFIRMED</span></div>
+      <div class="meta-row"><span class="meta-label">Pass Payload:</span><span class="meta-val" style="color: #38bdf8;">9999</span></div>
     </div>
-    <div class="token-text">Payload: 1001</div>
+
+    <div class="qr-container">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=9999" alt="Card 9999 QR">
+    </div>
+    <div class="token-text">Payload: 9999</div>
   </div>
 
   <div class="card">
-    <div class="badge" style="background:#38bdf8;">PerformanceOS Pass</div>
-    <h2>Faiz Khan (Pilates Class)</h2>
-    <p>Dynamic token verified in PerformanceOS database.</p>
-    <div class="qr-container">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=3C8QLVGCZMeIekmLvhEFJC" alt="Faiz Pass QR">
-    </div>
-    <div class="token-text">3C8QLVGCZMeIekmLvhEFJC</div>
+    <h2>Admin Panel Links</h2>
+    <p>Verify live attendance reflection without touching admin code.</p>
+    <a href="/members/client-360?memberId=fb1a6dea-417a-4321-a016-aa26629c0518" target="_blank" style="text-decoration:none;">
+      <button class="btn btn-secondary">📋 Open Faiz Khan - Client 360</button>
+    </a>
+    <a href="/ops/bookings" target="_blank" style="text-decoration:none;">
+      <button class="btn btn-secondary" style="margin-top:8px;">📊 Open Operations Bookings</button>
+    </a>
   </div>
 
   <div class="card">
     <h2>Direct Gate Control</h2>
-    <p>Sends an instant unlock pulse to 192.168.1.108 via Dahua Net API.</p>
-    <button class="btn" onclick="openDoor()">⚡ UNLOCK TURNSTILE NOW</button>
+    <p>Sends instant hardware unlock pulse to 192.168.1.108.</p>
+    <button class="btn" onclick="openDoor()">⚡ UNLOCK TURNSTILE RELAY</button>
     <div class="status-msg" id="status"></div>
   </div>
 

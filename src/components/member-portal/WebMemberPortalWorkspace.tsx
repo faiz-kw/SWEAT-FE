@@ -187,7 +187,6 @@ import {
   MobileMembershipActionOptions,
 } from "@/api/endpoints/mobileApi";
 import { openRazorpayCheckout, cleanupRazorpayDOM, loadRazorpayScript } from "@/utils/razorpayCheckout";
-import { QRCodeSvg } from "@/components/common/QRCodeSvg";
 import { useAuth } from "@/contexts";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { Button } from "@/components/ui/button";
@@ -6795,20 +6794,20 @@ function WebMemberPortalWorkspaceInner() {
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge
                     className={`font-semibold text-xs py-2 px-4 gap-2 shadow-xs ${
-                      Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission)
+                      (isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission)
                         ? "bg-emerald-500 text-white"
                         : "bg-amber-500 text-white"
                     }`}
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    {parqSurvey?.status_badge || (Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? "PAR-Q Cleared" : "PAR-Q Pending")}
+                    {parqSurvey?.status_badge || ((isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? "PAR-Q Cleared" : "PAR-Q Pending")}
                   </Badge>
                 </div>
               </div>
             </div>
 
             {/* Check if Member has a completed PAR-Q on file */}
-            {Boolean(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? (
+            {(isParqCleared || parqSurvey?.has_completed_parq || parqSurvey?.submission) ? (
               /* ========================================================================= */
               /* COMPLETED PAR-Q VIEW: STRICTLY VIEW-ONLY, IMMUTABLE HISTORICAL RECORD     */
               /* ========================================================================= */
@@ -8996,13 +8995,13 @@ function WebMemberPortalWorkspaceInner() {
       {/* MODAL 9: DIGITAL MEMBER QR ACCESS PASS (DYNAMIC TURNSTILE TOKEN)          */}
       {/* ------------------------------------------------------------------------- */}
       <Dialog open={showQRPassModal} onOpenChange={setShowQRPassModal}>
-        <DialogContent className="w-[92vw] sm:max-w-sm max-h-[90dvh] overflow-y-auto p-4 sm:p-6 rounded-2xl text-center flex flex-col items-center border border-border/80 shadow-2xl bg-card">
+        <DialogContent className="w-[92vw] sm:max-w-sm max-h-[90dvh] overflow-y-auto p-5 sm:p-6 rounded-2xl text-center flex flex-col items-center border border-[#232738] shadow-2xl bg-[#090a0f] text-white">
           <DialogHeader className="items-center">
-            <DialogTitle className="text-base font-bold flex items-center gap-1.5 text-foreground">
-              <Flame className="h-5 w-5 text-primary" />
+            <DialogTitle className="text-base font-bold flex items-center gap-1.5 text-white">
+              <Flame className="h-5 w-5 text-amber-500" />
               {qrPassData?.has_booking === false ? "Turnstile Access Key" : "Session Access Pass"}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <DialogDescription className="text-xs text-slate-400">
               {qrPassData?.has_booking === false
                 ? "Booking Required for Studio Entry"
                 : (qrPassData?.class_name || "Reserved Workout")}
@@ -9010,28 +9009,28 @@ function WebMemberPortalWorkspaceInner() {
           </DialogHeader>
 
           {isQRPassLoading ? (
-            <div className="w-56 h-56 my-3 rounded-2xl bg-muted/40 border border-border flex flex-col items-center justify-center gap-2">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
-              <span className="text-xs text-muted-foreground font-medium">Verifying workout schedule...</span>
+            <div className="w-56 h-56 my-3 rounded-2xl bg-[#131622] border border-[#232738] flex flex-col items-center justify-center gap-2">
+              <RefreshCw className="h-6 w-6 animate-spin text-amber-500" />
+              <span className="text-xs text-slate-400 font-medium">Verifying workout schedule...</span>
             </div>
           ) : qrPassData?.has_booking === false ? (
-            <div className="w-full my-3 p-5 rounded-2xl bg-muted/30 border border-border/80 flex flex-col items-center text-center space-y-3">
-              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+            <div className="w-full my-3 p-5 rounded-2xl bg-[#131622] border border-[#232738] flex flex-col items-center text-center space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shadow-inner">
                 <Ticket className="h-7 w-7" />
               </div>
               <div className="space-y-1">
-                <h4 className="text-sm font-bold text-foreground">
+                <h4 className="text-sm font-bold text-white">
                   No Workout Scheduled Today
                 </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
+                <p className="text-xs text-slate-400 leading-relaxed">
                   Turnstile QR passes are generated exclusively for confirmed workouts. Book your class slot from your package to unlock instant gate access.
                 </p>
               </div>
 
               {remainingCredits > 0 && (
-                <div className="w-full py-2 px-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between text-xs font-semibold text-primary">
+                <div className="w-full py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs font-semibold text-amber-400">
                   <span className="flex items-center gap-1.5">
-                    <Zap className="h-3.5 w-3.5 fill-primary" />
+                    <Zap className="h-3.5 w-3.5 fill-amber-500" />
                     Package Balance:
                   </span>
                   <span>{remainingCredits} Sessions Available</span>
@@ -9043,7 +9042,7 @@ function WebMemberPortalWorkspaceInner() {
                   setShowQRPassModal(false);
                   setActiveTab("schedule");
                 }}
-                className="w-full gap-2 text-xs font-semibold mt-1"
+                className="w-full gap-2 text-xs font-semibold mt-1 bg-amber-600 hover:bg-amber-500 text-white"
               >
                 <CalendarIcon className="h-4 w-4" />
                 Browse Schedule & Book Class
@@ -9051,67 +9050,37 @@ function WebMemberPortalWorkspaceInner() {
             </div>
           ) : (
             <>
-              <div className="p-3 my-2 rounded-2xl bg-white border border-border/80 shadow-md flex flex-col items-center justify-center">
-                <QRCodeSvg
-                  value={qrPassData?.qr_token || "SWT-PASS"}
-                  size={184}
-                  className="rounded-md"
-                  title="Turnstile QR Pass"
+              {/* Camera-Verified Pixel-Perfect QR Code */}
+              <div className="p-4 my-2 rounded-2xl bg-white shadow-2xl flex flex-col items-center justify-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPassData?.qr_token || "")}`}
+                  alt="Turnstile QR Pass"
+                  className="w-[200px] h-[200px] block select-none"
                 />
               </div>
 
-              <div className="w-full space-y-2 mt-1">
-                <div className="space-y-0.5">
-                  <h4 className="text-sm font-bold text-foreground">
+              <div className="w-full space-y-3 mt-2">
+                <div className="text-center space-y-1">
+                  <h4 className="text-base font-bold text-white tracking-wide">
                     {qrPassData?.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"))}
                   </h4>
-                  <div className="flex items-center justify-center gap-2 flex-wrap">
-                    <Badge variant="outline" className="font-mono text-[11px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/5 text-primary">
-                      {qrPassData?.membership_number || profile?.membership_number || "—"}
-                    </Badge>
-                    {qrPassData?.booking_number && (
-                      <Badge variant="secondary" className="font-mono text-[10px] px-2 py-0.5">
-                        {qrPassData.booking_number}
-                      </Badge>
-                    )}
-                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
-                      {qrPassData?.status || "CONFIRMED"}
-                    </Badge>
-                  </div>
+                  <p className="text-xs text-amber-400 font-semibold">
+                    {qrPassData?.class_name || "Reserved Workout"}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {qrPassData?.branch_name || "SWEAT Studio"}
+                  </p>
                 </div>
 
-                {qrPassData?.qr_token && (
-                  <div className="p-2 rounded-lg bg-muted/50 border border-border/60 text-left space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground font-medium">Turnstile Token (Base62):</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(qrPassData.qr_token);
-                          toast.success("Turnstile token copied to clipboard!");
-                        }}
-                        className="text-primary hover:underline font-semibold text-[10px] flex items-center gap-1 cursor-pointer"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                    <p className="font-mono text-[11px] text-foreground font-semibold break-all leading-tight select-all">
-                      {qrPassData.qr_token}
-                    </p>
-                  </div>
-                )}
-
-                <div className="text-[11px] text-muted-foreground space-y-1 pt-1">
-                  <p className="font-medium text-foreground flex items-center justify-center gap-1">
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                    Hold phone ~10cm in front of scanner
+                <div className="py-2.5 px-3 rounded-xl bg-[#131622] border border-[#232738] text-center">
+                  <p className="text-xs font-semibold text-emerald-400 flex items-center justify-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    {qrPassData?.status === 'COMPLETED' ? "Studio Entry Verified (Checked In)" : "Ready for Turnstile Entry"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {qrPassData?.valid_until ? (
-                      <>Valid until {format(new Date(qrPassData.valid_until), "hh:mm a, dd MMM yyyy")}</>
-                    ) : (
-                      "Active for booked workout window"
-                    )}
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {qrPassData?.status === 'COMPLETED' 
+                      ? "Present this pass at the exit turnstile when leaving"
+                      : "Scan QR at turnstile camera (hold 25–30 cm away)"}
                   </p>
                 </div>
               </div>
@@ -9121,7 +9090,7 @@ function WebMemberPortalWorkspaceInner() {
           <Button
             size="sm"
             onClick={() => setShowQRPassModal(false)}
-            className="w-full mt-3 text-xs font-semibold"
+            className="w-full mt-3 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white"
           >
             Done
           </Button>
