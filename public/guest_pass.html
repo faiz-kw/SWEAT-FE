@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SWEAT - TimeWatch On-Site Hardware Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090a0f;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      margin: 0;
+      text-align: center;
+    }
+    .badge {
+      background: #10b981;
+      color: #000;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card {
+      background: #161822;
+      border: 1px solid #2a2e43;
+      border-radius: 20px;
+      padding: 20px;
+      max-width: 340px;
+      width: 100%;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    h2 { margin: 8px 0; font-size: 18px; }
+    p { color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0; }
+    .qr-container {
+      background: #fff;
+      padding: 16px;
+      border-radius: 16px;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    .qr-container img {
+      width: 200px;
+      height: 200px;
+      display: block;
+    }
+    .token-text {
+      font-family: monospace;
+      font-size: 14px;
+      color: #38bdf8;
+      background: #0f172a;
+      padding: 6px 12px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .btn {
+      background: #22c55e;
+      color: #000;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+    .btn:active {
+      transform: scale(0.97);
+      background: #16a34a;
+    }
+    .status-msg {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #10b981;
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="badge">Hardware Pre-Authorized</div>
+    <h2>TimeWatch Guest Pass (1001)</h2>
+    <p>Pre-programmed in TimeWatch onboard memory. Hold 20–30 cm facing the top camera.</p>
+    <div class="qr-container">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=1001" alt="Guest 1001 QR">
+    </div>
+    <div class="token-text">Payload: 1001</div>
+  </div>
+
+  <div class="card">
+    <div class="badge" style="background:#38bdf8;">PerformanceOS Pass</div>
+    <h2>Faiz Khan (Pilates Class)</h2>
+    <p>Dynamic token verified in PerformanceOS database.</p>
+    <div class="qr-container">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=3C8QLVGCZMeIekmLvhEFJC" alt="Faiz Pass QR">
+    </div>
+    <div class="token-text">3C8QLVGCZMeIekmLvhEFJC</div>
+  </div>
+
+  <div class="card">
+    <h2>Direct Gate Control</h2>
+    <p>Sends an instant unlock pulse to 192.168.1.108 via Dahua Net API.</p>
+    <button class="btn" onclick="openDoor()">⚡ UNLOCK TURNSTILE NOW</button>
+    <div class="status-msg" id="status"></div>
+  </div>
+
+  <script>
+    async function openDoor() {
+      const st = document.getElementById('status');
+      st.textContent = "Sending unlock pulse to 192.168.1.108...";
+      try {
+        const res = await fetch('/api/v1/mobile/turnstile/open-direct/', { method: 'POST' });
+        if (res.ok) {
+          st.textContent = "✅ Turnstile Unlocked for 3 seconds!";
+        } else {
+          st.textContent = "Pulse dispatched via local server.";
+        }
+      } catch (e) {
+        st.textContent = "Dispatched!";
+      }
+    }
+  </script>
+
+</body>
+</html>

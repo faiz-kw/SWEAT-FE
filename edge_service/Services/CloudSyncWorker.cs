@@ -36,6 +36,7 @@ public class CloudSyncWorker : BackgroundService
         {
             _httpClient.DefaultRequestHeaders.Add("X-Edge-Api-Key", _apiKey);
         }
+        _httpClient.DefaultRequestHeaders.Add("X-Tenant-Slug", "sweat");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
