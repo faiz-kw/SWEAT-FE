@@ -95,6 +95,15 @@ export const workforceApi = {
     return res.data;
   },
 
+  getMyTrainerProfile: async (): Promise<TrainerProfile | null> => {
+    try {
+      const res = await api.get<TrainerProfile>('/tenant/trainer-profiles/me/');
+      return res.data;
+    } catch {
+      return null;
+    }
+  },
+
   getTrainer: async (id: string): Promise<TrainerProfile> => {
     const res = await api.get<TrainerProfile>(`/tenant/trainer-profiles/${id}/`);
     return res.data;

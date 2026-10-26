@@ -212,18 +212,28 @@ export function TrainersWorkspace() {
   const totalTrainers = trainersPage?.count ?? trainers.length;
   const totalPages = trainersPage?.total_pages || Math.max(1, Math.ceil(totalTrainers / pageSize));
 
+  // Fetch logged in trainer profile directly
+  const { data: myTrainerProfile } = useQuery({
+    queryKey: ['my-trainer-profile', user?.email],
+    queryFn: () => workforceApi.getMyTrainerProfile(),
+    enabled: !!user,
+  });
+
   // Auto-detect trainer profile belonging to logged in user
   const currentTrainer = React.useMemo(() => {
+    if (myTrainerProfile) return myTrainerProfile;
     if (!trainers.length || !user) return null;
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userUid = user.id || user.userId;
     return (
       trainers.find(
         (t) =>
-          t.email?.toLowerCase() === user.email?.toLowerCase() ||
-          (t as any).user === user.id ||
-          (t as any).user_id === user.id
+          (t.email && t.email.toLowerCase().trim() === userEmail) ||
+          (t as any).user === userUid ||
+          (t as any).user_id === userUid
       ) || null
     );
-  }, [trainers, user]);
+  }, [myTrainerProfile, trainers, user]);
 
   const isTrainer = !isOrgAdmin && (isTrainerRole || !!currentTrainer);
 

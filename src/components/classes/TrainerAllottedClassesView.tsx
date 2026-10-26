@@ -115,18 +115,28 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
     enabled: !initialTrainerId,
   });
 
+  // Fetch logged in trainer profile directly
+  const { data: myTrainerProfile } = useQuery({
+    queryKey: ['my-trainer-profile-allotted', user?.email],
+    queryFn: () => workforceApi.getMyTrainerProfile(),
+    enabled: !initialTrainerId && !!user,
+  });
+
   // Auto-detect trainer profile belonging to logged in user
   const currentTrainer = React.useMemo(() => {
+    if (myTrainerProfile) return myTrainerProfile;
     if (!trainers.length || !user) return null;
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userUid = user.id || user.userId;
     return (
       trainers.find(
         (t) =>
-          t.email?.toLowerCase() === user.email?.toLowerCase() ||
-          (t as any).user === user.id ||
-          (t as any).user_id === user.id
+          (t.email && t.email.toLowerCase().trim() === userEmail) ||
+          (t as any).user === userUid ||
+          (t as any).user_id === userUid
       ) || null
     );
-  }, [trainers, user]);
+  }, [myTrainerProfile, trainers, user]);
 
   const isTrainer = !isOrgAdmin && (isTrainerUser(user, trainers) || !!currentTrainer);
 
@@ -138,7 +148,11 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
           setSelectedTrainerId(currentTrainer.id);
         }
       } else if (!selectedTrainerId && trainers.length > 0) {
-        setSelectedTrainerId(trainers[0].id);
+        if (currentTrainer) {
+          setSelectedTrainerId(currentTrainer.id);
+        } else {
+          setSelectedTrainerId(trainers[0].id);
+        }
       }
     }
   }, [currentTrainer, initialTrainerId, isTrainer, selectedTrainerId, trainers]);

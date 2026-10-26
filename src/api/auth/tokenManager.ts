@@ -86,6 +86,7 @@ export interface TenantBrandingProfile {
 }
 
 export interface AuthUser {
+  id?: string;
   userId: string;
   tenantId: string;
   tenantName: string;
@@ -592,6 +593,8 @@ async function _hydrateUserProfile(baseUrl: string, token: string): Promise<void
     const isSuperAdminUser = (!me.tenant_id) && (me.is_superuser || userRole === 'Super Admin' || me.user_type === 'platform');
 
     setUserProfile({
+      id: me.id,
+      userId: me.id,
       role: userRole,
       roles: me.roles || [],
       permissions: me.permissions || [],

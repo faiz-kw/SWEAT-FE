@@ -277,9 +277,6 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                   <MapPin className="size-3.5 text-muted-foreground" />
                   {occurrence?.branch_name || 'All Branches'}
                 </span>
-                <Badge variant="outline" className="text-3xs font-mono bg-muted/60 text-muted-foreground border-border">
-                  Geofence: {occurrence?.branch_geofence_radius_meters || 200}m ({occurrence?.branch_geofence_enforcement || 'STRICT'})
-                </Badge>
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0">

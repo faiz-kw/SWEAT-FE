@@ -44,6 +44,9 @@ export const bookingsApi = {
   getBookingsPaginated: async (params?: {
     status?: string;
     branch_id?: string;
+    program_id?: string;
+    booking_type?: string;
+    is_trial?: boolean;
     occurrence_id?: string;
     user_id?: string;
     search?: string;

@@ -110,21 +110,9 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
         </div>
       </div>
 
-      {/* 3. Bottom-Left Shield: Covers & Blocks YouTube's Copy Link (🔗) icon */}
+      {/* 4. Bottom-Right Expanded Shield: Completely covers YouTube Logo & 'Watch on YouTube' button */}
       <div
-        className="absolute bottom-2.5 left-2.5 z-20 pointer-events-auto w-16 h-10 bg-black/95 rounded-lg border border-white/10 shadow-lg flex items-center justify-center cursor-default"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <span className="text-[9px] text-white/60 font-mono tracking-wider font-semibold">SWEAT</span>
-      </div>
-
-      {/* 4. Bottom-Right Expanded Shield: 100% Covers YouTube Logo & 'Watch on YouTube' button */}
-      <div
-        className="absolute bottom-2.5 right-2.5 z-20 pointer-events-auto flex items-center gap-1.5 bg-black/95 px-3.5 py-1.5 rounded-lg border border-white/15 shadow-xl select-none cursor-default"
+        className="absolute bottom-0 right-0 z-30 pointer-events-auto flex items-center justify-center gap-2 bg-black px-5 py-2.5 rounded-tl-xl border-t border-l border-white/15 shadow-2xl min-w-[210px] h-12 select-none cursor-default"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -132,8 +120,8 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
         onContextMenu={(e) => e.preventDefault()}
         title="Protected Studio Stream"
       >
-        <ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
-        <span className="text-[11px] text-white font-semibold tracking-wide">Studio Stream</span>
+        <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+        <span className="text-xs text-white font-semibold tracking-wide">Studio Stream</span>
       </div>
     </div>
   );

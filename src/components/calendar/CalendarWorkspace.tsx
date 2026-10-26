@@ -58,18 +58,28 @@ export const CalendarWorkspace: React.FC = () => {
     queryFn: () => workforceApi.getTrainers({ trainer_status: 'ACTIVE' }),
   });
 
+  // Fetch logged in trainer profile directly
+  const { data: myTrainerProfile } = useQuery({
+    queryKey: ['my-trainer-profile-calendar', user?.email],
+    queryFn: () => workforceApi.getMyTrainerProfile(),
+    enabled: !!user,
+  });
+
   // Identify logged in trainer
   const currentTrainer = React.useMemo(() => {
+    if (myTrainerProfile) return myTrainerProfile;
     if (!trainers.length || !user) return null;
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userUid = user.id || user.userId;
     return (
       trainers.find(
         (t) =>
-          t.email?.toLowerCase() === user.email?.toLowerCase() ||
-          (t as any).user === user.id ||
-          (t as any).user_id === user.id
+          (t.email && t.email.toLowerCase().trim() === userEmail) ||
+          (t as any).user === userUid ||
+          (t as any).user_id === userUid
       ) || null
     );
-  }, [trainers, user]);
+  }, [myTrainerProfile, trainers, user]);
 
   const isTrainer = !isOrgAdmin && (isTrainerUser(user, trainers) || !!currentTrainer);
 

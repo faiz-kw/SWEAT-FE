@@ -137,6 +137,17 @@ export const catalogApi = {
     await api.delete(`/tenant/package-versions/${versionId}/`);
   },
 
+  async updatePackageVersion(
+    versionId: string,
+    payload: Record<string, any>
+  ): Promise<PackageVersion> {
+    const res = await api.patch<PackageVersion>(
+      `/tenant/package-versions/${versionId}/`,
+      payload
+    );
+    return res.data;
+  },
+
   async cloneModifyPackageVersion(
     packageId: string,
     packageVersionId: string,

@@ -19,6 +19,7 @@ export type EntitlementType =
   | 'PERSONAL_TRAINING_SESSION'
   | 'ASSESSMENT'
   | 'OPEN_ACCESS'
+  | 'CREDIT_WALLET'
   | 'OTHER';
 
 export type DeliveryMode =
@@ -65,6 +66,7 @@ export interface ProgramCategory {
   name: string;
   description?: string | null;
   display_order: number;
+  credits?: number | string | null;
   status: 'ACTIVE' | 'INACTIVE';
   programs_count?: number;
   created_at: string;
@@ -85,6 +87,7 @@ export interface Program {
   program_type_code?: string | null;
   delivery_mode: DeliveryMode;
   display_order: number;
+  credits?: number | string | null;
   trial_allowed: boolean;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   available_branch_ids?: string[];
@@ -162,11 +165,13 @@ export interface PackageVersion {
   only_for_trial?: boolean;
   show_on_web?: boolean;
   show_on_app?: boolean;
+  allow_partial_payment?: boolean;
   published_at?: string | null;
   effective_from: string;
   effective_until?: string | null;
   status: PackageVersionStatus;
   prices?: PackagePrice[];
+  credits?: number | string | null;
   entitlement_definitions?: PackageEntitlementDefinition[];
   created_at: string;
   updated_at: string;
