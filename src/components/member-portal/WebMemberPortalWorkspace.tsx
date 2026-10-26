@@ -7006,6 +7006,8 @@ function WebMemberPortalWorkspaceInner() {
 
                             // 1. Locate answer from activeSub answers (array or object), answers_detailed, or form_snapshot
                             let rawAnswer: any = undefined;
+                            const isEmptyVal = (v: any) =>
+                              v === undefined || v === null || v === '' || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
 
                             if (Array.isArray(activeSub?.answers)) {
                               const found = activeSub.answers.find((a: any) => {
@@ -7021,14 +7023,15 @@ function WebMemberPortalWorkspaceInner() {
                             } else if (activeSub?.answers && typeof activeSub.answers === 'object') {
                               if (qId && activeSub.answers[qId] !== undefined) rawAnswer = activeSub.answers[qId];
                               else if (qOrder !== undefined && activeSub.answers[`q_${qOrder}`] !== undefined) rawAnswer = activeSub.answers[`q_${qOrder}`];
+                              else if (qOrder !== undefined && activeSub.answers[String(qOrder)] !== undefined) rawAnswer = activeSub.answers[String(qOrder)];
                               else if (q.key && activeSub.answers[q.key] !== undefined) rawAnswer = activeSub.answers[q.key];
                             }
 
-                            if (rawAnswer === undefined && Array.isArray(activeSub?.answers_detailed)) {
+                            if (isEmptyVal(rawAnswer) && Array.isArray(activeSub?.answers_detailed)) {
                               const found = activeSub.answers_detailed.find((a: any) => {
                                 if (!a) return false;
                                 if (qId && String(a.question_id) === qId) return true;
-                                if (qOrder !== undefined && a.order === qOrder) return true;
+                                if (qOrder !== undefined && (a.order === qOrder || a.display_order === qOrder)) return true;
                                 if (qText && a.question_text && a.question_text.toLowerCase().trim() === qText) return true;
                                 return false;
                               });
@@ -7037,12 +7040,12 @@ function WebMemberPortalWorkspaceInner() {
                               }
                             }
 
-                            if (rawAnswer === undefined && Array.isArray(activeSub?.form_snapshot?.questions)) {
+                            if (isEmptyVal(rawAnswer) && Array.isArray(activeSub?.form_snapshot?.questions)) {
                               const found = activeSub.form_snapshot.questions.find((sq: any) => {
                                 if (!sq) return false;
                                 if (qId && String(sq.id) === qId) return true;
-                                if (qOrder !== undefined && sq.order === qOrder) return true;
-                                if (qText && sq.question_text && sq.question_text.toLowerCase().trim() === qText) return true;
+                                if (qOrder !== undefined && (sq.order === qOrder || sq.display_order === qOrder)) return true;
+                                if (qText && (sq.question_text || sq.text) && (sq.question_text || sq.text).toLowerCase().trim() === qText) return true;
                                 return false;
                               });
                               if (found && (found.submitted_answer !== undefined || found.answer !== undefined)) {
@@ -7050,14 +7053,16 @@ function WebMemberPortalWorkspaceInner() {
                               }
                             }
 
-                            if (rawAnswer === undefined && parqSurvey?.saved_responses && typeof parqSurvey.saved_responses === 'object') {
+                            if (isEmptyVal(rawAnswer) && parqSurvey?.saved_responses && typeof parqSurvey.saved_responses === 'object') {
                               if (qId && parqSurvey.saved_responses[qId] !== undefined) rawAnswer = parqSurvey.saved_responses[qId];
                               else if (qOrder !== undefined && parqSurvey.saved_responses[`q_${qOrder}`] !== undefined) rawAnswer = parqSurvey.saved_responses[`q_${qOrder}`];
+                              else if (qOrder !== undefined && parqSurvey.saved_responses[String(qOrder)] !== undefined) rawAnswer = parqSurvey.saved_responses[String(qOrder)];
                             }
 
-                            if (rawAnswer === undefined && parqFormResponses) {
+                            if (isEmptyVal(rawAnswer) && parqFormResponses) {
                               if (qId && parqFormResponses[qId] !== undefined) rawAnswer = parqFormResponses[qId];
                               else if (qOrder !== undefined && parqFormResponses[`q_${qOrder}`] !== undefined) rawAnswer = parqFormResponses[`q_${qOrder}`];
+                              else if (qOrder !== undefined && parqFormResponses[String(qOrder)] !== undefined) rawAnswer = parqFormResponses[String(qOrder)];
                             }
 
                             // 2. Safe format answer

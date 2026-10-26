@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Globe,
+  Plus,
   History,
   AlertCircle,
   CheckCircle2,
@@ -281,9 +282,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: metaLeadsApi.disconnect,
-    onSuccess: () => {
-      toast.success('Facebook account disconnected.');
+    mutationFn: (connectionId?: string) => metaLeadsApi.disconnect(connectionId),
+    onSuccess: (data) => {
+      toast.success(
+        data?.meta_user_id
+          ? `Facebook account (${data.meta_user_id}) disconnected.`
+          : 'Facebook account disconnected.'
+      );
       void refreshAll();
     },
     onError: (e) => toast.error(formatError(e)),
@@ -367,13 +372,26 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const hasConnectPermission = canEdit;
   const canConnect = isPlatformConfigured && hasConnectPermission;
 
-  const isConnectionActive = Boolean(
-    meta.is_connected &&
-      (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED') &&
-      !meta.is_synthetic &&
-      meta.connection_status !== 'TOKEN_EXPIRED'
+  const rawAccounts = (meta.connections && meta.connections.length > 0)
+    ? meta.connections
+    : (meta.connection ? [meta.connection] : []);
+
+  const connectedAccounts = rawAccounts.filter(
+    (c) => c.status === 'CONNECTED' || c.status === 'LIVE_CONNECTED' || c.is_connected
   );
-  const isConnectionAttention = meta.connection_status === 'TOKEN_EXPIRED';
+  const attentionAccounts = rawAccounts.filter(
+    (c) => c.status === 'TOKEN_EXPIRED'
+  );
+
+  const isConnectionActive =
+    connectedAccounts.length > 0 ||
+    Boolean(
+      meta.is_connected &&
+        (meta.connection_status === 'CONNECTED' || meta.connection_status === 'LIVE_CONNECTED') &&
+        !meta.is_synthetic &&
+        meta.connection_status !== 'TOKEN_EXPIRED'
+    );
+  const isConnectionAttention = !isConnectionActive && (attentionAccounts.length > 0 || meta.connection_status === 'TOKEN_EXPIRED');
   const hasActiveForms = allMappings.some((m) => m.is_active);
   const hasReceivedEnquiries = allImports.some((i) => i.status === 'IMPORTED');
 
@@ -395,12 +413,16 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           <div className="space-y-1.5 flex-1">
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="font-semibold text-base text-foreground">
-                Facebook Connection
+                {connectedAccounts.length > 1
+                  ? `Connected Facebook Accounts (${connectedAccounts.length})`
+                  : 'Facebook Connection'}
               </h2>
               {isConnectionActive ? (
                 <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1 text-xs">
                   <CheckCircle2 className="h-3 w-3" />
-                  Connected
+                  {connectedAccounts.length > 1
+                    ? `${connectedAccounts.length} Connected`
+                    : 'Connected'}
                 </Badge>
               ) : isConnectionAttention ? (
                 <Badge variant="destructive" className="font-medium gap-1 text-xs">
@@ -417,7 +439,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
             <p className="text-sm text-muted-foreground max-w-2xl">
               {isConnectionActive
-                ? `Connected to Facebook as ${meta.connection?.meta_user_name || 'Authorized User'}. Your lead forms will automatically synchronize.`
+                ? connectedAccounts.length > 1
+                  ? `You have ${connectedAccounts.length} Facebook accounts connected. Each account manages its own Facebook Pages and Lead Forms independently without cross-account conflicts.`
+                  : `Connected to Facebook as ${connectedAccounts[0]?.meta_user_name || meta.connection?.meta_user_name || 'Authorized User'}. Your lead forms will automatically synchronize.`
                 : isConnectionAttention
                 ? 'Your Facebook connection has expired or permissions were updated. Please reconnect to continue receiving enquiries.'
                 : 'Connect your Facebook account to access your gym’s lead forms and start receiving enquiries automatically.'}
@@ -427,34 +451,16 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 w-full sm:w-auto">
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               {isConnectionActive ? (
-                <div className="flex items-center gap-2 flex-1 sm:flex-initial">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!canEdit || disconnectMutation.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          'Are you sure you want to disconnect Facebook? Incoming enquiries from your forms will be paused.'
-                        )
-                      ) {
-                        disconnectMutation.mutate();
-                      }
-                    }}
-                    className="h-9 px-3.5 text-xs flex-1 sm:flex-initial"
-                  >
-                    Disconnect
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!canEdit}
-                    onClick={() => setShowConnectModal(true)}
-                    className="h-9 px-3.5 text-xs flex-1 sm:flex-initial"
-                  >
-                    Reconnect
-                  </Button>
-                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={!canConnect}
+                  onClick={() => setShowConnectModal(true)}
+                  className="gap-1.5 h-9 px-3.5 text-xs font-medium flex-1 sm:flex-initial justify-center shadow-xs"
+                >
+                  <Plus className="h-4 w-4" />
+                  Connect Another Facebook Account
+                </Button>
               ) : (
                 <Button
                   variant="default"
@@ -496,36 +502,133 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           </div>
         </div>
 
+        {/* Multi-Account Cards List */}
+        {rawAccounts.length > 0 && (
+          <div className="pt-2">
+            <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
+              {rawAccounts.map((account) => {
+                const isAccConnected =
+                  account.status === 'CONNECTED' ||
+                  account.status === 'LIVE_CONNECTED' ||
+                  account.is_connected;
+                const isAccExpired = account.status === 'TOKEN_EXPIRED';
+                const accPagesCount = account.pages_count ?? (account.pages?.length ?? 0);
+                const isDisconnectingThis =
+                  disconnectMutation.isPending &&
+                  disconnectMutation.variables === account.id;
+
+                return (
+                  <div
+                    key={account.id || account.meta_user_id}
+                    className="flex flex-col justify-between rounded-lg border bg-card/60 p-4 shadow-2xs hover:border-primary/30 transition-all gap-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-sm text-foreground truncate">
+                            {account.meta_user_name || 'Facebook User'}
+                          </h4>
+                          <p className="text-xs text-muted-foreground font-mono truncate">
+                            ID: {account.meta_user_id || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isAccConnected ? (
+                        <Badge className="bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 text-[11px] font-medium py-0.5 px-2 shrink-0">
+                          Active
+                        </Badge>
+                      ) : isAccExpired ? (
+                        <Badge variant="destructive" className="text-[11px] font-medium py-0.5 px-2 shrink-0">
+                          Expired
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[11px] font-medium py-0.5 px-2 shrink-0">
+                          {account.status || 'Disconnected'}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-md">
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/80 font-medium">Pages Linked</span>
+                        <span className="font-semibold text-foreground">{accPagesCount} page(s)</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/80 font-medium">Token Valid</span>
+                        <span className="truncate block">
+                          {account.token_expires_at || account.expires_at
+                            ? new Date(account.token_expires_at || account.expires_at!).toLocaleDateString()
+                            : 'Active'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                      {isAccExpired && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canEdit}
+                          onClick={() => setShowConnectModal(true)}
+                          className="h-8 px-2.5 text-xs"
+                        >
+                          Reconnect
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canEdit || isDisconnectingThis || disconnectMutation.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Are you sure you want to disconnect Facebook account "${account.meta_user_name || account.meta_user_id}"? Only this account and its associated pages will be unlinked. Other connected accounts will not be affected.`
+                            )
+                          ) {
+                            disconnectMutation.mutate(account.id);
+                          }
+                        }}
+                        className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-border"
+                      >
+                        {isDisconnectingThis ? 'Disconnecting...' : 'Disconnect Account'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Restricted Diagnostic View */}
         {canEdit && (
           <details className="mt-3 pt-3 border-t text-xs text-muted-foreground group">
             <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1.5 select-none">
               <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Connection details</span>
+              <span>Connection diagnostics</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             </summary>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-3 pb-1">
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
-                <span className="text-[11px] font-semibold text-foreground">Account Status</span>
-                <p>Status: {meta.connection_status === 'LIVE_CONNECTED' || meta.connection_status === 'CONNECTED' ? 'Active' : meta.connection_status}</p>
-                <p>Authorized user: {meta.connection?.meta_user_name || 'None'}</p>
+                <span className="text-[11px] font-semibold text-foreground">Accounts Configured</span>
+                <p>Total Accounts: {rawAccounts.length}</p>
+                <p>Active Accounts: {connectedAccounts.length}</p>
               </div>
 
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
                 <span className="text-[11px] font-semibold text-foreground">Token Security</span>
-                <p>Storage: Encrypted at rest</p>
-                <p>
-                  Token valid until:{' '}
-                  {meta.connection?.expires_at
-                    ? new Date(meta.connection.expires_at).toLocaleDateString()
-                    : 'Standard active token'}
-                </p>
+                <p>Storage: Encrypted at rest (Fernet AES-128-CBC)</p>
+                <p>Exposure: Redacted in frontend & logs</p>
               </div>
 
               <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
                 <span className="text-[11px] font-semibold text-foreground">Pages & Webhooks</span>
-                <p>Connected pages: {meta.pages?.length || 0}</p>
-                <p>Webhook reception: {meta.live_available ? 'Configured' : 'Pending platform setup'}</p>
+                <p>Total Active Pages: {meta.pages?.length || 0}</p>
+                <p>Webhook Reception: {meta.live_available ? 'Configured (/api/v1/webhooks/meta/leads/)' : 'Pending platform setup'}</p>
               </div>
             </div>
           </details>
@@ -566,7 +669,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
             <h3 className="font-semibold text-sm text-foreground">Connect Facebook</h3>
             <p className="text-xs text-muted-foreground">
               {isConnectionActive
-                ? `Authorized as ${meta.connection?.meta_user_name || 'Facebook user'}`
+                ? connectedAccounts.length > 1
+                  ? `${connectedAccounts.length} accounts connected (${connectedAccounts.map((a) => a.meta_user_name || 'User').join(', ')})`
+                  : `Authorized as ${connectedAccounts[0]?.meta_user_name || meta.connection?.meta_user_name || 'Facebook user'}`
                 : isConnectionAttention
                 ? 'Reconnection required'
                 : !meta.meta_app_configured

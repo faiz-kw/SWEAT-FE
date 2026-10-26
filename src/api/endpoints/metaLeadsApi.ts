@@ -30,14 +30,21 @@ export type MetaDiscoveredForm = {
 
 export type MetaConnectionDetails = {
   id: string;
+  status?: string;
   is_connected: boolean;
+  is_synthetic?: boolean;
   meta_user_id: string;
   meta_user_name: string;
   scopes: string[];
-  expires_at: string | null;
+  expires_at?: string | null;
+  token_expires_at?: string | null;
   masked_access_token?: string;
-  created_at: string;
-  updated_at: string;
+  pages_count?: number;
+  pages?: MetaDiscoveredPage[];
+  last_connected_at?: string | null;
+  last_error?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type MetaMapping = {
@@ -140,6 +147,7 @@ export type MetaMetadata = {
   simulator_enabled: boolean;
   simulator_requirement: string;
   connection?: MetaConnectionDetails | null;
+  connections?: MetaConnectionDetails[];
   pages?: MetaDiscoveredPage[];
   destination_fields: Choice[];
   allowed_default_fields?: Choice[];
@@ -169,8 +177,30 @@ export const metaLeadsApi = {
   oauthInit: async () => (await api.get<{ auth_url: string; state: string }>('/tenant/meta-lead-mappings/oauth_init/')).data,
   oauthCallback: async (code: string, state: string) =>
     (await api.post<{ success: boolean; message: string; connection: MetaConnectionDetails }>('/tenant/meta-lead-mappings/oauth_callback/', { code, state })).data,
-  connection: async () => (await api.get<{ is_connected: boolean; connection: MetaConnectionDetails | null; pages: MetaDiscoveredPage[] }>('/tenant/meta-lead-mappings/connection/')).data,
-  disconnect: async () => (await api.post<{ success: boolean; message: string }>('/tenant/meta-lead-mappings/disconnect/', {})).data,
+  connection: async () =>
+    (
+      await api.get<{
+        status: string;
+        is_connected: boolean;
+        is_synthetic?: boolean;
+        meta_user_id?: string;
+        meta_user_name?: string;
+        token_expires_at?: string | null;
+        connection?: MetaConnectionDetails | null;
+        connections?: MetaConnectionDetails[];
+        pages: MetaDiscoveredPage[];
+      }>('/tenant/meta-lead-mappings/connection/')
+    ).data,
+  disconnect: async (connectionId?: string) =>
+    (
+      await api.post<{
+        status: string;
+        disconnected_connection_id?: string;
+        meta_user_id?: string;
+        success?: boolean;
+        message?: string;
+      }>('/tenant/meta-lead-mappings/disconnect/', connectionId ? { connection_id: connectionId } : {})
+    ).data,
   pages: async () => {
     const res = (await api.get<{ pages?: MetaDiscoveredPage[]; results?: MetaDiscoveredPage[] }>('/tenant/meta-lead-mappings/pages/')).data;
     return {

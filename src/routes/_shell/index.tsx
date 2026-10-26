@@ -28,16 +28,19 @@ export const Route = createFileRoute("/_shell/")({
 
 function Dashboard() {
   const { user } = useAuth();
+  // Support previewing Member Portal via ?view=member query parameter
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isMemberMode = isMemberUser(user) || searchParams?.get('view') === 'member' || searchParams?.get('asMember') === 'true';
 
   React.useEffect(() => {
-    if (!isMemberUser(user)) {
+    if (!isMemberMode) {
       const brand = user?.branding?.app_name || "SWEAT Elite";
       document.title = `Executive Dashboard · ${brand}`;
     }
-  }, [user]);
+  }, [user, isMemberMode]);
 
-  // If authenticated user is a Member, render the Web Member Portal workspace
-  if (isMemberUser(user)) {
+  // If authenticated user is a Member or viewing as member, render the Web Member Portal workspace
+  if (isMemberMode) {
     return <WebMemberPortalWorkspace />;
   }
 

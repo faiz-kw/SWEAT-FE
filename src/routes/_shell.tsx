@@ -193,8 +193,9 @@ function ShellLayout() {
     return null;
   }
 
-  // If user is a Member, render the clean, dedicated Web Member Portal shell
-  if (isMemberUser(user)) {
+  // If user is a Member or previewing Member Portal, render the clean, dedicated Web Member Portal shell
+  const isMemberMode = isMemberUser(user) || (typeof window !== 'undefined' && pathname === '/' && (new URLSearchParams(window.location.search).get('view') === 'member' || new URLSearchParams(window.location.search).get('asMember') === 'true'));
+  if (isMemberMode) {
     return (
       <AppProvider>
         <div className="min-h-screen bg-background text-foreground">
