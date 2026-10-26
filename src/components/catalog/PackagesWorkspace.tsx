@@ -183,6 +183,7 @@ export const PackagesWorkspace: React.FC = () => {
   // Search state
   const [progSearchQuery, setProgSearchQuery] = useState('');
   const [catSearchQuery, setCatSearchQuery] = useState('');
+  const [catFilterStatus, setCatFilterStatus] = useState<string>('ACTIVE');
   const [termsSearchQuery, setTermsSearchQuery] = useState('');
 
   // Expandable programs state (Set of program IDs)
@@ -242,6 +243,7 @@ export const PackagesWorkspace: React.FC = () => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatOrder, setNewCatOrder] = useState(0);
+  const [newCatCredits, setNewCatCredits] = useState('');
   const [catFormError, setCatFormError] = useState<string | null>(null);
 
   const [editingProgramCategory, setEditingProgramCategory] = useState<ProgramCategory | null>(null);
@@ -249,6 +251,7 @@ export const PackagesWorkspace: React.FC = () => {
   const [editCatCode, setEditCatCode] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
   const [editCatOrder, setEditCatOrder] = useState(0);
+  const [editCatCredits, setEditCatCredits] = useState('');
   const [editCatStatus, setEditCatStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [editCatFormError, setEditCatFormError] = useState<string | null>(null);
 
@@ -261,7 +264,7 @@ export const PackagesWorkspace: React.FC = () => {
 
   // Program Filter bar state
   const [progFilterCategory, setProgFilterCategory] = useState<string>('ALL');
-  const [progFilterStatus, setProgFilterStatus] = useState<string>('ALL');
+  const [progFilterStatus, setProgFilterStatus] = useState<string>('ACTIVE');
   const [progFilterBranch, setProgFilterBranch] = useState<string>(() => (locationId && locationId !== 'all' ? locationId : 'ALL'));
   const [progFilterDeliveryMode, setProgFilterDeliveryMode] = useState<string>('ALL');
   const [progFilterTrialOnly, setProgFilterTrialOnly] = useState<boolean>(false);
@@ -320,9 +323,11 @@ export const PackagesWorkspace: React.FC = () => {
   const [newPkgDisplayPrice, setNewPkgDisplayPrice] = useState('');
   const [newPkgTaxPercentage, setNewPkgTaxPercentage] = useState('18');
   const [newPkgTaxIncluded, setNewPkgTaxIncluded] = useState(true);
+  const [newPkgAllowPartialPayment, setNewPkgAllowPartialPayment] = useState(false);
   const [newPkgMaxSessions, setNewPkgMaxSessions] = useState('');
   const [newPkgPassportSessions, setNewPkgPassportSessions] = useState('');
   const [newPkgPassportCost, setNewPkgPassportCost] = useState('');
+  const [newPkgCredits, setNewPkgCredits] = useState('');
   const [newPkgShowWeb, setNewPkgShowWeb] = useState(true);
   const [newPkgShowApp, setNewPkgShowApp] = useState(true);
   const [newPkgPublishNow, setNewPkgPublishNow] = useState(false);
@@ -347,11 +352,36 @@ export const PackagesWorkspace: React.FC = () => {
   const [newVerCrossUnlimited, setNewVerCrossUnlimited] = useState(false);
   const [newVerPassportSessions, setNewVerPassportSessions] = useState('');
   const [newVerPassportCost, setNewVerPassportCost] = useState('');
+  const [newVerCredits, setNewVerCredits] = useState('');
   const [newVerSalePrice, setNewVerSalePrice] = useState('');
   const [newVerDisplayPrice, setNewVerDisplayPrice] = useState('');
   const [newVerTaxPercentage, setNewVerTaxPercentage] = useState('18');
   const [newVerTaxIncluded, setNewVerTaxIncluded] = useState(true);
+  const [newVerAllowPartialPayment, setNewVerAllowPartialPayment] = useState(false);
   const [newVerPublishNow, setNewVerPublishNow] = useState(false);
+
+  // Edit Draft Version state
+  const [editingDraftVersion, setEditingDraftVersion] = useState<{ pkg: Package; ver: PackageVersion } | null>(null);
+  const [editVerName, setEditVerName] = useState('');
+  const [editVerDurationVal, setEditVerDurationVal] = useState(1);
+  const [editVerDurationUnit, setEditVerDurationUnit] = useState('MONTH');
+  const [editVerValidity, setEditVerValidity] = useState(30);
+  const [editVerTotalDays, setEditVerTotalDays] = useState(30);
+  const [editVerShowWeb, setEditVerShowWeb] = useState(true);
+  const [editVerShowApp, setEditVerShowApp] = useState(true);
+  const [editVerHomeUnlimited, setEditVerHomeUnlimited] = useState(false);
+  const [editVerMaxSessions, setEditVerMaxSessions] = useState('');
+  const [editVerCrossUnlimited, setEditVerCrossUnlimited] = useState(false);
+  const [editVerPassportSessions, setEditVerPassportSessions] = useState('');
+  const [editVerPassportCost, setEditVerPassportCost] = useState('');
+  const [editVerCredits, setEditVerCredits] = useState('');
+  const [editVerSalePrice, setEditVerSalePrice] = useState('');
+  const [editVerDisplayPrice, setEditVerDisplayPrice] = useState('');
+  const [editVerTaxPercentage, setEditVerTaxPercentage] = useState('18');
+  const [editVerTaxIncluded, setEditVerTaxIncluded] = useState(true);
+  const [editVerAllowPartialPayment, setEditVerAllowPartialPayment] = useState(false);
+  const [editVerPublishNow, setEditVerPublishNow] = useState(false);
+  const [editDraftFormError, setEditDraftFormError] = useState<string | null>(null);
 
   // Program Form state
   const [newProgName, setNewProgName] = useState('');
@@ -449,15 +479,33 @@ export const PackagesWorkspace: React.FC = () => {
   // Map packages to their program
   const packagesByProgram = useMemo(() => {
     const map = new Map<string, Package[]>();
+    const progMap = new Map<string, Program>();
+    for (const p of programs) {
+      progMap.set(p.id, p);
+    }
     for (const pkg of packages) {
       if (pkg.program) {
+        const parentProg = progMap.get(pkg.program);
+        if (progFilterStatus === 'ACTIVE') {
+          if (pkg.status !== 'ACTIVE' || parentProg?.status !== 'ACTIVE') continue;
+        } else if (progFilterStatus === 'INACTIVE') {
+          const isInactive = pkg.status === 'INACTIVE' || parentProg?.status === 'INACTIVE';
+          if (!isInactive) continue;
+        } else if (progFilterStatus !== 'ALL') {
+          if (progFilterStatus === 'DRAFT') {
+            const hasDraftVer = pkg.versions?.some((v) => v.status === 'DRAFT');
+            if (pkg.status !== 'DRAFT' && !hasDraftVer) continue;
+          } else if (pkg.status !== progFilterStatus) {
+            continue;
+          }
+        }
         const list = map.get(pkg.program) || [];
         list.push(pkg);
         map.set(pkg.program, list);
       }
     }
     return map;
-  }, [packages]);
+  }, [packages, programs, progFilterStatus]);
 
   // Mutations
   const createPackageMutation = useMutation({
@@ -465,7 +513,7 @@ export const PackagesWorkspace: React.FC = () => {
       const pkg = await catalogApi.createPackage({
         name: newPkgName.trim(),
         program: newPkgProgram,
-        status: 'ACTIVE',
+        status: newPkgPublishNow ? 'ACTIVE' : 'DRAFT',
         available_branch_ids: newPkgBranchIds,
       });
       // Create initial version if duration provided
@@ -482,11 +530,13 @@ export const PackagesWorkspace: React.FC = () => {
           display_price: newPkgDisplayPrice ? Number(newPkgDisplayPrice) : undefined,
           tax_percentage: newPkgTaxPercentage ? Number(newPkgTaxPercentage) : undefined,
           prices_include_tax: newPkgTaxIncluded,
+          allow_partial_payment: newPkgAllowPartialPayment,
           is_unlimited_home: newPkgHomeUnlimited,
           max_sessions: newPkgHomeUnlimited ? undefined : (newPkgMaxSessions ? Number(newPkgMaxSessions) : undefined),
           is_unlimited_cross: newPkgCrossUnlimited,
           passport_sessions: newPkgCrossUnlimited ? undefined : (newPkgPassportSessions ? Number(newPkgPassportSessions) : undefined),
           passport_cost: newPkgPassportCost ? Number(newPkgPassportCost) : undefined,
+          credits: newPkgCredits ? Number(newPkgCredits) : undefined,
           publish_immediately: newPkgPublishNow,
           status: newPkgPublishNow ? 'ACTIVE' : 'DRAFT',
         });
@@ -499,6 +549,7 @@ export const PackagesWorkspace: React.FC = () => {
       setIsNewPackageOpen(false);
       // Auto expand the program to show the newly created package
       if (pkg.program) {
+        const parentProg = progMap.get(pkg.program);
         setExpandedProgramIds((prev) => new Set([...prev, pkg.program!]));
       }
       setNewPkgName('');
@@ -511,6 +562,7 @@ export const PackagesWorkspace: React.FC = () => {
       setNewPkgCrossUnlimited(false);
       setNewPkgPassportSessions('');
       setNewPkgPassportCost('');
+      setNewPkgCredits('');
       setPkgFormError(null);
       toast.success('Package created successfully.');
     },
@@ -652,6 +704,38 @@ export const PackagesWorkspace: React.FC = () => {
     },
   });
 
+  const updateDraftVersionMutation = useMutation({
+    mutationFn: ({ verId, payload }: { verId: string; payload: any }) =>
+      catalogApi.updatePackageVersion(verId, payload),
+    onSuccess: (updatedVer: any) => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      if (historyPackage && editingDraftVersion && historyPackage.id === editingDraftVersion.pkg.id) {
+        setHistoryPackage((prev: any) => {
+          if (!prev) return prev;
+          const updatedVersions = (prev.versions || []).map((v: any) =>
+            v.id === updatedVer.id ? updatedVer : v
+          );
+          return {
+            ...prev,
+            versions: updatedVersions,
+            active_version: updatedVer.status === 'ACTIVE' ? updatedVer : prev.active_version,
+          };
+        });
+      }
+      setEditingDraftVersion(null);
+      setEditDraftFormError(null);
+      toast.success(
+        updatedVer.status === 'ACTIVE'
+          ? 'Draft version published successfully!'
+          : 'Draft version updated successfully.'
+      );
+    },
+    onError: (err: any) => {
+      setEditDraftFormError(getErrorMessage(err));
+    },
+  });
+
   const createProgramMutation = useMutation({
     mutationFn: () =>
       catalogApi.createProgram({
@@ -771,6 +855,7 @@ export const PackagesWorkspace: React.FC = () => {
         name: newCatName.trim(),
         description: newCatDesc.trim() || null,
         display_order: newCatOrder,
+        credits: newCatCredits ? Number(newCatCredits) : null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['program-categories'] });
@@ -778,6 +863,7 @@ export const PackagesWorkspace: React.FC = () => {
       setNewCatName('');
       setNewCatDesc('');
       setNewCatOrder(0);
+      setNewCatCredits('');
       setCatFormError(null);
       toast.success('Program Category created successfully.');
     },
@@ -908,15 +994,18 @@ export const PackagesWorkspace: React.FC = () => {
   };
 
   // Filtered program categories (search by name, code, or description)
-  const filteredProgramCategories = programCategories.filter((c) => {
-    const q = catSearchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      c.name?.toLowerCase().includes(q) ||
-      (c.code && c.code.toLowerCase().includes(q)) ||
-      (c.description && c.description.toLowerCase().includes(q))
-    );
-  });
+  const filteredProgramCategories = useMemo(() => {
+    return programCategories.filter((c) => {
+      if (catFilterStatus !== 'ALL' && c.status !== catFilterStatus) return false;
+      const q = catSearchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        c.name?.toLowerCase().includes(q) ||
+        (c.code && c.code.toLowerCase().includes(q)) ||
+        (c.description && c.description.toLowerCase().includes(q))
+      );
+    });
+  }, [programCategories, catSearchQuery, catFilterStatus]);
 
   // Filtered programs (search by name, code, category, description, or package name + filters)
   const filteredPrograms = useMemo(() => {
@@ -975,6 +1064,11 @@ export const PackagesWorkspace: React.FC = () => {
     programCategories,
   ]);
 
+  // Status-filtered programs for category pills counts
+  const statusFilteredPrograms = useMemo(() => {
+    return programs.filter((p) => progFilterStatus === 'ALL' || p.status === progFilterStatus);
+  }, [programs, progFilterStatus]);
+
   // Filtered terms docs (search by name or type)
   const filteredTermsDocs = termsDocs.filter((doc) => {
     const q = termsSearchQuery.toLowerCase().trim();
@@ -984,6 +1078,71 @@ export const PackagesWorkspace: React.FC = () => {
       doc.document_type?.toLowerCase().includes(q)
     );
   });
+
+  const startEditDraftVersion = (pkg: Package, ver: PackageVersion) => {
+    setEditDraftFormError(null);
+    setEditVerName(ver.name_snapshot || pkg.name);
+    setEditVerDurationVal(ver.duration_value ?? 1);
+    setEditVerDurationUnit(ver.duration_unit ?? 'MONTH');
+    const td = ver.total_days ?? calcDays(ver.duration_value ?? 1, ver.duration_unit ?? 'MONTH');
+    setEditVerTotalDays(td);
+    setEditVerValidity(ver.validity_days ?? td);
+
+    const firstPrice = ver.prices?.[0];
+    const saleP = firstPrice?.base_price ?? (firstPrice as any)?.sale_price;
+    const isTrial = Boolean(ver.is_trial || (ver as any).is_trial_package || pkg.name.toLowerCase().includes('trial'));
+    setEditVerSalePrice(saleP != null ? String(Math.round(Number(saleP))) : (isTrial ? '0' : ''));
+    setEditVerDisplayPrice(
+      firstPrice?.display_price != null ? String(Math.round(Number(firstPrice.display_price))) : ''
+    );
+    setEditVerTaxPercentage(
+      firstPrice?.tax_percent != null
+        ? String(Math.round(parseFloat(String(firstPrice.tax_percent))))
+        : '18'
+    );
+    setEditVerTaxIncluded(firstPrice?.prices_include_tax ?? true);
+
+    const ents: any[] = (ver as any).entitlement_definitions || (ver as any).entitlements || [];
+    const homeEnt =
+      ents.find((e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION') ||
+      ents.find((e: any) => e.entitlement_type === 'CLASS_SESSION') ||
+      ents.find((e: any) => e.entitlement_type === 'PERSONAL_TRAINING_SESSION') ||
+      ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS') ||
+      ents[0];
+    const crossEnt = ents.find((e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION');
+    const creditEnt = ents.find((e: any) => e.entitlement_type === 'CREDIT_WALLET');
+
+    const cfgPassportSessions = Number(homeEnt?.configuration?.max_passport_sessions ?? 0);
+
+    setEditVerHomeUnlimited(Boolean(homeEnt?.is_unlimited));
+    setEditVerMaxSessions(
+      homeEnt?.allocated_units != null && !homeEnt.is_unlimited
+        ? String(Math.round(Number(homeEnt.allocated_units)))
+        : ''
+    );
+    setEditVerCrossUnlimited(Boolean(crossEnt?.is_unlimited));
+    setEditVerPassportSessions(
+      crossEnt?.allocated_units != null && !crossEnt.is_unlimited
+        ? String(Math.round(Number(crossEnt.allocated_units)))
+        : cfgPassportSessions > 0
+        ? String(cfgPassportSessions)
+        : ''
+    );
+    setEditVerPassportCost(
+      crossEnt?.extra_unit_price != null ? String(Math.round(Number(crossEnt.extra_unit_price))) : ''
+    );
+
+    const creds = (ver as any).credits != null ? (ver as any).credits : creditEnt?.allocated_units;
+    setEditVerCredits(creds != null && Number(creds) > 0 ? String(Number(creds)) : '');
+
+    setEditVerAllowPartialPayment(
+      Boolean((ver as any).allow_partial_payment || homeEnt?.configuration?.allow_partial_payment)
+    );
+    setEditVerShowWeb(ver.show_on_web ?? true);
+    setEditVerShowApp(ver.show_on_app ?? true);
+    setEditVerPublishNow(false);
+    setEditingDraftVersion({ pkg, ver });
+  };
 
   const startEditPackage = (pkg: Package) => {
     setEditingPackage(pkg);
@@ -1014,6 +1173,7 @@ export const PackagesWorkspace: React.FC = () => {
     setEditCatCode(cat.code || '');
     setEditCatDesc(cat.description || '');
     setEditCatOrder(cat.display_order);
+    setEditCatCredits(cat.credits != null ? String(cat.credits) : '');
     setEditCatStatus(cat.status);
     setEditCatFormError(null);
   };
@@ -1191,8 +1351,8 @@ export const PackagesWorkspace: React.FC = () => {
         {/* ========================================================================= */}
         {activeTab === 'categories' && (
           <div className="space-y-4">
-            {/* Search */}
-            <div className="flex flex-col sm:flex-row gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs">
+            {/* Search and Filters toolbar */}
+            <div className="flex flex-col sm:flex-row gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border/60 shadow-xs items-stretch sm:items-center justify-between">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -1202,6 +1362,21 @@ export const PackagesWorkspace: React.FC = () => {
                   onChange={(e) => setCatSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Status:</span>
+                </div>
+                <select
+                  value={catFilterStatus}
+                  onChange={(e) => setCatFilterStatus(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="ALL">All Statuses</option>
+                </select>
               </div>
             </div>
 
@@ -1219,13 +1394,28 @@ export const PackagesWorkspace: React.FC = () => {
               <div className="p-12 text-center bg-card border border-dashed border-border/80 rounded-2xl">
                 <Settings2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
                 <h3 className="text-base font-semibold text-foreground">
-                  {catSearchQuery ? 'No matching program categories' : 'No program categories configured'}
+                  {catSearchQuery || catFilterStatus !== 'ALL'
+                    ? 'No matching program categories'
+                    : 'No program categories configured'}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-5">
-                  {catSearchQuery
-                    ? `No program category matched "${catSearchQuery}". Try a different search term.`
+                  {catSearchQuery || catFilterStatus !== 'ALL'
+                    ? `No ${catFilterStatus !== 'ALL' ? catFilterStatus.toLowerCase() : ''} program category matched ${catSearchQuery ? `"${catSearchQuery}"` : 'the selected status filter'}. Try adjusting your search or status filter.`
                     : 'Program Categories classify your programs (e.g. Strength & Conditioning, Pilates, Personal Training, Open Gym). Create the first one to get started.'}
                 </p>
+                {(catSearchQuery || catFilterStatus !== 'ALL') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCatFilterStatus('ALL');
+                      setCatSearchQuery('');
+                    }}
+                    className="mr-2"
+                  >
+                    Reset Filters
+                  </Button>
+                )}
                 {!catSearchQuery && hasCatalogPermission && (
                   <Button
                     onClick={() => {
@@ -1329,7 +1519,7 @@ export const PackagesWorkspace: React.FC = () => {
                           </p>
                         )}
 
-                        <div className="flex items-center gap-3 pt-1 text-xs">
+                        <div className="flex items-center gap-3 pt-1 text-xs flex-wrap">
                           <span className="inline-flex items-center gap-1.5 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md">
                             <Layers className="w-3.5 h-3.5" />
                             {catPrograms.length} {catPrograms.length === 1 ? 'Program' : 'Programs'}
@@ -1338,6 +1528,12 @@ export const PackagesWorkspace: React.FC = () => {
                             <PackageIcon className="w-3.5 h-3.5 text-muted-foreground" />
                             {catPackagesCount} {catPackagesCount === 1 ? 'Package' : 'Packages'}
                           </span>
+                          {cat.credits != null && Number(cat.credits) > 0 && (
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md" title="Default booking credits deducted for SWEAT Elite members">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              {Number(cat.credits)} {Number(cat.credits) === 1 ? 'Credit' : 'Credits'} / session
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1418,10 +1614,10 @@ export const PackagesWorkspace: React.FC = () => {
                         : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
                     }`}
                   >
-                    All Categories ({programs.length})
+                    All Categories ({statusFilteredPrograms.length})
                   </button>
                   {programCategories.map((cat) => {
-                    const count = programs.filter((p) => p.category === cat.id).length;
+                    const count = statusFilteredPrograms.filter((p) => p.category === cat.id).length;
                     const isSelected = progFilterCategory === cat.id;
                     return (
                       <button
@@ -1485,6 +1681,7 @@ export const PackagesWorkspace: React.FC = () => {
                   <option value="ALL">All Statuses</option>
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
+                  <option value="DRAFT">Draft</option>
                   <option value="ARCHIVED">Archived</option>
                 </select>
 
@@ -1872,7 +2069,7 @@ export const PackagesWorkspace: React.FC = () => {
                                       <div className="p-6 text-center bg-card border border-dashed border-border/80 rounded-xl space-y-2">
                                         <PackageIcon className="w-7 h-7 text-muted-foreground/40 mx-auto" />
                                         <p className="text-xs text-muted-foreground">
-                                          No packages configured for {prog.name} yet.
+                                          {progFilterStatus !== 'ALL' ? `No ${progFilterStatus.toLowerCase()} packages found for ${prog.name}.` : `No packages configured for ${prog.name} yet.`}
                                         </p>
                                         {hasCatalogPermission && (
                                           <Button
@@ -1894,7 +2091,7 @@ export const PackagesWorkspace: React.FC = () => {
                                               <th className="py-2.5 px-4">Package / Session Tier</th>
                                               <th className="py-2.5 px-3">Sessions Included</th>
                                               <th className="py-2.5 px-3">Validity</th>
-                                              <th className="py-2.5 px-3">Passport (Cross-Branch)</th>
+                                              <th className="py-2.5 px-3">Passport Sessions</th>
                                               <th className="py-2.5 px-3">Price</th>
                                               <th className="py-2.5 px-3">Status</th>
                                               <th className="py-2.5 px-4 text-right">Actions</th>
@@ -1943,6 +2140,7 @@ export const PackagesWorkspace: React.FC = () => {
 
                                               const validityDays =
                                                 activeVer?.validity_days || activeVer?.total_days || activeVer?.duration_value;
+                                              const draftVer = pkg.versions?.find((v: any) => v.status === 'DRAFT') || (activeVer?.status === 'DRAFT' ? activeVer : null);
 
                                               return (
                                                 <tr
@@ -1978,7 +2176,19 @@ export const PackagesWorkspace: React.FC = () => {
 
                                                   {/* 2. Sessions Included */}
                                                   <td className="py-3 px-3">
-                                                    {homeEnt ? (
+                                                    {activeVer?.credits != null && Number(activeVer.credits) > 0 ? (
+                                                      <div className="flex flex-col gap-1 items-start">
+                                                        <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md text-xs">
+                                                          <Sparkles className="w-3.5 h-3.5" />
+                                                          {Number(activeVer.credits)} Credits
+                                                        </span>
+                                                        {homeEnt && !homeEnt.is_unlimited && Number(homeEnt.allocated_units) > 0 && (
+                                                          <span className="text-[10px] text-muted-foreground">
+                                                            + {formatSessionCount(homeEnt.allocated_units)} Home Sessions
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    ) : homeEnt ? (
                                                       <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs">
                                                         {homeEnt.is_unlimited
                                                           ? 'Unlimited Sessions'
@@ -2002,7 +2212,7 @@ export const PackagesWorkspace: React.FC = () => {
                                                     )}
                                                   </td>
 
-                                                  {/* 4. Passport / Cross-Branch */}
+                                                  {/* 4. Passport Sessions */}
                                                   <td className="py-3 px-3 text-xs">
                                                     {crossEnt ? (
                                                       <span className="font-medium text-foreground">
@@ -2144,6 +2354,7 @@ export const PackagesWorkspace: React.FC = () => {
                                                                   ? String(Math.round(Number(crossEnt.extra_unit_price)))
                                                                   : ''
                                                               );
+                                                              setNewVerCredits(activeVer?.credits != null ? String(activeVer.credits) : '');
                                                               setNewVerShowWeb(activeVer?.show_on_web ?? true);
                                                               setNewVerShowApp(activeVer?.show_on_app ?? true);
                                                               setNewVerPublishNow(false);
@@ -2156,6 +2367,18 @@ export const PackagesWorkspace: React.FC = () => {
                                                             <span>New Version</span>
                                                           </Button>
 
+                                                          {draftVer && (
+                                                            <Button
+                                                              variant="outline"
+                                                              size="sm"
+                                                              onClick={() => startEditDraftVersion(pkg, draftVer)}
+                                                              className="h-7 text-xs px-2.5 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 gap-1 font-semibold"
+                                                              title={`Edit commercial terms for Draft v${draftVer.version_number}`}
+                                                            >
+                                                              <Pencil className="w-3 h-3" />
+                                                              <span>Edit Draft</span>
+                                                            </Button>
+                                                          )}
                                                           <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -2569,6 +2792,7 @@ export const PackagesWorkspace: React.FC = () => {
                                             setNewVerCrossUnlimited(Boolean(ce?.is_unlimited));
                                             setNewVerPassportSessions(ce?.allocated_units ? String(Math.round(Number(ce.allocated_units))) : '');
                                             setNewVerPassportCost(ce?.extra_unit_price ? String(Math.round(Number(ce.extra_unit_price))) : '');
+                                            setNewVerCredits(ver.credits != null ? String(ver.credits) : '');
                                             setNewVerShowWeb(ver.show_on_web ?? true);
                                             setNewVerShowApp(ver.show_on_app ?? true);
                                             setNewVerPublishNow(false);
@@ -2609,6 +2833,19 @@ export const PackagesWorkspace: React.FC = () => {
                                     </Badge>
                                     {hasCatalogPermission && (
                                       <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEditDraftVersion(historyPackage, ver);
+                                          }}
+                                          className="h-6 text-[11px] px-2 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 gap-1 font-medium"
+                                          title="Edit commercial terms for this draft version"
+                                        >
+                                          <Pencil className="w-3 h-3" />
+                                          <span>Edit Draft</span>
+                                        </Button>
                                         <Button
                                           size="sm"
                                           variant="default"
@@ -2677,6 +2914,12 @@ export const PackagesWorkspace: React.FC = () => {
                             </div>
                             {/* Quick-glance summary row */}
                             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5 items-center">
+                              {ver.credits != null && Number(ver.credits) > 0 && (
+                                <span className="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded text-[11px]">
+                                  <Sparkles className="w-3 h-3" />
+                                  {Number(ver.credits)} Credits
+                                </span>
+                              )}
                               <span className="font-medium text-foreground">{durationLabel}</span>
                               {firstPrice && (
                                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">
@@ -2715,6 +2958,24 @@ export const PackagesWorkspace: React.FC = () => {
                                 <span className="flex-1">
                                   This version is retired and immutable. Click &ldquo;Make Current Again&rdquo; to clone these terms into a new Draft version.
                                 </span>
+                              </div>
+                            ) : ver.status === 'DRAFT' ? (
+                              <div className="flex items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/30">
+                                <div className="flex items-center gap-2">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>This version is in <strong>Draft</strong> state. You can edit all commercial terms before publishing.</span>
+                                </div>
+                                {hasCatalogPermission && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => startEditDraftVersion(historyPackage, ver)}
+                                    className="h-6 text-[11px] px-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 gap-1 font-semibold shrink-0"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                    <span>Edit Draft</span>
+                                  </Button>
+                                )}
                               </div>
                             ) : null}
 
@@ -2792,7 +3053,7 @@ export const PackagesWorkspace: React.FC = () => {
                                   )}
                                   {crossEnt && (
                                     <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-2.5">
-                                      <p className="text-[10px] text-muted-foreground mb-0.5">🌐 Session Passport (Cross-Branch)</p>
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">🌐 Session Passport</p>
                                       <p className="font-semibold text-foreground">
                                         {crossEnt.is_unlimited ? 'Unlimited' : crossEnt.allocated_units ? `${crossEnt.allocated_units} sessions` : '—'}
                                       </p>
@@ -3096,16 +3357,33 @@ export const PackagesWorkspace: React.FC = () => {
                 className="text-sm"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
-              <Input
-                type="number"
-                min={0}
-                value={newCatOrder}
-                onChange={(e) => setNewCatOrder(Number(e.target.value))}
-                className="text-sm"
-              />
-              <span className="text-[10px] text-muted-foreground">Lower number = shown first in listings</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Display Order</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={newCatOrder}
+                  onChange={(e) => setNewCatOrder(Number(e.target.value))}
+                  className="text-sm"
+                />
+                <span className="text-[10px] text-muted-foreground">Lower number = shown first</span>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  Credits per Class <span className="text-muted-foreground font-normal">(Optional)</span>
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  placeholder="e.g. 3 (Optional)"
+                  value={newCatCredits}
+                  onChange={(e) => setNewCatCredits(e.target.value)}
+                  className="text-sm"
+                />
+                <span className="text-[10px] text-muted-foreground">Consumed by credit members (SWEAT Elite)</span>
+              </div>
             </div>
           </div>
           <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -3190,6 +3468,21 @@ export const PackagesWorkspace: React.FC = () => {
                   className="text-sm"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  Credits per Class / Booking <span className="text-muted-foreground font-normal">(Optional)</span>
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  placeholder="e.g. 3 (leave blank if not credit-based)"
+                  value={editCatCredits}
+                  onChange={(e) => setEditCatCredits(e.target.value)}
+                  className="text-sm"
+                />
+                <span className="text-[10px] text-muted-foreground">Credits deducted when a SWEAT Elite member books a class in this category</span>
+              </div>
             </div>
             <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEditingProgramCategory(null)}>
@@ -3205,6 +3498,7 @@ export const PackagesWorkspace: React.FC = () => {
                       name: editCatName.trim(),
                       description: editCatDesc.trim() || null,
                       display_order: editCatOrder,
+                      credits: editCatCredits ? Number(editCatCredits) : null,
                       status: editCatStatus,
                     },
                   });
@@ -3983,17 +4277,31 @@ export const PackagesWorkspace: React.FC = () => {
                     className="text-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 pt-1 sm:pt-5">
-                  <input
-                    type="checkbox"
-                    id="new_pkg_tax_inc"
-                    checked={newPkgTaxIncluded}
-                    onChange={(e) => setNewPkgTaxIncluded(e.target.checked)}
-                    className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                  />
-                  <label htmlFor="new_pkg_tax_inc" className="text-xs text-foreground cursor-pointer select-none">
-                    Prices include tax
-                  </label>
+                <div className="space-y-2 pt-1 sm:pt-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="new_pkg_tax_inc"
+                      checked={newPkgTaxIncluded}
+                      onChange={(e) => setNewPkgTaxIncluded(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="new_pkg_tax_inc" className="text-xs text-foreground cursor-pointer select-none">
+                      Prices include tax
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="new_pkg_allow_partial"
+                      checked={newPkgAllowPartialPayment}
+                      onChange={(e) => setNewPkgAllowPartialPayment(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="new_pkg_allow_partial" className="text-xs text-foreground cursor-pointer select-none font-medium text-primary">
+                      Allow partial payment
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4001,7 +4309,7 @@ export const PackagesWorkspace: React.FC = () => {
             {/* Section 4: Sessions & Passport Entitlements */}
             <div className="pt-3 border-t border-border space-y-3">
               <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Sessions &amp; Entitlements</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between h-5 mb-1.5">
                     <label className="text-xs font-medium text-foreground">Home Sessions</label>
@@ -4033,7 +4341,7 @@ export const PackagesWorkspace: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between h-5 mb-1.5">
-                    <label className="text-xs font-medium text-foreground">Cross-Branch Sessions</label>
+                    <label className="text-xs font-medium text-foreground">Passport Sessions</label>
                     <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                       <input
                         type="checkbox"
@@ -4058,7 +4366,7 @@ export const PackagesWorkspace: React.FC = () => {
                     }}
                     className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                   />
-                  <span className="text-[10px] text-muted-foreground block">Cross-Branch</span>
+                  <span className="text-[10px] text-muted-foreground block">Passport session</span>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between h-5 mb-1.5">
@@ -4073,6 +4381,21 @@ export const PackagesWorkspace: React.FC = () => {
                     className="text-sm h-9"
                   />
                   <span className="text-[10px] text-muted-foreground block">Extra per session</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between h-5 mb-1.5">
+                    <label className="text-xs font-medium text-foreground">Booking Credits</label>
+                    <span className="text-[10px] text-muted-foreground">SWEAT Elite</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 50"
+                    value={newPkgCredits}
+                    onChange={(e) => setNewPkgCredits(e.target.value)}
+                    className="text-sm h-9"
+                  />
+                  <span className="text-[10px] text-muted-foreground block">Cross-program credits</span>
                 </div>
               </div>
             </div>
@@ -4446,17 +4769,31 @@ export const PackagesWorkspace: React.FC = () => {
                       className="text-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-2 pt-1 sm:pt-5">
-                    <input
-                      type="checkbox"
-                      id="price_inc_tax"
-                      checked={newVerTaxIncluded}
-                      onChange={(e) => setNewVerTaxIncluded(e.target.checked)}
-                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                    />
-                    <label htmlFor="price_inc_tax" className="text-xs text-foreground cursor-pointer select-none">
-                      Prices include tax
-                    </label>
+                  <div className="space-y-2 pt-1 sm:pt-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="price_inc_tax"
+                        checked={newVerTaxIncluded}
+                        onChange={(e) => setNewVerTaxIncluded(e.target.checked)}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="price_inc_tax" className="text-xs text-foreground cursor-pointer select-none">
+                        Prices include tax
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="ver_allow_partial"
+                        checked={newVerAllowPartialPayment}
+                        onChange={(e) => setNewVerAllowPartialPayment(e.target.checked)}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="ver_allow_partial" className="text-xs text-foreground cursor-pointer select-none font-medium text-primary">
+                        Allow partial payment
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4464,7 +4801,7 @@ export const PackagesWorkspace: React.FC = () => {
               {/* Sessions & Entitlements Section */}
               <div className="pt-2 border-t border-border">
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Sessions &amp; Entitlements</span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between h-5 mb-1.5">
                       <label className="text-xs font-medium text-foreground">Home Sessions</label>
@@ -4496,7 +4833,7 @@ export const PackagesWorkspace: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between h-5 mb-1.5">
-                      <label className="text-xs font-medium text-foreground">Cross-Branch Sessions</label>
+                      <label className="text-xs font-medium text-foreground">Passport Sessions</label>
                       <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
                         <input
                           type="checkbox"
@@ -4521,7 +4858,7 @@ export const PackagesWorkspace: React.FC = () => {
                       }}
                       className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
                     />
-                    <span className="text-[10px] text-muted-foreground block">Cross-Branch</span>
+                    <span className="text-[10px] text-muted-foreground block">Passport session</span>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between h-5 mb-1.5">
@@ -4536,6 +4873,21 @@ export const PackagesWorkspace: React.FC = () => {
                       className="text-sm h-9"
                     />
                     <span className="text-[10px] text-muted-foreground block">Extra per session</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Booking Credits</label>
+                      <span className="text-[10px] text-muted-foreground">SWEAT Elite</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="e.g. 50"
+                      value={newVerCredits}
+                      onChange={(e) => setNewVerCredits(e.target.value)}
+                      className="text-sm h-9"
+                    />
+                    <span className="text-[10px] text-muted-foreground block">Cross-program credits</span>
                   </div>
                 </div>
               </div>
@@ -4612,11 +4964,13 @@ export const PackagesWorkspace: React.FC = () => {
                       display_price: newVerDisplayPrice ? Number(newVerDisplayPrice) : undefined,
                       tax_percentage: newVerTaxPercentage ? Math.round(Number(newVerTaxPercentage)) : 18,
                       prices_include_tax: newVerTaxIncluded,
+                      allow_partial_payment: newVerAllowPartialPayment,
                       is_unlimited_home: newVerHomeUnlimited,
                       max_sessions: newVerHomeUnlimited ? undefined : (newVerMaxSessions ? Number(newVerMaxSessions) : undefined),
                       is_unlimited_cross: newVerCrossUnlimited,
                       passport_sessions: newVerCrossUnlimited ? undefined : (newVerPassportSessions ? Number(newVerPassportSessions) : undefined),
                       passport_cost: newVerPassportCost ? Number(newVerPassportCost) : undefined,
+                      credits: newVerCredits ? Number(newVerCredits) : undefined,
                       publish_immediately: newVerPublishNow,
                       status: newVerPublishNow ? 'ACTIVE' : 'DRAFT',
                     },
@@ -4635,6 +4989,351 @@ export const PackagesWorkspace: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT DRAFT PACKAGE VERSION */}
+      {/* ========================================================================= */}
+      {editingDraftVersion && (
+        <Dialog open={Boolean(editingDraftVersion)} onOpenChange={(open) => !open && setEditingDraftVersion(null)}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Edit Draft Version (v{editingDraftVersion.ver.version_number})</span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Target Package: <span className="font-semibold text-primary">{editingDraftVersion.pkg.name}</span>
+              </p>
+            </DialogHeader>
+            <div className="space-y-4 text-sm pt-2">
+              {editDraftFormError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-lg break-words">
+                  {editDraftFormError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Version Name Snapshot</label>
+                <Input
+                  type="text"
+                  placeholder={editingDraftVersion.pkg.name}
+                  value={editVerName}
+                  onChange={(e) => setEditVerName(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+
+              {/* Version Duration - Harmonized 3-column row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Duration Value */}
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Duration Value *</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={editVerDurationVal}
+                    onChange={(e) => {
+                      const v = Math.max(1, Number(e.target.value));
+                      setEditVerDurationVal(v);
+                      const d = calcDays(v, editVerDurationUnit);
+                      setEditVerTotalDays(d);
+                      setEditVerValidity(d);
+                    }}
+                    className="text-sm"
+                  />
+                </div>
+                {/* Duration Unit */}
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Duration Unit *</label>
+                  <select
+                    value={editVerDurationUnit}
+                    onChange={(e) => {
+                      const u = e.target.value;
+                      setEditVerDurationUnit(u);
+                      const d = calcDays(editVerDurationVal, u);
+                      setEditVerTotalDays(d);
+                      setEditVerValidity(d);
+                    }}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="DAY">Day(s)</option>
+                    <option value="WEEK">Week(s)</option>
+                    <option value="MONTH">Month(s)</option>
+                    <option value="YEAR">Year(s)</option>
+                  </select>
+                </div>
+                {/* Total Days */}
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1 flex items-center gap-1">
+                    Total Days
+                    <span className="text-[9px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">auto</span>
+                  </label>
+                  <Input
+                    type="number"
+                    readOnly
+                    value={editVerTotalDays}
+                    className="text-sm bg-muted/50 cursor-not-allowed text-muted-foreground"
+                    tabIndex={-1}
+                  />
+                </div>
+              </div>
+
+              {/* Commercial Pricing Section */}
+              <div className="pt-2 border-t border-border">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Pricing</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1">Sale Price (₹)</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 24285"
+                      value={editVerSalePrice}
+                      onChange={(e) => setEditVerSalePrice(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1">Display Price (₹)</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 29999"
+                      value={editVerDisplayPrice}
+                      onChange={(e) => setEditVerDisplayPrice(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1">GST / Tax Percentage (%)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="18"
+                      value={editVerTaxPercentage}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditVerTaxPercentage(val ? String(Math.round(Number(val))) : '');
+                      }}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2 pt-1 sm:pt-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="edit_draft_price_inc_tax"
+                        checked={editVerTaxIncluded}
+                        onChange={(e) => setEditVerTaxIncluded(e.target.checked)}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="edit_draft_price_inc_tax" className="text-xs text-foreground cursor-pointer select-none">
+                        Prices include tax
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="edit_draft_ver_allow_partial"
+                        checked={editVerAllowPartialPayment}
+                        onChange={(e) => setEditVerAllowPartialPayment(e.target.checked)}
+                        className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="edit_draft_ver_allow_partial" className="text-xs text-foreground cursor-pointer select-none font-medium text-primary">
+                        Allow partial payment
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sessions & Entitlements Section */}
+              <div className="pt-2 border-t border-border">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider block mb-2">Sessions &amp; Entitlements</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Home Sessions</label>
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editVerHomeUnlimited}
+                          onChange={(e) => {
+                            setEditVerHomeUnlimited(e.target.checked);
+                            if (e.target.checked) setEditVerMaxSessions('');
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
+                        />
+                        Unlimited
+                      </label>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder={editVerHomeUnlimited ? 'Unlimited' : 'e.g. 72'}
+                      disabled={editVerHomeUnlimited}
+                      value={editVerMaxSessions}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEditVerMaxSessions(v ? String(Math.round(Number(v))) : '');
+                      }}
+                      className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
+                    />
+                    <span className="text-[10px] text-muted-foreground block">Home Branch</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Passport Sessions</label>
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editVerCrossUnlimited}
+                          onChange={(e) => {
+                            setEditVerCrossUnlimited(e.target.checked);
+                            if (e.target.checked) setEditVerPassportSessions('');
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
+                        />
+                        Unlimited
+                      </label>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder={editVerCrossUnlimited ? 'Unlimited' : 'e.g. 10'}
+                      disabled={editVerCrossUnlimited}
+                      value={editVerPassportSessions}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEditVerPassportSessions(v ? String(Math.round(Number(v))) : '');
+                      }}
+                      className="text-sm h-9 disabled:bg-muted/50 disabled:text-muted-foreground"
+                    />
+                    <span className="text-[10px] text-muted-foreground block">Passport session</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Passport Cost (₹)</label>
+                      <span className="text-[10px] text-muted-foreground">Optional</span>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 500"
+                      value={editVerPassportCost}
+                      onChange={(e) => setEditVerPassportCost(e.target.value)}
+                      className="text-sm h-9"
+                    />
+                    <span className="text-[10px] text-muted-foreground block">Extra per session</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-medium text-foreground">Booking Credits</label>
+                      <span className="text-[10px] text-muted-foreground">SWEAT Elite</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="e.g. 50"
+                      value={editVerCredits}
+                      onChange={(e) => setEditVerCredits(e.target.value)}
+                      className="text-sm h-9"
+                    />
+                    <span className="text-[10px] text-muted-foreground block">Cross-program credits</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Channels & Publishing */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editVerShowWeb}
+                      onChange={(e) => setEditVerShowWeb(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    Show on Web
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editVerShowApp}
+                      onChange={(e) => setEditVerShowApp(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    Show on App
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="edit_draft_publish_now"
+                    checked={editVerPublishNow}
+                    onChange={(e) => setEditVerPublishNow(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="edit_draft_publish_now" className="text-xs font-semibold text-primary cursor-pointer select-none">
+                    Publish immediately (Activate Version {editingDraftVersion.ver.version_number})
+                  </label>
+                </div>
+                {editVerPublishNow && (
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                    <span>
+                      <strong>Immediate Publication:</strong> Activating this version will automatically make it live and retire any currently active version of this package.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingDraftVersion(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={updateDraftVersionMutation.isPending || editVerTotalDays <= 0}
+                onClick={() =>
+                  updateDraftVersionMutation.mutate({
+                    verId: editingDraftVersion.ver.id,
+                    payload: {
+                      name_snapshot: editVerName || editingDraftVersion.pkg.name,
+                      duration_value: editVerDurationVal,
+                      duration_unit: editVerDurationUnit,
+                      total_days: editVerTotalDays,
+                      validity_days: editVerValidity,
+                      show_on_web: editVerShowWeb,
+                      show_on_app: editVerShowApp,
+                      sale_price: editVerSalePrice !== '' ? Number(editVerSalePrice) : 0,
+                      display_price: editVerDisplayPrice !== '' ? Number(editVerDisplayPrice) : undefined,
+                      tax_percentage: editVerTaxPercentage !== '' ? Math.round(Number(editVerTaxPercentage)) : 18,
+                      prices_include_tax: editVerTaxIncluded,
+                      allow_partial_payment: editVerAllowPartialPayment,
+                      is_unlimited_home: editVerHomeUnlimited,
+                      max_sessions: editVerHomeUnlimited ? undefined : (editVerMaxSessions !== '' ? Number(editVerMaxSessions) : undefined),
+                      is_unlimited_cross: editVerCrossUnlimited,
+                      passport_sessions: editVerCrossUnlimited ? undefined : (editVerPassportSessions !== '' ? Number(editVerPassportSessions) : undefined),
+                      passport_cost: editVerPassportCost !== '' ? Number(editVerPassportCost) : undefined,
+                      credits: editVerCredits !== '' ? Number(editVerCredits) : undefined,
+                      publish_immediately: editVerPublishNow,
+                      status: editVerPublishNow ? 'ACTIVE' : 'DRAFT',
+                    },
+                  })
+                }
+              >
+                {updateDraftVersionMutation.isPending
+                  ? 'Saving...'
+                  : editVerPublishNow
+                  ? 'Save & Publish Version'
+                  : 'Save Draft Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* MODAL: NEW LEGAL POLICY (NO CODE FIELD) */}
       {/* ========================================================================= */}
       <Dialog open={isNewTermsDocOpen} onOpenChange={setIsNewTermsDocOpen}>

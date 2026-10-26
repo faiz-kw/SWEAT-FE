@@ -97,6 +97,8 @@ export interface Booking {
   member_number?: string;
   occurrence: string;
   class_name?: string;
+  program_name?: string | null;
+  booked_by_name?: string | null;
   occurrence_date?: string;
   start_at?: string;
   end_at?: string;

@@ -150,8 +150,8 @@ export function isTrainerUser(user: any, trainers?: any[]): boolean {
     const isTrainerEmail = trainers.some(
       (t) =>
         (t.email && String(t.email).toLowerCase().trim() === userEmail) ||
-        t.user === user.id ||
-        t.user_id === user.id
+        t.user === (user.id || user.userId) ||
+        t.user_id === (user.id || user.userId)
     );
     if (isTrainerEmail) return true;
   }
@@ -302,7 +302,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Dashboard", to: "/crm/dashboard", permission: "crm.dashboard.view" },
       { label: "Leads", to: "/crm/leads", badgeKey: "leads", permission: "crm.leads.view" },
-      { label: "Lead Pipeline", to: "/crm/pipeline", permission: "crm.pipeline.view" },
+
       { label: "Trial Management", to: "/crm/trials", permission: "crm.trials.view" },
       { label: "Sales Activities", to: "/crm/activities", permission: "crm.leads.view" },
       { label: "Follow-ups", to: "/crm/follow-ups", permission: "crm.follow-ups.view" },

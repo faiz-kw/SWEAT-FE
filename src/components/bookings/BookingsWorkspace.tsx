@@ -31,6 +31,7 @@ import { formatOccurrenceDateTime, formatTime12h, formatOccurrenceDate } from '@
 import { bookingsApi } from '@/api/endpoints/bookingsApi';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { membershipsApi } from '@/api/endpoints/membershipsApi';
+import { api } from '@/api/client';
 import {
   Booking,
   BookingPolicySet,
@@ -79,6 +80,9 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('ALL');
+  const [selectedBookingType, setSelectedBookingType] = useState<string>('ALL');
   const [dateFilterMode, setDateFilterMode] = useState<'all' | 'today' | 'custom' | 'range'>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
@@ -115,7 +119,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
 
   React.useEffect(() => {
     setPage(1);
-  }, [activeTab, debouncedSearch, statusFilter, dateFilterMode, selectedDate, fromDate, toDate, pageSize]);
+  }, [activeTab, debouncedSearch, statusFilter, dateFilterMode, selectedDate, fromDate, toDate, pageSize, selectedBranchId, selectedProgramId, selectedBookingType]);
 
   // Selected Booking & Action Modals
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -178,6 +182,38 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
       ? undefined
       : statusFilter;
 
+  // Fetch branches for filter
+  const { data: branches = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['bookings-branches-list'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any>('/tenant/branches/');
+        return Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  // Fetch programs for filter
+  const { data: programs = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['bookings-programs-list'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any>('/tenant/programs/', { params: { page_size: 100 } });
+        const list = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+        const seen = new Set<string>();
+        return list.filter((p: any) => {
+          if (!p.name || seen.has(p.name)) return false;
+          seen.add(p.name);
+          return true;
+        });
+      } catch {
+        return [];
+      }
+    },
+  });
+
   // Paginated Bookings Query
   const {
     data: paginatedBookings,
@@ -192,6 +228,9 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
       selectedDate,
       fromDate,
       toDate,
+      selectedBranchId,
+      selectedProgramId,
+      selectedBookingType,
       page,
       pageSize,
     ],
@@ -199,6 +238,9 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
       bookingsApi.getBookingsPaginated({
         status: effectiveStatusParam,
         search: debouncedSearch || undefined,
+        branch_id: selectedBranchId !== 'ALL' ? selectedBranchId : undefined,
+        program_id: selectedProgramId !== 'ALL' ? selectedProgramId : undefined,
+        booking_type: selectedBookingType !== 'ALL' ? selectedBookingType : undefined,
         occurrence_date:
           dateFilterMode === 'today'
             ? todayIsoStr
@@ -213,7 +255,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   });
 
   const bookings = paginatedBookings?.results || [];
-  const totalMatchingBookings = paginatedBookings?.count ?? bookings.length;
+  const totalMatchingBookings = (selectedProgramId !== 'ALL' && (paginatedBookings?.count ?? 0) === 0) ? 0 : (paginatedBookings?.count ?? bookings.length);
   const totalPages = paginatedBookings?.total_pages ?? 1;
   const bookingSummary = paginatedBookings?.summary;
 
@@ -420,15 +462,31 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     },
   });
 
-  const filteredBookings = bookings;
-  const waitlistBookings = activeTab === 'waitlist' ? bookings : bookings.filter((b) => b.status === 'WAITLISTED');
+  const filteredBookings = React.useMemo(() => {
+    if (!bookings || bookings.length === 0) return [];
+    if (selectedProgramId === 'ALL') return bookings;
+
+    const targetProg = programs.find((p) => String(p.id) === String(selectedProgramId));
+    const targetName = targetProg?.name?.toLowerCase().trim();
+
+    return bookings.filter((b) => {
+      if (b.program_name && targetName) {
+        return b.program_name.toLowerCase().trim() === targetName;
+      }
+      if (b.is_trial || b.booking_type === 'PROSPECT' || b.booking_source === 'TRIAL') {
+        return false;
+      }
+      return true;
+    });
+  }, [bookings, selectedProgramId, programs]);
+  const waitlistBookings = activeTab === 'waitlist' ? filteredBookings : filteredBookings.filter((b) => b.status === 'WAITLISTED');
 
   // KPI Metrics Calculation (Backed by server-side aggregate summary across all records)
-  const totalBookings = bookingSummary?.total_count ?? totalMatchingBookings;
-  const confirmedCount = bookingSummary?.confirmed_count ?? bookings.filter((b) => b.status === 'CONFIRMED').length;
-  const waitlistCount = bookingSummary?.waitlisted_count ?? waitlistBookings.length;
-  const attendedCount = bookingSummary?.attended_count ?? bookings.filter((b) => b.status === 'ATTENDED' || b.status === 'COMPLETED' || b.status === 'LATE').length;
-  const noShowCount = bookingSummary?.no_show_count ?? bookings.filter((b) => b.status === 'NO_SHOW').length;
+  const totalBookings = selectedProgramId !== 'ALL' && filteredBookings.length === 0 && (bookingSummary?.total_count ?? 0) === 0 ? 0 : (bookingSummary?.total_count ?? totalMatchingBookings);
+  const confirmedCount = selectedProgramId !== 'ALL' && filteredBookings.length === 0 && (bookingSummary?.confirmed_count ?? 0) === 0 ? 0 : (bookingSummary?.confirmed_count ?? filteredBookings.filter((b) => b.status === 'CONFIRMED').length);
+  const waitlistCount = selectedProgramId !== 'ALL' && filteredBookings.length === 0 && (bookingSummary?.waitlisted_count ?? 0) === 0 ? 0 : (bookingSummary?.waitlisted_count ?? waitlistBookings.length);
+  const attendedCount = selectedProgramId !== 'ALL' && filteredBookings.length === 0 && (bookingSummary?.attended_count ?? 0) === 0 ? 0 : (bookingSummary?.attended_count ?? filteredBookings.filter((b) => b.status === 'ATTENDED' || b.status === 'COMPLETED' || b.status === 'LATE').length);
+  const noShowCount = selectedProgramId !== 'ALL' && filteredBookings.length === 0 && (bookingSummary?.no_show_count ?? 0) === 0 ? 0 : (bookingSummary?.no_show_count ?? filteredBookings.filter((b) => b.status === 'NO_SHOW').length);
 
   const getStatusBadge = (status: BookingStatus | string) => {
     switch (status) {
@@ -693,21 +751,68 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Status:</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="WAITLISTED">Waitlisted</option>
-                  <option value="ATTENDED">Attended</option>
-                  <option value="NO_SHOW">No Show</option>
-                  <option value="CANCELLED">Cancelled</option>
-                  <option value="RESCHEDULED">Rescheduled</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Branch Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Branch:</span>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="ALL">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Program Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Program:</span>
+                  <select
+                    value={selectedProgramId}
+                    onChange={(e) => setSelectedProgramId(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary max-w-[150px] truncate"
+                  >
+                    <option value="ALL">All Programs</option>
+                    {programs.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Trial Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Type:</span>
+                  <select
+                    value={selectedBookingType}
+                    onChange={(e) => setSelectedBookingType(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="ALL">All Bookings</option>
+                    <option value="TRIAL">Trials Only</option>
+                    <option value="MEMBER">Members Only</option>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Status:</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="WAITLISTED">Waitlisted</option>
+                    <option value="ATTENDED">Attended</option>
+                    <option value="NO_SHOW">No Show</option>
+                    <option value="CANCELLED">Cancelled</option>
+                    <option value="RESCHEDULED">Rescheduled</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -717,11 +822,11 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 <table className="w-full text-left text-xs sm:text-sm">
                   <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
                     <tr>
-                      <th className="px-4 py-3">Booking #</th>
+                      <th className="px-4 py-3">Booking # &amp; Timing</th>
                       <th className="px-4 py-3">Member</th>
-                      <th className="px-4 py-3">Class Occurrence</th>
+                      <th className="px-4 py-3">Class &amp; Program</th>
                       <th className="px-4 py-3">Branch</th>
-                      <th className="px-4 py-3">Source / Type</th>
+                      <th className="px-4 py-3">Channel &amp; Origin</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
@@ -740,7 +845,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                           <p className="text-sm font-medium text-foreground mb-1">No bookings found</p>
                           <p className="text-xs text-muted-foreground mb-4">
                             {searchTerm || statusFilter !== 'ALL'
-                              ? 'Try adjusting your search criteria or status filter.'
+                              ? 'Try adjusting your search criteria or filters.'
                               : 'Create your first class reservation to get started.'}
                           </p>
                           {canCreate && (
@@ -765,6 +870,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     ) : (
                       filteredBookings.map((booking) => (
                         <tr key={booking.id} className="hover:bg-muted/40 transition-colors">
+                          {/* 1. Booking Number & Timestamps */}
                           <td className="px-4 py-3.5 font-mono text-xs text-primary font-semibold">
                             <button
                               onClick={() => {
@@ -775,13 +881,33 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                             >
                               {booking.booking_number}
                             </button>
-                            <div className="text-[10px] text-muted-foreground font-sans font-normal">
-                              {new Date(booking.booked_at).toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+                            <div className="text-[10px] text-muted-foreground font-sans font-normal mt-0.5">
+                              {booking.booked_at ? (
+                                <>Booked: {new Date(booking.booked_at).toLocaleString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                })}</>
+                              ) : null}
                             </div>
+                            {booking.cancelled_at && (
+                              <div className="text-[10px] text-rose-500 font-sans font-semibold mt-0.5">
+                                Cancelled: {new Date(booking.cancelled_at).toLocaleString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                })}
+                              </div>
+                            )}
                           </td>
+
+                          {/* 2. Member */}
                           <td className="px-4 py-3.5">
                             <div className="font-medium text-foreground">
                               {booking.user_profile_name || 'Member'}
@@ -790,37 +916,57 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               {booking.user_profile_email || (booking as any).user_profile_phone || (booking as any).phone || ''}
                             </div>
                           </td>
+
+                          {/* 3. Class & Program */}
                           <td className="px-4 py-3.5">
-                            <div className="text-foreground font-medium">
-                              {booking.occurrence_title || 'Class Session'}
+                            <div className="text-foreground font-semibold">
+                              {booking.class_name || booking.occurrence_title || 'Class Session'}
                             </div>
-                            <div className="text-[11px] text-muted-foreground">
+                            {booking.program_name && (
+                              <div className="text-[11px] font-medium text-primary">
+                                {booking.program_name}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
                               {formatOccurrenceDateTime({
                                 occurrence_date: booking.occurrence_date,
-                                start_at: booking.occurrence_start_at,
-                                start_time: (booking as any).occurrence_start_time,
-                                end_time: (booking as any).occurrence_end_time,
+                                start_at: booking.occurrence_start_at || booking.start_at,
+                                start_time: (booking as any).occurrence_start_time || booking.start_time,
+                                end_time: (booking as any).occurrence_end_time || booking.end_time,
                               })}
                             </div>
                           </td>
+
+                          {/* 4. Branch */}
                           <td className="px-4 py-3.5 text-xs text-muted-foreground">
                             {booking.branch_name || 'Main Studio'}
                           </td>
+
+                          {/* 5. Channel & Origin */}
                           <td className="px-4 py-3.5">
-                            {booking.is_trial || booking.booking_source === 'TRIAL' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                                TRIAL / PROSPECT
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-muted text-foreground border border-border">
+                                {booking.booking_source === 'MOBILE_APP'
+                                  ? '📱 Mobile App'
+                                  : booking.booking_source === 'WEB'
+                                  ? '🌐 Web Portal'
+                                  : booking.booking_source === 'FRONT_DESK'
+                                  ? '🏢 Front Desk'
+                                  : booking.booking_source || 'App'}
                               </span>
-                            ) : (
-                              <>
-                                <span className="text-[11px] px-2 py-0.5 rounded bg-muted text-foreground mr-1.5 border border-border">
-                                  {booking.booking_source}
+                              {booking.is_trial || booking.booking_source === 'TRIAL' || booking.booking_type === 'TRIAL' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                                  TRIAL
                                 </span>
-                                <span className="text-[11px] text-muted-foreground font-medium">
-                                  {booking.booking_type === 'MEMBER' ? 'MEMBER / CLASS BOOKING' : booking.booking_type}
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  {booking.booking_type}
                                 </span>
-                              </>
-                            )}
+                              )}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              By: <span className="text-foreground font-medium">{booking.booked_by_name || (booking.booking_source === 'MOBILE_APP' ? 'Member (Self)' : 'Staff')}</span>
+                            </div>
                           </td>
                           {(() => {
                             const effectiveStatus = (booking.attendance_record?.status === 'LATE' || booking.status === 'LATE')
@@ -836,7 +982,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               <>
                                 <td className="px-4 py-3.5">{getStatusBadge(effectiveStatus)}</td>
                                 <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
-                                  {booking.is_trial || booking.booking_source === 'TRIAL' ? (
+                                  {booking.is_trial || booking.booking_source === 'TRIAL' || booking.booking_type === 'TRIAL' ? (
                                     <>
                                       {/* TRIAL ACTIONS */}
                                       {canEdit && (booking.status === 'BOOKED' || (booking as any).confirmation_status === 'PENDING') && (
@@ -1820,23 +1966,46 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   <div className="text-[10px] text-muted-foreground">{selectedBooking.user_profile_email}</div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Class Session</span>
-                  <span className="font-semibold text-foreground">{selectedBooking.occurrence_title}</span>
+                  <span className="text-muted-foreground block text-[10px]">Class &amp; Program</span>
+                  <span className="font-semibold text-foreground">{selectedBooking.class_name || selectedBooking.occurrence_title || 'Class Session'}</span>
+                  {selectedBooking.program_name && (
+                    <div className="text-[11px] font-medium text-primary">{selectedBooking.program_name}</div>
+                  )}
                   <div className="text-[10px] text-muted-foreground">
                     {selectedBooking.occurrence_date} ({selectedBooking.branch_name})
                   </div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Type / Source</span>
-                  <span className="text-foreground">
-                    {selectedBooking.booking_type} via {selectedBooking.booking_source}
+                  <span className="text-muted-foreground block text-[10px]">Booking Channel &amp; Origin</span>
+                  <span className="text-foreground font-medium">
+                    {selectedBooking.booking_source === 'MOBILE_APP'
+                      ? '📱 Mobile App'
+                      : selectedBooking.booking_source === 'WEB'
+                      ? '🌐 Web Portal'
+                      : selectedBooking.booking_source === 'FRONT_DESK'
+                      ? '🏢 Front Desk'
+                      : selectedBooking.booking_source}
                   </span>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    Booked by: <span className="text-foreground font-medium">{selectedBooking.booked_by_name || 'Member (Self)'}</span>
+                  </div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Reserved At</span>
-                  <span className="text-foreground">
-                    {new Date(selectedBooking.booked_at).toLocaleString()}
-                  </span>
+                  <span className="text-muted-foreground block text-[10px]">Timing Audit</span>
+                  <div className="text-foreground font-medium text-xs">
+                    {selectedBooking.booked_at ? (
+                      <>Booked: {new Date(selectedBooking.booked_at).toLocaleString([], {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                      })}</>
+                    ) : '—'}
+                  </div>
+                  {selectedBooking.cancelled_at && (
+                    <div className="text-[10px] text-rose-500 font-semibold mt-0.5">
+                      Cancelled: {new Date(selectedBooking.cancelled_at).toLocaleString([], {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
