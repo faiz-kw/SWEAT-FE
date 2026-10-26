@@ -916,11 +916,11 @@ export function FoodVisionAndBarcodeScanner({
                     <div className="flex items-center gap-2">
                       <Input
                         type="text"
-                        placeholder="e.g. 8901764012280 (Maaza / Amul Milk)"
+                        placeholder="Enter barcode (e.g. 8901764012280) or food name (e.g. Oatmeal, Whey Shake)"
                         value={barcodeInput}
                         onChange={(e) => setBarcodeInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && void handleBarcodeLookup()}
-                        className="bg-background font-mono text-xs"
+                        className="bg-background text-xs"
                       />
                       <Button
                         onClick={() => void handleBarcodeLookup()}
@@ -974,6 +974,16 @@ export function FoodVisionAndBarcodeScanner({
                         >
                           🍪 Parle-G (8901719101038)
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBarcodeInput('8902080002375');
+                            void handleBarcodeLookup('8902080002375');
+                          }}
+                          className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          ⚡ Gatorade Zero (8902080002375)
+                        </button>
                       </div>
                     </div>
 
@@ -1009,7 +1019,7 @@ export function FoodVisionAndBarcodeScanner({
                               {barcodeResult.product.product_name}
                             </h3>
                             <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                              Barcode: {barcodeResult.product.barcode}
+                              {barcodeResult.product.barcode ? `Barcode: ${barcodeResult.product.barcode}` : 'Verified Food Item'}
                             </p>
                           </div>
                         </div>

@@ -3613,11 +3613,19 @@ const MemberHealthFormsSection: React.FC<{
                       Authenticated Member Digital Signature
                     </span>
                     <div className="flex items-center gap-4 flex-wrap">
-                      <div className="p-2 bg-white rounded-lg border border-border shadow-xs inline-block">
+                      <div className="p-2 bg-white rounded-lg border border-border/80 shadow-xs inline-flex items-center justify-center min-w-[120px] min-h-[44px]">
                         <img
-                          src={sub.signature_data}
+                          src={
+                            sub.signature_data.startsWith('data:image/') ||
+                            sub.signature_data.startsWith('http://') ||
+                            sub.signature_data.startsWith('https://')
+                              ? sub.signature_data
+                              : sub.signature_data.startsWith('/media/')
+                              ? sub.signature_data
+                              : `/media/${sub.signature_data.replace(/^\/+/, '')}`
+                          }
                           alt="Member Drawn Signature"
-                          className="max-h-16 object-contain"
+                          className="h-11 w-auto max-w-[200px] object-contain block"
                         />
                       </div>
                       <div className="text-xs space-y-0.5">
@@ -3720,20 +3728,42 @@ const MemberHealthFormsSection: React.FC<{
                           </div>
 
                           <div className="pt-0.5">
-                            {ans.question_type === 'BOOLEAN' || ans.boolean_value !== null ? (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true' || ans.boolean_value === true
-                                    ? 'text-amber-500 border-amber-500/30 bg-amber-500/10 font-bold'
-                                    : 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10 font-semibold'
+                            {(() => {
+                              const raw = ans.answer ?? ans.value ?? ans.text_value;
+                              const isBool = ans.question_type === 'BOOLEAN' || ans.boolean_value !== null || raw === true || raw === false || raw === 'yes' || raw === 'no' || raw === 'YES' || raw === 'NO' || raw === 'true' || raw === 'false';
+                              const isYes = ans.boolean_value === true || String(raw).toLowerCase() === 'yes' || String(raw).toLowerCase() === 'true';
+
+                              if (isBool) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      isYes
+                                        ? 'text-amber-500 border-amber-500/30 bg-amber-500/10 font-bold'
+                                        : 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10 font-semibold'
+                                    }
+                                  >
+                                    {isYes ? 'YES' : 'NO'}
+                                  </Badge>
+                                );
+                              }
+
+                              let formattedText = '—';
+                              if (raw !== null && raw !== undefined && raw !== '') {
+                                if (Array.isArray(raw)) {
+                                  formattedText = raw.map((item) => (typeof item === 'object' && item ? item.label || item.value || item.answer || '' : String(item))).filter(Boolean).join(', ') || '—';
+                                } else if (typeof raw === 'object') {
+                                  formattedText = raw.label || raw.value || raw.answer || Object.values(raw).filter((v) => typeof v === 'string' || typeof v === 'number').join(', ') || '—';
+                                } else {
+                                  formattedText = String(raw).trim() || '—';
                                 }
-                              >
-                                {ans.answer?.toLowerCase() === 'yes' || ans.answer === 'true' || ans.boolean_value === true ? 'YES' : 'NO'}
-                              </Badge>
-                            ) : (
-                              <span className="font-semibold text-foreground">{ans.answer || '—'}</span>
-                            )}
+                              }
+                              if (formattedText === '[object Object]' || formattedText.includes('[object Object]')) {
+                                formattedText = '—';
+                              }
+
+                              return <span className="font-semibold text-foreground">{formattedText}</span>;
+                            })()}
                           </div>
                         </div>
                       ))}
@@ -3780,7 +3810,23 @@ const MemberHealthFormsSection: React.FC<{
  * Enables trainers, nutritionists, and gym admins to monitor a member's daily diet intake.
  */
 const MemberWellnessSection: React.FC<{ memberId: string }> = ({ memberId }) => {
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const getLocalDateStr = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const addCalendarDays = (dateStr: string, days: number): string => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + days);
+    const year = dt.getFullYear();
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateStr());
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['member-wellness-summary', memberId, selectedDate],
@@ -3792,37 +3838,45 @@ const MemberWellnessSection: React.FC<{ memberId: string }> = ({ memberId }) => 
   });
 
   const handlePrevDay = () => {
-    const d = new Date(`${selectedDate}T00:00:00`);
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate((prev) => addCalendarDays(prev, -1));
   };
 
   const handleNextDay = () => {
-    const d = new Date(`${selectedDate}T00:00:00`);
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate((prev) => addCalendarDays(prev, 1));
   };
 
   const handleToday = () => {
-    setSelectedDate(new Date().toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateStr());
   };
 
   const anyData = data as any;
   const cals = anyData?.nutrition
     ? {
-        consumed: anyData.nutrition.total_calories || 0,
-        target: anyData.targets?.daily_calorie_target || 2000,
-        remaining: anyData.nutrition.calories_remaining || 2000,
+        consumed: anyData.nutrition.total_calories ?? anyData.consumed?.calories ?? anyData.consumed?.total_calories ?? 0,
+        target: anyData.targets?.daily_calories ?? anyData.targets?.calories ?? anyData.targets?.daily_calorie_target ?? 2000,
+        remaining: anyData.nutrition.calories_remaining ?? anyData.remaining?.calories ?? 2000,
       }
-    : (anyData?.calories || { consumed: 0, target: 2000, remaining: 2000 });
+    : (anyData?.consumed || anyData?.calories || { consumed: 0, target: 2000, remaining: 2000 });
   const calPercent = Math.min(100, Math.round(((cals.consumed || 0) / (cals.target || 2000)) * 100));
 
-  const macros = anyData?.nutrition
+  const macros = anyData?.nutrition || anyData?.consumed
     ? {
-        protein: { consumed_g: anyData.nutrition.total_protein_g || 0, target_g: anyData.targets?.protein_target_g || 120 },
-        carbs: { consumed_g: anyData.nutrition.total_carbs_g || 0, target_g: anyData.targets?.carbs_target_g || 220 },
-        fat: { consumed_g: anyData.nutrition.total_fat_g || 0, target_g: anyData.targets?.fat_target_g || 65 },
-        fiber: { consumed_g: anyData.nutrition.total_fiber_g || 0, target_g: 30 },
+        protein: {
+          consumed_g: anyData.nutrition?.total_protein_g ?? anyData.consumed?.protein_g ?? anyData.consumed?.total_protein_g ?? 0,
+          target_g: anyData.targets?.daily_protein_g ?? anyData.targets?.protein_g ?? anyData.targets?.protein_target_g ?? 120,
+        },
+        carbs: {
+          consumed_g: anyData.nutrition?.total_carbs_g ?? anyData.consumed?.carbs_g ?? anyData.consumed?.total_carbs_g ?? 0,
+          target_g: anyData.targets?.daily_carbs_g ?? anyData.targets?.carbs_g ?? anyData.targets?.carbs_target_g ?? 220,
+        },
+        fat: {
+          consumed_g: anyData.nutrition?.total_fat_g ?? anyData.consumed?.fat_g ?? anyData.consumed?.total_fat_g ?? 0,
+          target_g: anyData.targets?.daily_fat_g ?? anyData.targets?.fat_g ?? anyData.targets?.fat_target_g ?? 65,
+        },
+        fiber: {
+          consumed_g: anyData.nutrition?.total_fiber_g ?? anyData.consumed?.fiber_g ?? anyData.consumed?.total_fiber_g ?? 0,
+          target_g: 30,
+        },
       }
     : (anyData?.macros || {
         protein: { consumed_g: 0, target_g: 120 },
@@ -3831,21 +3885,53 @@ const MemberWellnessSection: React.FC<{ memberId: string }> = ({ memberId }) => 
         fiber: { consumed_g: 0, target_g: 30 },
       });
 
-  const water = data?.water || { total_ml: 0, target_ml: 2500, progress_pct: 0 };
-  const sleep = data?.sleep || { total_hours: 0, target_hours: 8, progress_pct: 0 };
-  const meals = data?.meals || { BREAKFAST: [], LUNCH: [], DINNER: [], SNACK: [] };
+  const water = anyData?.water || { total_ml: 0, target_ml: 2500, progress_pct: 0 };
+  const sleep = anyData?.sleep || { total_hours: 0, target_hours: 8, progress_pct: 0 };
+
+  // Support both meals_by_type (grouped object) and meals (array or object)
+  const mealsByType: Record<string, any[]> = {
+    BREAKFAST: [],
+    LUNCH: [],
+    DINNER: [],
+    SNACK: [],
+  };
+
+  if (anyData?.meals_by_type && typeof anyData.meals_by_type === 'object' && !Array.isArray(anyData.meals_by_type)) {
+    mealsByType.BREAKFAST = anyData.meals_by_type.BREAKFAST || [];
+    mealsByType.LUNCH = anyData.meals_by_type.LUNCH || [];
+    mealsByType.DINNER = anyData.meals_by_type.DINNER || [];
+    mealsByType.SNACK = [
+      ...(anyData.meals_by_type.SNACK || []),
+      ...(anyData.meals_by_type.EVENING_SNACK || []),
+    ];
+  } else if (Array.isArray(anyData?.meals)) {
+    for (const m of anyData.meals) {
+      let mType = (m.meal_type || 'SNACK').toUpperCase();
+      if (mType === 'EVENING_SNACK') mType = 'SNACK';
+      if (!mealsByType[mType]) mealsByType[mType] = [];
+      mealsByType[mType].push(m);
+    }
+  } else if (anyData?.meals && typeof anyData.meals === 'object') {
+    mealsByType.BREAKFAST = anyData.meals.BREAKFAST || [];
+    mealsByType.LUNCH = anyData.meals.LUNCH || [];
+    mealsByType.DINNER = anyData.meals.DINNER || [];
+    mealsByType.SNACK = [
+      ...(anyData.meals.SNACK || []),
+      ...(anyData.meals.EVENING_SNACK || []),
+    ];
+  }
 
   const totalMealCount =
-    (meals.BREAKFAST?.length || 0) +
-    (meals.LUNCH?.length || 0) +
-    (meals.DINNER?.length || 0) +
-    (meals.SNACK?.length || 0);
+    (mealsByType.BREAKFAST?.length || 0) +
+    (mealsByType.LUNCH?.length || 0) +
+    (mealsByType.DINNER?.length || 0) +
+    (mealsByType.SNACK?.length || 0);
 
   const mealTypes = [
-    { key: 'BREAKFAST', label: 'Breakfast', icon: Coffee, items: meals.BREAKFAST || [] },
-    { key: 'LUNCH', label: 'Lunch', icon: Utensils, items: meals.LUNCH || [] },
-    { key: 'DINNER', label: 'Dinner', icon: Flame, items: meals.DINNER || [] },
-    { key: 'SNACK', label: 'Snacks & Supplements', icon: Activity, items: meals.SNACK || [] },
+    { key: 'BREAKFAST', label: 'Breakfast', icon: Coffee, items: mealsByType.BREAKFAST || [] },
+    { key: 'LUNCH', label: 'Lunch', icon: Utensils, items: mealsByType.LUNCH || [] },
+    { key: 'DINNER', label: 'Dinner', icon: Flame, items: mealsByType.DINNER || [] },
+    { key: 'SNACK', label: 'Snacks & Supplements', icon: Activity, items: mealsByType.SNACK || [] },
   ];
 
   return (
@@ -4055,30 +4141,87 @@ const MemberWellnessSection: React.FC<{ memberId: string }> = ({ memberId }) => 
                       </div>
 
                       <div className="space-y-2">
-                        {mt.items.map((meal) => (
-                          <div key={meal.id} className="p-2.5 rounded-lg bg-muted/40 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-foreground">
-                                {meal.items?.map((it: any) => it.food_name || it.custom_name || it.custom_food_name).filter(Boolean).join(', ') || 'Logged meal'}
-                              </span>
-                              <span className="font-bold text-primary font-mono">{Math.round(meal.total_calories || 0)} kcal</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                              <span>P: {Math.round(meal.total_protein_g || 0)}g</span>
-                              <span>•</span>
-                              <span>C: {Math.round(meal.total_carbs_g || 0)}g</span>
-                              <span>•</span>
-                              <span>F: {Math.round(meal.total_fat_g || 0)}g</span>
-                              {((meal as any).logged_time || meal.logged_at) && (
-                                <>
-                                  <span>•</span>
-                                  <span className="font-mono">{((meal as any).logged_time || meal.logged_at).slice(0, 5)}</span>
-                                </>
+                        {mt.items.map((meal: any) => {
+                          const mealItems: any[] = Array.isArray(meal.items) ? meal.items : [];
+                          const mealCals = Math.round(meal.total_calories ?? meal.calories ?? 0);
+                          const mealP = Math.round(meal.total_protein_g ?? meal.protein_g ?? 0);
+                          const mealC = Math.round(meal.total_carbs_g ?? meal.carbs_g ?? 0);
+                          const mealF = Math.round(meal.total_fat_g ?? meal.fat_g ?? 0);
+                          const rawTime = (meal.logged_time || meal.logged_at || '');
+                          const mealTime = rawTime ? String(rawTime).slice(0, 5) : '';
+
+                          return (
+                            <div key={meal.id || Math.random()} className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-2 text-xs">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-foreground">
+                                    {mealTime ? `${mealTime} • ` : ''}
+                                    {mt.label} Entry
+                                  </span>
+                                  {meal.notes && (
+                                    <span className="text-[10px] text-muted-foreground italic truncate max-w-[200px]">
+                                      ({meal.notes})
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-extrabold text-primary font-mono">{mealCals} kcal</span>
+                              </div>
+
+                              {/* Individual Dishes / Items logged in this meal */}
+                              {mealItems.length > 0 ? (
+                                <div className="space-y-1.5 pt-1">
+                                  {mealItems.map((it: any, itIdx: number) => {
+                                    const itemName =
+                                      it.food_name_snapshot ||
+                                      it.food_name ||
+                                      it.food_item?.name ||
+                                      it.custom_name ||
+                                      it.custom_food_name ||
+                                      'Food item';
+                                    const itemGrams = it.consumed_grams ? `${Math.round(it.consumed_grams)}g` : '';
+                                    const itemCals = Math.round(it.snapshot_calories ?? it.calories ?? 0);
+                                    const itemP = Math.round(it.snapshot_protein_g ?? it.protein_g ?? 0);
+                                    const itemC = Math.round(it.snapshot_carbs_g ?? it.carbs_g ?? 0);
+                                    const itemF = Math.round(it.snapshot_fat_g ?? it.fat_g ?? 0);
+
+                                    return (
+                                      <div
+                                        key={it.id || itIdx}
+                                        className="flex items-center justify-between p-2 rounded-lg bg-background/80 border border-border/40 text-[11px]"
+                                      >
+                                        <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
+                                          <span className="font-medium text-foreground truncate">{itemName}</span>
+                                          {itemGrams && (
+                                            <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                                              ({itemGrams})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 font-mono text-[10px] shrink-0">
+                                          <span className="text-muted-foreground">
+                                            {itemP}p • {itemC}c • {itemF}f
+                                          </span>
+                                          <span className="font-bold text-foreground">{itemCals} kcal</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] text-muted-foreground">
+                                  {meal.food_name || 'Logged meal item'}
+                                </div>
                               )}
+
+                              <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px] text-muted-foreground font-mono">
+                                <span>Meal Total:</span>
+                                <span>
+                                  P: {mealP}g • C: {mealC}g • F: {mealF}g
+                                </span>
+                              </div>
                             </div>
-                            {meal.notes && <p className="text-[11px] text-muted-foreground italic">Note: {meal.notes}</p>}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

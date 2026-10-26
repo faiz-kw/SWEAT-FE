@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SWEAT CRM Booking Policy System &amp; Testing Playbook - Chat Viewer</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card-user: #1e293b;
+    --card-assistant: #111827;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --user-border: #3b82f6;
+    --assistant-border: #10b981;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.6;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+  header {
+    position: sticky; top: 0; background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(8px); padding: 16px 0; border-bottom: 1px solid var(--border);
+    margin-bottom: 24px; z-index: 10;
+  }
+  h1 { font-size: 24px; color: var(--accent); margin-bottom: 8px; }
+  .meta { color: var(--text-muted); font-size: 14px; margin-bottom: 12px; }
+  .search-bar {
+    width: 100%; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid var(--border); background: #1e293b; color: #fff;
+    font-size: 15px; outline: none; transition: border-color 0.2s;
+  }
+  .search-bar:focus { border-color: var(--accent); }
+  .stats { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+  .msg-card {
+    background: var(--card-assistant);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  }
+  .msg-card.user {
+    background: var(--card-user);
+    border-left: 4px solid var(--user-border);
+  }
+  .msg-card.assistant {
+    border-left: 4px solid var(--assistant-border);
+  }
+  .msg-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 8px;
+  }
+  .badge {
+    font-weight: 600; font-size: 13px; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 6px; display: inline-block;
+  }
+  .badge.user { background: #1d4ed8; color: #dbeafe; }
+  .badge.assistant { background: #065f46; color: #d1fae5; }
+  .step-pill { font-size: 12px; color: var(--text-muted); }
+  .msg-body { white-space: pre-wrap; font-size: 14px; word-break: break-word; }
+  .msg-body pre {
+    background: #090d16; padding: 12px; border-radius: 8px;
+    overflow-x: auto; margin: 10px 0; border: 1px solid var(--border);
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>SWEAT CRM Booking Policy System &amp; Testing Playbook</h1>
+    <div class="meta">Conversation ID: <code>055e1c6b-9f1f-4982-a5ee-ea91e88bb740</code> | Total Messages: <span id="count">4</span></div>
+    <input type="text" id="search" class="search-bar" placeholder="🔍 Search messages, questions, code, endpoints..." oninput="filterMessages()">
+    <div class="stats" id="match-stats">Showing all 4 messages</div>
+  </header>
+  <main id="messages"></main>
+</div>
+<script>
+  const data = [{"role": "user", "step": 0, "text": "Please analyze our CRM\u2019s Booking Policy module in complete detail, assuming I am the Sweat Owner, Mahek is the Sweat Owner, and I am Faiz, a Member.\r\n\r\nReview the attached image carefully and explain the entire booking policy system from every available view, including all rules, settings, permissions, workflows, and configurations.\r\n\r\nPlease cover the following points in detail:\r\n\r\nComplete Booking Policy Explanation: Explain every booking policy rule, what it does, why it exists, how it works, and how it affects the booking process.\r\nRole-Based Access and Permissions: Explain the system from both perspectives:\r\nSweat Owner (Mahek): What can the owner view, create, edit, configure, enable, disable, or manage?\r\nMember (Faiz): What can a member view, access, book, modify, or cancel? Which actions should be restricted?\r\nUI Configuration: Determine whether booking policies can be configured directly through the UI. Identify which settings are editable, which are fixed, and whether any configuration options are missing.\r\nBackend Integration: Verify whether the booking policies are properly connected to the backend and database. Explain whether changes made in the UI are persisted, whether the backend enforces the rules, and whether the booking flow actually respects the configured policies.\r\nView-by-View Analysis: Review every relevant screen, page, tab, modal, form, and settings view. Explain the purpose of each component and how it interacts with the booking policy system.\r\nIssues and Missing Functionality: Identify bugs, incorrect behavior, inconsistent UI elements, missing validations, permission issues, incomplete implementations, and any frontend or backend integration problems.\r\nSecurity and Business Logic: Check whether members can bypass booking restrictions, access owner-only settings, or perform unauthorized actions. Verify that critical booking rules are enforced on the backend rather than relying only on frontend validation.\r\nEnhancement Recommendations: Suggest improvements to the UI/UX\n<truncated 1061 bytes>\n, and items that require further investigation.\r\nExplain everything in simple, practical language, as if you were guiding me through the CRM as both the owner and the member.\r\nProvide concrete examples using Mahek as the Sweat Owner and Faiz as the Member to demonstrate how each rule should behave.\r\nFinish with a prioritized list of recommended fixes and enhancements, starting with critical security and booking-integrity issues.\r\n\r\nThe goal is to understand the entire Booking Policy system, its configuration capabilities, role-based behavior, backend integration, current problems, and the improvements needed to make it reliable and production-ready."}, {"role": "assistant", "step": 118, "text": "# Deep-Dive Technical & Operational Audit: SWEAT CRM Booking Policy System\n\n---\n\n## Executive Summary & System Overview\n\nThe SWEAT CRM Booking Policy system controls how class capacity is filled, protected, and monetized across studios. In this audit, we analyze the platform through two defined personas:\n* **Mahek (Sweat Owner / Studio Executive)**: Sets policies, defines cancellation windows, manages financial penalties, overrides capacities, and monitors studio operations.\n* **Faiz (Member #MEM-978E4D)**: Holds an active *\"Sweat Pilates - 36 Sessions (Quarterly)\"* contract with 36 credits at the Andheri Studio, booking workouts and managing reservations via the Member Web Portal.\n\nOur inspection of the codebase across the frontend ([`ConfigurationWorkspace.tsx`](file:///F:/fitness-command-center/src/components/admin/ConfigurationWorkspace.tsx), [`BookingsWorkspace.tsx`](file:///F:/fitness-command-center/src/components/bookings/BookingsWorkspace.tsx), [`WebMemberPortalWorkspace.tsx`](file:///F:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx)) and backend ([`models_bookings.py`](file:///F:/fitness-command-center/backend/apps/tenant_core/models_bookings.py), [`services_booking_policy.py`](file:///F:/fitness-command-center/backend/apps/tenant_core/services_booking_policy.py), [`services_bookings.py`](file:///F:/fitness-command-center/backend/apps/tenant_core/services_bookings.py), [`views_bookings.py`](file:///F:/fitness-command-center/backend/apps/tenant_core/views_bookings.py), [`views_mobile.py`](file:///F:/fitness-command-center/backend/apps/tenant_core/views_mobile.py)) reveals a **dual-architecture system**:\n1. **Administrative Business Configuration (`BookingPolicyConfig`)**: Controls auto-cancellation timers, cancellation/rescheduling deadlines, session credit consumption rules, late penalty fines, and notification channels.\n2. **Granular Operational Policies (`BookingPolicySet` & `AttendancePolicySet`)**: Controls versioned FIFO waitlists, booking windows, attendance strik\n<truncated 22324 bytes>\nmatch the backend enum:\n     ```typescript\n     { id: \"MEMBER\", label: \"Group Fitness Classes (Members)\" },\n     { id: \"TRIAL\", label: \"Intro Trials\" },\n     { id: \"PAY_PER_USE\", label: \"Drop-in Pay Per Use\" },\n     { id: \"WALK_IN\", label: \"Front Desk Walk-ins\" },\n     ```\n2. **Lock Down API Endpoint Security**:\n   * In [`views_bookings.py:1223`](file:///F:/fitness-command-center/backend/apps/tenant_core/views_bookings.py#L1223), add strict permissions:\n     ```python\n     class BookingPolicyViewSet(viewsets.ViewSet):\n         permission_classes = [RequireActiveTenantAndOrg, TenantRBACPermission]\n         required_module = 'ops'\n         required_submodule = 'bookings'\n         required_permission = 'ops.bookings.edit'\n     ```\n\n#### Phase 2: Unify Booking Policy Data Models (Sprint 1)\n3. **Bridge `BookingPolicyConfig` & `BookingPolicySet`**:\n   * Update [`BookingPolicyService.save_policy`](file:///F:/fitness-command-center/backend/apps/tenant_core/services_booking_policy.py#L142) to automatically update or create the active default `BookingPolicySet`, ensuring `max_upcoming_bookings` and `max_reschedules` remain identical across both tables.\n4. **Dynamic Passbook Display**:\n   * Replace the hardcoded string in [`WebMemberPortalWorkspace.tsx:4849`](file:///F:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx#L4849) with the dynamic property from the active policy:\n     ```tsx\n     <span className=\"font-semibold text-foreground\">\n       Free refund up to {effectivePolicy?.cancellation_cutoff_hours || 2} hours prior to class commencement\n     </span>\n     ```\n\n#### Phase 3: Operational Monitoring & Automation (Sprint 2)\n5. **Verify Celery Beat Scheduler**:\n   * Ensure `run_booking_auto_cancellation_task` runs on a 1-minute or 5-minute recurring cron in `celery.py` so Mahek never has to manually click \"Run Auto-Cancel Check\".\n6. **Owner Audit Notification**:\n   * Dispatch an automated WhatsApp/Email notification to Mahek when a class hits 100% capacity and waitlist begins accumulating."}, {"role": "user", "step": 176, "text": "Act as a Senior QA Engineer, SaaS Platform Architect, and Product Security Specialist with 20+ years of experience. I want you to create a complete, step-by-step testing guide for our CRM\u2019s Booking Policy module, covering every rule, navigation path, user interaction, permission, and backend behavior from both the Member and Admin/Owner perspectives.\r\n\r\nMy goal is to personally test every feature and verify that the entire booking policy system works correctly, securely, and consistently.\r\n\r\n1. Map the Entire Booking Policy Module\r\n\r\nFirst, identify and document every screen, page, tab, submenu, settings panel, modal, button, dropdown, form, and navigation path related to booking policies.\r\n\r\nExplain:\r\n\r\nHow to navigate to each screen from the beginning.\r\nWhat each screen and control does.\r\nWhich actions are available to Members versus Admins/Owners.\r\nHow each screen connects to the booking workflow.\r\nWhich settings affect other screens or booking behaviors.\r\nWhat the expected result should be after every action.\r\n\r\nDo not skip hidden settings, secondary navigation paths, edge cases, or less obvious interactions.\r\n\r\n2. Create Two Separate, Complete Testing Workflows\r\nA. Member Testing \u2014 Faiz\r\n\r\nAssume I am Faiz, a regular Member. Explain exactly how I should test the booking policy system without administrative privileges.\r\n\r\nCover:\r\n\r\nNavigating to the booking section and viewing available booking options.\r\nViewing available schedules, slots, resources, or services, wherever applicable.\r\nAttempting to book within the permitted booking window.\r\nTesting bookings outside the allowed booking window.\r\nTesting advance-booking limits and minimum-notice requirements.\r\nTesting cancellation deadlines and cancellation restrictions.\r\nTesting rescheduling rules and modification limits.\r\nTesting booking duration, slot availability, capacity limits, and overlapping bookings.\r\nTesting booking limits per member, day, week, or other configured period.\r\nTesting restrictions based on membership status, role, elig\n<truncated 7944 bytes>\nvice.\r\nClearly distinguish verified functionality, failed tests, untested areas, and features that are not implemented.\r\nDo not modify production data or perform destructive tests without explicit authorization. Use a safe test environment and test accounts wherever possible.\r\nIf you cannot access the CRM, source code, APIs, or database, tell me what access is required and provide the most useful test plan possible without pretending tests have been executed.\r\n\r\nFinal objective: Give me a complete, practical, end-to-end manual testing playbook that allows me to test every booking policy rule, every navigation path, every Member and Admin/Owner action, and every important frontend/backend interaction\u2014so I can confidently determine what works, what fails, what is missing, and what must be fixed before the CRM is production-ready."}, {"role": "assistant", "step": 177, "text": "# SWEAT CRM: Booking Policy Module \u2014 Master QA Testing Playbook & Verification Guide\n**Author**: Senior QA Engineer, SaaS Platform Architect & Product Security Specialist  \n**Target Systems**: SWEAT Central CRM (`/admin`, `/ops`) & SWEAT Member Web Portal (`/portal` / `localhost:5173`)  \n**Personas**:  \n* **Admin / Studio Owner**: `Mahek` (Role: `ORG_ADMIN`, Scope: Global Studio Network)  \n* **Member**: `Faiz Khan` (Member `#MEM-978E4D`, Active Contract: *Sweat Pilates - 36 Sessions (Quarterly)*, Branch: *SWEAT Andheri*)\n\n---\n\n## 1. Complete Module Navigation & UI Control Map\n\n```mermaid\ngraph TD\n    subgraph Admin_Portal[\"Admin / Owner Portal (Mahek)\"]\n        A0[Login: /admin or /ops] --> A1[\"Admin Navigation Sidebar\"]\n        A1 --> A2[\"Administration -> Configuration (/admin/configuration?tab=booking)\"]\n        A1 --> A3[\"Operations -> Bookings (/ops/bookings)\"]\n        \n        A2 --> A2_1[\"Studio Location Dropdown (All Studios vs Branch)\"]\n        A2 --> A2_2[\"Auto-Release Unused Spots (Unpaid 15m / Unconfirmed 60m)\"]\n        A2 --> A2_3[\"Cancellation & Reschedule Deadlines (Cutoffs & Max Moves)\"]\n        A2 --> A2_4[\"Late Cancellation Rules & Penalties (Session Action & Fine \u20b9)\"]\n        A2 --> A2_5[\"Who Can Book & Booking Limits (Advance Days & Max Concurrent)\"]\n        A2 --> A2_6[\"Notification Channels (WhatsApp, In-App, SMS, Email)\"]\n        A2 --> A2_7[\"Run Auto-Cancel Check Button\"]\n        A2 --> A2_8[\"Save Changes Button (Header)\"]\n\n        A3 --> A3_1[\"Tab: Active Bookings (Roster View)\"]\n        A3 --> A3_2[\"Tab: Waitlist Queue (FIFO Roster)\"]\n        A3 --> A3_3[\"Tab: Booking Policies (1)\"]\n        A3_3 --> A3_4[\"Button: + Configure Policy Set\"]\n        A3_4 --> A3_5[\"Modal: Configure Booking Policy Set (Rules, Windows, Waitlist)\"]\n    end\n\n    subgraph Member_Portal[\"Member Web Portal (Faiz Khan)\"]\n        M0[Login: /portal or localhost:5173] --> M1[\"Member Portal Workspace\"]\n        M1 --> M2[\"Tab: Studio Hub (/overview)\"]\n        M1 --> M3[\"Tab: Class Schedule & Booking (/schedule)\"]\n    \n<truncated 27045 bytes>\ntab on portal.\n* **Observed Behavior**: Text still reads `\"Free refund up to 2 hours prior to class commencement\"`.\n* **Expected Behavior**: Text dynamically displays `\"Free refund up to 4 hours prior to class commencement\"`.\n\n---\n\n## 9. Final Sign-Off & Go-Live Acceptance Checklist\n\nBefore declaring the SWEAT CRM Booking Policy Module **production-ready**, verify the following criteria:\n\n### Critical (Blockers for Launch)\n- [ ] **Security**: `BookingPolicyViewSet` rejects all non-admin JWT tokens with HTTP 403 Forbidden.\n- [ ] **Data Integrity**: Concurrency tests verify that class capacity can never exceed 100% under rapid simultaneous clicks (no over-booking).\n- [ ] **Core Workflow**: Fixing the `allowed_booking_types` enum ensures saving business settings never blocks member class bookings.\n- [ ] **Passbook Accuracy**: Early cancellation restores session credits immediately; late cancellation forfeits credit without exception.\n\n### High (Core Stability)\n- [ ] **Automated Background Cancellation**: Celery beat worker executes `run_booking_auto_cancellation_task` periodically (every 5 minutes) without requiring manual button clicks.\n- [ ] **Waitlist Promotion**: When a confirmed booking is cancelled, Position #1 on the waitlist is promoted to confirmed and receives an instant alert.\n- [ ] **No-Show Enforcement**: Members incurring consecutive no-show strikes are automatically restricted to single-booking mode.\n\n### Medium (Usability & Polish)\n- [ ] **Dynamic Policy Text**: Passbook cancellation window string reflects the actual configured cutoff hours.\n- [ ] **Branch Precedence**: Branch-specific override settings take priority over organization defaults for classes hosted at that branch.\n- [ ] **Audit Trail**: Every policy update, auto-cancellation, and manual override writes an immutable record in `audit_events`.\n\n### Low (Cosmetic & Minor)\n- [ ] Mobile viewport responsiveness verified across iOS Safari and Android Chrome.\n- [ ] Toast notification durations set to a readable 4 seconds across all interactions."}];
+  const container = document.getElementById('messages');
+  const matchStats = document.getElementById('match-stats');
+
+  function render(items) {
+    container.innerHTML = '';
+    if (items.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding: 40px; color: #94a3b8;">No messages found matching your query.</div>';
+      return;
+    }
+    items.forEach(m => {
+      const card = document.createElement('div');
+      card.className = `msg-card ${m.role}`;
+      card.innerHTML = `
+        <div class="msg-header">
+          <span class="badge ${m.role}">${m.role === 'user' ? '👤 User' : '🤖 Assistant'}</span>
+          <span class="step-pill">Step ${m.step}</span>
+        </div>
+        <div class="msg-body">${escapeHtml(m.text)}</div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function filterMessages() {
+    const q = document.getElementById('search').value.toLowerCase().trim();
+    if (!q) {
+      render(data);
+      matchStats.textContent = `Showing all ${data.length} messages`;
+      return;
+    }
+    const filtered = data.filter(m => m.text.toLowerCase().includes(q));
+    render(filtered);
+    matchStats.textContent = `Found ${filtered.length} matching messages out of ${data.length}`;
+  }
+
+  render(data);
+</script>
+</body>
+</html>

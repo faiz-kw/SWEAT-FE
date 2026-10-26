@@ -162,7 +162,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     allow_trial: true,
     max_trial_bookings: 1,
     allow_cross_branch: false,
-    require_parq: false,
+    require_parq: true,
     status: 'ACTIVE',
   });
   const [bookingOpenValue, setBookingOpenValue] = useState<number>(7);
@@ -1257,9 +1257,11 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <h4 className="font-semibold text-foreground text-base">{p.name}</h4>
+                        <h4 className="font-semibold text-foreground text-base">
+                          {p.name || (p.branch_name ? `${p.branch_name} Policy` : p.program_name ? `${p.program_name} Policy` : `Studio Policy (v${p.version_number || 1})`)}
+                        </h4>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-primary font-mono">{p.code}</span>
+                          <span className="text-xs text-primary font-mono">{p.code || `POL_V${p.version_number || 1}`}</span>
                           <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono">
                             {p.rule_behavior}
                           </span>
@@ -1276,7 +1278,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-muted/40 p-3 rounded-lg border border-border/60">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-muted/40 p-3 rounded-lg border border-border/60">
                       <div>
                         <span className="text-muted-foreground block text-[10px]">Max Upcoming</span>
                         <span className="text-foreground font-semibold">{p.max_upcoming_bookings} slots</span>
@@ -1291,6 +1293,12 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                         <span className="text-muted-foreground block text-[10px]">Booking Cutoff</span>
                         <span className="text-foreground font-semibold">
                           {p.booking_close_minutes_before ? `${p.booking_close_minutes_before}m before` : 'None'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">PAR-Q Required</span>
+                        <span className={`font-semibold ${p.require_parq ? 'text-emerald-500' : 'text-amber-500'}`}>
+                          {p.require_parq ? 'Yes (Enforced)' : 'No'}
                         </span>
                       </div>
                       <div>
@@ -2248,6 +2256,22 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   <option value="SCHEDULED">SCHEDULED</option>
                   <option value="RETIRED">RETIRED</option>
                 </select>
+              </div>
+              <div className="col-span-1 sm:col-span-2 pt-2 border-t border-border/60">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(policyForm.require_parq)}
+                    onChange={(e) => setPolicyForm({ ...policyForm, require_parq: e.target.checked })}
+                    className="h-4 w-4 mt-0.5 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <div className="text-xs">
+                    <span className="font-semibold text-foreground">Require PAR-Q Health Clearance Before Booking</span>
+                    <p className="text-muted-foreground text-[11px] mt-0.5">
+                      Members must complete and digitally sign the Physical Activity Readiness Questionnaire (PAR-Q) before any class booking is confirmed.
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
           </div>

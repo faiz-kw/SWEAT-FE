@@ -374,7 +374,7 @@ export function CrudModule({ path }: { path: string }) {
             >
               Overview <ArrowUpRight className="ml-1 size-3.5" />
             </Button>
-            {!path.startsWith("/reports/") && (
+            {!path.startsWith("/reports/") && collectionKey !== "stockMovements" && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -473,6 +473,15 @@ export function CrudModule({ path }: { path: string }) {
           </>
         )}
 
+        {collectionKey === "stockMovements" && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 mb-3 flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Authoritative Stock Audit Ledger:
+            </span>
+            <span>All records are immutable and system-generated from sales deductions, warehouse receipts, and physical audit adjustments.</span>
+          </div>
+        )}
+
         <div className="rounded-md border border-border bg-surface">
           <DataTable<Row>
             rows={rows}
@@ -489,6 +498,10 @@ export function CrudModule({ path }: { path: string }) {
                     { label: "Export selected", icon: Download },
                     { label: "Mark Active", icon: CheckCircle2 },
                     { label: "Mark Inactive", icon: PowerOff },
+                  ]
+                : collectionKey === "stockMovements"
+                ? [
+                    { label: "Export selected", icon: Download },
                   ]
                 : [
                     { label: "Export selected", icon: Download },

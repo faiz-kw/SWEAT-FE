@@ -75,7 +75,17 @@ export function MemberParqSigningModal({
   // When switching to EDIT, pre-fill answers from existing submission
   useEffect(() => {
     if (parqDecision === 'EDIT' && requirement?.existing_submission?.answers) {
-      setAnswers({ ...requirement.existing_submission.answers });
+      const initialAnswers: Record<string, any> = {};
+      if (Array.isArray(requirement.existing_submission.answers)) {
+        requirement.existing_submission.answers.forEach((a: any) => {
+          const val = a.answer ?? a.value ?? a.text_value ?? a.boolean_value;
+          if (a.question_id) initialAnswers[a.question_id] = val;
+          if (a.order || a.display_order) initialAnswers[`q_${a.order || a.display_order}`] = val;
+        });
+      } else if (typeof requirement.existing_submission.answers === 'object') {
+        Object.assign(initialAnswers, requirement.existing_submission.answers);
+      }
+      setAnswers(initialAnswers);
       setConsentAccepted(false);
       setHasSignature(false);
     } else if (parqDecision === 'NEW') {
@@ -430,11 +440,19 @@ export function MemberParqSigningModal({
                   {requirement.existing_submission?.signature_data && (
                     <div className="pt-2 border-t border-border/60 flex items-center gap-3">
                       <span className="text-xs text-muted-foreground font-medium">Stored Signature:</span>
-                      <div className="p-1 bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-2xs">
+                      <div className="p-1.5 bg-white rounded-lg border border-border/80 shadow-xs inline-flex items-center justify-center min-w-[120px] min-h-[44px]">
                         <img
-                          src={requirement.existing_submission.signature_data}
+                          src={
+                            requirement.existing_submission.signature_data.startsWith('data:image/') ||
+                            requirement.existing_submission.signature_data.startsWith('http://') ||
+                            requirement.existing_submission.signature_data.startsWith('https://')
+                              ? requirement.existing_submission.signature_data
+                              : requirement.existing_submission.signature_data.startsWith('/media/')
+                              ? requirement.existing_submission.signature_data
+                              : `/media/${requirement.existing_submission.signature_data.replace(/^\/+/, '')}`
+                          }
                           alt="Stored Signature"
-                          className="h-9 max-w-[150px] object-contain"
+                          className="h-10 w-auto max-w-[200px] object-contain block"
                         />
                       </div>
                     </div>
@@ -548,10 +566,45 @@ export function MemberParqSigningModal({
                                 );
                               })}
                             </div>
+                          ) : q.question_type === 'MULTI_SELECT' || q.question_type === 'MULTIPLE_CHOICE' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {(q.options || []).map((opt: any) => {
+                                const optVal = opt.value ?? opt.label ?? opt.option_text ?? opt;
+                                const optLabel = opt.label ?? opt.option_text ?? opt.value ?? opt;
+                                const selectedArr: string[] = Array.isArray(currentVal)
+                                  ? currentVal
+                                  : currentVal
+                                  ? [String(currentVal)]
+                                  : [];
+                                const isSelected = selectedArr.includes(optVal);
+                                return (
+                                  <button
+                                    key={optVal}
+                                    type="button"
+                                    onClick={() => {
+                                      const next = isSelected
+                                        ? selectedArr.filter((x) => x !== optVal)
+                                        : [...selectedArr, optVal];
+                                      setAnswers((prev) => ({ ...prev, [qId]: next }));
+                                    }}
+                                    className={`py-1.5 px-3 rounded-lg text-xs text-left font-medium border transition-all flex items-center justify-between ${
+                                      isSelected
+                                        ? 'bg-primary/10 text-primary border-primary font-semibold shadow-xs'
+                                        : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                    }`}
+                                  >
+                                    <span>{optLabel}</span>
+                                    <span className={`w-3.5 h-3.5 rounded border text-[10px] flex items-center justify-center ${isSelected ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/30'}`}>
+                                      {isSelected ? '✓' : ''}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <input
                               type="text"
-                              value={currentVal ?? ''}
+                              value={typeof currentVal === 'string' ? currentVal : (typeof currentVal === 'number' ? String(currentVal) : (Array.isArray(currentVal) ? currentVal.join(', ') : ''))}
                               onChange={(e) => setAnswers((prev) => ({ ...prev, [qId]: e.target.value }))}
                               placeholder="Your answer..."
                               className="w-full text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"

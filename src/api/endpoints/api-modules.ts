@@ -979,6 +979,10 @@ export function normalizeProduct(item: any): Row {
 
   const primaryImage = images[0] || item.image_url || item.imageUrl || "";
   const isActive = item.is_active !== undefined ? Boolean(item.is_active) : (item.isActive !== undefined ? Boolean(item.isActive) : true);
+  const cost = item.cost !== undefined ? Number(item.cost) : (item.cost_price !== undefined ? Number(item.cost_price) : (item.costPrice !== undefined ? Number(item.costPrice) : 0));
+  const price = item.price !== undefined ? Number(item.price) : (item.retailPrice !== undefined ? Number(item.retailPrice) : (item.retail_price !== undefined ? Number(item.retail_price) : 0));
+  const stock = item.stock !== undefined ? Number(item.stock) : (item.stock_quantity !== undefined ? Number(item.stock_quantity) : (item.quantity_on_hand !== undefined ? Number(item.quantity_on_hand) : 20));
+  const productType = item.productType || item.product_type || "Physical Goods";
 
   return {
     ...item,
@@ -987,17 +991,29 @@ export function normalizeProduct(item: any): Row {
     isActive: isActive,
     is_active: isActive,
     category: item.category || "Supplements",
-    productType: item.productType || item.product_type || "Physical Goods",
+    productType: productType,
+    product_type: productType,
     sku: item.sku || `SKU-${String(item.id ?? Date.now()).slice(-4)}`,
-    price: item.price !== undefined ? Number(item.price) : 0,
-    cost: item.cost !== undefined ? Number(item.cost) : (item.cost_price !== undefined ? Number(item.cost_price) : 0),
-    stock: item.stock !== undefined ? Number(item.stock) : (item.stock_quantity !== undefined ? Number(item.stock_quantity) : (item.quantity_on_hand !== undefined ? Number(item.quantity_on_hand) : 20)),
+    price: price,
+    retailPrice: price,
+    cost: cost,
+    costPrice: cost,
+    cost_price: cost,
+    stock: stock,
+    stock_quantity: stock,
+    supplier: item.supplier ?? null,
+    batchNumber: item.batch_number || item.batchNumber || "",
+    batch_number: item.batch_number || item.batchNumber || "",
+    expiryDate: item.expiry_date || item.expiryDate || "",
+    expiry_date: item.expiry_date || item.expiryDate || "",
+    manufacturingDate: item.manufacturing_date || item.manufacturingDate || "",
+    manufacturing_date: item.manufacturing_date || item.manufacturingDate || "",
     imageUrl: images.length > 1 ? images : primaryImage,
     primaryImageUrl: primaryImage,
     images: images,
     videoUrl: item.videoUrl || item.video_url || item.video || "",
     description: item.description || "",
-    status: item.status || (isActive ? (Number(item.stock ?? 20) > 0 ? "In Stock" : "Out of Stock") : "Discontinued"),
+    status: item.status || (isActive ? (stock > 0 ? "In Stock" : "Out of Stock") : "Discontinued"),
   };
 }
 
@@ -1039,19 +1055,58 @@ export async function createProductApi(values: Record<string, unknown>): Promise
     description: norm.description,
     status: norm.status,
   };
+  if (norm.supplier) payload.supplier = norm.supplier;
+  if (norm.batchNumber) payload.batch_number = norm.batchNumber;
+  if (norm.expiryDate) payload.expiry_date = norm.expiryDate;
+  if (norm.manufacturingDate) payload.manufacturing_date = norm.manufacturingDate;
+
   const res = await api.post<any>("/tenant/products/", payload);
   return normalizeProduct(res.data);
 }
 
 export async function updateProductApi(id: string, values: Record<string, unknown>): Promise<Row> {
   const norm = normalizeProduct({ id, ...values });
-  const payload: Record<string, unknown> = {
-    ...values,
-    is_active: norm.isActive !== undefined ? norm.isActive : norm.is_active,
-    image_url: norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl),
-    images: Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : [])),
-    video_url: norm.videoUrl,
-  };
+  const payload: Record<string, unknown> = {};
+
+  if (values.name !== undefined) payload.name = norm.name;
+  if (values.category !== undefined) payload.category = norm.category;
+  if (values.productType !== undefined || values.product_type !== undefined) {
+    payload.product_type = norm.productType;
+  }
+  if (values.sku !== undefined) payload.sku = norm.sku;
+  if (values.price !== undefined || values.retailPrice !== undefined || values.retail_price !== undefined) {
+    payload.price = norm.price;
+  }
+  if (values.cost !== undefined || values.costPrice !== undefined || values.cost_price !== undefined) {
+    payload.cost_price = norm.cost;
+  }
+  if (values.stock !== undefined || values.stock_quantity !== undefined) {
+    payload.stock_quantity = norm.stock;
+  }
+  if (values.isActive !== undefined || values.is_active !== undefined) {
+    payload.is_active = norm.isActive;
+  }
+  if (values.description !== undefined) payload.description = norm.description;
+  if (values.status !== undefined) payload.status = norm.status;
+  if (values.videoUrl !== undefined || values.video_url !== undefined) {
+    payload.video_url = norm.videoUrl;
+  }
+  if (values.imageUrl !== undefined || values.images !== undefined || values.primaryImageUrl !== undefined) {
+    payload.image_url = norm.primaryImageUrl || (Array.isArray(norm.imageUrl) ? norm.imageUrl[0] : norm.imageUrl);
+    payload.images = Array.isArray(norm.images) ? norm.images : (Array.isArray(norm.imageUrl) ? norm.imageUrl : (norm.imageUrl ? [norm.imageUrl] : []));
+  }
+  if (values.branch !== undefined) payload.branch = values.branch;
+  if (values.supplier !== undefined) payload.supplier = norm.supplier;
+  if (values.batchNumber !== undefined || values.batch_number !== undefined) {
+    payload.batch_number = norm.batchNumber || null;
+  }
+  if (values.expiryDate !== undefined || values.expiry_date !== undefined) {
+    payload.expiry_date = norm.expiryDate || null;
+  }
+  if (values.manufacturingDate !== undefined || values.manufacturing_date !== undefined) {
+    payload.manufacturing_date = norm.manufacturingDate || null;
+  }
+
   const res = await api.patch<any>(`/tenant/products/${id}/`, payload);
   return normalizeProduct(res.data);
 }
@@ -1066,13 +1121,83 @@ export async function deleteProductApi(id: string): Promise<void> {
     // Soft-deactivate on backend
     await api.patch(`/tenant/products/${id}/`, { is_active: false, status: "Discontinued" });
   } catch {
-    try {
-      await api.delete(`/tenant/products/${id}/`);
-    } catch {
-      // Fallback
-    }
+    // Hard delete fallback
+    await api.delete(`/tenant/products/${id}/`);
   }
 }
+
+export function normalizeSupplier(item: any): Row {
+  return {
+    ...item,
+    id: String(item.id ?? `SUP-${Date.now()}`),
+    name: item.name || "Unnamed Supplier",
+    category: item.category || "General Equipment",
+    contactPerson: item.contact_person || item.contactPerson || "",
+    email: item.email || "",
+    phone: item.phone || "",
+    address: item.address || "",
+    leadTimeDays: Number(item.lead_time_days ?? item.leadTimeDays ?? 7),
+    paymentTerms: item.payment_terms || item.paymentTerms || "Net 30",
+    status: item.status || "Active",
+    createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+  };
+}
+
+export async function fetchSuppliers(): Promise<Row[]> {
+  try {
+    const res = await api.get<any>("/tenant/suppliers/?page_size=200");
+    const list = extractList(res.data);
+    if (list.length > 0) return list.map(normalizeSupplier);
+  } catch {
+    // Non-blocking
+  }
+  return [];
+}
+
+export async function createSupplierApi(values: Record<string, unknown>): Promise<Row> {
+  const norm = normalizeSupplier({ id: `SUP-${Date.now()}`, ...values });
+  const payload: Record<string, unknown> = {
+    name: norm.name,
+    category: norm.category,
+    contact_person: norm.contactPerson,
+    email: norm.email,
+    phone: norm.phone,
+    address: norm.address,
+    lead_time_days: norm.leadTimeDays,
+    payment_terms: norm.paymentTerms,
+    status: norm.status,
+  };
+  const res = await api.post<any>("/tenant/suppliers/", payload);
+  return normalizeSupplier(res.data);
+}
+
+export async function updateSupplierApi(id: string, values: Record<string, unknown>): Promise<Row> {
+  const norm = normalizeSupplier({ id, ...values });
+  const payload: Record<string, unknown> = {};
+  if (values.name !== undefined) payload.name = norm.name;
+  if (values.category !== undefined) payload.category = norm.category;
+  if (values.contactPerson !== undefined || values.contact_person !== undefined) {
+    payload.contact_person = norm.contactPerson;
+  }
+  if (values.email !== undefined) payload.email = norm.email;
+  if (values.phone !== undefined) payload.phone = norm.phone;
+  if (values.address !== undefined) payload.address = norm.address;
+  if (values.leadTimeDays !== undefined || values.lead_time_days !== undefined) {
+    payload.lead_time_days = norm.leadTimeDays;
+  }
+  if (values.paymentTerms !== undefined || values.payment_terms !== undefined) {
+    payload.payment_terms = norm.paymentTerms;
+  }
+  if (values.status !== undefined) payload.status = norm.status;
+
+  const res = await api.patch<any>(`/tenant/suppliers/${id}/`, payload);
+  return normalizeSupplier(res.data);
+}
+
+export async function deleteSupplierApi(id: string): Promise<void> {
+  await api.delete(`/tenant/suppliers/${id}/`);
+}
+
 
 export function normalizeInventoryMovement(item: any): Row {
   return {

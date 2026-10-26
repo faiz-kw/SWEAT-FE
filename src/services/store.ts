@@ -91,6 +91,7 @@ export const BACKEND_COLLECTIONS = new Set<CollectionKey>([
   "coupons",
   "integrations",
   "stockMovements",
+  "suppliers",
 ]);
 
 let data: Collections | null = null;
@@ -105,68 +106,7 @@ function build(): Collections {
   for (const k of Object.keys({ ...d, ...ai })) {
     next[k] = []; // Clean empty array — ZERO dummy data! Only real DB data is loaded.
   }
-  next["suppliers"] = [
-    {
-      id: "SUP-001",
-      name: "Sweat Fit Wellness Official Store",
-      category: "Digital Guides & Merch",
-      contactPerson: "E-Commerce Fulfillment Desk",
-      email: "orders@sweatfitwellness.com",
-      phone: "+91 98200 12345",
-      address: "Mumbai, Maharashtra, India",
-      leadTimeDays: 1,
-      paymentTerms: "Immediate / Prepaid",
-      status: "Active",
-    },
-    {
-      id: "SUP-002",
-      name: "GripTech Performance Apparel",
-      category: "Accessories & Grip Socks",
-      contactPerson: "Sunil Verma",
-      email: "sales@griptech-india.com",
-      phone: "+91 98211 44556",
-      address: "Tirupur, Tamil Nadu, India",
-      leadTimeDays: 3,
-      paymentTerms: "Net 30",
-      status: "Active",
-    },
-    {
-      id: "SUP-003",
-      name: "Hydrate Pro Stainless Supplies",
-      category: "Water Tumblers & Bottles",
-      contactPerson: "Anita Deshmukh",
-      email: "anita@hydratepro.in",
-      phone: "+91 98333 77889",
-      address: "Pune, Maharashtra, India",
-      leadTimeDays: 5,
-      paymentTerms: "Net 15",
-      status: "Active",
-    },
-    {
-      id: "SUP-004",
-      name: "AeroMat & Foam Gear Co.",
-      category: "Knee & Elbow Cushions, Bands",
-      contactPerson: "Rahul Nair",
-      email: "rahul@aeromat.in",
-      phone: "+91 98444 11223",
-      address: "Bengaluru, Karnataka, India",
-      leadTimeDays: 4,
-      paymentTerms: "Net 30",
-      status: "Active",
-    },
-    {
-      id: "SUP-005",
-      name: "Optimum Wellness & Nutrition Dist.",
-      category: "Nutritional Supplements & Shakes",
-      contactPerson: "Deepak Mehra",
-      email: "deepak@optimumdist.com",
-      phone: "+91 98555 99001",
-      address: "Delhi NCR, India",
-      leadTimeDays: 2,
-      paymentTerms: "Net 30",
-      status: "Active",
-    },
-  ];
+  next["suppliers"] = [];
   next["stockMovements"] = [];
   return next as unknown as Collections;
 }
@@ -212,6 +152,7 @@ import {
   createPlanApi,
   createProductApi,
   createProgramApi,
+  createSupplierApi,
   createTrainerApi,
   deleteAssessmentApi,
   deleteBookingApi,
@@ -226,6 +167,7 @@ import {
   deletePlanApi,
   deleteProductApi,
   deleteProgramApi,
+  deleteSupplierApi,
   deleteTrainerApi,
   fetchAssessments,
   fetchBookings,
@@ -242,6 +184,7 @@ import {
   fetchPlans,
   fetchProducts,
   fetchPrograms,
+  fetchSuppliers,
   fetchTrainers,
   updateAssessmentApi,
   updateBookingApi,
@@ -256,6 +199,7 @@ import {
   updatePlanApi,
   updateProductApi,
   updateProgramApi,
+  updateSupplierApi,
   updateTrainerApi,
 } from "../api/endpoints/api-modules";
 
@@ -412,6 +356,25 @@ export function createRecord(key: CollectionKey, values: Record<string, unknown>
         const msg = err?.response?.data?.detail || err?.response?.data?.name?.[0] || err?.message || "Failed to save product to database";
         toast.error(`Database Error: ${msg}`);
       });
+  } else if (key === "suppliers") {
+    createSupplierApi(values)
+      .then((created) => {
+        const idx = rows.findIndex((r) => r.id === row.id);
+        if (idx !== -1) {
+          rows[idx] = created;
+          emit();
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to create supplier on backend:", err);
+        const idx = rows.findIndex((r) => r.id === row.id);
+        if (idx !== -1) {
+          rows.splice(idx, 1);
+          emit();
+        }
+        const msg = err?.response?.data?.detail || err?.message || "Failed to save supplier to database";
+        toast.error(`Database Error: ${msg}`);
+      });
   } else if (key === "invoices") {
     createInvoiceApi(values)
       .then((created) => {
@@ -496,11 +459,27 @@ export function updateRecord(key: CollectionKey, id: string, values: Record<stri
       console.error("Failed to update nutrition plan on backend:", err);
     });
   } else if (key === "products") {
-    updateProductApi(id, values).catch((err) => {
-      console.error("Failed to update product on backend:", err);
-      const msg = err?.response?.data?.detail || err?.message || "Failed to update product on backend";
-      toast.error(`Database Error: ${msg}`);
-    });
+    updateProductApi(id, values)
+      .then((updated) => {
+        if (row) Object.assign(row, updated);
+        emit();
+      })
+      .catch((err) => {
+        console.error("Failed to update product on backend:", err);
+        const msg = err?.response?.data?.detail || err?.message || "Failed to update product on backend";
+        toast.error(`Database Error: ${msg}`);
+      });
+  } else if (key === "suppliers") {
+    updateSupplierApi(id, values)
+      .then((updated) => {
+        if (row) Object.assign(row, updated);
+        emit();
+      })
+      .catch((err) => {
+        console.error("Failed to update supplier on backend:", err);
+        const msg = err?.response?.data?.detail || err?.message || "Failed to update supplier on backend";
+        toast.error(`Database Error: ${msg}`);
+      });
   } else if (key === "invoices") {
     updateInvoiceApi(id, values).catch((err) => {
       console.error("Failed to update invoice on backend:", err);
@@ -583,6 +562,14 @@ export function deleteRecords(key: CollectionKey, ids: string[]) {
       deleteProductApi(id).catch((err) => {
         console.error("Failed to delete product on backend:", err);
         const msg = err?.response?.data?.detail || err?.message || "Failed to delete product on backend";
+        toast.error(`Database Error: ${msg}`);
+      });
+    }
+  } else if (key === "suppliers") {
+    for (const id of ids) {
+      deleteSupplierApi(id).catch((err) => {
+        console.error("Failed to delete supplier on backend:", err);
+        const msg = err?.response?.data?.detail || err?.message || "Failed to delete supplier on backend";
         toast.error(`Database Error: ${msg}`);
       });
     }
@@ -695,7 +682,13 @@ export function loadCollection(key: CollectionKey, locationId?: string) {
   } else if (key === "stockMovements") {
     fetchInventoryMovements()
       .then((rows) => {
-        if (rows.length > 0) setCollectionRows("stockMovements", rows);
+        setCollectionRows("stockMovements", rows);
+      })
+      .catch(() => {});
+  } else if (key === "suppliers") {
+    fetchSuppliers()
+      .then((rows) => {
+        setCollectionRows("suppliers", rows);
       })
       .catch(() => {});
   }

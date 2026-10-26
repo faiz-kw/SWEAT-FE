@@ -4121,15 +4121,20 @@ function WebMemberPortalWorkspaceInner() {
     };
   };
 
-  const setupParqCanvas = () => {
+  const setupParqCanvas = React.useCallback(() => {
     const canvas = parqCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
+      const dpr = window.devicePixelRatio || 1;
+      const targetW = Math.round(rect.width * dpr);
+      const targetH = Math.round(rect.height * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
     }
-  };
+  }, []);
 
   const clearParqSignature = () => {
     const canvas = parqCanvasRef.current;
@@ -4163,10 +4168,10 @@ function WebMemberPortalWorkspaceInner() {
     const { x, y } = getParqCanvasCoords(e, canvas);
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / (rect.width || 1);
-    ctx.lineWidth = 2.5 * scaleX;
+    ctx.lineWidth = 3.0 * scaleX;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#0f172a";
+    ctx.strokeStyle = "#1d4ed8"; // Crisp royal blue digital ink
     ctx.lineTo(x, y);
     ctx.stroke();
     setParqHasSignature(true);
@@ -4370,7 +4375,9 @@ function WebMemberPortalWorkspaceInner() {
     }
   };
 
-  const isParqCleared = parqSurvey?.is_cleared ?? true;
+  const isParqCleared = Boolean(
+    parqSurvey?.is_cleared ?? (profile?.parq_status === 'COMPLETED' || Boolean(parqSurvey?.submission))
+  );
 
   const handleCancelPTAppointment = async (apptId: string) => {
     try {
@@ -6898,8 +6905,20 @@ function WebMemberPortalWorkspaceInner() {
                         <div className="pt-2 border-t border-emerald-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-medium text-muted-foreground">Verified Digital Signature:</span>
-                            <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-2xs">
-                              <img src={activeSub.signature_data} alt="Member Signature" className="h-9 max-w-[150px] object-contain" />
+                            <div className="p-2 bg-white rounded-lg border border-border/80 shadow-xs inline-flex items-center justify-center min-w-[120px] min-h-[44px]">
+                              <img
+                                src={
+                                  activeSub.signature_data.startsWith('data:image/') ||
+                                  activeSub.signature_data.startsWith('http://') ||
+                                  activeSub.signature_data.startsWith('https://')
+                                    ? activeSub.signature_data
+                                    : activeSub.signature_data.startsWith('/media/')
+                                    ? activeSub.signature_data
+                                    : `/media/${activeSub.signature_data.replace(/^\/+/, '')}`
+                                }
+                                alt="Member Verified Signature"
+                                className="h-10 w-auto max-w-[200px] object-contain block"
+                              />
                             </div>
                           </div>
                           <span className="text-[11px] text-muted-foreground font-mono">
@@ -6981,15 +7000,109 @@ function WebMemberPortalWorkspaceInner() {
                       <CardContent className="pt-5 space-y-3">
                         {parqSurvey?.questions && parqSurvey.questions.length > 0 ? (
                           parqSurvey.questions.map((q: any) => {
-                            const qId = q.id;
-                            const subAnswers = activeSub?.answers || {};
-                            const val = subAnswers[qId] ?? subAnswers[`q_${q.order}`] ?? subAnswers[String(q.order)] ?? parqFormResponses[qId] ?? parqFormResponses[`q_${q.order}`];
-                            const isYes = val === true || val === 'yes' || val === 'YES' || val === 'true';
-                            const isNo = val === false || val === 'no' || val === 'NO' || val === 'false';
+                            const qId = String(q.id || '');
+                            const qOrder = q.order || q.display_order;
+                            const qText = (q.text || q.question_text || '').toLowerCase().trim();
+
+                            // 1. Locate answer from activeSub answers (array or object), answers_detailed, or form_snapshot
+                            let rawAnswer: any = undefined;
+
+                            if (Array.isArray(activeSub?.answers)) {
+                              const found = activeSub.answers.find((a: any) => {
+                                if (!a) return false;
+                                if (qId && (String(a.question_id) === qId || String(a.id) === qId)) return true;
+                                if (qOrder !== undefined && (a.order === qOrder || a.display_order === qOrder)) return true;
+                                if (qText && a.question_text && a.question_text.toLowerCase().trim() === qText) return true;
+                                return false;
+                              });
+                              if (found) {
+                                rawAnswer = found.answer ?? found.submitted_answer ?? found.text_value ?? found.boolean_value ?? found.value;
+                              }
+                            } else if (activeSub?.answers && typeof activeSub.answers === 'object') {
+                              if (qId && activeSub.answers[qId] !== undefined) rawAnswer = activeSub.answers[qId];
+                              else if (qOrder !== undefined && activeSub.answers[`q_${qOrder}`] !== undefined) rawAnswer = activeSub.answers[`q_${qOrder}`];
+                              else if (q.key && activeSub.answers[q.key] !== undefined) rawAnswer = activeSub.answers[q.key];
+                            }
+
+                            if (rawAnswer === undefined && Array.isArray(activeSub?.answers_detailed)) {
+                              const found = activeSub.answers_detailed.find((a: any) => {
+                                if (!a) return false;
+                                if (qId && String(a.question_id) === qId) return true;
+                                if (qOrder !== undefined && a.order === qOrder) return true;
+                                if (qText && a.question_text && a.question_text.toLowerCase().trim() === qText) return true;
+                                return false;
+                              });
+                              if (found) {
+                                rawAnswer = found.answer ?? found.submitted_answer ?? found.text_value ?? found.boolean_value ?? found.value;
+                              }
+                            }
+
+                            if (rawAnswer === undefined && Array.isArray(activeSub?.form_snapshot?.questions)) {
+                              const found = activeSub.form_snapshot.questions.find((sq: any) => {
+                                if (!sq) return false;
+                                if (qId && String(sq.id) === qId) return true;
+                                if (qOrder !== undefined && sq.order === qOrder) return true;
+                                if (qText && sq.question_text && sq.question_text.toLowerCase().trim() === qText) return true;
+                                return false;
+                              });
+                              if (found && (found.submitted_answer !== undefined || found.answer !== undefined)) {
+                                rawAnswer = found.submitted_answer ?? found.answer;
+                              }
+                            }
+
+                            if (rawAnswer === undefined && parqSurvey?.saved_responses && typeof parqSurvey.saved_responses === 'object') {
+                              if (qId && parqSurvey.saved_responses[qId] !== undefined) rawAnswer = parqSurvey.saved_responses[qId];
+                              else if (qOrder !== undefined && parqSurvey.saved_responses[`q_${qOrder}`] !== undefined) rawAnswer = parqSurvey.saved_responses[`q_${qOrder}`];
+                            }
+
+                            if (rawAnswer === undefined && parqFormResponses) {
+                              if (qId && parqFormResponses[qId] !== undefined) rawAnswer = parqFormResponses[qId];
+                              else if (qOrder !== undefined && parqFormResponses[`q_${qOrder}`] !== undefined) rawAnswer = parqFormResponses[`q_${qOrder}`];
+                            }
+
+                            // 2. Safe format answer
+                            let displayAnswer = 'No response recorded';
+                            let isYes = false;
+                            let isNo = false;
+
+                            if (rawAnswer !== undefined && rawAnswer !== null && rawAnswer !== '') {
+                              if (rawAnswer === true || rawAnswer === 'true' || rawAnswer === 'yes' || rawAnswer === 'YES') {
+                                isYes = true;
+                                displayAnswer = 'YES';
+                              } else if (rawAnswer === false || rawAnswer === 'false' || rawAnswer === 'no' || rawAnswer === 'NO') {
+                                isNo = true;
+                                displayAnswer = 'NO';
+                              } else if (Array.isArray(rawAnswer)) {
+                                const parts = rawAnswer.map((item) => (typeof item === 'object' && item ? item.label || item.value || item.answer || '' : String(item))).filter(Boolean);
+                                displayAnswer = parts.join(', ') || 'No response recorded';
+                              } else if (typeof rawAnswer === 'object' && rawAnswer !== null) {
+                                if (rawAnswer.label) displayAnswer = String(rawAnswer.label);
+                                else if (rawAnswer.value !== undefined) displayAnswer = String(rawAnswer.value);
+                                else if (rawAnswer.answer !== undefined) displayAnswer = String(rawAnswer.answer);
+                                else {
+                                  const textVals = Object.values(rawAnswer).filter((v) => typeof v === 'string' || typeof v === 'number');
+                                  displayAnswer = textVals.length > 0 ? textVals.join(', ') : 'No response recorded';
+                                }
+                              } else {
+                                displayAnswer = String(rawAnswer).trim();
+                                const lower = displayAnswer.toLowerCase();
+                                if (lower === 'yes' || lower === 'true') {
+                                  isYes = true;
+                                  displayAnswer = 'YES';
+                                } else if (lower === 'no' || lower === 'false') {
+                                  isNo = true;
+                                  displayAnswer = 'NO';
+                                }
+                              }
+                            }
+
+                            if (displayAnswer === '[object Object]' || displayAnswer.includes('[object Object]')) {
+                              displayAnswer = 'No response recorded';
+                            }
 
                             return (
                               <div
-                                key={qId}
+                                key={qId || q.order}
                                 className="p-3.5 rounded-xl border border-border/70 bg-accent/5 space-y-2"
                               >
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -7020,7 +7133,7 @@ function WebMemberPortalWorkspaceInner() {
                                     </Badge>
                                   ) : (
                                     <span className="text-xs font-semibold text-foreground px-2.5 py-1 bg-background rounded-lg border border-border/60 inline-block">
-                                      {val !== undefined && val !== null && val !== '' ? String(val) : 'No response recorded'}
+                                      {displayAnswer}
                                     </span>
                                   )}
                                 </div>
@@ -7143,26 +7256,59 @@ function WebMemberPortalWorkspaceInner() {
                               ) : q.type === 'SINGLE_SELECT' ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
                                   {(q.options || []).map((opt: any) => {
-                                    const isSelected = val === opt.value || val === opt.label;
+                                    const optVal = opt.value ?? opt.label ?? opt;
+                                    const optLabel = opt.label ?? opt.value ?? opt;
+                                    const isSelected = val === optVal;
                                     return (
                                       <button
-                                        key={opt.value || opt.label}
+                                        key={optVal}
                                         type="button"
-                                        onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: opt.value || opt.label, [`q_${q.order}`]: opt.value || opt.label }))}
+                                        onClick={() => setParqFormResponses((prev) => ({ ...prev, [qId]: optVal, [`q_${q.order}`]: optVal }))}
                                         className={`p-2.5 rounded-lg text-xs text-left font-medium border transition-all ${
                                           isSelected
                                             ? 'bg-primary/10 text-primary border-primary font-semibold shadow-xs'
                                             : 'bg-background hover:bg-muted text-muted-foreground border-border'
                                         }`}
                                       >
-                                        {opt.label || opt.value}
+                                        {optLabel}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : q.type === 'MULTI_SELECT' || q.type === 'MULTIPLE_CHOICE' ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                                  {(q.options || []).map((opt: any) => {
+                                    const optVal = opt.value ?? opt.label ?? opt;
+                                    const optLabel = opt.label ?? opt.value ?? opt;
+                                    const selectedArr: string[] = Array.isArray(val) ? val : (val ? [String(val)] : []);
+                                    const isSelected = selectedArr.includes(optVal);
+                                    return (
+                                      <button
+                                        key={optVal}
+                                        type="button"
+                                        onClick={() => {
+                                          const nextArr = isSelected
+                                            ? selectedArr.filter((x: any) => x !== optVal)
+                                            : [...selectedArr, optVal];
+                                          setParqFormResponses((prev) => ({ ...prev, [qId]: nextArr, [`q_${q.order}`]: nextArr }));
+                                        }}
+                                        className={`p-2.5 rounded-lg text-xs text-left font-medium border transition-all flex items-center justify-between ${
+                                          isSelected
+                                            ? 'bg-primary/15 text-primary border-primary font-bold shadow-xs ring-1 ring-primary/40'
+                                            : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                                        }`}
+                                      >
+                                        <span>{optLabel}</span>
+                                        <span className={`w-3.5 h-3.5 rounded border text-[10px] flex items-center justify-center shrink-0 ${isSelected ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/30'}`}>
+                                          {isSelected ? '✓' : ''}
+                                        </span>
                                       </button>
                                     );
                                   })}
                                 </div>
                               ) : (
                                 <Input
-                                  value={val ?? ''}
+                                  value={typeof val === 'string' ? val : (typeof val === 'number' ? String(val) : (Array.isArray(val) ? val.join(', ') : ''))}
                                   onChange={(e) => setParqFormResponses((prev) => ({ ...prev, [qId]: e.target.value, [`q_${q.order}`]: e.target.value }))}
                                   placeholder="Type your response..."
                                   className="text-xs"

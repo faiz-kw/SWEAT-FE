@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PAR-Q Form Before First Booking &amp; Member Profile Sync - Chat Viewer</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card-user: #1e293b;
+    --card-assistant: #111827;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --user-border: #3b82f6;
+    --assistant-border: #10b981;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.6;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+  header {
+    position: sticky; top: 0; background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(8px); padding: 16px 0; border-bottom: 1px solid var(--border);
+    margin-bottom: 24px; z-index: 10;
+  }
+  h1 { font-size: 24px; color: var(--accent); margin-bottom: 8px; }
+  .meta { color: var(--text-muted); font-size: 14px; margin-bottom: 12px; }
+  .search-bar {
+    width: 100%; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid var(--border); background: #1e293b; color: #fff;
+    font-size: 15px; outline: none; transition: border-color 0.2s;
+  }
+  .search-bar:focus { border-color: var(--accent); }
+  .stats { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+  .msg-card {
+    background: var(--card-assistant);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  }
+  .msg-card.user {
+    background: var(--card-user);
+    border-left: 4px solid var(--user-border);
+  }
+  .msg-card.assistant {
+    border-left: 4px solid var(--assistant-border);
+  }
+  .msg-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 8px;
+  }
+  .badge {
+    font-weight: 600; font-size: 13px; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 6px; display: inline-block;
+  }
+  .badge.user { background: #1d4ed8; color: #dbeafe; }
+  .badge.assistant { background: #065f46; color: #d1fae5; }
+  .step-pill { font-size: 12px; color: var(--text-muted); }
+  .msg-body { white-space: pre-wrap; font-size: 14px; word-break: break-word; }
+  .msg-body pre {
+    background: #090d16; padding: 12px; border-radius: 8px;
+    overflow-x: auto; margin: 10px 0; border: 1px solid var(--border);
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>PAR-Q Form Before First Booking &amp; Member Profile Sync</h1>
+    <div class="meta">Conversation ID: <code>5937f9ed-4632-494a-a81f-ab7ca107468a</code> | Total Messages: <span id="count">3</span></div>
+    <input type="text" id="search" class="search-bar" placeholder="🔍 Search messages, questions, code, endpoints..." oninput="filterMessages()">
+    <div class="stats" id="match-stats">Showing all 3 messages</div>
+  </header>
+  <main id="messages"></main>
+</div>
+<script>
+  const data = [{"role": "user", "step": 0, "text": "see member have to fill the par-q form before first booking after purchasing a package and then it should reflect to members and admin panle in membership 360 properly backend connected and see the booking policies is not working i guess u just note the error or anything incompleted and tell me which is not connected to backend and or missed somethinng which is not working dummy"}, {"role": "assistant", "step": 326, "text": "Here is the comprehensive diagnostic report of your **PAR-Q Form intake flow**, **Membership 360 reflection**, and **Booking Policies system**, detailing exactly what is connected, what is failing, and where errors or disconnects exist between the frontend and backend.\n\n---\n\n### Key Findings Summary\n\n| System / Feature | Backend Connected? | Working Status | Core Issue / Blocker |\n| :--- | :---: | :---: | :--- |\n| **PAR-Q Form Submission (Member Portal)** | **Yes** (`POST /api/v1/mobile/onboarding/submit/`) | **Working** (Backend Engine) / **UX Gaps** (Frontend) | The backend persists submissions, saves digital signatures to disk, and updates memberships to `COMPLETED`. However, Question 2 (Date) & 15 (Multi-select) render as plain text inputs, and missing signatures silently disable the button. |\n| **PAR-Q Gate Before First Booking** | **Partial** (`services_bookings.py`) | **Bypassed / Not Enforced** | `create_booking` only blocks pending PAR-Q **if** `booking_policy.require_parq == True`. In your database, `require_parq` is set to `False`, so members can bypass PAR-Q and book classes directly. |\n| **Membership 360 Admin Reflection** | **Yes** (`GET /api/v1/tenant/members/:id/360/`) | **Working** | Tab 6 (\"PAR-Q Form\") reads directly from backend `IntakeSubmission` & `Membership.parq_status`. It correctly displays `PAR-Q PENDING` with `Class Booking Blocked` until cleared. |\n| **Studio Hub PAR-Q Card (Member Portal)** | **Yes** (`GET /api/v1/mobile/onboarding-survey/`) | **Visual Bug** | Even when status is `\"PAR-Q Pending\"`, the card renders a **green checkmark** (`CheckCircle2 text-emerald-500`), giving members the false impression that they are already cleared. |\n| **Admin Booking Policies Tab (`/bookings`)** | **Broken** (`/api/v1/tenant/booking-policy-sets/`) | **Failing on Save (500/400) + Blank Cards** | 1. `BookingPolicySet` model has **no `name` or `code`** fields (cards render blank titles).<br>2. Creating/saving throws `{'organization': ['This field is required.']}`.<br>3. The modal lacks a toggle for `require_parq`. |\n| **Business Settings Booking Tab (`/admin/configuration`)** | **Yes** (`/api/v1/tenant/booking-policy/`) | **Working** (Separate Config) | Manages auto-cancellations, cutoffs, and booking types via `BookingPolicyConfig`, but has no awareness of PAR-Q requirements. |\n\n---\n\n### 1. The PAR-Q Flow & Membership 360 Audit\n\n#### A. Why the First Booking Gate is Currently Bypassed\nIn [`services_bookings.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/services_bookings.py#L758-L760):\n```python\n# Gate: Verify PAR-Q completed and digitally signed for this specific membership if required by policy\nparq_enforced = bool(booking_policy and booking_policy.require_parq)\nif parq_enforced and getattr(membership, 'parq_status', 'PENDING') != 'COMPLETED':\n    raise ParqRequiredValidationError(...)\n```\n* **The Root Cause:** `parq_enforced` is gated strictly on `booking_policy.require_parq`. In your database's active `BookingPolicySet`, `require_parq` is set to `False`. \n* **The Result:** Even though the membership shows `PAR-Q PENDING` and `Class Booking Blocked` in Membership 360, the booking service skips the validation gate because the policy flag is off.\n* **The Fix:** Either:\n  1. Set `require_parq = True` on the active policy, or\n  2. Enforce `if getattr(membership, 'parq_status', 'PENDING') != 'COMPLETED':` as a mandatory platform rule regardless of whether the policy flag is on.\n\n#### B. Member Portal Studio Hub Visual Bug\nIn [`WebMemberPortalWorkspace.tsx`](file:///f:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx#L5115-L5122):\n* The Studio Hub \"PAR-Q Clearance\" card displays `{parqSurvey?.status_badge || \"PAR-Q Cleared\"}` (which says `\"PAR-Q Pending\"` in your screenshot).\n* **The Bug:** The icon container is hardcoded to `bg-emerald-500/10 text-emerald-500` with `<CheckCircle2 />`. A pending medical requirement should display an amber shield (`AlertTriangle` / `Clock`) with amber styling, not a green success checkmark.\n\n#### C. Member Portal PAR-Q Questionnaire Issues\nIn [`WebMemberPortalWorkspace.tsx`](file:///f:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx#L7118-L7170):\n1. **Question 2 (`Date of Birth`):** Falls back to a standard text `<Input>` rather than `<Input type=\"date\">`.\n2. **Question 15 (`MULTI_SELECT`):** The question is configured in the backend as `MULTI_SELECT` (\"How can SWEAT best support your fitness journey?\"), but the frontend only has handlers for `BOOLEAN` and `SINGLE_SELECT`, so it falls back to a single text input instead of checkbox options.\n3. **Silent Disabled Submit Button:** The submit button has `disabled={isParqSubmitting || !parqConsentAccepted || !parqHasSignature}`. If a member fills out all questions and accepts terms but forgets to draw in the signature canvas, the button stays disabled with no feedback explaining why.\n\n#### D. How It Connects to Backend & Reflects in Membership 360\n* When the member draws their signature and clicks **Save & Confirm PAR-Q Clearance**:\n  1. The frontend dispatches `POST /api/v1/mobile/onboarding/submit/` ([`views_mobile.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/views_mobile.py#L3416)).\n  2. The backend compresses the signature PNG and saves it to `/media/signatures/parq_sig_*.png` on disk.\n  3. It creates an immutable `IntakeSubmission` record linked to the member and records all 15 question answers.\n  4. It executes:\n     ```python\n     membership.parq_status = 'COMPLETED'\n     membership.parq_completed_at = now\n     membership.parq_submission = submission\n     membership.save()\n     ```\n  5. In **Membership 360** ([`Member360Workspace.tsx`](file:///f:/fitness-command-center/src/components/members/Member360Workspace.tsx#L3454)), the requirement status flips from `PAR-Q PENDING` to `COMPLETED`, the badge changes from `Class Booking Blocked` to `Cleared for Booking`, and the submission appears with full audit history under **Signed Submission Records**.\n\n---\n\n### 2. Why \"Booking Policies is Not Working\"\n\nThere are **two competing booking policy implementations** in the codebase that are disconnected from each other:\n\n#### A. Problem in Operations \u2192 Bookings \u2192 \"Booking Policies\" Tab\nFile: [`BookingsWorkspace.tsx`](file:///f:/fitness-command-center/src/components/bookings/BookingsWorkspace.tsx#L1250-L1315) & [`views_bookings.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/views_bookings.py#L794)\n\n1. **Card Title is Blank:** \n   The frontend renders `{p.name}` and `{p.code}`. However, the database model `BookingPolicySet` in [`models_bookings.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/models_bookings.py#L12) **does not have `name` or `code` fields**. The cards display empty headers.\n2. **\"Configure Policy\" / \"Create Policy Set\" Fails on Save:**\n   When you click \"Save Policy\", it calls `POST /api/v1/tenant/booking-policy-sets/`. The backend serializer rejects the request with:\n   ```json\n   {\"organization\": [\"This field is required.\"]}\n   ```\n   * The frontend dialog does not supply `organization`.\n   * `BookingPolicySetViewSet.perform_create` fails to auto-assign the organization from the user's active tenant session.\n3. **No PAR-Q Toggle in Policy Modal:**\n   The modal in `BookingsWorkspace.tsx` configures booking window, cutoff minutes, waitlist capacity, and max reschedules, but **omits a toggle for `require_parq`**.\n\n#### B. The Settings Tab: `/admin/configuration?tab=booking`\nFile: [`ConfigurationWorkspace.tsx`](file:///f:/fitness-command-center/src/components/admin/ConfigurationWorkspace.tsx#L208-L232)\n* This screen connects to `/api/v1/tenant/booking-policy/` (backed by `BookingPolicyConfig` in [`services_booking_policy.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/services_booking_policy.py)).\n* It saves auto-cancellation timers (unpaid 15m, unconfirmed 60m), cancellation cutoffs (2h), and booking types (CLASS, TRIAL, PT).\n* **Disconnect:** This policy service has **no field or logic for PAR-Q enforcement**.\n\n---\n\n### 3. Concrete Action Items to Complete the Flow\n\n1. **Fix `BookingPolicySetViewSet.perform_create`** in [`views_bookings.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/views_bookings.py#L818):\n   Auto-populate `organization = get_user_tenant_organization()` and add fallback display names so policies save successfully without validation errors.\n2. **Add `require_parq` Toggle to Policy Modal** in [`BookingsWorkspace.tsx`](file:///f:/fitness-command-center/src/components/bookings/BookingsWorkspace.tsx):\n   Allow studio administrators to turn on \"Require PAR-Q before first booking\".\n3. **Enforce PAR-Q Gate in `create_booking`** in [`services_bookings.py`](file:///f:/fitness-command-center/backend/apps/tenant_core/services_bookings.py#L758):\n   Ensure that any active membership with `parq_status == 'PENDING'` halts booking creation and returns `code: 'PARQ_REQUIRED'`.\n4. **Member Portal Booking UX**:\n   When `PARQ_REQUIRED` is returned during booking, present a modal prompting the member to complete their health questionnaire and automatically route them to the PAR-Q tab.\n5. **Fix Studio Hub Clearance Card Colors**:\n   In [`WebMemberPortalWorkspace.tsx`](file:///f:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx#L5115), render an amber warning icon and badge when `parq_status === 'PENDING'`.\n6. **Fix Date & Multi-Select Inputs in PAR-Q Tab**:\n   In [`WebMemberPortalWorkspace.tsx`](file:///f:/fitness-command-center/src/components/member-portal/WebMemberPortalWorkspace.tsx#L7143), support `DATE` inputs and `MULTI_SELECT` chip selectors."}, {"role": "user", "step": 328, "text": "see in parq why object word is shown it should show to both in members portal and then in admin panel also it should show , if user has filled and signature should be visible also and it should be backend connected and stored"}];
+  const container = document.getElementById('messages');
+  const matchStats = document.getElementById('match-stats');
+
+  function render(items) {
+    container.innerHTML = '';
+    if (items.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding: 40px; color: #94a3b8;">No messages found matching your query.</div>';
+      return;
+    }
+    items.forEach(m => {
+      const card = document.createElement('div');
+      card.className = `msg-card ${m.role}`;
+      card.innerHTML = `
+        <div class="msg-header">
+          <span class="badge ${m.role}">${m.role === 'user' ? '👤 User' : '🤖 Assistant'}</span>
+          <span class="step-pill">Step ${m.step}</span>
+        </div>
+        <div class="msg-body">${escapeHtml(m.text)}</div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function filterMessages() {
+    const q = document.getElementById('search').value.toLowerCase().trim();
+    if (!q) {
+      render(data);
+      matchStats.textContent = `Showing all ${data.length} messages`;
+      return;
+    }
+    const filtered = data.filter(m => m.text.toLowerCase().includes(q));
+    render(filtered);
+    matchStats.textContent = `Found ${filtered.length} matching messages out of ${data.length}`;
+  }
+
+  render(data);
+</script>
+</body>
+</html>
