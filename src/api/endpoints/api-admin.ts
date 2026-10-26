@@ -690,6 +690,7 @@ export interface BookingPolicyData {
   require_active_membership: boolean;
   max_upcoming_bookings: number;
   advance_booking_days_max: number;
+  qr_activation_minutes_before_class?: number;
   apply_to_existing_bookings?: boolean;
   policy_effective_at?: string;
   notify_unpaid_auto_cancellation: boolean;

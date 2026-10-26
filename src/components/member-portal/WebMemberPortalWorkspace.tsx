@@ -4220,8 +4220,29 @@ function WebMemberPortalWorkspaceInner() {
       if (res.data?.has_booking === false) {
         setQrPassData({
           has_booking: false,
-          status: res.data.status || 'EXPIRED',
-          detail: res.data.detail || "No upcoming workout scheduled today. Please reserve a class session to generate your turnstile access key.",
+          is_active: false,
+          status: res.data.status || 'NO_BOOKING',
+          detail: res.data.detail || "No upcoming workout scheduled. Please reserve a class session to generate your turnstile access key.",
+          member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+          membership_number: profile?.membership_number || "—",
+        });
+        return;
+      }
+      if (res.data?.status === 'EARLY' || res.data?.is_active === false) {
+        setQrPassData({
+          has_booking: true,
+          is_active: false,
+          status: res.data.status || 'EARLY',
+          booking_id: (res.data as any).booking_id,
+          booking_number: (res.data as any).booking_number,
+          class_name: (res.data as any).class_name,
+          branch_name: (res.data as any).branch_name,
+          start_at: (res.data as any).start_at,
+          activation_time: (res.data as any).activation_time,
+          activation_minutes_before: (res.data as any).activation_minutes_before || 20,
+          formatted_start_time: (res.data as any).formatted_start_time,
+          formatted_activation_time: (res.data as any).formatted_activation_time,
+          detail: res.data.detail,
           member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
           membership_number: profile?.membership_number || "—",
         });
@@ -4231,23 +4252,27 @@ function WebMemberPortalWorkspaceInner() {
         pass_id: res.data.pass_id,
         booking_id: (res.data as any).booking_id,
         booking_number: (res.data as any).booking_number,
-        qr_token: (res.data as any).compact_token || res.data.qr_payload,
+        qr_token: (res.data as any).compact_token || res.data.qr_token || res.data.qr_payload,
         class_name: (res.data as any).class_name,
         branch_name: (res.data as any).branch_name,
         start_at: (res.data as any).start_at,
+        activation_time: (res.data as any).activation_time,
+        activation_minutes_before: (res.data as any).activation_minutes_before,
         valid_from: (res.data as any).valid_from,
         valid_until: res.data.valid_until,
         member_name: res.data.member_name || (profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member")),
         membership_number: res.data.membership_number || profile?.membership_number || "—",
-        status: (res.data as any).status || "CONFIRMED",
+        status: (res.data as any).status || "ACTIVE",
         pass_type: 'CLASS_BOOKING',
         has_booking: true,
+        is_active: true,
       });
     } catch (err: any) {
       console.warn("[SWEAT Member Portal] getQRPass:", err);
-      const detailMsg = err?.response?.data?.detail || "No confirmed class booking found for today. Please reserve a class session to generate your turnstile access key.";
+      const detailMsg = err?.response?.data?.detail || "No confirmed class booking found. Please reserve a class session to generate your turnstile access key.";
       setQrPassData({
         has_booking: false,
+        is_active: false,
         detail: detailMsg,
         member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
         membership_number: profile?.membership_number || "—",
@@ -4265,8 +4290,29 @@ function WebMemberPortalWorkspaceInner() {
       if (res.data?.has_booking === false) {
         setQrPassData({
           has_booking: false,
+          is_active: false,
           status: res.data.status || 'EXPIRED',
           detail: res.data.detail || "This session has concluded and the access pass has expired.",
+          member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
+          membership_number: profile?.membership_number || "—",
+        });
+        return;
+      }
+      if (res.data?.status === 'EARLY' || res.data?.is_active === false) {
+        setQrPassData({
+          has_booking: true,
+          is_active: false,
+          status: res.data.status || 'EARLY',
+          booking_id: res.data.booking_id || booking.id,
+          booking_number: res.data.booking_number || booking.booking_number,
+          class_name: res.data.class_name || booking.class_name,
+          branch_name: res.data.branch_name || booking.branch?.name,
+          start_at: res.data.start_at || booking.start_time,
+          activation_time: res.data.activation_time,
+          activation_minutes_before: res.data.activation_minutes_before || 20,
+          formatted_start_time: res.data.formatted_start_time,
+          formatted_activation_time: res.data.formatted_activation_time,
+          detail: res.data.detail,
           member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
           membership_number: profile?.membership_number || "—",
         });
@@ -4279,13 +4325,17 @@ function WebMemberPortalWorkspaceInner() {
         qr_token: res.data.qr_token || res.data.compact_token || res.data.qr_payload,
         class_name: res.data.class_name || booking.class_name,
         branch_name: res.data.branch_name || booking.branch?.name,
+        start_at: res.data.start_at || booking.start_time,
+        activation_time: res.data.activation_time,
+        activation_minutes_before: res.data.activation_minutes_before,
         valid_from: (res.data as any).valid_from,
         valid_until: res.data.valid_until,
-        status: res.data.status || "CONFIRMED",
+        status: res.data.status || "ACTIVE",
         member_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ""}`.trim() : (user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Member"),
         membership_number: profile?.membership_number || "—",
         pass_type: 'CLASS_BOOKING',
         has_booking: true,
+        is_active: true,
       });
     } catch (err: any) {
       console.warn("[SWEAT Member Portal] getBookingQRPass error:", err);
@@ -6396,44 +6446,50 @@ function WebMemberPortalWorkspaceInner() {
                         Turnstile QR Access
                       </CardTitle>
                       <CardDescription className="text-xs">
-                        {todayConfirmedBooking
-                          ? `Session: ${todayConfirmedBooking.class_name || "Workout"} today`
+                        {(todayConfirmedBooking || nextWorkout)
+                          ? `Session: ${(todayConfirmedBooking || nextWorkout).class_name || "Workout"}`
                           : "Booking required for turnstile entry"}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-6 flex flex-col items-center text-center">
-                  {todayConfirmedBooking ? (
+                  {(todayConfirmedBooking || nextWorkout) ? (
                     <>
-                      <div className="p-3 rounded-2xl bg-white border border-border shadow-md">
-                        <QRCodeSvg
-                          value={todayConfirmedBooking.booking_number ? `BKG_${todayConfirmedBooking.booking_number}` : "SWT_PASS"}
-                          size={140}
-                          className="rounded-md"
-                          title="Today's Session Pass"
-                        />
-                      </div>
-                      <div className="mt-3">
-                        <span className="text-sm font-bold text-foreground">
-                          {todayConfirmedBooking.class_name || "Reserved Workout"}
-                        </span>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                          {todayConfirmedBooking.booking_number || profile?.membership_number || "—"}
-                        </p>
-                      </div>
-                      <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 mt-2">
-                        CONFIRMED FOR TODAY
-                      </Badge>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleOpenBookingQRPass(todayConfirmedBooking)}
-                        className="w-full text-xs font-semibold mt-4 gap-2"
-                      >
-                        <QrCode className="h-4 w-4" />
-                        Open Turnstile Pass
-                      </Button>
+                      {(() => {
+                        const target = todayConfirmedBooking || nextWorkout;
+                        const isToday = Boolean(todayConfirmedBooking);
+                        return (
+                          <>
+                            <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex flex-col items-center justify-center text-center shadow-inner w-36 h-36">
+                              <QrCode className="h-12 w-12 text-violet-500 animate-pulse" />
+                              <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 mt-2">
+                                Turnstile Access Pass
+                              </span>
+                            </div>
+                            <div className="mt-3">
+                              <span className="text-sm font-bold text-foreground">
+                                {target.class_name || "Reserved Workout"}
+                              </span>
+                              <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                                {target.start_time ? safeFormatDate(target.start_time, "EEEE, MMM d · h:mm a") : (target.booking_number || "—")}
+                              </p>
+                            </div>
+                            <Badge className={`${isToday ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30"} font-bold text-[10px] px-2 py-0.5 mt-2`}>
+                              {isToday ? "CONFIRMED FOR TODAY" : "CONFIRMED IN ADVANCE"}
+                            </Badge>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleOpenBookingQRPass(target)}
+                              className="w-full text-xs font-semibold mt-4 gap-2"
+                            >
+                              <QrCode className="h-4 w-4" />
+                              Open Turnstile Pass
+                            </Button>
+                          </>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="w-full py-2 flex flex-col items-center text-center space-y-3">
@@ -6442,10 +6498,10 @@ function WebMemberPortalWorkspaceInner() {
                       </div>
                       <div className="space-y-1">
                         <h4 className="text-sm font-bold text-foreground">
-                          No Workout Booked Today
+                          No Workout Scheduled
                         </h4>
                         <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-                          Turnstile access keys are strictly generated for confirmed class bookings. Book your slot to unlock your pass.
+                          Turnstile access keys are generated on-demand for confirmed class bookings. Book your slot to unlock your pass.
                         </p>
                       </div>
                       {remainingCredits > 0 && (
@@ -6461,7 +6517,7 @@ function WebMemberPortalWorkspaceInner() {
                         className="w-full text-xs font-semibold mt-2 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
                       >
                         <CalendarIcon className="h-3.5 w-3.5" />
-                        Book Today's Workout
+                        Browse Schedule & Book
                       </Button>
                     </div>
                   )}
@@ -9169,11 +9225,27 @@ function WebMemberPortalWorkspaceInner() {
         <DialogContent className="w-[92vw] sm:max-w-sm max-h-[90dvh] overflow-y-auto p-5 sm:p-6 rounded-2xl text-center flex flex-col items-center border border-[#232738] shadow-2xl bg-[#090a0f] text-white">
           <DialogHeader className="items-center">
             <DialogTitle className="text-base font-bold flex items-center gap-1.5 text-white">
-              <Flame className="h-5 w-5 text-amber-500" />
-              {qrPassData?.has_booking === false ? "Turnstile Access Key" : "Session Access Pass"}
+              {qrPassData?.status === 'EARLY' || qrPassData?.is_active === false ? (
+                <>
+                  <Clock className="h-5 w-5 text-amber-500" />
+                  <span>Turnstile Access Key</span>
+                </>
+              ) : qrPassData?.has_booking === false ? (
+                <>
+                  <Flame className="h-5 w-5 text-amber-500" />
+                  <span>Turnstile Access Key</span>
+                </>
+              ) : (
+                <>
+                  <Flame className="h-5 w-5 text-amber-500" />
+                  <span>Session Access Pass</span>
+                </>
+              )}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-400">
-              {qrPassData?.has_booking === false
+              {qrPassData?.status === 'EARLY' || qrPassData?.is_active === false
+                ? "Early Access Window"
+                : qrPassData?.has_booking === false
                 ? "Booking Required for Studio Entry"
                 : (qrPassData?.class_name || "Reserved Workout")}
             </DialogDescription>
@@ -9191,7 +9263,7 @@ function WebMemberPortalWorkspaceInner() {
               </div>
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-white">
-                  No Workout Scheduled Today
+                  No Upcoming Workout Scheduled
                 </h4>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Turnstile QR passes are generated exclusively for confirmed workouts. Book your class slot from your package to unlock instant gate access.
@@ -9219,15 +9291,78 @@ function WebMemberPortalWorkspaceInner() {
                 Browse Schedule & Book Class
               </Button>
             </div>
+          ) : qrPassData?.status === 'EARLY' || qrPassData?.is_active === false ? (
+            /* EARLY ACTIVATION POPUP (Section 4 Requirement) */
+            <div className="w-full my-3 p-5 rounded-2xl bg-[#131622] border border-[#232738] flex flex-col items-center text-center space-y-4">
+              <div className="h-14 w-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
+                <Clock className="h-7 w-7 animate-pulse" />
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="text-base font-bold text-white tracking-tight">
+                  Your QR code isn&apos;t available yet
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-xs">
+                  Your class starts at{" "}
+                  <span className="font-semibold text-amber-400">
+                    {qrPassData?.formatted_start_time || (qrPassData?.start_at ? format(new Date(qrPassData.start_at), "h:mm a (EEE, MMM d)") : "scheduled time")}
+                  </span>
+                  . Your turnstile access QR code will become available at{" "}
+                  <span className="font-semibold text-emerald-400">
+                    {qrPassData?.formatted_activation_time || (qrPassData?.activation_time ? format(new Date(qrPassData.activation_time), "h:mm a") : "activation time")}
+                  </span>
+                  {qrPassData?.activation_minutes_before ? ` (${qrPassData.activation_minutes_before} minutes before class)` : ""}.
+                </p>
+                <p className="text-xs text-slate-400">
+                  Please return at that time to generate your QR code.
+                </p>
+              </div>
+
+              {/* Class Summary Box */}
+              <div className="w-full p-3.5 rounded-xl bg-[#090a0f] border border-[#232738] text-left space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Class:</span>
+                  <span className="font-semibold text-white">{qrPassData?.class_name || "Workout"}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Studio Location:</span>
+                  <span className="font-medium text-slate-300">{qrPassData?.branch_name || "SWEAT Studio"}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Booking Reference:</span>
+                  <span className="font-mono text-amber-400/90">{qrPassData?.booking_number || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between pt-1.5 border-t border-[#232738] text-slate-400">
+                  <span>QR Window Opens:</span>
+                  <span className="font-bold text-emerald-400">
+                    {qrPassData?.formatted_activation_time || (qrPassData?.activation_time ? format(new Date(qrPassData.activation_time), "h:mm a") : "—")}
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-400">
+                <Lock className="h-3.5 w-3.5 shrink-0" />
+                <span>Turnstile gate opens strictly during the access window</span>
+              </div>
+            </div>
           ) : (
             <>
               {/* Camera-Verified Pixel-Perfect QR Code */}
               <div className="p-4 my-2 rounded-2xl bg-white shadow-2xl flex flex-col items-center justify-center">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPassData?.qr_token || "")}`}
-                  alt="Turnstile QR Pass"
-                  className="w-[200px] h-[200px] block select-none"
-                />
+                {qrPassData?.qr_token ? (
+                  <QRCodeSvg
+                    value={qrPassData.qr_token}
+                    size={190}
+                    className="block select-none"
+                    title="Turnstile QR Pass"
+                  />
+                ) : (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPassData?.qr_token || "")}`}
+                    alt="Turnstile QR Pass"
+                    className="w-[190px] h-[190px] block select-none"
+                  />
+                )}
               </div>
 
               <div className="w-full space-y-3 mt-2">

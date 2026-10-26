@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check, Snowflake, Sliders, CheckCircle2 } from "lucide-react";
+import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check, Snowflake, Sliders, CheckCircle2, QrCode } from "lucide-react";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { membershipsApi } from "@/api/endpoints/membershipsApi";
 import type { MembershipPolicyConfig, MembershipChangePolicy } from "@/types/memberships";
@@ -58,6 +58,7 @@ export function ConfigurationWorkspace() {
     require_active_membership: true,
     max_upcoming_bookings: 5,
     advance_booking_days_max: 14,
+    qr_activation_minutes_before_class: 20,
     notify_unpaid_auto_cancellation: true,
     notify_unconfirmed_auto_cancellation: true,
     notify_late_cancellation: true,
@@ -898,7 +899,54 @@ export function ConfigurationWorkspace() {
                 </div>
               </div>
 
-              {/* 5. NOTIFICATION CHANNELS */}
+              {/* 5. TURNSTILE ACCESS & QR PASS ACTIVATION */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <QrCode className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Turnstile Access & QR Pass Activation</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Control when turnstile QR codes become active and accessible to members prior to class start.
+                  </p>
+                </div>
+
+                <div className="p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="qr_activation_min" className="text-sm font-semibold text-foreground">
+                      QR Code Activation Before Class
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Configure how many minutes before a class starts the turnstile access QR code becomes available to members. Before this window opens, members will see an informative popup stating the exact availability time without generating a pass.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Input
+                        id="qr_activation_min"
+                        type="number"
+                        min="1"
+                        max="1440"
+                        value={bookingPolicy.qr_activation_minutes_before_class ?? 20}
+                        onChange={(e) => {
+                          const rawVal = e.target.value;
+                          const num = Number(rawVal);
+                          updateBooking("qr_activation_minutes_before_class", isNaN(num) || num < 1 ? 1 : num);
+                        }}
+                        className="h-9 w-28 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs font-medium text-muted-foreground shrink-0">minutes before class</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span>Default: <strong>20 minutes</strong> (Currently saved: <strong>{bookingPolicy.qr_activation_minutes_before_class ?? 20}m</strong>)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. NOTIFICATION CHANNELS */}
               <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-3">
                 <div className="border-b border-border/40 pb-3">
                   <div className="flex items-center gap-2">
