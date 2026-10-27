@@ -878,7 +878,19 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                   </Label>
                   <select
                     value={selectedSource}
-                    onChange={(e) => setSelectedSource(e.target.value)}
+                    onChange={(e) => {
+                      const newSourceId = e.target.value;
+                      setSelectedSource(newSourceId);
+                      const chosenSrc = sources.find((s) => s.id === newSourceId);
+                      if (chosenSrc) {
+                        const nameLower = chosenSrc.name.toLowerCase();
+                        const isWalkIn = nameLower.includes('walk') || nameLower.includes('direct') || nameLower.includes('in-person') || nameLower.includes('reception') || nameLower.includes('desk');
+                        if (isWalkIn) {
+                          setTriggerAiCall(false);
+                          toast.info('Walk-in source selected: AI voice calling & trial automation auto-disabled.');
+                        }
+                      }
+                    }}
                     className={`w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm focus:ring-1 focus:ring-primary ${
                       formErrors.source ? 'border-destructive' : ''
                     }`}
@@ -1289,21 +1301,37 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
             </div>
 
             {/* SECTION: AI VOICE CALLING & AUTOMATION */}
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+            <div className={`rounded-xl border p-4 space-y-3 transition-colors ${
+              triggerAiCall 
+                ? 'border-emerald-500/30 bg-emerald-500/5' 
+                : 'border-amber-500/30 bg-amber-500/5'
+            }`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                    triggerAiCall 
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}>
                     <Bot className="w-4 h-4" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="text-xs font-bold text-foreground">Sarvam AI Automated Call</h4>
-                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-                        Real-time AI Calling
-                      </Badge>
+                      {triggerAiCall ? (
+                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                          Real-time AI Calling
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                          Calls & Automation Skipped
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      AI agent (Mahek) will automatically explain programs, branches, and class timings, and book their trial session.
+                      {triggerAiCall
+                        ? 'AI agent (Mahek) will automatically explain programs, branches, and class timings, and book their trial session.'
+                        : 'AI outbound call and automated trial messages are disabled. Ideal for direct walk-ins and package purchases.'}
                     </p>
                   </div>
                 </div>
@@ -1319,10 +1347,15 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
                 </label>
               </div>
 
-              {triggerAiCall && (
+              {triggerAiCall ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 rounded-md px-2.5 py-1.5 border border-emerald-500/20">
                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>Voice calling permission verified on intake. Outbound call will trigger automatically between 09:00–21:00 IST.</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 rounded-md px-2.5 py-1.5 border border-amber-500/20">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>AI calling and trial WhatsApp automation are paused for this lead (Walk-in / Direct Purchase mode).</span>
                 </div>
               )}
             </div>

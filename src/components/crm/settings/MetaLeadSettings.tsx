@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import {
   metaLeadsApi,
@@ -35,6 +36,10 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Trash2,
   Sparkles,
   Info,
@@ -146,6 +151,7 @@ function extractLeadName(item: MetaImport): string | null {
 // ===========================================================================
 export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const { tenantId } = useApp();
+  const navigate = useNavigate();
   const client = useQueryClient();
   const queryKeyBase = ['meta-leads', tenantId];
 
@@ -159,6 +165,18 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     'ALL' | 'NEEDS_ATTENTION' | 'ADDED' | 'RESOLVED' | 'FAILED'
   >('ALL');
   const [importPage, setImportPage] = React.useState(1);
+  const [importPageSize, setImportPageSize] = React.useState(10);
+
+  const handleViewLead = (leadId: string) => {
+    if (!leadId) {
+      toast.error('Lead identifier not found for this submission');
+      return;
+    }
+    navigate({
+      to: '/crm/leads',
+      search: { lead_id: leadId },
+    });
+  };
 
   const [editing, setEditing] = React.useState<MetaMapping | null | undefined>(undefined);
   const [historyMapping, setHistoryMapping] = React.useState<MetaMapping | null>(null);
@@ -221,8 +239,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
       : undefined;
 
   const importsQuery = useQuery({
-    queryKey: [...queryKeyBase, 'imports', importPage, backendImportFilter],
-    queryFn: () => metaLeadsApi.imports(importPage, backendImportFilter),
+    queryKey: [...queryKeyBase, 'imports', importPage, importPageSize, backendImportFilter],
+    queryFn: () => metaLeadsApi.imports(importPage, backendImportFilter, importPageSize),
   });
 
   const refreshAll = () => client.invalidateQueries({ queryKey: queryKeyBase });
@@ -1278,9 +1296,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            window.location.href = `/crm/leads?search=${encodeURIComponent(item.lead!)}`;
-                          }}
+                          onClick={() => handleViewLead(item.lead!)}
                           className="gap-1 text-xs"
                         >
                           <Eye className="h-3.5 w-3.5 text-primary" />
@@ -1292,9 +1308,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            window.location.href = `/crm/leads?search=${encodeURIComponent(item.matched_lead!.id)}`;
-                          }}
+                          onClick={() => handleViewLead(item.matched_lead!.id)}
                           className="gap-1 text-xs border-primary/40 text-primary hover:bg-primary/10"
                         >
                           <ExternalLink className="h-3.5 w-3.5 text-primary" />
@@ -1593,31 +1607,89 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         )}
 
         {/* Lead Imports Pagination */}
-        {importsQuery.data && importsQuery.data.count > 10 && (
-          <div className="flex items-center justify-between pt-2 text-xs">
-            <span className="text-muted-foreground">
-              Page {importPage} ({importsQuery.data.count} total records)
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!importsQuery.data.previous}
-                onClick={() => setImportPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!importsQuery.data.next}
-                onClick={() => setImportPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+        {(() => {
+          const totalImports = importsQuery.data?.count || 0;
+          const totalImportPages = Math.max(1, Math.ceil(totalImports / importPageSize));
+          if (totalImports === 0) return null;
+
+          return (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3.5 py-3 mt-4 rounded-xl border border-border/70 bg-card/60 text-xs shadow-2xs">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <span>
+                  Showing <span className="font-semibold text-foreground">{((importPage - 1) * importPageSize) + 1}</span> to{' '}
+                  <span className="font-semibold text-foreground">{Math.min(importPage * importPageSize, totalImports)}</span> of{' '}
+                  <span className="font-semibold text-foreground">{totalImports.toLocaleString()}</span> submissions
+                </span>
+                <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
+                  <span className="hidden sm:inline">Per page:</span>
+                  <select
+                    value={importPageSize}
+                    onChange={(e) => {
+                      setImportPageSize(Number(e.target.value));
+                      setImportPage(1);
+                    }}
+                    className="h-7.5 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  >
+                    <option value={5}>5 / page</option>
+                    <option value={10}>10 / page</option>
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportPage(1)}
+                  disabled={importPage <= 1 || importsQuery.isFetching}
+                  className="h-8 w-8 p-0"
+                  title="First Page"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportPage((p) => Math.max(1, p - 1))}
+                  disabled={importPage <= 1 || importsQuery.isFetching}
+                  className="h-8 px-2.5 gap-1"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </Button>
+
+                <div className="px-3 py-1 rounded-md bg-muted/60 text-xs font-semibold text-foreground">
+                  Page {importPage} of {totalImportPages}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportPage((p) => Math.min(totalImportPages, p + 1))}
+                  disabled={importPage >= totalImportPages || importsQuery.isFetching}
+                  className="h-8 px-2.5 gap-1"
+                  title="Next Page"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportPage(totalImportPages)}
+                  disabled={importPage >= totalImportPages || importsQuery.isFetching}
+                  className="h-8 w-8 p-0"
+                  title="Last Page"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </section>
 
       {/* 6. Facebook Connection Modal */}

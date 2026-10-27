@@ -40,6 +40,7 @@ import {
   User,
   UserCheck,
   X,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AttentionQueueView } from './AttentionQueueView';
@@ -586,6 +587,45 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     setIsTrialOpen(true);
   };
 
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const params: Record<string, any> = {};
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (statusFilter && statusFilter !== 'ALL') params.current_status = statusFilter;
+      if (sourceFilter && sourceFilter !== 'ALL') params.lead_source_id = sourceFilter;
+      if (campaignFilter.trim()) params.campaign = campaignFilter.trim();
+      if (slaFilter && slaFilter !== 'ALL') params.sla_status = slaFilter;
+      if (branchFilter && branchFilter !== 'ALL') params.branch_id = branchFilter;
+      if (effectiveDateFrom) params.date_from = effectiveDateFrom;
+      if (effectiveDateTo) params.date_to = effectiveDateTo;
+      if (scopeFilter === 'MY_LEADS') params.assigned_to_me = 'true';
+      if (scopeFilter === 'UNASSIGNED') params.unassigned = 'true';
+
+      const blob = await crmApi.exportLeadsExcel(params);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateTag = effectiveDateFrom ? `${effectiveDateFrom}_to_${effectiveDateTo || 'today'}` : 'leads_26th_to_today';
+      a.download = `sweat_leads_${dateTag}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Leads Excel report downloaded successfully', {
+        description: `Exported active view to sweat_leads_${dateTag}.xlsx`,
+      });
+    } catch (err: any) {
+      toast.error('Failed to export leads', {
+        description: err?.message || 'An error occurred during Excel export.',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // RBAC View Denied State
   if (!canView) {
     return (
@@ -658,6 +698,22 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="gap-1.5 h-9 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-medium"
+              title="Download leads & Sarvam audio links as Excel spreadsheet"
+            >
+              {isExporting ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export Excel'}</span>
             </Button>
 
             {canCreate && (

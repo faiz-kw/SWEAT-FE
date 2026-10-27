@@ -275,8 +275,16 @@ export const metaLeadsApi = {
     (await api.patch<MetaMapping>(`/tenant/meta-lead-mappings/${id}/`, { is_active, expected_version })).data,
   auditHistory: async (id: string) =>
     (await api.get<{ results: MetaAuditHistoryItem[] }>(`/tenant/meta-lead-mappings/${id}/audit-history/`)).data,
-  imports: async (page = 1, status?: string) =>
-    (await api.get<Page<MetaImport>>('/tenant/meta-lead-imports/', { params: { page, ...(status ? { status } : {}) } })).data,
+  imports: async (page = 1, status?: string, page_size?: number) =>
+    (
+      await api.get<Page<MetaImport>>('/tenant/meta-lead-imports/', {
+        params: {
+          page,
+          ...(page_size ? { page_size } : {}),
+          ...(status ? { status } : {}),
+        },
+      })
+    ).data,
   detail: async (id: string) => (await api.get<MetaImport>(`/tenant/meta-lead-imports/${id}/`)).data,
   simulate: async (payload: { page_id: string; form_id: string; external_lead_id: string; field_data: { name: string; values: string[] }[] }) =>
     (await api.post<MetaImport>('/tenant/meta-lead-imports/simulate/', payload)).data,

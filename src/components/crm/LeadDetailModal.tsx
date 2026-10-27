@@ -950,6 +950,11 @@ export function LeadDetailModal({
         if (!nextOpen && conversionWizardOpen) {
           return;
         }
+        if (!nextOpen) {
+          const rzp = document.querySelector('.razorpay-container');
+          if (rzp) rzp.remove();
+          setConversionWizardOpen(false);
+        }
         onOpenChange(nextOpen);
       }}
     >
@@ -961,10 +966,14 @@ export function LeadDetailModal({
             onOpenChange(false);
           }}
           onPointerDownOutside={(e) => {
-            e.preventDefault();
+            if (conversionWizardOpen) {
+              e.preventDefault();
+            }
           }}
           onInteractOutside={(e) => {
-            e.preventDefault();
+            if (conversionWizardOpen) {
+              e.preventDefault();
+            }
           }}
           onEscapeKeyDown={(e) => {
             if (conversionWizardOpen) {

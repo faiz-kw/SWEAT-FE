@@ -6428,7 +6428,9 @@ function WebMemberPortalWorkspaceInner() {
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-muted-foreground">Cancellation Window:</span>
-                      <span className="font-semibold text-foreground">Free refund up to 2 hours prior to class commencement</span>
+                      <span className="font-semibold text-foreground">
+                        Free refund up to {nextWorkout?.cancellation_cutoff_hours || todayConfirmedBooking?.cancellation_cutoff_hours || 2} hours prior to class commencement
+                      </span>
                     </div>
                   </div>
                 </CardContent>

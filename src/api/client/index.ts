@@ -26,6 +26,7 @@ export interface ApiResponse<T> {
 export interface CustomRequestInit extends RequestInit {
   _retry?: boolean;
   params?: Record<string, any>;
+  responseType?: 'json' | 'blob';
 }
 
 async function request<T>(
@@ -129,6 +130,11 @@ async function request<T>(
     throw error;
   }
 
+  if (options.responseType === 'blob') {
+    const blob = await res.blob();
+    return { data: blob as unknown as T, status: res.status };
+  }
+
   const data = (res.status === 204 ? {} : await res.json()) as T;
   return { data, status: res.status };
 }
@@ -136,6 +142,8 @@ async function request<T>(
 export const api = {
   get: <T>(endpoint: string, options?: CustomRequestInit) =>
     request<T>(endpoint, { ...options, method: 'GET' }),
+  downloadBlob: (endpoint: string, options?: CustomRequestInit) =>
+    request<Blob>(endpoint, { ...options, method: 'GET', responseType: 'blob' }).then((r) => r.data),
   post: <T>(endpoint: string, body?: any, options?: CustomRequestInit) =>
     request<T>(endpoint, {
       ...options,

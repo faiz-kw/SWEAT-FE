@@ -1145,6 +1145,10 @@ export const crmApi = {
     const res = await api.post<{ marked_read: number }>('/tenant/in-app-notifications/mark-all-read/');
     return res.data?.marked_read || 0;
   },
+
+  exportLeadsExcel: async (params?: Record<string, any>): Promise<Blob> => {
+    return api.downloadBlob('/tenant/leads/export-excel/', { params });
+  },
 };
 
 
