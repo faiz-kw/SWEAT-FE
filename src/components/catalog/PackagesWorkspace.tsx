@@ -1107,8 +1107,7 @@ export const PackagesWorkspace: React.FC = () => {
       ents.find((e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION') ||
       ents.find((e: any) => e.entitlement_type === 'CLASS_SESSION') ||
       ents.find((e: any) => e.entitlement_type === 'PERSONAL_TRAINING_SESSION') ||
-      ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS') ||
-      ents[0];
+      ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS');
     const crossEnt = ents.find((e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION');
     const creditEnt = ents.find((e: any) => e.entitlement_type === 'CREDIT_WALLET');
 
@@ -2101,16 +2100,24 @@ export const PackagesWorkspace: React.FC = () => {
                                             {progPkgs.map((pkg) => {
                                               const activeVer = pkg.active_version || (pkg as any).latest_version;
                                               const firstPrice = activeVer?.prices?.[0];
-                                              const ents: any[] = activeVer?.entitlements || [];
+                                              const ents: any[] = activeVer?.entitlements || (activeVer as any)?.entitlement_definitions || [];
                                               const homeEnt =
                                                 ents.find((e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION') ||
                                                 ents.find((e: any) => e.entitlement_type === 'CLASS_SESSION') ||
                                                 ents.find((e: any) => e.entitlement_type === 'PERSONAL_TRAINING_SESSION') ||
-                                                ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS') ||
-                                                ents[0];
+                                                ents.find((e: any) => e.entitlement_type === 'OPEN_ACCESS');
                                               const crossEnt = ents.find(
                                                 (e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION'
                                               );
+                                              const creditEnt = ents.find(
+                                                (e: any) => e.entitlement_type === 'CREDIT_WALLET'
+                                              );
+                                              const effectiveCredits =
+                                                activeVer?.credits != null
+                                                  ? Number(activeVer.credits)
+                                                  : creditEnt?.allocated_units != null
+                                                  ? Number(creditEnt.allocated_units)
+                                                  : undefined;
                                               const cfgPassportSessions = Number(
                                                 homeEnt?.configuration?.max_passport_sessions ?? 0
                                               );
@@ -2176,11 +2183,11 @@ export const PackagesWorkspace: React.FC = () => {
 
                                                   {/* 2. Sessions Included */}
                                                   <td className="py-3 px-3">
-                                                    {activeVer?.credits != null && Number(activeVer.credits) > 0 ? (
+                                                    {effectiveCredits != null && effectiveCredits > 0 ? (
                                                       <div className="flex flex-col gap-1 items-start">
                                                         <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md text-xs">
                                                           <Sparkles className="w-3.5 h-3.5" />
-                                                          {Number(activeVer.credits)} Credits
+                                                          {effectiveCredits} Credits
                                                         </span>
                                                         {homeEnt && !homeEnt.is_unlimited && Number(homeEnt.allocated_units) > 0 && (
                                                           <span className="text-[10px] text-muted-foreground">
@@ -2354,7 +2361,7 @@ export const PackagesWorkspace: React.FC = () => {
                                                                   ? String(Math.round(Number(crossEnt.extra_unit_price)))
                                                                   : ''
                                                               );
-                                                              setNewVerCredits(activeVer?.credits != null ? String(activeVer.credits) : '');
+                                                              setNewVerCredits(effectiveCredits != null && !isNaN(effectiveCredits) ? String(effectiveCredits) : '');
                                                               setNewVerShowWeb(activeVer?.show_on_web ?? true);
                                                               setNewVerShowApp(activeVer?.show_on_app ?? true);
                                                               setNewVerPublishNow(false);
@@ -2785,14 +2792,16 @@ export const PackagesWorkspace: React.FC = () => {
                                             setNewVerDisplayPrice(fp?.display_price ? String(Math.round(Number(fp.display_price))) : '');
                                             setNewVerTaxPercentage(fp?.tax_percent ? String(Math.round(parseFloat(String(fp.tax_percent)))) : '18');
                                             setNewVerTaxIncluded(fp?.prices_include_tax ?? true);
-                                            const he = ver.entitlement_definitions?.find(e => e.entitlement_type === 'HOME_BRANCH_SESSION');
-                                            const ce = ver.entitlement_definitions?.find(e => e.entitlement_type === 'CROSS_BRANCH_SESSION');
+                                            const vEnts: any[] = ver.entitlement_definitions || (ver as any).entitlements || [];
+                                            const he = vEnts.find((e: any) => e.entitlement_type === 'HOME_BRANCH_SESSION' || e.entitlement_type === 'CLASS_SESSION' || e.entitlement_type === 'PERSONAL_TRAINING_SESSION' || e.entitlement_type === 'OPEN_ACCESS');
+                                            const ce = vEnts.find((e: any) => e.entitlement_type === 'CROSS_BRANCH_SESSION');
+                                            const cde = vEnts.find((e: any) => e.entitlement_type === 'CREDIT_WALLET');
                                             setNewVerHomeUnlimited(Boolean(he?.is_unlimited));
                                             setNewVerMaxSessions(he?.allocated_units ? String(Math.round(Number(he.allocated_units))) : '');
                                             setNewVerCrossUnlimited(Boolean(ce?.is_unlimited));
                                             setNewVerPassportSessions(ce?.allocated_units ? String(Math.round(Number(ce.allocated_units))) : '');
                                             setNewVerPassportCost(ce?.extra_unit_price ? String(Math.round(Number(ce.extra_unit_price))) : '');
-                                            setNewVerCredits(ver.credits != null ? String(ver.credits) : '');
+                                            setNewVerCredits(ver.credits != null ? String(ver.credits) : (cde?.allocated_units != null ? String(cde.allocated_units) : ''));
                                             setNewVerShowWeb(ver.show_on_web ?? true);
                                             setNewVerShowApp(ver.show_on_app ?? true);
                                             setNewVerPublishNow(false);
