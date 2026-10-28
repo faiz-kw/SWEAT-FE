@@ -6,3 +6,4 @@ export * from "./TelephonyManager";
 export * from "./WebRTCPhoneContext";
 export * from "./WebPhoneBar";
 export * from "./TelephonySettingsModal";
+export * from "./TelephonyAnalyticsDashboard";

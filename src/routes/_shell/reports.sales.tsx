@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-
-import { ModuleView } from "@/components/shell/ModuleView";
+import { TelephonyAnalyticsDashboard } from "@/components/crm/telephony/TelephonyAnalyticsDashboard";
 
 export const Route = createFileRoute("/_shell/reports/sales")({
   head: () => ({
     meta: [
-      { title: "Sales Reports · PerformanceOS Admin" },
-      { name: "description", content: "Sales Reports workspace in the PerformanceOS fitness business operating system." },
-      { property: "og:title", content: "Sales Reports · PerformanceOS Admin" },
-      { property: "og:description", content: "Sales Reports workspace in the PerformanceOS fitness business operating system." },
+      { title: "Sales Calling Reports & Leaderboard – PerformanceOS Admin" },
+      { name: "description", content: "Comprehensive Sales Telephony Calling Reports, Rep Leaderboard, and Connect Rate Analytics." },
+      { property: "og:title", content: "Sales Calling Reports & Leaderboard – PerformanceOS Admin" },
+      { property: "og:description", content: "Comprehensive Sales Telephony Calling Reports, Rep Leaderboard, and Connect Rate Analytics." },
     ],
   }),
-  component: () => <ModuleView path="/reports/sales" />,
+  component: () => <TelephonyAnalyticsDashboard />,
 });

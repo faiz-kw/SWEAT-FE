@@ -1303,6 +1303,78 @@ export const crmApi = {
     const res = await api.post('/tenant/crm/telephony/config/', payload);
     return res.data;
   },
+
+  getTelephonyAnalytics: async (params?: {
+    timeframe?: 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_30_days' | 'custom';
+    date_from?: string;
+    date_to?: string;
+    branch_id?: string;
+    rep_id?: string;
+    team_only?: boolean;
+  }): Promise<{
+    timeframe: string;
+    summary: {
+      total_dials: number;
+      connected_calls: number;
+      connect_rate_pct: number;
+      meaningful_calls: number;
+      meaningful_rate_pct: number;
+      total_talk_time_minutes: number;
+      avg_duration_seconds: number;
+      trials_booked: number;
+      members_converted: number;
+      inbound_calls: number;
+      outbound_calls: number;
+      peak_connect_hour: string;
+    };
+    leaderboard: Array<{
+      rank: number;
+      rep_id: string;
+      name: string;
+      email: string;
+      dials: number;
+      connected: number;
+      connect_rate_pct: number;
+      meaningful_calls: number;
+      talk_time_minutes: number;
+      trials_booked: number;
+      members_converted: number;
+    }>;
+    dispositions: Array<{
+      code: string;
+      label: string;
+      count: number;
+      percentage: number;
+    }>;
+    hourly_heatmap: Array<{
+      hour: number;
+      label: string;
+      dials: number;
+      connected: number;
+      connect_rate_pct: number;
+    }>;
+    recent_calls: Array<{
+      id: string;
+      lead_id?: string;
+      lead_name: string;
+      masked_phone: string;
+      sales_rep_name: string;
+      sales_rep_id?: string;
+      direction: 'INBOUND' | 'OUTBOUND';
+      status: string;
+      duration_seconds: number;
+      is_meaningful: boolean;
+      disposition?: string;
+      disposition_label?: string;
+      disposition_notes?: string;
+      has_recording: boolean;
+      created_at: string;
+    }>;
+  }> => {
+    const res = await api.get('/tenant/crm/telephony/analytics/', { params });
+    return res.data;
+  },
+
 };
 
 
