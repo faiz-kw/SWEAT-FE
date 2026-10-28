@@ -849,6 +849,25 @@ export function LeadDetailModal({
     },
   });
 
+  // Human Sales Click-to-Call (Zoiper Softphone + Vobiz)
+  const clickToCallMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentLead?.id) throw new Error('Lead ID is missing');
+      return await crmApi.clickToCall(currentLead.id);
+    },
+    onSuccess: (data) => {
+      toast.success('Calling Softphone...', {
+        description: `Ringing your Zoiper softphone first! Once you pick up, ${data.masked_phone} will be bridged automatically.`,
+        duration: 8000,
+      });
+      queryClient.invalidateQueries({ queryKey: ['telephony-presence'] });
+    },
+    onError: (err: any) => {
+      const errMsg = err?.response?.data?.error || err.message || 'Failed to initiate click-to-call';
+      toast.error('Calling Failed', { description: errMsg });
+    },
+  });
+
   const grantConsentMutation = useMutation({
     mutationFn: async () => {
       if (!currentLead?.id) throw new Error('Lead ID is missing');
@@ -1187,40 +1206,58 @@ export function LeadDetailModal({
                       const hasVerifiedConsent = voiceConsentStatus === 'GRANTED' && !isDncOrOptedOut;
 
                       return (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsCallModalOpen(true)}
-                          disabled={!hasValidPhone || isCallInProgress || callMutation.isPending}
-                          className={`h-7 px-2.5 text-xs gap-1.5 font-medium cursor-pointer ${
-                            hasVerifiedConsent
-                              ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
-                              : 'border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
-                          } ${
-                            (!hasValidPhone || isCallInProgress) ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          title={
-                            !hasValidPhone
-                              ? 'A valid 10-digit phone number is needed to call'
-                              : isCallInProgress
-                              ? 'A call is already in progress for this person'
-                              : isDncOrOptedOut
-                              ? 'Do Not Contact: This person cannot be called'
-                              : !hasVerifiedConsent
-                              ? 'Permission needed to call (click to view details)'
-                              : 'Call this person with AI'
-                          }
-                        >
-                          {callMutation.isPending ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Bot className={`w-3 h-3 ${hasVerifiedConsent ? 'text-emerald-500' : 'text-amber-500'}`} />
-                          )}
-                          <span>Call with AI</span>
-                          {!hasVerifiedConsent && hasValidPhone && !isCallInProgress && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Permission needed" />
-                          )}
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => clickToCallMutation.mutate()}
+                            disabled={!hasValidPhone || clickToCallMutation.isPending}
+                            className="h-7 px-2.5 text-xs gap-1.5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 cursor-pointer"
+                            title="Call this prospect via Zoiper softphone with agent-first bridging & full number masking"
+                          >
+                            {clickToCallMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <PhoneCall className="w-3 h-3 text-white" />
+                            )}
+                            <span>Call (Zoiper)</span>
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsCallModalOpen(true)}
+                            disabled={!hasValidPhone || isCallInProgress || callMutation.isPending}
+                            className={`h-7 px-2.5 text-xs gap-1.5 font-medium cursor-pointer ${
+                              hasVerifiedConsent
+                                ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                                : 'border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+                            } ${
+                              (!hasValidPhone || isCallInProgress) ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                            title={
+                              !hasValidPhone
+                                ? 'A valid 10-digit phone number is needed to call'
+                                : isCallInProgress
+                                ? 'A call is already in progress for this person'
+                                : isDncOrOptedOut
+                                ? 'Do Not Contact: This person cannot be called'
+                                : !hasVerifiedConsent
+                                ? 'Permission needed to call (click to view details)'
+                                : 'Call this person with AI'
+                            }
+                          >
+                            {callMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Bot className={`w-3 h-3 ${hasVerifiedConsent ? 'text-emerald-500' : 'text-amber-500'}`} />
+                            )}
+                            <span>AI Call</span>
+                            {!hasVerifiedConsent && hasValidPhone && !isCallInProgress && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Permission needed" />
+                            )}
+                          </Button>
+                        </div>
                       );
                     })()}
                     {canEdit && onBookTrialClick && canBookTrial && (

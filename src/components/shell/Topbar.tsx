@@ -36,6 +36,7 @@ import { exitImpersonateApi } from "@/api/endpoints/api-platform";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { crmApi, type InAppNotification } from "@/api/endpoints/crmApi";
+import { AgentPresenceWidget, MissedCallsDesk } from "@/components/crm/telephony";
 
 // ── Helper: derive breadcrumb segments from pathname ──────────────────────────
 function buildBreadcrumbs(pathname: string, navLabel?: string, sectionLabel?: string) {
@@ -478,6 +479,10 @@ export function Topbar() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Sales Calling: Zoiper Softphone Presence & Missed Calls Desk */}
+          <AgentPresenceWidget />
+          <MissedCallsDesk />
 
           {/* Theme Toggle Button */}
           <Button

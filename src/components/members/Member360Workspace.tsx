@@ -106,6 +106,9 @@ import {
   PurchaseProgramPackageModal,
 } from './modals/MemberActionModals';
 
+import { usePermissions } from '@/lib/permissions';
+import { useAuth } from '@/contexts';
+
 interface Member360WorkspaceProps {
   memberId: string;
   initialTab?: string | undefined;
@@ -128,8 +131,22 @@ const resolveInitialTab = (tab?: string): TabKey => {
 export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId, initialTab }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can, isSuperAdmin } = usePermissions();
+  const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveInitialTab(initialTab));
+  const roleStr = (user?.role || '').toLowerCase().trim();
+  const isSalesOrCounselor = roleStr.includes('sales') || roleStr.includes('counselor') || roleStr.includes('front desk');
+
+  const canViewFinance = !isSalesOrCounselor && (isSuperAdmin || can('members.finance.view') || can('finance.view') || roleStr.includes('admin') || roleStr.includes('manager') || roleStr.includes('finance'));
+  const canViewHealth = !isSalesOrCounselor && (isSuperAdmin || can('members.health.view') || can('health.view') || roleStr.includes('admin') || roleStr.includes('manager') || roleStr.includes('trainer'));
+  const canAdjustEntitlements = !isSalesOrCounselor && (isSuperAdmin || can('members.entitlements.adjust') || roleStr.includes('admin') || roleStr.includes('manager'));
+
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const init = resolveInitialTab(initialTab);
+    if (init === 'finance' && !canViewFinance) return 'overview';
+    if (init === 'health' && !canViewHealth) return 'overview';
+    return init;
+  });
 
   React.useEffect(() => {
     if (initialTab) {
@@ -678,7 +695,12 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {header.available_actions?.filter((act) => act.action !== 'PURCHASE_PACKAGE').map((act) => {
+              {header.available_actions?.filter((act) => {
+                if (act.action === 'PURCHASE_PACKAGE') return false;
+                if (!canAdjustEntitlements && (act.action === 'ADJUST_ENTITLEMENT' || act.action === 'ADJUST_SESSIONS' || act.action === 'CANCEL')) return false;
+                if (!canViewFinance && act.action === 'COLLECT_PAYMENT') return false;
+                return true;
+              }).map((act) => {
                 const isCheckIn = act.action === 'CHECK_IN';
                 const isUnfreeze = act.action === 'UNFREEZE';
                 const isCollect = act.action === 'COLLECT_PAYMENT';
@@ -737,28 +759,31 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         <div className="border-b border-border">
           <div className="flex space-x-1 sm:space-x-4 overflow-x-auto pb-px">
             {[
-              { key: 'overview', label: 'Overview', icon: User },
-              { key: 'timeline', label: 'Timeline', icon: History, count: (timeline || []).length },
-              { key: 'memberships', label: 'Memberships & Passbook', icon: Layers },
+              { key: 'overview', label: 'Overview', icon: User, visible: true },
+              { key: 'timeline', label: 'Timeline', icon: History, count: (timeline || []).length, visible: true },
+              { key: 'memberships', label: 'Memberships & Passbook', icon: Layers, visible: true },
               {
                 key: 'bookings',
                 label: 'Bookings & Attendance',
                 icon: Calendar,
                 count: (bookings_and_attendance?.upcoming_bookings || []).length,
+                visible: true,
               },
-              { key: 'finance', label: 'Finance', icon: CreditCard },
+              { key: 'finance', label: 'Finance', icon: CreditCard, visible: canViewFinance },
               {
                 key: 'health',
                 label: 'PAR-Q Form',
                 icon: HeartPulse,
                 count: (par_q_form?.submissions || health_and_forms?.submissions || []).length,
+                visible: canViewHealth,
               },
               {
                 key: 'wellness',
                 label: 'Nutrition & Wellness',
                 icon: Utensils,
+                visible: true,
               },
-            ].map((tab) => {
+            ].filter((t) => t.visible).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
               return (
@@ -821,7 +846,13 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   </div>
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Phone</span>
-                    <span className="font-medium font-mono text-foreground">{overview.contact.phone || '—'}</span>
+                    <span className="font-medium font-mono text-foreground">
+                      {overview.contact.phone
+                        ? (isSalesOrCounselor && overview.contact.phone.length >= 4
+                            ? `+91-XXXXX-${overview.contact.phone.slice(-4)}`
+                            : overview.contact.phone)
+                        : '—'}
+                    </span>
                   </div>
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Email</span>
@@ -833,7 +864,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       {overview.contact.gender || '—'} {overview.contact.age ? `(${overview.contact.age} yrs)` : ''}
                     </span>
                   </div>
-                  {(overview.contact as any)?.date_of_birth && (
+                  {!isSalesOrCounselor && (overview.contact as any)?.date_of_birth && (
                     <div className="pt-2 flex justify-between">
                       <span className="text-muted-foreground">Date of Birth</span>
                       <span className="font-medium text-foreground font-mono">
@@ -841,10 +872,12 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       </span>
                     </div>
                   )}
-                  <div className="pt-2 flex justify-between">
-                    <span className="text-muted-foreground">Emergency Contact</span>
-                    <span className="font-medium text-foreground">{overview.contact.emergency_contact || 'None specified'}</span>
-                  </div>
+                  {!isSalesOrCounselor && (
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-muted-foreground">Emergency Contact</span>
+                      <span className="font-medium text-foreground">{overview.contact.emergency_contact || 'None specified'}</span>
+                    </div>
+                  )}
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Acquisition Source</span>
                     <Badge variant="outline" className="text-xs">
@@ -944,21 +977,25 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       <div>
                         <div className="text-xs text-muted-foreground">Contracted Price</div>
                         <div className="font-bold text-foreground text-sm mt-0.5">
-                          {overview.current_membership.contract_snapshot ? (
-                            <>
-                              ₹{Number(overview.current_membership.contract_snapshot.final_amount).toLocaleString()}
-                              {overview.current_membership.contract_snapshot.discount_amount > 0 && (
-                                <span className="text-xs text-emerald-500 font-normal ml-1.5">
-                                  (Saved ₹{overview.current_membership.contract_snapshot.discount_amount.toLocaleString()})
-                                </span>
-                              )}
-                            </>
+                          {canViewFinance ? (
+                            overview.current_membership.contract_snapshot ? (
+                              <>
+                                ₹{Number(overview.current_membership.contract_snapshot.final_amount).toLocaleString()}
+                                {overview.current_membership.contract_snapshot.discount_amount > 0 && (
+                                  <span className="text-xs text-emerald-500 font-normal ml-1.5">
+                                    (Saved ₹{overview.current_membership.contract_snapshot.discount_amount.toLocaleString()})
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              'Snapshot Pending'
+                            )
                           ) : (
-                            'Snapshot Pending'
+                            <span className="text-emerald-500 font-medium text-xs">Active Commercial Membership</span>
                           )}
                         </div>
                         <div className="text-[11px] text-muted-foreground">
-                          Immutable audit record
+                          {canViewFinance ? 'Immutable audit record' : 'Commercial enrollment verified'}
                         </div>
                       </div>
                     </div>

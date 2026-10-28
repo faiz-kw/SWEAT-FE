@@ -20,6 +20,9 @@ import {
   CheckCircle2,
   XCircle,
   Megaphone,
+  PhoneCall,
+  Headphones,
+  PhoneMissed,
 } from 'lucide-react';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { api } from '@/api/client';
@@ -142,6 +145,7 @@ export function CRMDashboardWorkspace() {
   const attentionData = dashboardData?.attention;
   const agentsData = dashboardData?.agents || [];
   const branchesData = dashboardData?.branches || [];
+  const telephony = dashboardData?.telephony;
 
   const handleDrilldown = (path: string, params?: Record<string, string>) => {
     const sp = new URLSearchParams();
@@ -1068,6 +1072,143 @@ export function CRMDashboardWorkspace() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              {/* Telephony & Sales Calling Performance (Vobiz Engine) */}
+              <div className="bg-card border border-border rounded-xl p-5 shadow-2xs space-y-4 col-span-1 lg:col-span-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <PhoneCall className="h-4 w-4 text-emerald-500" />
+                      Sales Calling &amp; Telephony (Vobiz Softphone)
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Outbound &amp; Inbound dials, connection velocity, 60s pulse billing, and rep call time
+                    </p>
+                  </div>
+                  {telephony && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-xs">
+                        Connect Rate: {telephony.connect_rate_pct}%
+                      </Badge>
+                      <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-mono text-xs">
+                        Meaningful (≥30s): {telephony.meaningful_rate_pct}%
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                {/* KPI Strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Dials</div>
+                    <div className="text-lg font-bold text-foreground mt-0.5">{telephony?.total_dials ?? 0}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {telephony?.outbound_calls ?? 0} Out / {telephony?.inbound_calls ?? 0} In
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Connected</div>
+                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {telephony?.connected_calls ?? 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                      {telephony?.connect_rate_pct ?? 0}% answered
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Meaningful (≥30s)</div>
+                    <div className="text-lg font-bold text-primary mt-0.5">
+                      {telephony?.meaningful_calls ?? 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                      {telephony?.meaningful_rate_pct ?? 0}% of connects
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Talk Time</div>
+                    <div className="text-lg font-bold text-foreground mt-0.5">
+                      {Math.floor((telephony?.total_talk_time_seconds ?? 0) / 60)}m {Math.floor((telephony?.total_talk_time_seconds ?? 0) % 60)}s
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Pure conversation</div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Billable Pulse</div>
+                    <div className="text-lg font-bold text-foreground mt-0.5">
+                      {Math.ceil((telephony?.total_bill_duration_seconds ?? 0) / 60)} mins
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">60s pulse billing</div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 border border-border/50 text-center">
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Missed Inbound</div>
+                    <div className={`text-lg font-bold mt-0.5 ${(telephony?.missed_inbound ?? 0) > 0 ? 'text-rose-500' : 'text-foreground'}`}>
+                      {telephony?.missed_inbound ?? 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Need callback</div>
+                  </div>
+                </div>
+
+                {/* Sub-grid: Dispositions & Rep Leaderboard */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  {/* Top Dispositions */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-foreground">Top Call Outcomes / Dispositions</div>
+                    {(telephony?.top_dispositions?.length ?? 0) === 0 ? (
+                      <div className="p-4 text-center text-xs text-muted-foreground rounded-lg border border-dashed border-border">
+                        No call dispositions submitted yet
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {telephony?.top_dispositions.map((d) => (
+                          <div key={d.disposition} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/30 border border-border/40">
+                            <span className="font-medium text-foreground">{d.disposition.replace(/_/g, ' ')}</span>
+                            <Badge variant="secondary" className="font-mono text-[10px]">{d.count} calls</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rep Leaderboard */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-foreground">Sales Rep Call Leaderboard</div>
+                    {(telephony?.agent_leaderboard?.length ?? 0) === 0 ? (
+                      <div className="p-4 text-center text-xs text-muted-foreground rounded-lg border border-dashed border-border">
+                        No softphone calls logged for agents
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-border text-muted-foreground text-[11px]">
+                              <th className="pb-1.5">Rep</th>
+                              <th className="pb-1.5 text-right">Dials</th>
+                              <th className="pb-1.5 text-right">Connects</th>
+                              <th className="pb-1.5 text-right">≥30s</th>
+                              <th className="pb-1.5 text-right">Talk Time</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40">
+                            {telephony?.agent_leaderboard.map((rep) => (
+                              <tr key={rep.agent_id} className="hover:bg-muted/30">
+                                <td className="py-1.5 font-medium text-foreground truncate max-w-[120px]">{rep.agent_name}</td>
+                                <td className="py-1.5 text-right font-mono">{rep.total_calls}</td>
+                                <td className="py-1.5 text-right font-mono">{rep.connected}</td>
+                                <td className="py-1.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{rep.meaningful}</td>
+                                <td className="py-1.5 text-right font-mono">{Math.floor(rep.talk_time_seconds / 60)}m</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

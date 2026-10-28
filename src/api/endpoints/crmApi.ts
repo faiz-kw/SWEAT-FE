@@ -1149,6 +1149,110 @@ export const crmApi = {
   exportLeadsExcel: async (params?: Record<string, any>): Promise<Blob> => {
     return api.downloadBlob('/tenant/leads/export-excel/', { params });
   },
+
+  // ── Telephony & Vobiz Sales Calling ──────────────────────────────────────────
+  clickToCall: async (leadId: string): Promise<{
+    call_session_id: string;
+    status: string;
+    message: string;
+    agent_sip: string;
+    masked_phone: string;
+  }> => {
+    const res = await api.post<{
+      call_session_id: string;
+      status: string;
+      message: string;
+      agent_sip: string;
+      masked_phone: string;
+    }>('/tenant/crm/telephony/click-to-call/', { lead_id: leadId });
+    return res.data;
+  },
+
+  submitDisposition: async (payload: {
+    session_id: string;
+    disposition: string;
+    disposition_notes?: string;
+    followup_date?: string;
+  }): Promise<{
+    status: string;
+    session_id: string;
+    disposition: string;
+    agent_presence: string;
+  }> => {
+    const res = await api.post<{
+      status: string;
+      session_id: string;
+      disposition: string;
+      agent_presence: string;
+    }>('/tenant/crm/telephony/disposition/', payload);
+    return res.data;
+  },
+
+  getMissedCalls: async (): Promise<Array<{
+    id: string;
+    call_uuid: string;
+    started_at: string;
+    lead: {
+      id: string;
+      first_name: string;
+      last_name: string;
+      branch_name?: string;
+      masked_phone: string;
+      status: string;
+    } | null;
+    user_phone_number: string;
+    sales_rep_name?: string;
+    status: string;
+  }>> => {
+    const res = await api.get<{
+      missed_calls: Array<{
+        id: string;
+        call_uuid: string;
+        started_at: string;
+        lead: {
+          id: string;
+          first_name: string;
+          last_name: string;
+          branch_name?: string;
+          masked_phone: string;
+          status: string;
+        } | null;
+        user_phone_number: string;
+        sales_rep_name?: string;
+        status: string;
+      }>;
+    }>('/tenant/crm/telephony/missed-calls/');
+    return res.data?.missed_calls || [];
+  },
+
+  getAgentPresence: async (): Promise<{
+    status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
+    sip_username: string;
+    last_heartbeat: string;
+    active_session_id?: string | null;
+  }> => {
+    const res = await api.get<{
+      status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
+      sip_username: string;
+      last_heartbeat: string;
+      active_session_id?: string | null;
+    }>('/tenant/crm/telephony/presence/');
+    return res.data;
+  },
+
+  updateAgentPresence: async (presenceStatus: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE'): Promise<{
+    status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
+    sip_username: string;
+    last_heartbeat: string;
+  }> => {
+    const res = await api.put<{
+      status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
+      sip_username: string;
+      last_heartbeat: string;
+    }>('/tenant/crm/telephony/presence/', { status: presenceStatus });
+    return res.data;
+  },
 };
+
 
 

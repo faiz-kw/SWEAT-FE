@@ -587,6 +587,26 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     setIsTrialOpen(true);
   };
 
+  const [callingLeadId, setCallingLeadId] = React.useState<string | null>(null);
+
+  const handleQuickCall = async (lead: Lead) => {
+    if (!lead.phone_normalized) {
+      toast.error('No phone number available for this lead.');
+      return;
+    }
+    try {
+      setCallingLeadId(lead.id);
+      toast.info(`Connecting to ${lead.first_name}... Ringing your Zoiper softphone.`);
+      const res = await crmApi.clickToCall(lead.id);
+      toast.success(res.message || 'Call initiated! Answer your Zoiper softphone.');
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.error || err?.message || 'Failed to initiate click-to-call';
+      toast.error(errMsg);
+    } finally {
+      setCallingLeadId(null);
+    }
+  };
+
   const [isExporting, setIsExporting] = React.useState(false);
 
   const handleExportExcel = async () => {
@@ -1682,6 +1702,19 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
 
                               return (
                                 <div className="inline-flex items-center justify-end gap-1.5">
+                                  {!isConverted && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleQuickCall(lead)}
+                                      disabled={callingLeadId === lead.id}
+                                      className="h-7 px-2.5 text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 shadow-2xs gap-1 cursor-pointer"
+                                      title="Click-to-Call (Zoiper Softphone)"
+                                    >
+                                      <Phone className={`w-3.5 h-3.5 ${callingLeadId === lead.id ? 'animate-pulse' : ''}`} />
+                                      <span>{callingLeadId === lead.id ? 'Calling...' : 'Call'}</span>
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1920,6 +1953,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           ) : (
                             canEdit && (
                               <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleQuickCall(lead)}
+                                  disabled={callingLeadId === lead.id}
+                                  className="h-8 px-2.5 text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 gap-1 shadow-xs"
+                                >
+                                  <Phone className={`w-3.5 h-3.5 ${callingLeadId === lead.id ? 'animate-pulse' : ''}`} />
+                                  <span>{callingLeadId === lead.id ? 'Calling...' : 'Call'}</span>
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"

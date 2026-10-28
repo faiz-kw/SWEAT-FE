@@ -48,6 +48,7 @@ interface NewLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  initialPhone?: string;
 }
 
 interface LeadFormErrors {
@@ -64,7 +65,7 @@ interface LeadFormErrors {
   panNumber?: string;
 }
 
-export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProps) {
+export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: NewLeadModalProps) {
   const queryClient = useQueryClient();
 
   // --- Form State ---
@@ -72,9 +73,15 @@ export function NewLeadModal({ open, onOpenChange, onSuccess }: NewLeadModalProp
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
-  const [phone, setPhone] = React.useState('');
+  const [phone, setPhone] = React.useState(initialPhone || '');
   const [gender, setGender] = React.useState('');
   const [dateOfBirth, setDateOfBirth] = React.useState('');
+
+  React.useEffect(() => {
+    if (initialPhone && open) {
+      setPhone(initialPhone);
+    }
+  }, [initialPhone, open]);
 
   // Section 2: Interest & Location
   const [selectedBranch, setSelectedBranch] = React.useState('');

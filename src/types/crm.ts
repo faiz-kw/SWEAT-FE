@@ -1398,7 +1398,31 @@ export interface CRMDashboardResponse {
   agents: CRMAgentPerformanceItem[];
   branches: CRMBranchPerformanceItem[];
   trends: CRMTrendBucket[];
+  telephony?: CRMDashboardTelephony;
 }
+
+export interface CRMDashboardTelephony {
+  total_dials: number;
+  connected_calls: number;
+  connect_rate_pct: number;
+  meaningful_calls: number;
+  meaningful_rate_pct: number;
+  inbound_calls: number;
+  outbound_calls: number;
+  missed_inbound: number;
+  total_talk_time_seconds: number;
+  total_bill_duration_seconds: number;
+  top_dispositions: Array<{ disposition: string; count: number }>;
+  agent_leaderboard: Array<{
+    agent_id: string;
+    agent_name: string;
+    total_calls: number;
+    connected: number;
+    meaningful: number;
+    talk_time_seconds: number;
+  }>;
+}
+
 
 
 

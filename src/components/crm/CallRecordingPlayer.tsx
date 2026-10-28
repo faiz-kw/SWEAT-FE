@@ -153,6 +153,10 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
   // Resolve effective audio playback URL
   const resolvedAudioUrl = React.useMemo(() => {
     let raw = recordingUrl;
+    // For Vobiz carrier recordings, always route through authenticated proxy to prevent public CDN leaks (Risk R6)
+    if (callSessionId && (provider?.toUpperCase() === 'VOBIZ' || raw?.includes('vobiz.ai') || title?.toLowerCase().includes('zoiper') || title?.toLowerCase().includes('sales'))) {
+      return `/api/v1/tenant/crm/telephony/recordings/${callSessionId}/stream/`;
+    }
     if (!raw && callSessionId) {
       raw = `/api/v1/voice-agent/recordings/${callSessionId}/audio.wav`;
     }
@@ -161,7 +165,7 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
       raw = raw.replace(/\/audio\/$/, '/audio.wav');
     }
     return raw;
-  }, [recordingUrl, callSessionId]);
+  }, [recordingUrl, callSessionId, provider, title]);
 
   // Ensure audio element loads source whenever resolvedAudioUrl changes
   React.useEffect(() => {

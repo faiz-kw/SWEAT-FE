@@ -9,6 +9,7 @@ import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { hasPermission } from "@/lib/permissions";
 import { NAV, isOrganizationAdmin, isMemberUser } from "@/lib/nav";
 import { toast } from "sonner";
+import { TelephonyManager } from "@/components/crm/telephony";
 
 export const Route = createFileRoute("/_shell")({
   beforeLoad: async ({ location }) => {
@@ -207,6 +208,7 @@ function ShellLayout() {
 
   return (
     <AppProvider>
+      <TelephonyManager />
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
