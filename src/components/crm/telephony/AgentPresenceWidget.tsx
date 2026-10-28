@@ -92,7 +92,7 @@ export function AgentPresenceWidget() {
       <DropdownMenuTrigger asChild>
         <button
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${statusConfig.border} ${statusConfig.bgLight} ${statusConfig.text} hover:opacity-90`}
-          title={`Zoiper Softphone: ${statusConfig.label}`}
+          title={`Vobiz WebPhone: ${statusConfig.label}`}
         >
           <span className="relative flex h-2 w-2">
             {statusConfig.ping && (
@@ -108,7 +108,7 @@ export function AgentPresenceWidget() {
 
       <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl rounded-xl border-border bg-popover text-popover-foreground">
         <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground px-2 py-1">
-          Zoiper Softphone Status
+          Vobiz WebPhone Status
           {presence?.sip_username && (
             <div className="font-mono text-[10px] text-foreground font-normal truncate mt-0.5">
               sip:{presence.sip_username}@registrar.vobiz.ai

@@ -1951,7 +1951,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                       onClick={() => handleQuickCall(lead)}
                                       disabled={callingLeadId === lead.id}
                                       className="h-7 px-2.5 text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 shadow-2xs gap-1 cursor-pointer"
-                                      title="Click-to-Call (Zoiper Softphone)"
+                                      title="Click-to-Call (Vobiz WebPhone)"
                                     >
                                       <Phone className={`w-3.5 h-3.5 ${callingLeadId === lead.id ? 'animate-pulse' : ''}`} />
                                       <span>{callingLeadId === lead.id ? 'Calling...' : 'Call'}</span>

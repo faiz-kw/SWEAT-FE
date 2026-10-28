@@ -867,7 +867,7 @@ export function LeadDetailModal({
     },
   });
 
-  // Human Sales Click-to-Call (Zoiper Softphone + Vobiz)
+  // Human Sales Click-to-Call (Vobiz WebPhone)
   const clickToCallMutation = useMutation({
     mutationFn: async () => {
       if (!currentLead?.id) throw new Error('Lead ID is missing');
@@ -875,7 +875,7 @@ export function LeadDetailModal({
     },
     onSuccess: (data) => {
       toast.success('Calling Softphone...', {
-        description: `Ringing your Zoiper softphone first! Once you pick up, ${data.masked_phone} will be bridged automatically.`,
+        description: `Ringing your Vobiz WebPhone first! Once you pick up, ${data.masked_phone} will be bridged automatically.`,
         duration: 8000,
       });
       queryClient.invalidateQueries({ queryKey: ['telephony-presence'] });
@@ -1238,7 +1238,7 @@ export function LeadDetailModal({
                             ) : (
                               <PhoneCall className="w-3 h-3 text-white" />
                             )}
-                            <span>{webPhoneCallState === 'CONNECTED' ? 'In Call' : isWebPhoneReady ? 'Call' : 'Call (Zoiper)'}</span>
+                            <span>{webPhoneCallState === 'CONNECTED' ? 'In Call' : isWebPhoneReady ? 'Call' : 'Call (WebPhone)'}</span>
                           </Button>
 
                           <Button

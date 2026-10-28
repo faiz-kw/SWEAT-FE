@@ -70,7 +70,7 @@ export function MissedCallsDesk() {
   const callbackMutation = useMutation({
     mutationFn: (leadId: string) => crmApi.clickToCall(leadId),
     onSuccess: (res) => {
-      toast.success(res.message || "Calling your Zoiper softphone first, then bridging lead.");
+      toast.success(res.message || "Calling your Vobiz WebPhone first, then bridging lead.");
       queryClient.invalidateQueries({ queryKey: ['telephony-missed-calls'] });
     },
     onError: (err: any) => {
