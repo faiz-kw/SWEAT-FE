@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneOff, Clock, ShieldCheck, Calendar, CheckCircle2, AlertCircle } from "lucide-react";
+import { PhoneOff, Clock, ShieldCheck, Calendar, CheckCircle2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { toast } from "sonner";
 
@@ -43,6 +44,7 @@ const DISPOSITION_OPTIONS = [
   { value: "NOT_INTERESTED", label: "❌ Not Interested / Dropped", color: "text-rose-500" },
   { value: "NO_ANSWER", label: "📵 No Answer / Unreachable", color: "text-muted-foreground" },
   { value: "BUSY", label: "⚠️ Busy / Call Rejected", color: "text-muted-foreground" },
+  { value: "SWITCHED_OFF", label: "📵 Switched Off / Network Unavailable", color: "text-muted-foreground" },
   { value: "WRONG_NUMBER", label: "🚫 Wrong / Invalid Number", color: "text-red-500" },
 ];
 
@@ -55,6 +57,31 @@ export function CallDispositionModal({
   const [notes, setNotes] = React.useState<string>("");
   const [followupDate, setFollowupDate] = React.useState<string>("");
   const [isSubmitting, setIsSubmitting] = React.useState<boolean>(false);
+  const [sendWhatsApp, setSendWhatsApp] = React.useState<boolean>(true);
+  const [whatsappMsg, setWhatsappMsg] = React.useState<string>("");
+
+  const leadFirstName = React.useMemo(() => {
+    return callEndedData?.lead_name?.split(' ')[0] || 'there';
+  }, [callEndedData?.lead_name]);
+
+  // Set default WhatsApp message whenever lead changes
+  React.useEffect(() => {
+    setWhatsappMsg(
+      `Hi ${leadFirstName}, I tried reaching you from SWEAT Elite regarding your fitness inquiry. When is a convenient time to speak?`
+    );
+  }, [leadFirstName]);
+
+  // Check if disposition is an unanswered / busy scenario
+  const isUnansweredOutcome = React.useMemo(() => {
+    return ["NO_ANSWER", "BUSY", "SWITCHED_OFF", "CALLBACK_REQUESTED"].includes(disposition);
+  }, [disposition]);
+
+  // Automatically enable WhatsApp toggle when user chooses No Answer or Busy
+  React.useEffect(() => {
+    if (isUnansweredOutcome) {
+      setSendWhatsApp(true);
+    }
+  }, [isUnansweredOutcome]);
 
   // Format seconds to mm:ss
   const formatDuration = (totalSeconds?: number) => {
@@ -82,14 +109,23 @@ export function CallDispositionModal({
 
     try {
       setIsSubmitting(true);
-      await crmApi.submitDisposition({
+      const res = await crmApi.submitDisposition({
         session_id: callEndedData.session_id,
         disposition,
         disposition_notes: notes.trim(),
         followup_date: followupDate ? new Date(followupDate).toISOString() : undefined,
+        send_whatsapp: isUnansweredOutcome ? sendWhatsApp : false,
+        whatsapp_message: isUnansweredOutcome && sendWhatsApp ? whatsappMsg.trim() : undefined,
       });
 
-      toast.success("Call disposition logged. Softphone presence reset to Available.");
+      if (res.whatsapp_sent) {
+        toast.success(
+          `Call logged and WhatsApp follow-up delivered to ${leadFirstName}! Presence reset to Available.`
+        );
+      } else {
+        toast.success("Call disposition logged. Softphone presence reset to Available.");
+      }
+
       setNotes("");
       setFollowupDate("");
       onDispositionComplete();
@@ -205,6 +241,53 @@ export function CallDispositionModal({
             </div>
           )}
 
+          {/* Automated WhatsApp Follow-up Card on Unanswered / Busy */}
+          {isUnansweredOutcome && (
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 space-y-2.5 animate-in fade-in-50 duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                    <MessageSquare className="size-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                      Automated WhatsApp Outreach
+                    </span>
+                    <p className="text-[10px] text-muted-foreground">
+                      Gupshup / Meta Template: <code className="font-mono text-[9px] text-emerald-600 dark:text-emerald-400">sweat_call_missed_followup</code>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Switch
+                    id="send-wa-switch"
+                    checked={sendWhatsApp}
+                    onCheckedChange={setSendWhatsApp}
+                  />
+                  <Label htmlFor="send-wa-switch" className="text-[11px] font-semibold cursor-pointer">
+                    {sendWhatsApp ? "Auto-Send" : "Skip"}
+                  </Label>
+                </div>
+              </div>
+
+              {sendWhatsApp && (
+                <div className="space-y-1.5 pt-1 border-t border-emerald-500/20">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Message to {leadFirstName}:</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">1-Click Delivery</span>
+                  </div>
+                  <Textarea
+                    rows={2}
+                    value={whatsappMsg}
+                    onChange={(e) => setWhatsappMsg(e.target.value)}
+                    className="resize-none text-xs rounded-lg bg-background/80 border-emerald-500/30 focus-visible:ring-emerald-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Detailed Notes */}
           <div className="space-y-1.5">
             <Label htmlFor="disposition-notes" className="text-xs font-bold text-foreground">
@@ -212,10 +295,10 @@ export function CallDispositionModal({
             </Label>
             <Textarea
               id="disposition-notes"
-              rows={3}
+              rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Lead agreed to Saturday 8 AM HIIT trial session. Interested in weight loss and strength..."
+              placeholder="e.g. Call rang with no answer. Sent automated WhatsApp follow-up..."
               className="resize-none text-xs rounded-xl"
             />
           </div>
@@ -227,7 +310,12 @@ export function CallDispositionModal({
               className="w-full h-10 font-bold text-xs gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 cursor-pointer"
             >
               <CheckCircle2 className="size-4" />
-              {isSubmitting ? "Saving & Resetting Softphone..." : "Save Disposition & Set Status Available"}
+              {isSubmitting 
+                ? "Logging Outcome & Dispatching..." 
+                : isUnansweredOutcome && sendWhatsApp
+                ? "Save Disposition & Send WhatsApp"
+                : "Save Disposition & Set Status Available"
+              }
             </Button>
           </DialogFooter>
         </form>

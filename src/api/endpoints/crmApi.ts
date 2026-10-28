@@ -1190,18 +1190,17 @@ export const crmApi = {
     disposition: string;
     disposition_notes?: string;
     followup_date?: string;
+    send_whatsapp?: boolean;
+    whatsapp_message?: string;
   }): Promise<{
-    status: string;
-    session_id: string;
-    disposition: string;
-    agent_presence: string;
+    status?: string;
+    success?: boolean;
+    session_id?: string;
+    disposition?: string;
+    agent_presence?: string;
+    whatsapp_sent?: boolean;
   }> => {
-    const res = await api.post<{
-      status: string;
-      session_id: string;
-      disposition: string;
-      agent_presence: string;
-    }>('/tenant/crm/telephony/disposition/', payload);
+    const res = await api.post('/tenant/crm/telephony/disposition/', payload);
     return res.data;
   },
 
