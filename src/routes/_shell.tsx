@@ -9,7 +9,7 @@ import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { hasPermission } from "@/lib/permissions";
 import { NAV, isOrganizationAdmin, isMemberUser } from "@/lib/nav";
 import { toast } from "sonner";
-import { TelephonyManager } from "@/components/crm/telephony";
+import { TelephonyManager, WebRTCPhoneProvider } from "@/components/crm/telephony";
 
 export const Route = createFileRoute("/_shell")({
   beforeLoad: async ({ location }) => {
@@ -206,18 +206,35 @@ function ShellLayout() {
     );
   }
 
+  // Role & Permissions Guard: Only Sales Reps & Admins mount WebPhone and receive sales calls
+  const isSalesOrAdmin = !isMemberMode && Boolean(
+    isOrganizationAdmin(user) ||
+    hasPermission(user, 'crm.leads.edit') ||
+    hasPermission(user, 'crm.leads.view')
+  );
+
+  const shellContent = (
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      <Sidebar />
+      <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
+        <Topbar />
+        <main ref={mainRef} className="scrollbar-thin flex-1 min-h-0 overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+
   return (
     <AppProvider>
-      <TelephonyManager />
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
-          <Topbar />
-          <main ref={mainRef} className="scrollbar-thin flex-1 min-h-0 overflow-y-auto">
-            <Outlet />
-          </main>
-        </div>
-      </div>
+      {isSalesOrAdmin ? (
+        <WebRTCPhoneProvider>
+          <TelephonyManager />
+          {shellContent}
+        </WebRTCPhoneProvider>
+      ) : (
+        shellContent
+      )}
     </AppProvider>
   );
 }

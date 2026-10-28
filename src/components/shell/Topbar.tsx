@@ -36,7 +36,7 @@ import { exitImpersonateApi } from "@/api/endpoints/api-platform";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { crmApi, type InAppNotification } from "@/api/endpoints/crmApi";
-import { AgentPresenceWidget, MissedCallsDesk } from "@/components/crm/telephony";
+import { AgentPresenceWidget, MissedCallsDesk, WebPhoneBar } from "@/components/crm/telephony";
 
 // ── Helper: derive breadcrumb segments from pathname ──────────────────────────
 function buildBreadcrumbs(pathname: string, navLabel?: string, sectionLabel?: string) {
@@ -165,6 +165,7 @@ export function Topbar() {
 
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
   const isOrgAdmin = isOrganizationAdmin(user);
+  const canAccessTelephony = isOrgAdmin || hasPermission(user, 'crm.leads.edit') || hasPermission(user, 'crm.leads.view');
   const enabledModules = user?.enabledModules ?? null;
 
   const searchResults = React.useMemo(() => {
@@ -480,9 +481,14 @@ export function Topbar() {
             </SelectContent>
           </Select>
 
-          {/* Sales Calling: Zoiper Softphone Presence & Missed Calls Desk */}
-          <AgentPresenceWidget />
-          <MissedCallsDesk />
+          {/* Sales Calling: WebRTC Phone, Agent Presence & Missed Calls Desk (Restricted to Sales & Admin roles) */}
+          {canAccessTelephony && (
+            <>
+              <WebPhoneBar />
+              <AgentPresenceWidget />
+              <MissedCallsDesk />
+            </>
+          )}
 
           {/* Theme Toggle Button */}
           <Button

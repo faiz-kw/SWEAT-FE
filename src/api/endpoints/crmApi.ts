@@ -888,6 +888,23 @@ export const crmApi = {
     return res.data;
   },
 
+  recycleStaleLeads: async (params?: { dry_run?: boolean; sla_hours?: number; dormant_days?: number }): Promise<{
+    status: string;
+    results: {
+      organization_id: string;
+      dry_run: boolean;
+      sla_breached_reassigned: number;
+      dormant_revived: number;
+      total_recycled: number;
+      sla_details: Array<{ lead_id: string; lead_name: string; previous_rep: string; new_rep?: string; reason: string }>;
+      dormant_details: Array<{ lead_id: string; lead_name: string; previous_rep: string; new_rep?: string; reason: string }>;
+    };
+  }> => {
+    const res = await api.post('/tenant/leads/recycle-stale/', params || {});
+    return res.data;
+  },
+
+
   getAttentionPolicy: async (): Promise<CRMAttentionPolicy> => {
     const res = await api.get<CRMAttentionPolicy[] | PaginatedResponse<CRMAttentionPolicy>>('/tenant/crm/attention-policy/');
     let list: CRMAttentionPolicy[] = [];
@@ -1250,6 +1267,40 @@ export const crmApi = {
       sip_username: string;
       last_heartbeat: string;
     }>('/tenant/crm/telephony/presence/', { status: presenceStatus });
+    return res.data;
+  },
+
+  getWebRTCCredentials: async (): Promise<{
+    username: string;
+    sip_domain: string;
+    sip_uri: string;
+    wss_url: string;
+    caller_id: string;
+    ring_timeout_sec: number;
+    status: string;
+    display_name: string;
+  }> => {
+    const res = await api.get('/tenant/crm/telephony/webrtc-credentials/');
+    return res.data;
+  },
+
+  getTelephonyConfig: async (): Promise<{
+    provider: string;
+    auth_id: string;
+    from_number: string;
+    registrar_host: string;
+    webrtc_gateway_url: string;
+    ring_timeout_sec: number;
+    record_all_calls: boolean;
+    status: string;
+    auth_token_masked?: string;
+  }> => {
+    const res = await api.get('/tenant/crm/telephony/config/');
+    return res.data;
+  },
+
+  updateTelephonyConfig: async (payload: Record<string, any>) => {
+    const res = await api.post('/tenant/crm/telephony/config/', payload);
     return res.data;
   },
 };

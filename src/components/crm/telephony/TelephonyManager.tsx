@@ -2,6 +2,7 @@ import * as React from "react";
 import { useAuth } from "@/contexts";
 import { getAccessToken } from "@/api/auth/tokenManager";
 import { InboundCallDrawer, type InboundCallPopupData } from "./InboundCallDrawer";
+import { useWebRTCPhone } from "./WebRTCPhoneContext";
 import { CallDispositionModal, type CallEndedData } from "./CallDispositionModal";
 import { LeadDetailModal } from "@/components/crm/LeadDetailModal";
 import { NewLeadModal } from "@/components/crm/NewLeadModal";
@@ -43,6 +44,27 @@ function playHarmonicChime() {
 export function TelephonyManager() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
+  const { lastEndedCall, clearLastEndedCall } = useWebRTCPhone();
+
+  // Handle in-browser WebRTC call termination -> Pop Mandatory Disposition Modal
+  React.useEffect(() => {
+    if (lastEndedCall) {
+      console.log("[TelephonyManager] In-browser WebRTC call finished:", lastEndedCall);
+      setActiveCallPopup(null);
+      setCallEndedData({
+        session_id: lastEndedCall.sessionId || `webrtc-${Date.now()}`,
+        lead_id: lastEndedCall.leadId,
+        lead_name: lastEndedCall.leadName || lastEndedCall.displayName,
+        member_id: lastEndedCall.memberId,
+        caller_phone: lastEndedCall.remoteIdentity,
+        direction: lastEndedCall.direction,
+        duration_seconds: lastEndedCall.durationSeconds,
+      });
+      setIsDispositionOpen(true);
+      clearLastEndedCall();
+      queryClient.invalidateQueries({ queryKey: ["telephony-presence"] });
+    }
+  }, [lastEndedCall, clearLastEndedCall, queryClient]);
 
   // Active call popup & disposition
   const [activeCallPopup, setActiveCallPopup] = React.useState<InboundCallPopupData | null>(null);

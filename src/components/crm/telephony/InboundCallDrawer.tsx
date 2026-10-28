@@ -2,6 +2,8 @@ import * as React from "react";
 import { PhoneCall, User, MapPin, FileText, ExternalLink, X, Headphones, UserCheck, UserPlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useWebRTCPhone } from "./WebRTCPhoneContext";
+import { PhoneOff } from "lucide-react";
 
 export interface InboundCallPopupData {
   session_id: string;
@@ -37,9 +39,12 @@ export function InboundCallDrawer({
 }: InboundCallDrawerProps) {
   if (!call) return null;
 
+  const { callState, answerCall, declineCall, hangupCall, activeCall } = useWebRTCPhone();
   const isMember = call.caller_type === 'MEMBER';
   const isLead = call.caller_type === 'LEAD';
   const isNew = call.caller_type === 'NEW';
+  const isRinging = callState === 'RINGING_INBOUND';
+  const isInCall = callState === 'CONNECTED';
 
   return (
     <div
@@ -119,10 +124,43 @@ export function InboundCallDrawer({
           </div>
         ) : null}
 
-        {/* Softphone Instruction Notice */}
-        <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2 text-xs text-primary font-medium">
-          <Headphones className="size-4 shrink-0 text-primary animate-pulse" />
-          <span>Pick up call on your softphone headset</span>
+        {/* In-Browser WebRTC Direct Call Controls */}
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-2.5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            <Headphones className="size-4 shrink-0 text-emerald-600 animate-pulse" />
+            <span>{isInCall ? "WebRTC Call Connected" : (isRinging ? "Ringing in Browser..." : "Ready to answer in Browser")}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {isInCall ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={hangupCall}
+                className="h-7 px-3 text-xs font-bold gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                <PhoneOff className="size-3" /> Hang Up
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  onClick={answerCall}
+                  className="h-7 px-3 text-xs font-bold gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30"
+                >
+                  <PhoneCall className="size-3" /> Answer
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={declineCall}
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-rose-500"
+                >
+                  Decline
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

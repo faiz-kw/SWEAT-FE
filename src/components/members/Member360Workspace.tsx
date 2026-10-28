@@ -21,6 +21,7 @@ import {
   Plus,
   User,
   Phone,
+  PhoneCall,
   Mail,
   Building2,
   Calendar,
@@ -67,6 +68,7 @@ import {
   Coffee,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useWebRTCPhone } from '@/components/crm/telephony';
 import { membersApi } from '@/api/endpoints/membersApi';
 import { wellnessApi } from '@/api/endpoints/wellnessApi';
 import { EditMemberProfileModal } from './modals/EditMemberProfileModal';
@@ -141,6 +143,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   const canViewHealth = !isSalesOrCounselor && (isSuperAdmin || can('members.health.view') || can('health.view') || roleStr.includes('admin') || roleStr.includes('manager') || roleStr.includes('trainer'));
   const canAdjustEntitlements = !isSalesOrCounselor && (isSuperAdmin || can('members.entitlements.adjust') || roleStr.includes('admin') || roleStr.includes('manager'));
 
+  const { isRegistered: isWebPhoneReady, makeCall: makeWebPhoneCall, callState: webPhoneCallState } = useWebRTCPhone();
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const init = resolveInitialTab(initialTab);
     if (init === 'finance' && !canViewFinance) return 'overview';
@@ -562,9 +565,21 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <span>{header.member_number}</span>
                   </div>
                   {member.phone && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-muted-foreground/70" />
                       <span>{member.phone}</span>
+                      {isWebPhoneReady && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 cursor-pointer"
+                          title="Call member directly in browser"
+                          disabled={webPhoneCallState !== 'IDLE'}
+                          onClick={() => makeWebPhoneCall(member.phone!, header.name, { memberId: member.id, leadName: header.name })}
+                        >
+                          <PhoneCall className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   )}
                   {member.email && (
@@ -844,15 +859,29 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <span className="text-muted-foreground">Full Name</span>
                     <span className="font-medium text-foreground">{overview.contact.full_name}</span>
                   </div>
-                  <div className="pt-2 flex justify-between">
+                  <div className="pt-2 flex justify-between items-center">
                     <span className="text-muted-foreground">Phone</span>
-                    <span className="font-medium font-mono text-foreground">
-                      {overview.contact.phone
-                        ? (isSalesOrCounselor && overview.contact.phone.length >= 4
-                            ? `+91-XXXXX-${overview.contact.phone.slice(-4)}`
-                            : overview.contact.phone)
-                        : '—'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium font-mono text-foreground">
+                        {overview.contact.phone
+                          ? (isSalesOrCounselor && overview.contact.phone.length >= 4
+                              ? `+91-XXXXX-${overview.contact.phone.slice(-4)}`
+                              : overview.contact.phone)
+                          : '—'}
+                      </span>
+                      {overview.contact.phone && isWebPhoneReady && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 cursor-pointer"
+                          title="Call member directly in browser"
+                          disabled={webPhoneCallState !== 'IDLE'}
+                          onClick={() => makeWebPhoneCall(overview.contact.phone, overview.contact.full_name || header.name, { memberId: member.id, leadName: header.name })}
+                        >
+                          <PhoneCall className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Email</span>

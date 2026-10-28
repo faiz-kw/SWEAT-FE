@@ -3,3 +3,6 @@ export * from "./CallDispositionModal";
 export * from "./MissedCallsDesk";
 export * from "./AgentPresenceWidget";
 export * from "./TelephonyManager";
+export * from "./WebRTCPhoneContext";
+export * from "./WebPhoneBar";
+export * from "./TelephonySettingsModal";

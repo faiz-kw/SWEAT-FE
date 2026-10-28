@@ -55,6 +55,7 @@ import { formatPercentage } from '@/utils/currencyUtils';
 import { ConversionWizard } from './ConversionWizard';
 import { BookTrialModal } from './BookTrialModal';
 import { CallRecordingPlayer } from './CallRecordingPlayer';
+import { useWebRTCPhone } from '@/components/crm/telephony';
 import type {
   Lead,
   LeadStatus,
@@ -251,6 +252,23 @@ export function LeadDetailModal({
   // AI Calling state
   const [isCallModalOpen, setIsCallModalOpen] = React.useState(false);
   const [activeCallSession, setActiveCallSession] = React.useState<InitiateLeadCallResponse | null>(null);
+  const { isRegistered: isWebPhoneReady, makeCall: makeWebPhoneCall, callState: webPhoneCallState, activeCall: webPhoneActiveCall } = useWebRTCPhone();
+
+  const handleDirectCall = async () => {
+    if (!currentLead) return;
+    const targetPhone = currentLead.phone_normalized || currentLead.phone || '';
+    const fullName = [currentLead.first_name, currentLead.last_name].filter(Boolean).join(' ') || 'Prospect';
+
+    if (isWebPhoneReady) {
+      toast.info(`Dialing ${fullName} directly in browser...`);
+      await makeWebPhoneCall(targetPhone, fullName, {
+        leadId: currentLead.id,
+        leadName: fullName,
+      });
+    } else {
+      clickToCallMutation.mutate();
+    }
+  };
 
   // Synchronize form when lead changes
   React.useEffect(() => {
@@ -1210,17 +1228,17 @@ export function LeadDetailModal({
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => clickToCallMutation.mutate()}
-                            disabled={!hasValidPhone || clickToCallMutation.isPending}
+                            onClick={handleDirectCall}
+                            disabled={!hasValidPhone || clickToCallMutation.isPending || webPhoneCallState !== 'IDLE'}
                             className="h-7 px-2.5 text-xs gap-1.5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 cursor-pointer"
-                            title="Call this prospect via Zoiper softphone with agent-first bridging & full number masking"
+                            title={isWebPhoneReady ? "Call this prospect directly in your browser via WebPhone" : "Call this prospect via softphone with agent-first bridging"}
                           >
-                            {clickToCallMutation.isPending ? (
+                            {clickToCallMutation.isPending || (webPhoneCallState === 'DIALING_OUTBOUND') ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
                               <PhoneCall className="w-3 h-3 text-white" />
                             )}
-                            <span>Call (Zoiper)</span>
+                            <span>{webPhoneCallState === 'CONNECTED' ? 'In Call' : isWebPhoneReady ? 'Call' : 'Call (Zoiper)'}</span>
                           </Button>
 
                           <Button
@@ -2730,7 +2748,27 @@ export function LeadDetailModal({
 
                                 <div className="p-3.5 rounded-xl border border-border/70 bg-card/50 hover:border-border transition-colors space-y-1">
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                                    <span className="text-xs font-bold text-foreground">{evt.title}</span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-xs font-bold text-foreground">{evt.title}</span>
+                                      {isVoiceCallEvent && (
+                                        evt.metadata?.is_verified_call ? (
+                                          <Badge variant="outline" className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold py-0 px-1.5 h-4.5">
+                                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                                            Verified Telephony Call
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="gap-1 border-border/80 bg-muted/60 text-muted-foreground text-[10px] font-medium py-0 px-1.5 h-4.5" title="Logged manually by rep without verified telephony recording">
+                                            <AlertCircle className="w-2.5 h-2.5 text-muted-foreground/70" />
+                                            Self-Reported Note
+                                          </Badge>
+                                        )
+                                      )}
+                                      {evt.metadata?.duration_formatted && (
+                                        <Badge variant="secondary" className="font-mono text-[10px] py-0 px-1.5 h-4.5">
+                                          {evt.metadata.duration_formatted}
+                                        </Badge>
+                                      )}
+                                    </div>
                                     <span className="text-[11px] text-muted-foreground font-mono">
                                       {new Date(evt.occurred_at).toLocaleString()}
                                     </span>

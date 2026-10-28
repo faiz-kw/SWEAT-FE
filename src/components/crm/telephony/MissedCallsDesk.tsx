@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { crmApi } from "@/api/endpoints/crmApi";
+import { useWebRTCPhone } from "./WebRTCPhoneContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -42,6 +43,23 @@ interface MissedCallItem {
 
 export function MissedCallsDesk() {
   const queryClient = useQueryClient();
+
+  const { isRegistered: isWebPhoneReady, makeCall: makeWebPhoneCall, callState: webPhoneCallState } = useWebRTCPhone();
+
+  const handleCallback = async (item: any) => {
+    if (isWebPhoneReady) {
+      const leadName = item.lead
+        ? `${item.lead.first_name} ${item.lead.last_name || ''}`.trim()
+        : "Prospect";
+      const phoneToCall = item.lead?.phone_normalized || item.user_phone_number;
+      await makeWebPhoneCall(phoneToCall, leadName, {
+        leadId: item.lead?.id,
+        leadName,
+      });
+    } else if (item.lead?.id) {
+      callbackMutation.mutate(item.lead.id);
+    }
+  };
 
   const { data: missedCalls = [], isLoading, refetch } = useQuery({
     queryKey: ['telephony-missed-calls'],
@@ -168,12 +186,12 @@ export function MissedCallsDesk() {
                   {item.lead?.id ? (
                     <Button
                       size="sm"
-                      onClick={() => callbackMutation.mutate(item.lead!.id)}
-                      disabled={callbackMutation.isPending}
+                      onClick={() => handleCallback(item)}
+                      disabled={callbackMutation.isPending || webPhoneCallState !== 'IDLE'}
                       className="h-7 text-xs font-bold gap-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 cursor-pointer shadow-sm"
                     >
                       <PhoneOutgoing className="size-3" />
-                      Call
+                      {webPhoneCallState === 'CONNECTED' ? 'In Call' : 'Call'}
                     </Button>
                   ) : (
                     <Badge variant="secondary" className="text-[10px] shrink-0">

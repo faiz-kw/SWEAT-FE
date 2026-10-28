@@ -25,6 +25,8 @@ import {
   CheckCircle2,
   Filter,
   Sparkles,
+  Zap,
+  Target,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -41,11 +43,13 @@ import {
   UserCheck,
   X,
   Download,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AttentionQueueView } from './AttentionQueueView';
 
 import { crmApi } from '@/api/endpoints/crmApi';
+import { useWebRTCPhone } from '@/components/crm/telephony';
 import type { Lead, LeadStatus } from '@/types/crm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -256,7 +260,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [campaignFilter, setCampaignFilter] = React.useState<string>('');
   const [slaFilter, setSlaFilter] = React.useState<string>('ALL');
   const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
-  const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'UNASSIGNED'>('ALL');
+  const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'MY_TEAM' | 'MY_DAY' | 'UNASSIGNED'>('ALL');
+  const [myDayBucket, setMyDayBucket] = React.useState<'ALL' | 'NEW' | 'DUE_TODAY' | 'OVERDUE'>('ALL');
   const [datePreset, setDatePreset] = React.useState<string>('ALL');
   const [customDateFrom, setCustomDateFrom] = React.useState<string>('');
   const [customDateTo, setCustomDateTo] = React.useState<string>('');
@@ -291,7 +296,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   // Reset page to 1 whenever any filter or search changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, datePreset, customDateFrom, customDateTo, specificDate]);
+  }, [searchQuery, statusFilter, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, myDayBucket, datePreset, customDateFrom, customDateTo, specificDate]);
 
   React.useEffect(() => {
     setViewMode(initialViewMode);
@@ -333,7 +338,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, effectiveDateFrom, effectiveDateTo, currentPage, pageSize, viewMode, sortField, sortDirection],
+    queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, myDayBucket, effectiveDateFrom, effectiveDateTo, currentPage, pageSize, viewMode, sortField, sortDirection],
     queryFn: () => {
       let orderingParam = '-created_at';
       if (sortField === 'created_at') {
@@ -355,8 +360,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (campaignFilter.trim()) p.campaign = campaignFilter.trim();
       if (slaFilter !== 'ALL') p.sla_status = slaFilter;
       if (branchFilter !== 'ALL') p.branch_id = branchFilter;
-      if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
-      if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      if (scopeFilter === 'MY_DAY') {
+        p.my_day = true;
+        if (myDayBucket !== 'ALL') p.my_day_bucket = myDayBucket;
+      } else if (scopeFilter === 'MY_LEADS') {
+        p.assigned_to_me = true;
+      } else if (scopeFilter === 'MY_TEAM') {
+        p.my_team = true;
+      } else if (scopeFilter === 'UNASSIGNED') {
+        p.unassigned = true;
+      }
       if (effectiveDateFrom) p.date_from = effectiveDateFrom;
       if (effectiveDateTo) p.date_to = effectiveDateTo;
       return crmApi.getLeadsPaginated(p);
@@ -485,7 +498,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   };
 
   const { data: summaryMetrics, isLoading: isMetricsLoading } = useQuery({
-    queryKey: ['lead-summary-metrics', branchFilter, statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, scopeFilter, effectiveDateFrom, effectiveDateTo],
+    queryKey: ['lead-summary-metrics', branchFilter, statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, scopeFilter, myDayBucket, effectiveDateFrom, effectiveDateTo],
     queryFn: () => {
       const p: Record<string, any> = {};
       if (branchFilter !== 'ALL') p.branch_id = branchFilter;
@@ -494,8 +507,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (sourceFilter !== 'ALL') p.lead_source_id = sourceFilter;
       if (campaignFilter.trim()) p.campaign = campaignFilter.trim();
       if (slaFilter !== 'ALL') p.sla_status = slaFilter;
-      if (scopeFilter === 'MY_LEADS') p.assigned_to_me = true;
-      if (scopeFilter === 'UNASSIGNED') p.unassigned = true;
+      if (scopeFilter === 'MY_DAY') {
+        p.my_day = true;
+        if (myDayBucket !== 'ALL') p.my_day_bucket = myDayBucket;
+      } else if (scopeFilter === 'MY_LEADS') {
+        p.assigned_to_me = true;
+      } else if (scopeFilter === 'MY_TEAM') {
+        p.my_team = true;
+      } else if (scopeFilter === 'UNASSIGNED') {
+        p.unassigned = true;
+      }
       if (effectiveDateFrom) p.date_from = effectiveDateFrom;
       if (effectiveDateTo) p.date_to = effectiveDateTo;
       return crmApi.getLeadSummaryMetrics(p);
@@ -588,17 +609,30 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   };
 
   const [callingLeadId, setCallingLeadId] = React.useState<string | null>(null);
+  const { isRegistered: isWebPhoneReady, makeCall: makeWebPhoneCall } = useWebRTCPhone();
 
   const handleQuickCall = async (lead: Lead) => {
-    if (!lead.phone_normalized) {
+    const phoneToCall = lead.phone_normalized || lead.phone;
+    if (!phoneToCall) {
       toast.error('No phone number available for this lead.');
       return;
     }
+    const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Prospect';
+
+    if (isWebPhoneReady) {
+      toast.info(`Dialing ${fullName} directly in browser...`);
+      await makeWebPhoneCall(phoneToCall, fullName, {
+        leadId: lead.id,
+        leadName: fullName,
+      });
+      return;
+    }
+
     try {
       setCallingLeadId(lead.id);
-      toast.info(`Connecting to ${lead.first_name}... Ringing your Zoiper softphone.`);
+      toast.info(`Connecting to ${lead.first_name}... Ringing your softphone.`);
       const res = await crmApi.clickToCall(lead.id);
-      toast.success(res.message || 'Call initiated! Answer your Zoiper softphone.');
+      toast.success(res.message || 'Call initiated! Answer your softphone.');
     } catch (err: any) {
       const errMsg = err?.response?.data?.error || err?.message || 'Failed to initiate click-to-call';
       toast.error(errMsg);
@@ -608,6 +642,28 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   };
 
   const [isExporting, setIsExporting] = React.useState(false);
+
+
+  const [isRecycling, setIsRecycling] = React.useState(false);
+
+  const handleRecycleStaleLeads = async () => {
+    setIsRecycling(true);
+    try {
+      const res = await crmApi.recycleStaleLeads();
+      const count = res.results?.total_recycled ?? 0;
+      if (count > 0) {
+        toast.success(`Recycled ${count} leads (${res.results.sla_breached_reassigned} SLA breaches, ${res.results.dormant_revived} dormant revived)`);
+      } else {
+        toast.info('No leads required recycling (all leads within SLA & actively worked).');
+      }
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leads-summary-metrics'] });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to execute lead recycling.');
+    } finally {
+      setIsRecycling(false);
+    }
+  };
 
   const handleExportExcel = async () => {
     try {
@@ -621,8 +677,16 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (branchFilter && branchFilter !== 'ALL') params.branch_id = branchFilter;
       if (effectiveDateFrom) params.date_from = effectiveDateFrom;
       if (effectiveDateTo) params.date_to = effectiveDateTo;
-      if (scopeFilter === 'MY_LEADS') params.assigned_to_me = 'true';
-      if (scopeFilter === 'UNASSIGNED') params.unassigned = 'true';
+      if (scopeFilter === 'MY_DAY') {
+        params.my_day = 'true';
+        if (myDayBucket !== 'ALL') params.my_day_bucket = myDayBucket;
+      } else if (scopeFilter === 'MY_LEADS') {
+        params.assigned_to_me = 'true';
+      } else if (scopeFilter === 'MY_TEAM') {
+        params.my_team = 'true';
+      } else if (scopeFilter === 'UNASSIGNED') {
+        params.unassigned = 'true';
+      }
 
       const blob = await crmApi.exportLeadsExcel(params);
       const url = URL.createObjectURL(blob);
@@ -736,6 +800,25 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export Excel'}</span>
             </Button>
 
+            
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRecycleStaleLeads}
+                disabled={isRecycling}
+                className="gap-1.5 h-9 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-medium"
+                title="Scan for SLA breached (>4h) and dormant leads (>7d) and auto-reassign to available sales reps"
+              >
+                {isRecycling ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                )}
+                <span className="hidden sm:inline">{isRecycling ? 'Recycling...' : 'Recycle Stale'}</span>
+              </Button>
+            )}
+
             {canCreate && (
               <Button
                 size="sm"
@@ -847,6 +930,51 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 }`}
               >
                 My Leads
+              </button>
+              {Boolean(isOrgAdmin || (summaryMetrics as any)?.team?.has_team) && (
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('MY_TEAM')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    scopeFilter === 'MY_TEAM'
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Team Leader Scoped View: Leads assigned to your direct team members"
+                >
+                  <Users className="size-3.5" />
+                  <span>My Team</span>
+                  {(summaryMetrics as any)?.team?.team_members_count > 1 && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      scopeFilter === 'MY_TEAM' ? 'bg-white/20 text-white' : 'bg-muted text-foreground'
+                    }`}>
+                      {(summaryMetrics as any).team.team_members_count}
+                    </span>
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setScopeFilter('MY_DAY');
+                  setMyDayBucket('ALL');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  scopeFilter === 'MY_DAY'
+                    ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                    : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10'
+                }`}
+                title="Sales Rep Priority Calling Queue for Today"
+              >
+                <Zap className="size-3.5 fill-current" />
+                <span>My Day</span>
+                {Boolean((summaryMetrics as any)?.my_day?.total) && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    scopeFilter === 'MY_DAY' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  }`}>
+                    {(summaryMetrics as any).my_day.total}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -1144,6 +1272,107 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             </div>
           </div>
         </div>
+
+        {/* My Day Focus Header Banner */}
+        {scopeFilter === 'MY_DAY' && (
+          <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Zap className="size-5 fill-current" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-foreground">Sales Rep "My Day" Priority Queue</h3>
+                  <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[10px] h-4.5 px-2">Focus Mode</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  High-priority actionable leads for today: uncontacted leads, scheduled follow-ups, and overdue callbacks.
+                </p>
+              </div>
+            </div>
+
+            {/* Daily Quota Progress Tracker for Sales Reps */}
+            {Boolean((summaryMetrics as any)?.daily_quota) && (
+              <div className="flex items-center gap-3 bg-background/90 border border-emerald-500/20 px-3.5 py-2 rounded-xl shrink-0 shadow-2xs">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="font-semibold text-foreground flex items-center gap-1">
+                      <Target className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Daily Target:
+                    </span>
+                    <span className="font-mono font-bold text-foreground">
+                      {(summaryMetrics as any).daily_quota.dials_completed} / {(summaryMetrics as any).daily_quota.dials_target} Dials ({(summaryMetrics as any).daily_quota.completion_pct}%)
+                    </span>
+                  </div>
+                  <div className="w-32 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${(summaryMetrics as any).daily_quota.completion_pct}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="border-l border-border/60 pl-3 hidden sm:block text-[11px] space-y-0.5">
+                  <div className="text-muted-foreground flex items-center gap-1">
+                    <span>Talk Time:</span>
+                    <strong className="text-foreground font-mono">{(summaryMetrics as any).daily_quota.talk_time_completed_minutes}m</strong>
+                  </div>
+                  <div className="text-muted-foreground flex items-center gap-1">
+                    <span>Trials:</span>
+                    <strong className="text-emerald-600 font-mono">{(summaryMetrics as any).daily_quota.trials_completed} / {(summaryMetrics as any).daily_quota.trials_target}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+              <button
+                type="button"
+                onClick={() => setMyDayBucket('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  myDayBucket === 'ALL'
+                    ? 'bg-foreground text-background border-foreground font-bold shadow-xs'
+                    : 'border-border/80 bg-background/60 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                All Priority ({(summaryMetrics as any)?.my_day?.total ?? 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyDayBucket('NEW')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  myDayBucket === 'NEW'
+                    ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-xs'
+                    : 'border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10'
+                }`}
+              >
+                <Sparkles className="size-3" />
+                New Uncontacted ({(summaryMetrics as any)?.my_day?.new_leads ?? 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyDayBucket('DUE_TODAY')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  myDayBucket === 'DUE_TODAY'
+                    ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs'
+                    : 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                }`}
+              >
+                <Clock className="size-3" />
+                Due Today ({(summaryMetrics as any)?.my_day?.due_today ?? 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyDayBucket('OVERDUE')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  myDayBucket === 'OVERDUE'
+                    ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-xs'
+                    : 'border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10'
+                }`}
+              >
+                <AlertTriangle className="size-3" />
+                Overdue / Missed ({(summaryMetrics as any)?.my_day?.overdue ?? 0})
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Content View */}
         {isLoading ? (
