@@ -189,7 +189,7 @@ export function WebPhoneBar() {
             </Button>
           </PopoverTrigger>
 
-          <PopoverContent className="w-80 sm:w-[350px] p-5 rounded-2xl shadow-2xl border-border/80 bg-popover/98 backdrop-blur-xl z-[9999]" align="end">
+          <PopoverContent className="w-[340px] sm:w-[390px] p-6 rounded-2xl shadow-2xl border-border/80 bg-popover/98 backdrop-blur-xl z-[9999]" align="end">
             <div className="flex items-center justify-between pb-3 border-b border-border/60 mb-3.5">
               <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
@@ -263,7 +263,7 @@ export function WebPhoneBar() {
                   placeholder="+91..."
                   value={targetNumber}
                   onChange={(e) => setTargetNumber(e.target.value)}
-                  className="h-12 text-xl font-mono tracking-wider font-extrabold text-center pr-10 rounded-xl bg-muted/40 border-border/70 focus-visible:ring-emerald-500"
+                  className="h-14 text-2xl font-mono tracking-wider font-extrabold text-center pr-10 rounded-xl bg-muted/40 border-border/70 focus-visible:ring-emerald-500"
                 />
                 {targetNumber ? (
                   <Button
@@ -287,7 +287,7 @@ export function WebPhoneBar() {
                     type="button"
                     variant="outline"
                     onClick={() => handleDial(digit)}
-                    className="h-13 rounded-xl flex flex-col items-center justify-center py-1 transition-all hover:bg-primary/10 active:scale-95 border-border/60 hover:border-primary/40 shadow-xs"
+                    className="h-14 rounded-xl flex flex-col items-center justify-center py-1 transition-all hover:bg-primary/10 active:scale-95 border-border/60 hover:border-primary/40 shadow-xs"
                   >
                     <span className="text-xl font-extrabold leading-none text-foreground">{digit}</span>
                     {sub ? (
@@ -305,7 +305,7 @@ export function WebPhoneBar() {
               <Button
                 type="submit"
                 disabled={!isConnected || !targetNumber.trim() || isInCall || isDialing}
-                className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold gap-2 text-sm rounded-xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.98] disabled:opacity-60"
+                className="w-full h-13 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold gap-2 text-base rounded-xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.98] disabled:opacity-60"
               >
                 <PhoneCall className="size-4" /> Call via WebRTC
               </Button>

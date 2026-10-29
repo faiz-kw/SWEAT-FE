@@ -396,15 +396,13 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
 
   // Answer call
   const answerCall = React.useCallback(() => {
-    if (currentSessionRef.current && callState === "RINGING_INBOUND") {
+    const session = currentSessionRef.current;
+    const canAnswer = session && !session.isEnded() && !session.isEstablished();
+
+    if (canAnswer) {
       try {
-        currentSessionRef.current.answer({
+        session.answer({
           mediaConstraints: { audio: true, video: false },
-          pcConfig: {
-            iceServers: [
-              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
-            ]
-          }
         });
 
         // Notify other open tabs
@@ -437,7 +435,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         }
       }, 7000);
     }
-  }, [callState]);
+  }, []);
 
   // Decline call
   const declineCall = React.useCallback(() => {
