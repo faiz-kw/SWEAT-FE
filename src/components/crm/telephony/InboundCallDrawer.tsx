@@ -48,7 +48,7 @@ export function InboundCallDrawer({
 
   return (
     <div
-      className="fixed top-16 right-3 sm:right-6 left-3 sm:left-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] z-50 rounded-2xl border-2 border-emerald-500/40 bg-card/95 backdrop-blur-xl p-4 sm:p-5 shadow-2xl shadow-emerald-500/10 text-card-foreground overflow-hidden animate-in slide-in-from-top-4 duration-300"
+      className="fixed top-16 right-3 sm:right-6 left-3 sm:left-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] z-[9999] pointer-events-auto rounded-2xl border-2 border-emerald-500/40 bg-card/95 backdrop-blur-xl p-4 sm:p-5 shadow-2xl shadow-emerald-500/10 text-card-foreground overflow-hidden animate-in slide-in-from-top-4 duration-300"
       role="alert"
       aria-live="assertive"
     >

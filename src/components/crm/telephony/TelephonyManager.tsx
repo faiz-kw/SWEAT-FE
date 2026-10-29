@@ -99,35 +99,18 @@ export function TelephonyManager() {
     playHarmonicChime();
     queryClient.invalidateQueries({ queryKey: ["telephony-presence"] });
 
-    // AUTOMATIC HIERARCHICAL MODAL DISPATCH:
-    // 1. If caller is an existing Member -> open Member 360 Workspace Modal
-    if (data.caller_type === "MEMBER" && data.member_id) {
-      setInspectMemberId(data.member_id);
-      setInspectMemberName(data.lead_name);
-      setInspectMemberNumber(data.member_number || "");
-      setInspectLeadId(null);
-      setIsNewLeadOpen(false);
+    // Hierarchical toast summary (Drawer stays prominent without blocking modal popups)
+    if (data.caller_type === "MEMBER") {
       toast.info(`Inbound Call: Member ${data.lead_name}`, {
-        description: "Automatically opening Member 360 Profile...",
+        description: "Caller identified from Member Registry. Click Answer to connect.",
       });
-    }
-    // 2. If caller is an existing Lead -> open Lead 360 Modal
-    else if (data.caller_type === "LEAD" && data.lead_id) {
-      setInspectLeadId(String(data.lead_id));
-      setInspectMemberId(null);
-      setIsNewLeadOpen(false);
+    } else if (data.caller_type === "LEAD") {
       toast.info(`Inbound Call: Lead ${data.lead_name}`, {
-        description: "Automatically opening Lead 360 Profile...",
+        description: "Caller identified from CRM Leads. Click Answer to connect.",
       });
-    }
-    // 3. If caller is New Prospect -> open Create Lead Modal
-    else {
-      setIsNewLeadOpen(true);
-      setNewLeadPhone(data.caller_phone || "");
-      setInspectMemberId(null);
-      setInspectLeadId(null);
+    } else {
       toast.info(`Inbound Call: ${data.masked_phone}`, {
-        description: "New caller detected. Opening Create Lead form...",
+        description: "New caller detected. Click Answer to connect.",
       });
     }
   }, [queryClient]);

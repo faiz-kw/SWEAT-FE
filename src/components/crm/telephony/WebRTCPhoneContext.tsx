@@ -386,6 +386,16 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
           description: "Please check microphone permissions in your browser.",
         });
       }
+    } else {
+      console.warn("[WebPhone] answerCall invoked while session is not ringing:", {
+        hasSession: !!currentSessionRef.current,
+        callState,
+      });
+      if (!currentSessionRef.current) {
+        toast.warning("Softphone Session Not Connected", {
+          description: "No incoming audio stream received yet. Please ensure the WebPhone status is Available.",
+        });
+      }
     }
   }, [callState]);
 
