@@ -208,7 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {/* data-density applies the CSS token for table row height */}
-      <div data-density={density === "default" ? undefined : density} className="contents">
+      <div data-density={density === "default" ? undefined : density} suppressHydrationWarning className="contents">
         {children}
       </div>
     </Ctx.Provider>

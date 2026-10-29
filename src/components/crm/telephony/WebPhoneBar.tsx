@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings } from "lucide-react";
+import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings, Delete, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,21 @@ function formatDuration(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
+const DIALPAD_KEYS = [
+  { digit: "1", sub: "" },
+  { digit: "2", sub: "ABC" },
+  { digit: "3", sub: "DEF" },
+  { digit: "4", sub: "GHI" },
+  { digit: "5", sub: "JKL" },
+  { digit: "6", sub: "MNO" },
+  { digit: "7", sub: "PQRS" },
+  { digit: "8", sub: "TUV" },
+  { digit: "9", sub: "WXYZ" },
+  { digit: "*", sub: "" },
+  { digit: "0", sub: "+" },
+  { digit: "#", sub: "" },
+];
+
 export function WebPhoneBar() {
   const {
     connectionStatus,
@@ -26,12 +41,14 @@ export function WebPhoneBar() {
     toggleMute,
     makeCall,
     sendDTMF,
+    reconnectPhone,
     isSupported,
   } = useWebRTCPhone();
 
   const [dialpadOpen, setDialpadOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [targetNumber, setTargetNumber] = React.useState("");
+  const [isReconnecting, setIsReconnecting] = React.useState(false);
 
   if (!isSupported) return null;
 
@@ -53,6 +70,17 @@ export function WebPhoneBar() {
     const ok = await makeCall(targetNumber);
     if (ok) {
       setDialpadOpen(false);
+    }
+  };
+
+  const handleReconnect = async () => {
+    try {
+      setIsReconnecting(true);
+      if (reconnectPhone) {
+        await reconnectPhone();
+      }
+    } finally {
+      setIsReconnecting(false);
     }
   };
 
@@ -146,14 +174,14 @@ export function WebPhoneBar() {
                   ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                   : connectionStatus === "CONNECTING"
                   ? "border-amber-500/30 bg-amber-500/5 text-amber-600 hover:bg-amber-500/10"
-                  : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted"
+                  : "border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
               )}
               title={`WebPhone: ${connectionStatus}`}
             >
               <span
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  isConnected ? "bg-emerald-500" : connectionStatus === "CONNECTING" ? "bg-amber-500 animate-pulse" : "bg-rose-400"
+                  isConnected ? "bg-emerald-500" : connectionStatus === "CONNECTING" ? "bg-amber-500 animate-pulse" : "bg-rose-500"
                 )}
               />
               <Phone className="size-3.5" />
@@ -161,86 +189,134 @@ export function WebPhoneBar() {
             </Button>
           </PopoverTrigger>
 
-          <PopoverContent className="w-68 p-3.5" align="end">
-            <div className="flex items-center justify-between pb-2 border-b border-border/50 mb-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                <Phone className="size-3.5 text-primary" />
-                <span>SWEAT In-Browser Phone</span>
+          <PopoverContent className="w-80 sm:w-[350px] p-5 rounded-2xl shadow-2xl border-border/80 bg-popover/98 backdrop-blur-xl z-[9999]" align="end">
+            <div className="flex items-center justify-between pb-3 border-b border-border/60 mb-3.5">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                  <Phone className="size-4" />
+                </div>
+                <span>SWEAT Softphone</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px] px-1.5 py-0",
-                    isConnected ? "text-emerald-600 border-emerald-500/30" : "text-muted-foreground"
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
+                    isConnected
+                      ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400"
+                      : connectionStatus === "CONNECTING"
+                      ? "text-amber-600 border-amber-500/30 bg-amber-500/10"
+                      : "text-rose-600 border-rose-500/30 bg-rose-500/10"
                   )}
                 >
-                  {connectionStatus}
+                  {isConnected ? "Ready" : connectionStatus}
                 </Badge>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-6 p-0 text-muted-foreground hover:text-foreground"
+                  className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     setDialpadOpen(false);
                     setSettingsOpen(true);
                   }}
                   title="Telephony Settings"
                 >
-                  <Settings className="size-3.5" />
+                  <Settings className="size-4" />
                 </Button>
               </div>
             </div>
 
-            <form onSubmit={handleStartCall} className="space-y-3">
-              <div className="flex gap-1.5">
+            {/* Offline Diagnostic & Reconnect Alert */}
+            {!isConnected && (
+              <div className={cn(
+                "mb-3 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200",
+                connectionStatus === "CONNECTING"
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300"
+                  : "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300"
+              )}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <AlertCircle className="size-3.5 shrink-0" />
+                  <span className="truncate font-semibold text-[11px]">
+                    {connectionStatus === "CONNECTING" ? "Connecting to carrier..." : "Gateway unlinked or offline"}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isReconnecting}
+                  onClick={handleReconnect}
+                  className="h-6 px-2 text-[11px] font-bold gap-1 rounded-md shrink-0 bg-background/90 hover:bg-background border-border/80 shadow-xs"
+                >
+                  <RefreshCw className={cn("size-3", isReconnecting && "animate-spin")} />
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            <form onSubmit={handleStartCall} className="space-y-3.5">
+              {/* Dialpad Input */}
+              <div className="relative flex items-center">
                 <Input
                   type="tel"
                   placeholder="+91..."
                   value={targetNumber}
                   onChange={(e) => setTargetNumber(e.target.value)}
-                  className="h-9 text-sm font-mono tracking-wider"
+                  className="h-12 text-xl font-mono tracking-wider font-extrabold text-center pr-10 rounded-xl bg-muted/40 border-border/70 focus-visible:ring-emerald-500"
                 />
-                {targetNumber && (
+                {targetNumber ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    className="h-9 px-2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setTargetNumber("")}
+                    size="icon"
+                    className="absolute right-1 size-9 text-muted-foreground hover:text-foreground rounded-lg"
+                    onClick={() => setTargetNumber((prev) => prev.slice(0, -1))}
+                    title="Backspace"
                   >
-                    <X className="size-3.5" />
+                    <Delete className="size-4" />
                   </Button>
-                )}
+                ) : null}
               </div>
 
-              {/* Dialpad Matrix */}
-              <div className="grid grid-cols-3 gap-1.5 py-1">
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((d) => (
+              {/* 3x4 Dialpad Matrix */}
+              <div className="grid grid-cols-3 gap-2 py-0.5">
+                {DIALPAD_KEYS.map(({ digit, sub }) => (
                   <Button
-                    key={d}
+                    key={digit}
                     type="button"
                     variant="outline"
-                    onClick={() => handleDial(d)}
-                    className="h-9 text-sm font-semibold hover:bg-primary/10 active:scale-95 transition-transform"
+                    onClick={() => handleDial(digit)}
+                    className="h-13 rounded-xl flex flex-col items-center justify-center py-1 transition-all hover:bg-primary/10 active:scale-95 border-border/60 hover:border-primary/40 shadow-xs"
                   >
-                    {d}
+                    <span className="text-xl font-extrabold leading-none text-foreground">{digit}</span>
+                    {sub ? (
+                      <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase leading-none mt-1">
+                        {sub}
+                      </span>
+                    ) : (
+                      <span className="h-[9px] mt-1" />
+                    )}
                   </Button>
                 ))}
               </div>
 
+              {/* Call Action Button */}
               <Button
                 type="submit"
                 disabled={!isConnected || !targetNumber.trim() || isInCall || isDialing}
-                className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 text-xs shadow-md shadow-emerald-600/20"
+                className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold gap-2 text-sm rounded-xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.98] disabled:opacity-60"
               >
-                <PhoneCall className="size-3.5" /> Call via WebRTC
+                <PhoneCall className="size-4" /> Call via WebRTC
               </Button>
 
+              {/* Identity & Caller ID Footer */}
               {agentCredentials && (
-                <div className="text-[10px] text-muted-foreground text-center pt-1 font-mono">
-                  Caller ID: {agentCredentials.caller_id}
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 px-1 border-t border-border/40 font-mono">
+                  <span>Caller ID: {agentCredentials.caller_id}</span>
+                  <span className="truncate max-w-[150px]" title={agentCredentials.username}>
+                    Endpoint: {agentCredentials.username}
+                  </span>
                 </div>
               )}
             </form>

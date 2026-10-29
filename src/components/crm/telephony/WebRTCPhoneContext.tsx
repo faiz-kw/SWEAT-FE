@@ -55,6 +55,7 @@ interface WebRTCPhoneContextValue {
   toggleMute: () => void;
   makeCall: (targetPhone: string, contactName?: string, metadata?: CallMetadata) => Promise<boolean>;
   sendDTMF: (tone: string) => void;
+  reconnectPhone: () => Promise<void>;
   isSupported: boolean;
 }
 
@@ -262,95 +263,107 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   );
 
   // Initialize UA and register dynamically
-  React.useEffect(() => {
+  const setupPhone = React.useCallback(async () => {
     if (!isAuthenticated || !isSupported) return;
 
-    let isMounted = true;
-
-    async function setupPhone() {
-      try {
-        setConnectionStatus("CONNECTING");
-        const creds = await crmApi.getWebRTCCredentials();
-        if (!isMounted) return;
-
-        setAgentCredentials({
-          username: creds.username,
-          sip_domain: creds.sip_domain,
-          caller_id: creds.caller_id,
-          display_name: creds.display_name,
-        });
-
-        // Initialize JsSIP User Agent with dynamic parameters
-        const targetWss = creds.wss_url?.includes(':5063') ? creds.wss_url : (creds.wss_url?.replace(/:443$/, '') + ':5063');
-        const socket = new JsSIP.WebSocketInterface(targetWss);
-        const endpointPassword = creds.password || creds.sip_password || 'Sweat@2026!';
-        const configuration: any = {
-          sockets: [socket],
-          uri: creds.sip_uri,
-          password: endpointPassword,
-          authorization_user: creds.username,
-          registrar_server: 'sip:' + (creds.sip_domain || ''),
-          display_name: creds.display_name,
-          register: true,
-          session_timers: false,
-          pcConfig: {
-            iceServers: [
-              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
-            ]
-          }
-        };
-
-        const ua = new JsSIP.UA(configuration);
-
-        ua.on("connected", () => {
-          if (isMounted) setConnectionStatus("CONNECTING");
-        });
-
-        ua.on("registered", () => {
-          console.log("[WebPhone] Successfully registered to Vobiz WebRTC gateway as", creds.username);
-          if (isMounted) setConnectionStatus("REGISTERED");
-        });
-
-        ua.on("unregistered", () => {
-          if (isMounted) setConnectionStatus("DISCONNECTED");
-        });
-
-        ua.on("registrationFailed", (data) => {
-          console.warn("[WebPhone] Registration failed:", data?.cause);
-          if (isMounted) setConnectionStatus("ERROR");
-        });
-
-        ua.on("newRTCSession", (data) => {
-          const session = data.session;
-          if (session.direction === "incoming") {
-            const remoteCaller = session.remote_identity?.uri?.user || "Unknown Caller";
-            console.log("[WebPhone] Incoming WebRTC call from:", remoteCaller);
-
-            setCallState("RINGING_INBOUND");
-            setActiveCall({
-              direction: "INBOUND",
-              remoteIdentity: remoteCaller,
-              displayName: session.remote_identity?.display_name || remoteCaller,
-              durationSeconds: 0,
-              isMuted: false,
-            });
-
-            bindSessionEvents(session, "INBOUND", remoteCaller);
-          }
-        });
-
-        ua.start();
-        uaRef.current = ua;
-      } catch (err) {
-        console.warn("[WebPhone] Could not initialize WebRTC credentials:", err);
-        if (isMounted) setConnectionStatus("ERROR");
+    try {
+      if (uaRef.current) {
+        try {
+          uaRef.current.stop();
+        } catch (_) {}
+        uaRef.current = null;
       }
-    }
 
-    setupPhone();
+      setConnectionStatus("CONNECTING");
+
+      // Enable verbose JsSIP debug output to console for instant troubleshooting
+      if (typeof window !== "undefined") {
+        try {
+          JsSIP.debug.enable("JsSIP:*");
+        } catch (_) {}
+      }
+
+      const creds = await crmApi.getWebRTCCredentials();
+
+      setAgentCredentials({
+        username: creds.username,
+        sip_domain: creds.sip_domain,
+        caller_id: creds.caller_id,
+        display_name: creds.display_name,
+      });
+
+      const targetWss = creds.wss_url?.includes(':5063') ? creds.wss_url : (creds.wss_url?.replace(/:443$/, '') + ':5063');
+      const socket = new JsSIP.WebSocketInterface(targetWss);
+      const endpointPassword = creds.password || creds.sip_password || 'Sweat@2026!';
+      const cleanDomain = creds.sip_domain || 'registrar.vobiz.ai';
+      const cleanUri = `${creds.username}@${cleanDomain}`;
+
+      const configuration: any = {
+        sockets: [socket],
+        uri: cleanUri,
+        password: endpointPassword,
+        display_name: creds.display_name,
+        register: true,
+        register_expires: 120,
+        session_timers: false,
+        pcConfig: {
+          iceServers: [
+            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+          ]
+        }
+      };
+
+      const ua = new JsSIP.UA(configuration);
+
+      ua.on("connected", () => {
+        setConnectionStatus("CONNECTING");
+      });
+
+      ua.on("registered", () => {
+        console.log("[WebPhone] Successfully registered to Vobiz WebRTC gateway as", creds.username);
+        setConnectionStatus("REGISTERED");
+      });
+
+      ua.on("unregistered", () => {
+        setConnectionStatus("DISCONNECTED");
+      });
+
+      ua.on("registrationFailed", (data: any) => {
+        console.warn("[WebPhone] Registration failed. Cause:", data?.cause, "Response:", data?.response?.status_code, data?.response?.reason_phrase);
+        setConnectionStatus("ERROR");
+      });
+
+      ua.on("newRTCSession", (data: any) => {
+        const session = data.session;
+        if (session.direction === "incoming") {
+          const remoteCaller = session.remote_identity?.uri?.user || "Unknown Caller";
+          console.log("[WebPhone] Incoming WebRTC call from:", remoteCaller);
+
+          setCallState("RINGING_INBOUND");
+          setActiveCall({
+            direction: "INBOUND",
+            remoteIdentity: remoteCaller,
+            displayName: session.remote_identity?.display_name || remoteCaller,
+            durationSeconds: 0,
+            isMuted: false,
+          });
+
+          bindSessionEvents(session, "INBOUND", remoteCaller);
+        }
+      });
+
+      ua.start();
+      uaRef.current = ua;
+    } catch (err) {
+      console.warn("[WebPhone] Could not initialize WebRTC credentials:", err);
+      setConnectionStatus("ERROR");
+    }
+  }, [isAuthenticated, isSupported, bindSessionEvents]);
+
+  React.useEffect(() => {
+    void setupPhone();
 
     return () => {
-      isMounted = false;
       if (uaRef.current) {
         try {
           uaRef.current.stop();
@@ -358,7 +371,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         uaRef.current = null;
       }
     };
-  }, [isAuthenticated, isSupported, bindSessionEvents]);
+  }, [setupPhone]);
 
   // Answer call
   const answerCall = React.useCallback(() => {
@@ -526,6 +539,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       toggleMute,
       makeCall,
       sendDTMF,
+      reconnectPhone: setupPhone,
       isSupported,
     }),
     [
@@ -541,6 +555,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       toggleMute,
       makeCall,
       sendDTMF,
+      setupPhone,
       isSupported,
     ]
   );
