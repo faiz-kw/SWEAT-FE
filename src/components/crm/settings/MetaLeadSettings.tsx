@@ -2724,8 +2724,32 @@ function MappingEditor({
 function MetaOAuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [authCode, setAuthCode] = React.useState('');
   const [authState, setAuthState] = React.useState('');
+  const [directToken, setDirectToken] = React.useState('');
   const [isLoadingAuth, setIsLoadingAuth] = React.useState(false);
   const [isSubmittingCode, setIsSubmittingCode] = React.useState(false);
+  const [isSubmittingToken, setIsSubmittingToken] = React.useState(false);
+
+  const handleDirectTokenConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directToken.trim()) {
+      toast.error('Please enter a Facebook User Access Token.');
+      return;
+    }
+    try {
+      setIsSubmittingToken(true);
+      const res = await metaLeadsApi.connectToken(directToken.trim());
+      if (res.status === 'CONNECTED') {
+        toast.success(`Connected Facebook account: ${res.meta_user_name} (${res.pages_count} pages linked)`);
+        onSuccess();
+      } else {
+        toast.error('Could not connect account with this token.');
+      }
+    } catch (err) {
+      toast.error(formatError(err));
+    } finally {
+      setIsSubmittingToken(false);
+    }
+  };
 
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -2804,30 +2828,49 @@ function MetaOAuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             {isLoadingAuth ? 'Preparing Facebook login...' : 'Log in with Facebook'}
           </Button>
 
-          {/* Manual Authorization Code Fallback */}
+          {/* Manual Authorization Code or Token Fallback */}
           <details className="pt-2 border-t text-muted-foreground group">
             <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1 select-none">
-              <span>Need to connect using an authorization code?</span>
+              <span>Need to connect using an access token or authorization code?</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             </summary>
-            <form onSubmit={handleCompleteCallback} className="pt-3 space-y-3">
-              <div className="space-y-2">
+            <div className="pt-3 space-y-4">
+              <form onSubmit={handleDirectTokenConnect} className="space-y-2.5">
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Connect directly with Facebook User Access Token:
+                </p>
                 <Input
-                  value={authCode}
-                  onChange={(e) => setAuthCode(e.target.value)}
-                  placeholder="Enter authorization code (code=...)"
-                  required
+                  value={directToken}
+                  onChange={(e) => setDirectToken(e.target.value)}
+                  placeholder="Paste User Access Token (EAA...)"
+                  type="password"
                 />
-                <Input
-                  value={authState}
-                  onChange={(e) => setAuthState(e.target.value)}
-                  placeholder="State token"
-                />
-              </div>
-              <Button type="submit" size="sm" disabled={isSubmittingCode} className="w-full">
-                {isSubmittingCode ? 'Connecting...' : 'Complete connection'}
-              </Button>
-            </form>
+                <Button type="submit" size="sm" disabled={isSubmittingToken} className="w-full">
+                  {isSubmittingToken ? 'Connecting...' : 'Connect with Access Token'}
+                </Button>
+              </form>
+
+              <form onSubmit={handleCompleteCallback} className="pt-2 border-t space-y-2.5">
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Or complete using an OAuth authorization code:
+                </p>
+                <div className="space-y-2">
+                  <Input
+                    value={authCode}
+                    onChange={(e) => setAuthCode(e.target.value)}
+                    placeholder="Enter authorization code (code=...)"
+                  />
+                  <Input
+                    value={authState}
+                    onChange={(e) => setAuthState(e.target.value)}
+                    placeholder="State token"
+                  />
+                </div>
+                <Button type="submit" size="sm" variant="outline" disabled={isSubmittingCode} className="w-full">
+                  {isSubmittingCode ? 'Connecting...' : 'Complete connection'}
+                </Button>
+              </form>
+            </div>
           </details>
         </div>
       </div>

@@ -177,6 +177,8 @@ export const metaLeadsApi = {
   oauthInit: async () => (await api.get<{ auth_url: string; state: string }>('/tenant/meta-lead-mappings/oauth_init/')).data,
   oauthCallback: async (code: string, state: string) =>
     (await api.post<{ success: boolean; message: string; connection: MetaConnectionDetails }>('/tenant/meta-lead-mappings/oauth_callback/', { code, state })).data,
+  connectToken: async (accessToken: string) =>
+    (await api.post<{ status: string; meta_user_name: string; meta_user_id: string; pages_count: number }>('/tenant/meta-lead-mappings/connect-token/', { access_token: accessToken })).data,
   connection: async () =>
     (
       await api.get<{
