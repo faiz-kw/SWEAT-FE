@@ -1292,6 +1292,19 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {isPending && canEdit && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={retryMutation.isPending}
+                          onClick={() => retryMutation.mutate(item.id)}
+                          className="gap-1 text-xs text-primary border-primary/40 hover:bg-primary/10"
+                        >
+                          <RotateCcw className={`h-3.5 w-3.5 ${retryMutation.isPending ? 'animate-spin' : ''}`} />
+                          Process now
+                        </Button>
+                      )}
+
                       {item.lead && (
                         <Button
                           variant="outline"
