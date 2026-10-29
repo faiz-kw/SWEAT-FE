@@ -82,6 +82,8 @@ import { CRMEmptyState } from './common/CRMEmptyState';
 import { CRMErrorState } from './common/CRMErrorState';
 import { formatCrmLabel, formatBranchOptionLabel, formatBranchTitle, formatBranchAddressOnly } from '@/lib/crmLabels';
 import { usePermissions } from '@/lib/permissions';
+import { useAuth } from '@/contexts';
+import { isOrganizationAdmin } from '@/lib/nav';
 import { NewLeadModal } from './NewLeadModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import { BookTrialModal } from './BookTrialModal';
@@ -248,7 +250,9 @@ interface LeadsWorkspaceProps {
 export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { can } = usePermissions();
+  const isOrgAdmin = isOrganizationAdmin(user);
 
   // Authoritative Effective Permissions
   const canCreate = can('crm.leads.create') || can('sales.leads.create');
