@@ -733,7 +733,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+    <div className="flex flex-col min-h-screen bg-background text-foreground w-full max-w-full overflow-x-hidden">
       {/* Page Header */}
       <CRMPageHeader
         title={viewMode === 'ATTENTION' ? 'Attention Queue' : 'Leads & Prospects'}
@@ -1281,7 +1281,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
 
         {/* My Day Focus Header Banner */}
         {scopeFilter === 'MY_DAY' && (
-          <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+          <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 rounded-2xl p-4 flex flex-col 2xl:flex-row items-start 2xl:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
                 <Zap className="size-5 fill-current" />
