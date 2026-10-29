@@ -288,7 +288,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
           uri: creds.sip_uri,
           password: endpointPassword,
           authorization_user: creds.username,
-          registrar_server: `sip:${creds.sip_domain}`,
+          registrar_server: 'sip:' + (creds.sip_domain || ''),
           display_name: creds.display_name,
           register: true,
           session_timers: false,
