@@ -1,5 +1,5 @@
 import * as React from "react";
-import * as JsSIP from "jssip";
+import * as JsSIP from "vobiz-jssip";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { useAuth } from "@/contexts";
 import { toast } from "sonner";
@@ -57,6 +57,93 @@ interface WebRTCPhoneContextValue {
   sendDTMF: (tone: string) => void;
   reconnectPhone: () => Promise<void>;
   isSupported: boolean;
+}
+
+
+const DEFAULT_MDNS_CANDIDATE = "192.168.0.1";
+const PREFERRED_CODECS = ["OPUS", "PCMU", "PCMA"];
+
+/**
+ * Transforms WebRTC SDP offers and answers for strict Vobiz / FreeSWITCH carrier compatibility.
+ * Replaces .local mDNS ICE candidates with routable default IP, applies bandwidth constraints,
+ * and prioritizes OPUS / PCMU audio codecs.
+ */
+function cleanVobizSdp(sdp: string, isOffer: boolean): string {
+  if (!sdp) return sdp;
+
+  let result = sdp;
+
+  // 1. Clean double-carriage returns from FreeSWITCH
+  result = result.replace(/t=0 0\r\r/g, "t=0 0\r");
+
+  // 2. Add bandwidth constraint b=AS:48000
+  if (result.includes("a=mid:audio\r\n") && !result.includes("b=AS:")) {
+    result = result.replace(/a=mid:audio\r\n/g, "a=mid:audio\r\nb=AS:48000\r\n");
+  }
+
+  // 3. Replace mDNS .local ICE candidates with valid IP (192.168.0.1)
+  const lines = result.split("\n");
+  let candidateCount = 0;
+  let localCount = 0;
+  const newLines = lines.map((line) => {
+    if (line.includes("a=candidate")) {
+      candidateCount++;
+      if (line.includes(".local")) {
+        localCount++;
+        const parts = line.split(" ");
+        if (parts.length > 4) {
+          parts[4] = DEFAULT_MDNS_CANDIDATE;
+          return parts.join(" ");
+        }
+      }
+    }
+    return line;
+  });
+
+  if (localCount > 0) {
+    result = newLines.join("\n");
+  }
+
+  // 4. Codec reordering for OPUS / PCMU preference
+  try {
+    const mLineMatch = result.match(/m=audio\s+\d+\s+\S+\s+([\d ]+)/i);
+    if (mLineMatch && mLineMatch[1]) {
+      const allPts = mLineMatch[1].trim().split(/\s+/).filter(Boolean);
+      const prefPts: string[] = [];
+
+      PREFERRED_CODECS.forEach((codec) => {
+        const reg = new RegExp(`a=rtpmap:(\\d+) ${codec}/`, "i");
+        const m = result.match(reg);
+        if (m && m[1] && allPts.includes(m[1]) && !prefPts.includes(m[1])) {
+          prefPts.push(m[1]);
+        }
+      });
+
+      // Keep telephone-event if present
+      const telEventMatch = result.match(/a=rtpmap:(\d+) telephone-event\//i);
+      if (telEventMatch && telEventMatch[1] && allPts.includes(telEventMatch[1]) && !prefPts.includes(telEventMatch[1])) {
+        prefPts.push(telEventMatch[1]);
+      }
+
+      // Add remaining existing PTs
+      allPts.forEach((pt) => {
+        if (!prefPts.includes(pt)) {
+          prefPts.push(pt);
+        }
+      });
+
+      if (prefPts.length > 0) {
+        result = result.replace(
+          /(m=audio\s+\d+\s+\S+\s+)([\d ]+)/i,
+          (_, prefix) => `${prefix}${prefPts.join(" ")}`
+        );
+      }
+    }
+  } catch (codecErr) {
+    console.debug("[WebPhone] Codec preference adjustment skipped:", codecErr);
+  }
+
+  return result;
 }
 
 const WebRTCPhoneContext = React.createContext<WebRTCPhoneContextValue | undefined>(undefined);
@@ -160,11 +247,16 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         }
       });
 
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.play().catch((e) => {
+      const audioEl = (document.getElementById("remoteAudio") as HTMLAudioElement) || remoteAudioRef.current;
+      if (audioEl) {
+        audioEl.srcObject = remoteStream;
+        audioEl.play().catch((e) => {
           console.debug("[WebPhone] Audio play failed or blocked by autoplay policy:", e);
         });
+      }
+      if (remoteAudioRef.current && remoteAudioRef.current !== audioEl) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.play().catch(() => {});
       }
     } catch (err) {
       console.warn("[WebPhone] Failed to attach remote audio stream:", err);
@@ -181,6 +273,15 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       metadata?: CallMetadata
     ) => {
       currentSessionRef.current = session;
+
+      // Attach SDP transformation listener for Vobiz / FreeSWITCH carrier compatibility
+      session.on("sdp", (evt: any) => {
+        try {
+          evt.sdp = cleanVobizSdp(evt.sdp, evt.type === "offer");
+        } catch (err) {
+          console.warn("[WebPhone] Error in cleanVobizSdp:", err);
+        }
+      });
 
       session.on("progress", () => {
         console.log("[WebPhone] Call in progress...");
@@ -255,8 +356,14 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       // PeerConnection track event fallback
       if (session.connection) {
         session.connection.addEventListener("track", (e: any) => {
-          if (remoteAudioRef.current && e.streams && e.streams[0]) {
-            remoteAudioRef.current.srcObject = e.streams[0];
+          const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
+          const audioEl = (document.getElementById("remoteAudio") as HTMLAudioElement) || remoteAudioRef.current;
+          if (audioEl) {
+            audioEl.srcObject = stream;
+            audioEl.play().catch(() => {});
+          }
+          if (remoteAudioRef.current && remoteAudioRef.current !== audioEl) {
+            remoteAudioRef.current.srcObject = stream;
             remoteAudioRef.current.play().catch(() => {});
           }
         });
@@ -339,6 +446,11 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       ua.on("newRTCSession", (data: any) => {
         const session = data.session;
         if (session.direction === "incoming") {
+          // Pre-clean double \r in SIP INVITE SDP before JsSIP parses it
+          if (data.request && typeof data.request.body === "string") {
+            data.request.body = data.request.body.replace(/t=0 0\r\r/g, "t=0 0\r");
+          }
+
           const remoteCaller = session.remote_identity?.uri?.user || "Unknown Caller";
           console.log("[WebPhone] Incoming WebRTC call from:", remoteCaller);
 
@@ -403,6 +515,11 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       try {
         session.answer({
           mediaConstraints: { audio: true, video: false },
+          pcConfig: {
+            iceServers: [
+              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+            ]
+          }
         });
 
         // Notify other open tabs
@@ -521,6 +638,11 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
           extraHeaders: [
             agentCredentials?.caller_id ? `X-Caller-ID: ${agentCredentials.caller_id}` : "",
           ].filter(Boolean),
+          pcConfig: {
+            iceServers: [
+              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+            ]
+          }
         });
 
         bindSessionEvents(session, "OUTBOUND", cleanNumber, contactName, metadata);

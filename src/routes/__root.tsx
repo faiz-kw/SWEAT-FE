@@ -116,6 +116,7 @@ function RootShell({ children }: { children: ReactNode }) {
       </head>
       <body suppressHydrationWarning>
         {children}
+        <audio id="remoteAudio" autoPlay playsInline style={{ display: "none" }} />
         <Scripts />
       </body>
     </html>
