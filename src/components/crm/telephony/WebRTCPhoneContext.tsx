@@ -80,9 +80,10 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     setLastEndedCall(null);
   }, []);
 
-  // Detect WebRTC browser support
-  const isSupported = React.useMemo(() => {
-    return typeof window !== "undefined" && Boolean(window.RTCPeerConnection && navigator.mediaDevices);
+  // Detect WebRTC browser support � must be client-only (no SSR) to avoid hydration mismatch.
+  const [isSupported, setIsSupported] = React.useState(false);
+  React.useEffect(() => {
+    setIsSupported(Boolean(typeof window !== "undefined" && window.RTCPeerConnection && navigator.mediaDevices));
   }, []);
 
   // Initialize hidden audio element for remote audio stream

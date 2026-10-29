@@ -195,7 +195,9 @@ function ShellLayout() {
   }
 
   // If user is a Member or previewing Member Portal, render the clean, dedicated Web Member Portal shell
-  const isMemberMode = isMemberUser(user) || (typeof window !== 'undefined' && pathname === '/' && (new URLSearchParams(window.location.search).get('view') === 'member' || new URLSearchParams(window.location.search).get('asMember') === 'true'));
+  // NOTE: Do NOT inline typeof window checks here � they cause SSR/hydration mismatches.
+  // window.location.search is only available on the client; use the router's searchStr instead.
+  const isMemberMode = isMemberUser(user) || (pathname === '/' && (searchStr.includes('view=member') || searchStr.includes('asMember=true')));
   if (isMemberMode) {
     return (
       <AppProvider>

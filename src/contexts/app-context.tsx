@@ -76,15 +76,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  // Theme state with localStorage persistence
-  const [theme, setThemeState] = React.useState<"light" | "dark">(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("app_theme");
-      if (saved === "dark" || saved === "light") return saved;
-      return "light";
+  // Theme state with localStorage persistence.
+  // IMPORTANT: Always initialise as "light" (deterministic SSR value).
+  // A useLayoutEffect then reads localStorage and corrects the theme before
+  // the first paint, avoiding a React hydration mismatch.
+  const [theme, setThemeState] = React.useState<"light" | "dark">("light");
+
+  // Sync the persisted theme preference after hydration (client-only).
+  React.useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("app_theme");
+    if (saved === "dark" || saved === "light") {
+      setThemeState(saved);
     }
-    return "light";
-  });
+  }, []);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
