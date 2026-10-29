@@ -908,6 +908,8 @@ export function TelephonyAnalyticsDashboard() {
               callerName={selectedCallForAudio.lead_name}
               durationSeconds={selectedCallForAudio.duration_seconds}
               disposition={selectedCallForAudio.disposition_label}
+              title={`${selectedCallForAudio.direction === 'INBOUND' ? 'Inbound' : 'Outbound'} Call Recording`}
+              provider="VOBIZ"
             />
 
             <div className="pt-2 flex justify-end">

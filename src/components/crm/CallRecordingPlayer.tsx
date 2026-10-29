@@ -46,10 +46,10 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
   recordingUrl,
   durationSeconds = 120,
   transcript,
-  title = 'AI Voice Call Recording',
+  title = 'Call Audio QA Recording',
   disposition,
   callSessionId,
-  provider = 'Sarvam AI',
+  provider = 'Vobiz Telephony',
   startedAt,
   callerName = 'Lead',
   className,
@@ -154,6 +154,9 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
   const resolvedAudioUrl = React.useMemo(() => {
     let raw = recordingUrl;
     // For Vobiz carrier recordings, always route through authenticated proxy to prevent public CDN leaks (Risk R6)
+    if (raw?.includes('/stream/')) {
+      return raw;
+    }
     if (callSessionId && (provider?.toUpperCase() === 'VOBIZ' || raw?.includes('vobiz.ai') || title?.toLowerCase().includes('zoiper') || title?.toLowerCase().includes('sales'))) {
       return `/api/v1/tenant/crm/telephony/recordings/${callSessionId}/stream/`;
     }
@@ -326,10 +329,8 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
           src={resolvedAudioUrl}
           onTimeUpdate={handleAudioTimeUpdate}
           onEnded={handleAudioEnded}
-          preload="auto"
-        >
-          <source src={resolvedAudioUrl} type="audio/wav" />
-        </audio>
+          preload="metadata"
+        />
       )}
 
       {/* Top Header / Metadata Bar */}
