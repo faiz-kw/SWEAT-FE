@@ -807,7 +807,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             </Button>
 
             
-            {canEdit && (
+            {canEdit && viewMode === 'ATTENTION' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -824,18 +824,6 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 <span className="hidden sm:inline">{isRecycling ? 'Recycling...' : 'Recycle Stale'}</span>
               </Button>
             )}
-
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.navigate({ to: '/reports/sales' })}
-              className="gap-1.5 h-9 font-medium"
-              title="View Sales Rep Calling Analytics & Leaderboard"
-            >
-              <BarChart3 className="w-3.5 h-3.5 text-primary" />
-              <span className="hidden sm:inline">Call Analytics</span>
-            </Button>
 
             {canCreate && (
               <Button

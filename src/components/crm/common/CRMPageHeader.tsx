@@ -21,15 +21,15 @@ export function CRMPageHeader({
 }: CRMPageHeaderProps) {
   return (
     <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4 sticky top-0 z-10 w-full">
-      <div className="w-full flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="w-full flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="min-w-0 shrink-0 max-w-2xl">
+          <div className="flex items-center gap-2.5">
             {Icon && (
               <span className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
                 <Icon className="w-5 h-5" />
               </span>
             )}
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground whitespace-nowrap">{title}</h1>
             {badgeText && (
               <Badge
                 variant={badgeVariant}
@@ -40,14 +40,14 @@ export function CRMPageHeader({
             )}
           </div>
           {subtitle && (
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
               {subtitle}
             </p>
           )}
         </div>
 
         {actions && (
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap shrink-0 w-full lg:w-auto justify-start lg:justify-end">
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0 justify-start xl:justify-end">
             {actions}
           </div>
         )}
