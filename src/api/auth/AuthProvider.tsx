@@ -112,6 +112,8 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<{ defaultRoute?: string; userType?: string }>;
+  loginWithOtp: (phone: string, otp: string, orgCode?: string) => Promise<{ defaultRoute?: string; userType?: string }>;
+  sendOtp: (phone: string, orgCode?: string) => Promise<{ success: boolean; message: string; retry_after_seconds?: number; whatsapp_dispatched?: boolean; dev_otp?: string }>;
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
@@ -429,6 +431,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }
 
+  async function sendOtp(phone: string, orgCode?: string): Promise<{ success: boolean; message: string; retry_after_seconds?: number; whatsapp_dispatched?: boolean; dev_otp?: string }> {
+    const payload: Record<string, any> = {
+      phone: phone.trim(),
+    };
+    if (orgCode && orgCode.trim()) {
+      payload.org_code = orgCode.trim().toLowerCase();
+    }
+    const response = await api.post<{ success: boolean; message: string; retry_after_seconds?: number; whatsapp_dispatched?: boolean; dev_otp?: string }>('/auth/otp/send/', payload);
+    return response.data;
+  }
+
+  async function loginWithOtp(phone: string, otp: string, orgCode?: string): Promise<{ defaultRoute?: string; userType?: string }> {
+    queryClient.clear();
+    const payload: Record<string, any> = {
+      phone: phone.trim(),
+      otp: otp.trim(),
+    };
+    if (orgCode && orgCode.trim()) {
+      payload.org_code = orgCode.trim().toLowerCase();
+    }
+    const response = await api.post<LoginApiResponse & { default_route?: string; user_type?: string }>('/auth/otp/verify/', payload);
+    clearUserProfile();
+    setAccessToken(response.data.access);
+    await fetchAndSetProfile();
+    setUser(getCurrentUser());
+    return {
+      defaultRoute: response.data.default_route || '/',
+      userType: response.data.user_type,
+    };
+  }
+
+
   // ---------------------------------------------------------------
   // Logout
   // ---------------------------------------------------------------
@@ -493,6 +527,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: isAuthenticated(),
     isLoading,
     login,
+    loginWithOtp,
+    sendOtp,
     logout,
     refreshUserProfile: fetchAndSetProfile,
   };

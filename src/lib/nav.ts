@@ -305,6 +305,7 @@ export const NAV: NavSection[] = [
 
       { label: "Trial Management", to: "/crm/trials", permission: "crm.trials.view" },
       { label: "Sales Activities", to: "/crm/activities", permission: "crm.leads.view" },
+      { label: "Call Logs & Dialer", to: "/reports/sales", permission: "crm.leads.view" },
       { label: "Follow-ups", to: "/crm/follow-ups", permission: "crm.follow-ups.view" },
       { label: "Coupons", to: "/crm/coupons", permission: "crm.campaigns.view" },
       { label: "Campaigns", to: "/crm/campaigns", permission: "crm.campaigns.view" },

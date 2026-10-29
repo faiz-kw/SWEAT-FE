@@ -75,6 +75,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   const remoteAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const durationTimerRef = React.useRef<any | null>(null);
   const callDurationRef = React.useRef<number>(0);
+  const pendingAnswerRef = React.useRef<boolean>(false);
 
   const clearLastEndedCall = React.useCallback(() => {
     setLastEndedCall(null);
@@ -245,6 +246,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         setActiveCall(null);
         currentSessionRef.current = null;
         callDurationRef.current = 0;
+        void crmApi.updateAgentPresence("AVAILABLE").catch(() => {});
         toast.error("Call Ended", {
           description: e?.cause || "Connection terminated.",
         });
@@ -350,6 +352,24 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
           });
 
           bindSessionEvents(session, "INBOUND", remoteCaller);
+
+          // Auto-answer if user already pressed Answer button during screen-pop
+          if (pendingAnswerRef.current) {
+            pendingAnswerRef.current = false;
+            console.log("[WebPhone] Auto-answering pending incoming call on arrival of SIP session");
+            try {
+              session.answer({
+                mediaConstraints: { audio: true, video: false },
+                pcConfig: {
+                  iceServers: [
+                    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+                  ]
+                }
+              });
+            } catch (ansErr) {
+              console.error("[WebPhone] Auto-answer failed:", ansErr);
+            }
+          }
         }
       });
 
@@ -402,15 +422,20 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         });
       }
     } else {
-      console.warn("[WebPhone] answerCall invoked while session is not ringing:", {
-        hasSession: !!currentSessionRef.current,
-        callState,
+      console.log("[WebPhone] answerCall clicked while session is syncing. Arming pending answer for incoming INVITE.");
+      pendingAnswerRef.current = true;
+      toast.info("Connecting call...", {
+        description: "Establishing audio connection with customer...",
+        duration: 3000,
       });
-      if (!currentSessionRef.current) {
-        toast.warning("Softphone Session Not Connected", {
-          description: "No incoming audio stream received yet. Please ensure the WebPhone status is Available.",
-        });
-      }
+      setTimeout(() => {
+        if (pendingAnswerRef.current && !currentSessionRef.current) {
+          pendingAnswerRef.current = false;
+          toast.warning("Softphone Session Not Connected", {
+            description: "No incoming audio stream received yet. Please ensure your WebPhone status is Available.",
+          });
+        }
+      }, 7000);
     }
   }, [callState]);
 
@@ -427,6 +452,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     setCallState("IDLE");
     setActiveCall(null);
     currentSessionRef.current = null;
+    void crmApi.updateAgentPresence("AVAILABLE").catch(() => {});
   }, []);
 
   // Hangup active call
