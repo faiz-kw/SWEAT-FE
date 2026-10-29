@@ -146,7 +146,25 @@ function cleanVobizSdp(sdp: string, isOffer: boolean): string {
   return result;
 }
 
-const WebRTCPhoneContext = React.createContext<WebRTCPhoneContextValue | undefined>(undefined);
+export const DEFAULT_PHONE_CONTEXT: WebRTCPhoneContextValue = {
+  connectionStatus: "DISCONNECTED",
+  isRegistered: false,
+  callState: "IDLE",
+  activeCall: null,
+  lastEndedCall: null,
+  clearLastEndedCall: () => {},
+  agentCredentials: null,
+  answerCall: () => {},
+  declineCall: () => {},
+  hangupCall: () => {},
+  toggleMute: () => {},
+  makeCall: async () => false,
+  sendDTMF: () => {},
+  reconnectPhone: async () => {},
+  isSupported: false,
+};
+
+const WebRTCPhoneContext = React.createContext<WebRTCPhoneContextValue>(DEFAULT_PHONE_CONTEXT);
 
 export function WebRTCPhoneProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
@@ -375,6 +393,23 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   // Initialize UA and register dynamically
   const setupPhone = React.useCallback(async () => {
     if (!isAuthenticated || !isSupported) return;
+
+    // Only attempt to set up WebRTC phone if user has sales or admin permissions
+    const canUsePhone = Boolean(
+      user && (
+        user.role === 'PLATFORM_SUPERADMIN' ||
+        user.role === 'ORG_ADMIN' ||
+        user.roles?.includes('ORG_ADMIN') ||
+        user.roles?.includes('SALES_REP') ||
+        user.roles?.includes('SALES_MANAGER') ||
+        user.permissions?.includes('crm.leads.view') ||
+        user.permissions?.includes('crm.leads.edit')
+      )
+    );
+    if (!canUsePhone) {
+      setConnectionStatus('DISCONNECTED');
+      return;
+    }
 
     try {
       if (uaRef.current) {
@@ -710,10 +745,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   return <WebRTCPhoneContext.Provider value={value}>{children}</WebRTCPhoneContext.Provider>;
 }
 
-export function useWebRTCPhone() {
+export function useWebRTCPhone(): WebRTCPhoneContextValue {
   const context = React.useContext(WebRTCPhoneContext);
-  if (!context) {
-    throw new Error("useWebRTCPhone must be used within a WebRTCPhoneProvider");
-  }
-  return context;
+  return context || DEFAULT_PHONE_CONTEXT;
 }

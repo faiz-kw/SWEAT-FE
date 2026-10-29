@@ -234,14 +234,10 @@ function ShellLayout() {
 
   return (
     <AppProvider>
-      {mounted && isSalesOrAdmin ? (
-        <WebRTCPhoneProvider>
-          <TelephonyManager />
-          {shellContent}
-        </WebRTCPhoneProvider>
-      ) : (
-        shellContent
-      )}
+      <WebRTCPhoneProvider>
+        {mounted && isSalesOrAdmin && <TelephonyManager />}
+        {shellContent}
+      </WebRTCPhoneProvider>
     </AppProvider>
   );
 }
