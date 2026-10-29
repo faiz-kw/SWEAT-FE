@@ -73,13 +73,20 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
-  const [phone, setPhone] = React.useState(initialPhone || '');
+  const sanitizeCustomerPhone = (p?: string): string => {
+    if (!p || p.includes('sip:') || p.includes('@') || p.toLowerCase().includes('agent')) return '';
+    const d = p.replace(/\D/g, '');
+    return d.length >= 10 ? d.slice(-10) : '';
+  };
+
+  const [phone, setPhone] = React.useState(() => sanitizeCustomerPhone(initialPhone));
   const [gender, setGender] = React.useState('');
   const [dateOfBirth, setDateOfBirth] = React.useState('');
 
   React.useEffect(() => {
-    if (initialPhone && open) {
-      setPhone(initialPhone);
+    if (open) {
+      const clean = sanitizeCustomerPhone(initialPhone);
+      setPhone(clean);
     }
   }, [initialPhone, open]);
 
@@ -419,6 +426,8 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
     const cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone) {
       errors.phone = 'Mobile number is required.';
+    } else if (cleanPhone.length !== 10) {
+      errors.phone = 'Please enter exactly a 10-digit Indian mobile number.';
     }
     if (assignmentMode === 'MANUAL') {
       if (!selectedAgent) {

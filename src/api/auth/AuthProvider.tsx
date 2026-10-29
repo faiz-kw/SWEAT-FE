@@ -436,7 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       phone: phone.trim(),
     };
     if (orgCode && orgCode.trim()) {
-      payload.org_code = orgCode.trim().toLowerCase();
+      payload['org_code'] = orgCode.trim().toLowerCase();
     }
     const response = await api.post<{ success: boolean; message: string; retry_after_seconds?: number; whatsapp_dispatched?: boolean; dev_otp?: string }>('/auth/otp/send/', payload);
     return response.data;
@@ -449,17 +449,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       otp: otp.trim(),
     };
     if (orgCode && orgCode.trim()) {
-      payload.org_code = orgCode.trim().toLowerCase();
+      payload['org_code'] = orgCode.trim().toLowerCase();
     }
     const response = await api.post<LoginApiResponse & { default_route?: string; user_type?: string }>('/auth/otp/verify/', payload);
     clearUserProfile();
     setAccessToken(response.data.access);
     await fetchAndSetProfile();
     setUser(getCurrentUser());
-    return {
+    const res: { defaultRoute?: string; userType?: string } = {
       defaultRoute: response.data.default_route || '/',
-      userType: response.data.user_type,
     };
+    if (response.data.user_type) {
+      res.userType = response.data.user_type;
+    }
+    return res;
   }
 
 

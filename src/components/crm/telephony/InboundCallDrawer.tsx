@@ -200,7 +200,11 @@ export function InboundCallDrawer({
         {isNew && (
           <Button
             size="sm"
-            onClick={() => onOpenNewLead(call.caller_phone)}
+            onClick={() => {
+              const digits = (call.caller_phone || '').replace(/\D/g, '');
+              const clean10 = digits.length >= 10 ? digits.slice(-10) : '';
+              onOpenNewLead(clean10);
+            }}
             className="text-xs font-bold gap-1.5 h-8 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
           >
             <UserPlus className="size-3.5" />
