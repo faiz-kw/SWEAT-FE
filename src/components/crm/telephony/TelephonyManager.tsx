@@ -51,8 +51,20 @@ export function TelephonyManager() {
     if (lastEndedCall) {
       console.log("[TelephonyManager] In-browser WebRTC call finished:", lastEndedCall);
       setActiveCallPopup(null);
+
+      const sessId = lastEndedCall.sessionId || `webrtc-${Date.now()}`;
+      // Ignore if this session or phone number was already disposed
+      if (
+        disposedSessionsRef.current.has(sessId) ||
+        (lastEndedCall.remoteIdentity && disposedSessionsRef.current.has(lastEndedCall.remoteIdentity))
+      ) {
+        console.log("[TelephonyManager] Call session already disposed, skipping duplicate modal:", sessId);
+        clearLastEndedCall();
+        return;
+      }
+
       setCallEndedData({
-        session_id: lastEndedCall.sessionId || `webrtc-${Date.now()}`,
+        session_id: sessId,
         lead_id: lastEndedCall.leadId,
         lead_name: lastEndedCall.leadName || lastEndedCall.displayName,
         member_id: lastEndedCall.memberId,
@@ -70,6 +82,16 @@ export function TelephonyManager() {
   const [activeCallPopup, setActiveCallPopup] = React.useState<InboundCallPopupData | null>(null);
   const [callEndedData, setCallEndedData] = React.useState<CallEndedData | null>(null);
   const [isDispositionOpen, setIsDispositionOpen] = React.useState<boolean>(false);
+
+  // Deduplication refs: tracks already disposed sessions to prevent duplicate modal popups
+  const disposedSessionsRef = React.useRef<Set<string>>(new Set());
+  const isDispositionOpenRef = React.useRef<boolean>(false);
+  const callEndedDataRef = React.useRef<CallEndedData | null>(null);
+
+  React.useEffect(() => {
+    isDispositionOpenRef.current = isDispositionOpen;
+    callEndedDataRef.current = callEndedData;
+  }, [isDispositionOpen, callEndedData]);
 
   // Modals state for Member, Lead, and New Prospect
   const [inspectMemberId, setInspectMemberId] = React.useState<string | null>(null);
@@ -175,6 +197,27 @@ export function TelephonyManager() {
           try {
             const data: CallEndedData = JSON.parse(e.data);
             console.log("[Telephony SSE] Call ended event:", data);
+
+            // Deduplication: if session or phone was already disposed, ignore
+            if (
+              (data.session_id && disposedSessionsRef.current.has(data.session_id)) ||
+              (data.call_uuid && disposedSessionsRef.current.has(data.call_uuid)) ||
+              (data.caller_phone && disposedSessionsRef.current.has(data.caller_phone))
+            ) {
+              console.log("[Telephony SSE] Skipping duplicate CALL_ENDED for already-disposed session:", data.session_id);
+              return;
+            }
+
+            // If disposition modal is ALREADY open for this exact session or phone, do NOT pop twice
+            if (
+              isDispositionOpenRef.current &&
+              (callEndedDataRef.current?.session_id === data.session_id ||
+               (data.caller_phone && callEndedDataRef.current?.caller_phone === data.caller_phone))
+            ) {
+              console.log("[Telephony SSE] Disposition modal is already open for session:", data.session_id);
+              return;
+            }
+
             setActiveCallPopup(null); // Dismiss incoming alert
             setCallEndedData(data);
             setIsDispositionOpen(true);
@@ -230,11 +273,30 @@ export function TelephonyManager() {
   };
 
   const handleDispositionComplete = () => {
+    if (callEndedData?.session_id) {
+      disposedSessionsRef.current.add(callEndedData.session_id);
+    }
+    if (callEndedData?.call_uuid) {
+      disposedSessionsRef.current.add(callEndedData.call_uuid);
+    }
+    if (callEndedData?.caller_phone) {
+      disposedSessionsRef.current.add(callEndedData.caller_phone);
+    }
+
     setIsDispositionOpen(false);
     setCallEndedData(null);
+
+    // Refresh all telephony and lead tables immediately
     queryClient.invalidateQueries({ queryKey: ["telephony-presence"] });
+    queryClient.invalidateQueries({ queryKey: ["telephony-analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-recent-calls"] });
     queryClient.invalidateQueries({ queryKey: ["leads"] });
+    queryClient.invalidateQueries({ queryKey: ["lead-summary-metrics"] });
+    queryClient.invalidateQueries({ queryKey: ["leads-summary-metrics"] });
     queryClient.invalidateQueries({ queryKey: ["crm-dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["crm-activities"] });
+    queryClient.invalidateQueries({ queryKey: ["lead-timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["lead-activities"] });
   };
 
   return (

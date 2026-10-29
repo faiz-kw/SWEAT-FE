@@ -22,10 +22,15 @@ export interface CallEndedData {
   session_id: string;
   lead_id?: string | number | null;
   duration?: number;
+  duration_seconds?: number;
   bill_duration?: number;
+  bill_duration_seconds?: number;
   is_meaningful?: boolean;
   recording_url?: string;
   lead_name?: string;
+  caller_phone?: string;
+  direction?: string;
+  call_uuid?: string;
 }
 
 interface CallDispositionModalProps {
@@ -61,7 +66,9 @@ export function CallDispositionModal({
   const [whatsappMsg, setWhatsappMsg] = React.useState<string>("");
 
   const leadFirstName = React.useMemo(() => {
-    return callEndedData?.lead_name?.split(' ')[0] || 'there';
+    const raw = callEndedData?.lead_name?.trim();
+    if (!raw || /^[+\d\s-]+$/.test(raw)) return 'there';
+    return raw.split(' ')[0] || 'there';
   }, [callEndedData?.lead_name]);
 
   // Set default WhatsApp message whenever lead changes
@@ -92,8 +99,8 @@ export function CallDispositionModal({
     return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  const rawSeconds = callEndedData?.duration ?? 0;
-  const billSeconds = callEndedData?.bill_duration ?? (Math.ceil((rawSeconds || 1) / 60) * 60);
+  const rawSeconds = callEndedData?.duration ?? callEndedData?.duration_seconds ?? 0;
+  const billSeconds = callEndedData?.bill_duration ?? callEndedData?.bill_duration_seconds ?? (Math.ceil((rawSeconds || 1) / 60) * 60);
   const isMeaningful = callEndedData?.is_meaningful ?? (rawSeconds >= 30);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,6 +123,10 @@ export function CallDispositionModal({
         followup_date: followupDate ? new Date(followupDate).toISOString() : undefined,
         send_whatsapp: isUnansweredOutcome ? sendWhatsApp : false,
         whatsapp_message: isUnansweredOutcome && sendWhatsApp ? whatsappMsg.trim() : undefined,
+        caller_phone: callEndedData.caller_phone,
+        duration_seconds: rawSeconds,
+        direction: callEndedData.direction,
+        lead_id: callEndedData.lead_id,
       });
 
       if (res.whatsapp_sent) {
@@ -140,7 +151,11 @@ export function CallDispositionModal({
   if (!isOpen || !callEndedData) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) {
+        onDispositionComplete();
+      }
+    }}>
       <DialogContent 
         className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-2xl border-border bg-card p-4 sm:p-6 shadow-2xl text-card-foreground"
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -196,12 +211,19 @@ export function CallDispositionModal({
         </div>
 
         {/* Lead Context info */}
-        {callEndedData.lead_name && (
-          <div className="text-xs font-semibold text-foreground flex items-center justify-between px-1">
-            <span className="text-muted-foreground">Prospect / Lead:</span>
-            <span className="font-bold text-primary">{callEndedData.lead_name}</span>
+        <div className="text-xs font-semibold text-foreground flex items-center justify-between px-1">
+          <span className="text-muted-foreground">Prospect / Lead:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-primary">
+              {callEndedData.lead_name || callEndedData.caller_phone || "Caller"}
+            </span>
+            {!callEndedData.lead_id && (
+              <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                Direct Dial
+              </Badge>
+            )}
           </div>
-        )}
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           {/* Outcome / Disposition Select */}

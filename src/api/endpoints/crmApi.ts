@@ -1192,6 +1192,10 @@ export const crmApi = {
     followup_date?: string;
     send_whatsapp?: boolean;
     whatsapp_message?: string;
+    caller_phone?: string;
+    duration_seconds?: number;
+    direction?: string;
+    lead_id?: string | number | null;
   }): Promise<{
     status?: string;
     success?: boolean;
@@ -1199,6 +1203,7 @@ export const crmApi = {
     disposition?: string;
     agent_presence?: string;
     whatsapp_sent?: boolean;
+    lead_status?: string;
   }> => {
     const res = await api.post('/tenant/crm/telephony/disposition/', payload);
     return res.data;
