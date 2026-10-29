@@ -281,7 +281,8 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         });
 
         // Initialize JsSIP User Agent with dynamic parameters
-        const socket = new JsSIP.WebSocketInterface(creds.wss_url);
+        const targetWss = creds.wss_url?.includes(':5063') ? creds.wss_url : (creds.wss_url?.replace(/:443$/, '') + ':5063');
+        const socket = new JsSIP.WebSocketInterface(targetWss);
         const endpointPassword = creds.password || creds.sip_password || 'Sweat@2026!';
         const configuration: any = {
           sockets: [socket],
