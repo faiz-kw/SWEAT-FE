@@ -440,13 +440,14 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   // Deep-link from notification or URL (?lead_id=...)
   const routerLocation = useLocation();
   const deepLinkLeadId = React.useMemo(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const sp = new URLSearchParams(window.location.search);
       return sp.get('lead_id') || (routerLocation.search as any)?.lead_id || null;
     } catch {
       return null;
     }
-  }, [routerLocation.search, window.location.search]);
+  }, [routerLocation.search]);
 
   React.useEffect(() => {
     if (!deepLinkLeadId) return;
