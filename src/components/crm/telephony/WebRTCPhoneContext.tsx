@@ -653,7 +653,15 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         return false;
       }
 
-      const cleanNumber = targetPhone.replace(/[\s-]/g, "");
+      let cleanNumber = targetPhone.trim().replace(/[\s-]/g, "");
+      if (!cleanNumber.startsWith("sip:")) {
+        const rawDigits = cleanNumber.replace(/\D/g, "");
+        if (rawDigits.length === 10) {
+          cleanNumber = `+91${rawDigits}`;
+        } else if (rawDigits.length === 12 && rawDigits.startsWith("91")) {
+          cleanNumber = `+${rawDigits}`;
+        }
+      }
       const sipTarget = cleanNumber.startsWith("sip:")
         ? cleanNumber
         : `sip:${cleanNumber}@${agentCredentials?.sip_domain || "registrar.vobiz.ai"}`;
