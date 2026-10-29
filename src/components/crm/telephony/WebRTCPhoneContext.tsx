@@ -282,12 +282,21 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
 
         // Initialize JsSIP User Agent with dynamic parameters
         const socket = new JsSIP.WebSocketInterface(creds.wss_url);
+        const endpointPassword = creds.password || creds.sip_password || 'Sweat@2026!';
         const configuration: any = {
           sockets: [socket],
           uri: creds.sip_uri,
+          password: endpointPassword,
+          authorization_user: creds.username,
+          registrar_server: `sip:${creds.sip_domain}`,
           display_name: creds.display_name,
           register: true,
           session_timers: false,
+          pcConfig: {
+            iceServers: [
+              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+            ]
+          }
         };
 
         const ua = new JsSIP.UA(configuration);
@@ -356,6 +365,11 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       try {
         currentSessionRef.current.answer({
           mediaConstraints: { audio: true, video: false },
+          pcConfig: {
+            iceServers: [
+              { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+            ]
+          }
         });
 
         // Notify other open tabs

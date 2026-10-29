@@ -1271,6 +1271,8 @@ export const crmApi = {
 
   getWebRTCCredentials: async (): Promise<{
     username: string;
+    password?: string;
+    sip_password?: string;
     sip_domain: string;
     sip_uri: string;
     wss_url: string;

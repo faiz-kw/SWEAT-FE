@@ -2727,6 +2727,19 @@ function MetaOAuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const [isLoadingAuth, setIsLoadingAuth] = React.useState(false);
   const [isSubmittingCode, setIsSubmittingCode] = React.useState(false);
 
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'META_OAUTH_SUCCESS') {
+        toast.success(`Connected Facebook account: ${event.data.userName || 'Successfully'}`);
+        onSuccess();
+      } else if (event.data?.type === 'META_OAUTH_ERROR') {
+        toast.error(`Facebook connection failed: ${event.data.description || event.data.error || 'Authorization cancelled'}`);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onSuccess]);
+
   const handleLaunchOAuth = async () => {
     try {
       setIsLoadingAuth(true);
