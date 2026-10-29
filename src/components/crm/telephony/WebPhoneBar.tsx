@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings, Delete, RefreshCw, AlertCircle } from "lucide-react";
+import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings, Delete, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -57,16 +57,30 @@ export function WebPhoneBar() {
   const isDialing = callState === "DIALING_OUTBOUND";
   const isRinging = callState === "RINGING_INBOUND";
 
+  const handleNumberChange = (raw: string) => {
+    // Only accept numbers
+    let digits = raw.replace(/\D/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) {
+      digits = digits.slice(2);
+    }
+    setTargetNumber(digits.slice(0, 10));
+  };
+
   const handleDial = (digit: string) => {
-    setTargetNumber((prev) => prev + digit);
     if (isInCall) {
       sendDTMF(digit);
+      return;
     }
+    // Dialler accepts only digits 0-9 and strictly up to 10 digits
+    if (!/^\d$/.test(digit)) return;
+    setTargetNumber((prev) => (prev.length < 10 ? prev + digit : prev));
   };
 
   const handleStartCall = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetNumber.trim()) return;
+    if (targetNumber.length !== 10) {
+      return;
+    }
     const ok = await makeCall(targetNumber);
     if (ok) {
       setDialpadOpen(false);
@@ -256,27 +270,62 @@ export function WebPhoneBar() {
             )}
 
             <form onSubmit={handleStartCall} className="space-y-3.5">
-              {/* Dialpad Input */}
-              <div className="relative flex items-center">
-                <Input
-                  type="tel"
-                  placeholder="+91..."
-                  value={targetNumber}
-                  onChange={(e) => setTargetNumber(e.target.value)}
-                  className="h-14 text-2xl font-mono tracking-wider font-extrabold text-center pr-10 rounded-xl bg-muted/40 border-border/70 focus-visible:ring-emerald-500"
-                />
-                {targetNumber ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 size-9 text-muted-foreground hover:text-foreground rounded-lg"
-                    onClick={() => setTargetNumber((prev) => prev.slice(0, -1))}
-                    title="Backspace"
-                  >
-                    <Delete className="size-4" />
-                  </Button>
-                ) : null}
+              {/* Dialpad Input (Strict 10-Digit Numeric Only) */}
+              <div className="space-y-1">
+                <div className="relative flex items-center">
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                    placeholder="Enter 10-digit number"
+                    value={targetNumber}
+                    onChange={(e) => handleNumberChange(e.target.value)}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      handleNumberChange(e.clipboardData.getData("text"));
+                    }}
+                    className={cn(
+                      "h-14 text-2xl font-mono tracking-wider font-extrabold text-center pr-10 rounded-xl bg-muted/40 border-border/70 focus-visible:ring-emerald-500 transition-colors",
+                      targetNumber.length === 10 && "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30"
+                    )}
+                  />
+                  {targetNumber ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 size-9 text-muted-foreground hover:text-foreground rounded-lg"
+                      onClick={() => setTargetNumber((prev) => prev.slice(0, -1))}
+                      title="Backspace"
+                    >
+                      <Delete className="size-4" />
+                    </Button>
+                  ) : null}
+                </div>
+
+                {/* 10-Digit Validation Indicator */}
+                <div className="flex items-center justify-between px-1 text-[11px] h-4">
+                  {targetNumber.length === 0 ? (
+                    <span className="text-muted-foreground">Accepts exactly 10-digit mobile number</span>
+                  ) : targetNumber.length === 10 ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="size-3" /> Valid 10-digit number (+91 {targetNumber})
+                    </span>
+                  ) : (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      Enter {10 - targetNumber.length} more digit{10 - targetNumber.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  <span className={cn(
+                    "font-mono text-[10px] font-bold px-1.5 py-0.2 rounded",
+                    targetNumber.length === 10
+                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {targetNumber.length}/10
+                  </span>
+                </div>
               </div>
 
               {/* 3x4 Dialpad Matrix */}
@@ -301,11 +350,16 @@ export function WebPhoneBar() {
                 ))}
               </div>
 
-              {/* Call Action Button */}
+              {/* Call Action Button (Strictly Enabled Only When 10 Digits Entered) */}
               <Button
                 type="submit"
-                disabled={!isConnected || !targetNumber.trim() || isInCall || isDialing}
-                className="w-full h-13 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold gap-2 text-base rounded-xl shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.98] disabled:opacity-60"
+                disabled={!isConnected || targetNumber.length !== 10 || isInCall || isDialing}
+                className={cn(
+                  "w-full h-13 text-white font-extrabold gap-2 text-base rounded-xl transition-all shadow-lg active:scale-[0.98]",
+                  targetNumber.length === 10 && isConnected && !isInCall && !isDialing
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25 cursor-pointer opacity-100"
+                    : "bg-muted text-muted-foreground/60 shadow-none cursor-not-allowed opacity-50 border border-border/50"
+                )}
               >
                 <PhoneCall className="size-4" /> Call via WebRTC
               </Button>

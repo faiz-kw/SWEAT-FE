@@ -656,6 +656,12 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       let cleanNumber = targetPhone.trim().replace(/[\s-]/g, "");
       if (!cleanNumber.startsWith("sip:")) {
         const rawDigits = cleanNumber.replace(/\D/g, "");
+        if (rawDigits.length !== 10 && (rawDigits.length !== 12 || !rawDigits.startsWith("91"))) {
+          toast.error("Invalid Number", {
+            description: "Please enter a valid 10-digit mobile number.",
+          });
+          return false;
+        }
         if (rawDigits.length === 10) {
           cleanNumber = `+91${rawDigits}`;
         } else if (rawDigits.length === 12 && rawDigits.startsWith("91")) {
