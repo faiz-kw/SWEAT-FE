@@ -40,6 +40,11 @@ function ShellLayout() {
   const { isAuthenticated: isAuth, isLoading, user } = useAuth();
   const navigate = useNavigate();
   const mainRef = React.useRef<HTMLElement>(null);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
   const { pathname, searchStr, hash } = useRouterState({
     select: (s) => ({
       pathname: s.location.pathname,
@@ -229,7 +234,7 @@ function ShellLayout() {
 
   return (
     <AppProvider>
-      {isSalesOrAdmin ? (
+      {mounted && isSalesOrAdmin ? (
         <WebRTCPhoneProvider>
           <TelephonyManager />
           {shellContent}

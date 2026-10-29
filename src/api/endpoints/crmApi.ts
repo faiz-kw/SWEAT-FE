@@ -1312,12 +1312,20 @@ export const crmApi = {
     branch_id?: string;
     rep_id?: string;
     team_only?: boolean;
+    direction?: string;
+    status?: string;
+    disposition?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<{
     timeframe: string;
     summary: {
       total_dials: number;
       connected_calls: number;
       connect_rate_pct: number;
+      missed_calls: number;
+      missed_rate_pct: number;
       meaningful_calls: number;
       meaningful_rate_pct: number;
       total_talk_time_minutes: number;
@@ -1338,6 +1346,7 @@ export const crmApi = {
       connect_rate_pct: number;
       meaningful_calls: number;
       talk_time_minutes: number;
+      avg_duration_seconds: number;
       trials_booked: number;
       members_converted: number;
     }>;
@@ -1369,10 +1378,44 @@ export const crmApi = {
       disposition_label?: string;
       disposition_notes?: string;
       has_recording: boolean;
+      recording_url?: string;
       created_at: string;
     }>;
+    sales_reps: Array<{
+      id: string;
+      name: string;
+      email: string;
+    }>;
+    available_dispositions: Array<{
+      code: string;
+      label: string;
+    }>;
+    pagination: {
+      total_count: number;
+      page: number;
+      page_size: number;
+      total_pages: number;
+    };
   }> => {
     const res = await api.get('/tenant/crm/telephony/analytics/', { params });
+    return res.data;
+  },
+
+  exportTelephonyReport: async (params?: {
+    timeframe?: string;
+    branch_id?: string;
+    rep_id?: string;
+    date_from?: string;
+    date_to?: string;
+    direction?: string;
+    status?: string;
+    disposition?: string;
+    search?: string;
+  }): Promise<Blob> => {
+    const res = await api.get('/tenant/crm/telephony/export/', {
+      params,
+      responseType: 'blob',
+    });
     return res.data;
   },
 
