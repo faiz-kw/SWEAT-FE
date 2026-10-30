@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/components/members/RenewalsWorkspace.tsx — Authoritative Member Renewals Workspace
  * Dedicated workspace replacing mock routes. Connects directly to backend tenant REST APIs.
  * Supports:
@@ -38,6 +38,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RenewModal } from './modals/MemberActionModals';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
 type RenewalTab = 'expiring_soon' | 'expired' | 'all';
 
@@ -48,6 +49,7 @@ export const RenewalsWorkspace: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<RenewalTab>('expiring_soon');
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
@@ -128,7 +130,12 @@ export const RenewalsWorkspace: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['member-renewals'] }),
+                  refetch(),
+                ]);
+              }}
               disabled={isFetching}
               className="text-xs h-9"
             >
@@ -179,7 +186,7 @@ export const RenewalsWorkspace: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               placeholder="Search by name, phone, email, or #..."
               className="pl-9 h-9 text-xs"
             />
@@ -254,7 +261,7 @@ export const RenewalsWorkspace: React.FC = () => {
                       <tr
                         key={member.id}
                         className="hover:bg-muted/20 transition-colors group cursor-pointer"
-                        onClick={() => navigate({ to: '/_shell/members/client-360', search: { memberId: member.id } })}
+                        onClick={() => navigate({ to: '/members/client-360', search: { memberId: member.id } as never })}
                       >
                         {/* Member identity */}
                         <td className="py-3 px-4">
@@ -355,8 +362,8 @@ export const RenewalsWorkspace: React.FC = () => {
                               className="h-8 text-xs font-medium"
                               onClick={() =>
                                 navigate({
-                                  to: '/_shell/members/client-360',
-                                  search: { memberId: member.id },
+                                  to: '/members/client-360',
+                                  search: { memberId: member.id } as never,
                                 })
                               }
                             >

@@ -2,10 +2,11 @@ import * as React from "react";
 import { 
   Bell, LogOut, Menu, PanelLeft, Search, ChevronRight, 
   CheckCircle2, AlertCircle, ArrowUpRight, KeyRound, Sparkles, MapPin, 
-  Building, Radio, Bot, Command, ShieldCheck, Flame, Sun, Moon, X
+  Building, Radio, Bot, Command, ShieldCheck, Flame, Sun, Moon, X, User, Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ import { exitImpersonateApi } from "@/api/endpoints/api-platform";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { crmApi, type InAppNotification } from "@/api/endpoints/crmApi";
+import { membersApi } from "@/api/endpoints/membersApi";
 import { AgentPresenceWidget, MissedCallsDesk, WebPhoneBar } from "@/components/crm/telephony";
 
 // ── Helper: derive breadcrumb segments from pathname ──────────────────────────
@@ -73,6 +75,8 @@ export function Topbar() {
     role,
     theme,
     toggleTheme,
+    globalSearchQuery,
+    setGlobalSearchQuery,
   } = useApp();
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -157,11 +161,35 @@ export function Topbar() {
   }, [isOrgWide, validLocations, locationId, setLocationId]);
 
   // ── Search State ──
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState(globalSearchQuery || "");
   const [searchFocused, setSearchFocused] = React.useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = React.useState(false);
   const searchContainerRef = React.useRef<HTMLDivElement>(null);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
+
+  // Sync external global search updates
+  React.useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+    }
+  }, [globalSearchQuery]);
+
+  // Reset search on route change
+  const prevPathnameRef = React.useRef(pathname);
+  React.useEffect(() => {
+    if (prevPathnameRef.current !== pathname) {
+      prevPathnameRef.current = pathname;
+      setSearchQuery("");
+      setGlobalSearchQuery("");
+      setSearchFocused(false);
+    }
+  }, [pathname, setGlobalSearchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    setGlobalSearchQuery(val);
+    setSearchFocused(true);
+  };
 
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
   const isOrgAdmin = isOrganizationAdmin(user);
@@ -205,6 +233,28 @@ export function Topbar() {
       );
     }).slice(0, 8);
   }, [searchQuery, isSuperAdmin, isOrgAdmin, user, enabledModules]);
+
+  const trimmedSearch = searchQuery.trim();
+  const isSearchActive = (searchFocused || mobileSearchOpen) && trimmedSearch.length >= 2;
+
+  // Real-time member search for global dropdown
+  const { data: memberSearchResults } = useQuery({
+    queryKey: ['global-search-members', trimmedSearch],
+    queryFn: () => membersApi.getMembers({ search: trimmedSearch, page_size: 4 }),
+    enabled: isSearchActive && !isSuperAdmin,
+    staleTime: 5000,
+  });
+
+  // Real-time lead search for global dropdown
+  const { data: leadSearchResults } = useQuery({
+    queryKey: ['global-search-leads', trimmedSearch],
+    queryFn: () => crmApi.getLeadsPaginated({ search: trimmedSearch, page_size: 4 }),
+    enabled: isSearchActive && !isSuperAdmin,
+    staleTime: 5000,
+  });
+
+  const matchingMembers = memberSearchResults?.results || [];
+  const matchingLeads = leadSearchResults?.leads || [];
 
   // Global Ctrl/Cmd + K shortcut listener
   React.useEffect(() => {
@@ -386,7 +436,7 @@ export function Topbar() {
             variant="ghost"
             size="icon"
             onClick={() => setMobileSearchOpen(true)}
-            className="2xl:hidden size-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-border bg-card cursor-pointer shrink-0"
+            className="lg:hidden size-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-border bg-card cursor-pointer shrink-0"
             title="Search modules (⌘K)"
             aria-label="Search modules"
           >
@@ -394,12 +444,12 @@ export function Topbar() {
           </Button>
 
           {/* Full Command Search on 2xl+ screens */}
-          <div ref={searchContainerRef} className="relative hidden 2xl:block w-44 2xl:w-52 shrink-0">
+          <div ref={searchContainerRef} className="relative hidden lg:block w-40 xl:w-52 2xl:w-60 shrink-0">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => {
-                setSearchQuery(e.target.value);
+                handleSearchChange(e.target.value);
                 setSearchFocused(true);
               }}
               onFocus={() => setSearchFocused(true)}
@@ -412,49 +462,166 @@ export function Topbar() {
                   setSearchFocused(false);
                 }
               }}
-              placeholder="Search…"
+              placeholder="Search… (⌘K)"
               className="h-8 pl-8 pr-11 text-xs bg-muted/40 text-foreground placeholder:text-muted-foreground border-border/80 focus:bg-surface focus:border-primary focus:ring-1 focus:ring-primary/20 rounded-lg transition-all"
             />
-            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.2 font-mono text-[9px] font-bold text-muted-foreground shadow-2xs">
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setGlobalSearchQuery("");
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+                title="Clear search"
+              >
+                <X className="size-3" />
+              </button>
+            ) : (
+              <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.2 font-mono text-[9px] font-bold text-muted-foreground shadow-2xs">
               ⌘K
             </kbd>
+            )}
 
             {/* Desktop Search Dropdown */}
             {searchFocused && searchQuery.trim().length > 0 && (
-              <div className="absolute left-0 top-full mt-1.5 w-76 rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
-                <div className="border-b border-border/70 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-primary bg-muted/50 flex items-center justify-between">
-                  <span>Matching Modules</span>
-                  <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.2 rounded font-bold">
-                    {searchResults.length}
+              <div className="absolute left-0 top-full mt-1.5 w-80 sm:w-96 rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                                <div className="border-b border-border/70 px-3.5 py-1.5 text-[11px] font-semibold text-primary bg-primary/10 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Sparkles className="size-3 text-primary shrink-0" />
+                    <span>Live Context &amp; Search</span>
                   </span>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setGlobalSearchQuery("");
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <X className="size-3" /> Clear
+                    </button>
+                  )}
                 </div>
-                {searchResults.length === 0 ? (
-                  <div className="px-4 py-5 text-center text-xs text-muted-foreground">
-                    No matching module found.
-                  </div>
-                ) : (
-                  <div className="max-h-60 overflow-y-auto divide-y divide-border/50 py-1">
-                    {searchResults.map((item) => (
-                      <button
-                        key={item.to}
-                        onClick={() => {
-                          void router.navigate({ to: item.to as "/" });
-                          setSearchQuery("");
-                          setSearchFocused(false);
-                        }}
-                        className="flex w-full items-center justify-between px-3.5 py-2 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                            {item.label}
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-border/50 py-1">
+                  {/* Matching Members */}
+                  {matchingMembers.length > 0 && (
+                    <div>
+                      <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                        <span>Members</span>
+                        <span className="font-mono text-[9px] bg-muted px-1.5 rounded">{matchingMembers.length}</span>
+                      </div>
+                      {matchingMembers.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            void router.navigate({
+                              to: '/members/client-360',
+                              search: { memberId: m.id } as never,
+                            });
+                            setSearchQuery("");
+                            setGlobalSearchQuery("");
+                            setSearchFocused(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3.5 py-2 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate flex items-center gap-1.5">
+                              <span>{m.name}</span>
+                              {m.member_number && (
+                                <span className="text-[10px] font-mono text-muted-foreground">({m.member_number})</span>
+                              )}
+                            </div>
+                            <div className="text-[10.5px] text-muted-foreground truncate">
+                              {m.phone || m.email || m.home_branch || 'Member Profile'}
+                            </div>
                           </div>
-                          <div className="text-[10.5px] text-muted-foreground">{item.section}</div>
-                        </div>
-                        <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary ml-2" />
-                      </button>
-                    ))}
-                  </div>
-                )}
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 uppercase ml-2">
+                            {m.status || 'Active'}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Matching Leads */}
+                  {matchingLeads.length > 0 && (
+                    <div>
+                      <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                        <span>Leads &amp; Prospects</span>
+                        <span className="font-mono text-[9px] bg-muted px-1.5 rounded">{matchingLeads.length}</span>
+                      </div>
+                      {matchingLeads.map((l) => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => {
+                            void router.navigate({
+                              to: '/crm/leads',
+                              search: { lead_id: l.id } as never,
+                            });
+                            setSearchQuery("");
+                            setGlobalSearchQuery("");
+                            setSearchFocused(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3.5 py-2 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                              {l.name}
+                            </div>
+                            <div className="text-[10.5px] text-muted-foreground truncate">
+                              {l.phone || l.email || l.preferred_program || 'Prospect'}
+                            </div>
+                          </div>
+                          <Badge className="bg-primary/10 text-primary border border-primary/20 text-[9px] px-1 py-0 h-4 shrink-0 uppercase ml-2">
+                            {l.current_status || 'New'}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Matching Modules */}
+                  {searchResults.length > 0 && (
+                    <div>
+                      <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                        <span>Modules &amp; Pages</span>
+                        <span className="font-mono text-[9px] bg-muted px-1.5 rounded">{searchResults.length}</span>
+                      </div>
+                      {searchResults.map((item) => (
+                        <button
+                          key={item.to}
+                          type="button"
+                          onClick={() => {
+                            void router.navigate({ to: item.to as "/" });
+                            setSearchQuery("");
+                            setGlobalSearchQuery("");
+                            setSearchFocused(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3.5 py-2 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                              {item.label}
+                            </div>
+                            <div className="text-[10.5px] text-muted-foreground">{item.section}</div>
+                          </div>
+                          <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary ml-2" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {matchingMembers.length === 0 && matchingLeads.length === 0 && searchResults.length === 0 && (
+                    <div className="px-4 py-5 text-center text-xs text-muted-foreground">
+                      No matching records or modules found for "{searchQuery}".
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -671,47 +838,134 @@ export function Topbar() {
 
       {/* Quick Search Dialog Modal for Mobile / Tablet */}
       <Dialog open={mobileSearchOpen} onOpenChange={setMobileSearchOpen}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-popover border-border rounded-2xl">
+                <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-popover border-border rounded-2xl">
           <div className="p-3 border-b border-border flex items-center gap-2 bg-muted/30">
             <Search className="size-4 text-muted-foreground shrink-0" />
             <input
               autoFocus
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search performance OS modules…"
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search performance OS data & modules…"
               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground">
+              <button onClick={() => { setSearchQuery(""); setGlobalSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
                 <X className="size-4" />
               </button>
             )}
           </div>
-          <div className="max-h-72 overflow-y-auto divide-y divide-border/60 p-1">
-            {searchResults.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-                {searchQuery ? "No matching modules found." : "Type a module or feature name to jump directly…"}
-              </div>
-            ) : (
-              searchResults.map((item) => (
-                <button
-                  key={item.to}
-                  onClick={() => {
-                    void router.navigate({ to: item.to as "/" });
-                    setMobileSearchOpen(false);
-                    setSearchQuery("");
-                  }}
-                  className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
-                >
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
-                      {item.label}
+          <div className="max-h-80 overflow-y-auto divide-y divide-border/60 p-1">
+            {/* Mobile Matching Members */}
+            {matchingMembers.length > 0 && (
+              <div>
+                <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Members ({matchingMembers.length})
+                </div>
+                {matchingMembers.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      void router.navigate({
+                        to: '/members/client-360',
+                        search: { memberId: m.id } as never,
+                      });
+                      setMobileSearchOpen(false);
+                      setSearchQuery("");
+                      setGlobalSearchQuery("");
+                    }}
+                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate flex items-center gap-1.5">
+                        <span>{m.name}</span>
+                        {m.member_number && (
+                          <span className="text-[10px] font-mono text-muted-foreground">({m.member_number})</span>
+                        )}
+                      </div>
+                      <div className="text-[10.5px] text-muted-foreground truncate">
+                        {m.phone || m.email || m.home_branch || 'Member Profile'}
+                      </div>
                     </div>
-                    <div className="text-[10.5px] text-muted-foreground">{item.section}</div>
-                  </div>
-                  <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary ml-2" />
-                </button>
-              ))
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 uppercase ml-2">
+                      {m.status || 'Active'}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Mobile Matching Leads */}
+            {matchingLeads.length > 0 && (
+              <div>
+                <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Leads & Prospects ({matchingLeads.length})
+                </div>
+                {matchingLeads.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => {
+                      void router.navigate({
+                        to: '/crm/leads',
+                        search: { lead_id: l.id } as never,
+                      });
+                      setMobileSearchOpen(false);
+                      setSearchQuery("");
+                      setGlobalSearchQuery("");
+                    }}
+                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                        {l.name}
+                      </div>
+                      <div className="text-[10.5px] text-muted-foreground truncate">
+                        {l.phone || l.email || l.preferred_program || 'Prospect'}
+                      </div>
+                    </div>
+                    <Badge className="bg-primary/10 text-primary border border-primary/20 text-[9px] px-1 py-0 h-4 shrink-0 uppercase ml-2">
+                      {l.current_status || 'New'}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Mobile Matching Modules */}
+            {searchResults.length > 0 && (
+              <div>
+                <div className="bg-muted/40 px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Modules & Pages ({searchResults.length})
+                </div>
+                {searchResults.map((item) => (
+                  <button
+                    key={item.to}
+                    type="button"
+                    onClick={() => {
+                      void router.navigate({ to: item.to as "/" });
+                      setMobileSearchOpen(false);
+                      setSearchQuery("");
+                      setGlobalSearchQuery("");
+                    }}
+                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-muted/70 transition-colors group cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
+                        {item.label}
+                      </div>
+                      <div className="text-[10.5px] text-muted-foreground">{item.section}</div>
+                    </div>
+                    <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary ml-2" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {matchingMembers.length === 0 && matchingLeads.length === 0 && searchResults.length === 0 && (
+              <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                {searchQuery ? 'No matching records or modules found.' : 'Type a member, lead, or module to search…'}
+              </div>
             )}
           </div>
         </DialogContent>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/components/members/TransfersWorkspace.tsx — Authoritative Member Transfers Workspace
  * Dedicated workspace replacing mock routes. Connects directly to backend tenant REST APIs.
  * Supports:
@@ -295,8 +295,8 @@ export const TransfersWorkspace: React.FC = () => {
                               className="h-8 text-xs font-medium"
                               onClick={() =>
                                 navigate({
-                                  to: '/_shell/members/client-360',
-                                  search: { memberId: hist.member_id! },
+                                  to: '/members/client-360',
+                                  search: { memberId: hist.member_id! } as never,
                                 })
                               }
                             >

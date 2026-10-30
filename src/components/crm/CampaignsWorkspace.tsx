@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Megaphone,
   RotateCw,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { api } from '@/api/client';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type {
   CampaignPerformanceItem,
   CampaignDrilldownConversion,
@@ -47,7 +48,9 @@ import { cn } from '@/lib/utils';
 import { formatBranchOptionLabel } from '@/lib/crmLabels';
 
 export function CampaignsWorkspace() {
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = React.useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [selectedPlatform, setSelectedPlatform] = React.useState('ALL');
   const [selectedBranch, setSelectedBranch] = React.useState('ALL');
   const [startDate, setStartDate] = React.useState('');
@@ -73,6 +76,7 @@ export function CampaignsWorkspace() {
     data: performanceData,
     isLoading,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['crm-campaign-performance', selectedBranch, selectedPlatform, startDate, endDate, searchTerm],
     queryFn: () => {
@@ -165,11 +169,17 @@ export function CampaignsWorkspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['crm-campaign-performance'] }),
+                  refetch(),
+                ]);
+              }}
+              disabled={isFetching}
               className="gap-1.5 h-9"
               title="Refresh campaign data"
             >
-              <RotateCw className="w-3.5 h-3.5" />
+              <RotateCw className={cn("w-3.5 h-3.5 transition-transform", isFetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
@@ -260,7 +270,7 @@ export function CampaignsWorkspace() {
                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
                 <Input
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   placeholder="Campaign name, UTM..."
                   className="pl-9 h-9 text-xs w-full min-w-0"
                 />

@@ -69,6 +69,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
 
@@ -131,6 +133,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sessionsPage, setSessionsPage] = useState<number>(1);
   const [sessionsPageSize, setSessionsPageSize] = useState<number>(20);
@@ -417,7 +420,7 @@ export const ClassesWorkspace: React.FC = () => {
   const totalRulesCount = paginatedRules?.count ?? rules.length;
   const totalRulesPages = Math.max(1, Math.ceil(totalRulesCount / rulesPageSize));
 
-  const { data: paginatedOccurrences, isLoading: loadingOccurrences, refetch: refetchOccurrences } = useQuery({
+  const { data: paginatedOccurrences, isLoading: loadingOccurrences, refetch: refetchOccurrences, isFetching: fetchingOccurrences } = useQuery({
     queryKey: [
       'class-occurrences',
       dateFilterMode,
@@ -1277,6 +1280,28 @@ export const ClassesWorkspace: React.FC = () => {
         }
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['class-occurrences'] }),
+                  queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] }),
+                  queryClient.invalidateQueries({ queryKey: ['class-categories'] }),
+                  queryClient.invalidateQueries({ queryKey: ['class-templates'] }),
+                  queryClient.invalidateQueries({ queryKey: ['class-occurrences-today'] }),
+                  refetchOccurrences(),
+                  refetchRules(),
+                ]);
+                toast.success('Classes refreshed');
+              }}
+              disabled={fetchingOccurrences}
+              className="gap-1.5 h-8 text-xs font-semibold"
+              title="Refresh classes data"
+            >
+              <RefreshCw className={cn("size-3.5 transition-transform", fetchingOccurrences && "animate-spin")} />
+              <span>Refresh</span>
+            </Button>
             {primaryTab === 'sessions' && canCreate && (
               <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
                 <Plus className="size-3.5" />
@@ -1610,7 +1635,7 @@ export const ClassesWorkspace: React.FC = () => {
                       type="text"
                       placeholder="Search categories by name..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => handleSearchChange(e.target.value)}
                       className="h-8 pl-8 text-xs bg-background"
                     />
                   </div>
@@ -1719,7 +1744,7 @@ export const ClassesWorkspace: React.FC = () => {
                       type="text"
                       placeholder="Search class templates by name..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => handleSearchChange(e.target.value)}
                       className="h-8 pl-8 text-xs bg-background"
                     />
                   </div>
@@ -1910,7 +1935,7 @@ export const ClassesWorkspace: React.FC = () => {
                         type="text"
                         placeholder="Search rules by class, type, or branch..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                         className="h-8 pl-8 text-xs bg-background"
                       />
                     </div>
@@ -2352,7 +2377,7 @@ export const ClassesWorkspace: React.FC = () => {
                     type="text"
                     placeholder="Search class, type, branch, or trainer..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="h-8 pl-8 text-xs bg-background"
                   />
                 </div>
@@ -3094,7 +3119,7 @@ export const ClassesWorkspace: React.FC = () => {
                   type="text"
                   placeholder="Search content by title or description..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-background"
                 />
               </div>

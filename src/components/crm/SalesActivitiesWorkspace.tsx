@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone,
@@ -30,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
 import { crmApi } from '@/api/endpoints/crmApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type { ActivityType, Lead } from '@/types/crm';
 import { LeadDetailModal } from './LeadDetailModal';
 import { CRMPageHeader } from './common/CRMPageHeader';
@@ -62,6 +64,7 @@ export function SalesActivitiesWorkspace() {
 
   // Filters state
   const [search, setSearch] = React.useState('');
+  const { handleSearchChange } = useGlobalSearchSync(search, setSearch);
   const [selectedType, setSelectedType] = React.useState<string>('ALL');
   const [dateFilter, setDateFilter] = React.useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7'>('ALL');
 
@@ -107,6 +110,7 @@ export function SalesActivitiesWorkspace() {
     isLoading,
     isError,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['sales-activities', selectedType, dateParams],
     queryFn: () => {
@@ -212,11 +216,17 @@ export function SalesActivitiesWorkspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['sales-activities'] }),
+                  refetch(),
+                ]);
+              }}
+              disabled={isFetching}
               className="gap-1.5 h-9"
               title="Refresh activities"
             >
-              <RotateCw className="w-3.5 h-3.5" />
+              <RotateCw className={cn("w-3.5 h-3.5 transition-transform", isFetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             {canCreate && (
@@ -272,7 +282,7 @@ export function SalesActivitiesWorkspace() {
         {/* TOOLBAR: SEARCH & FILTERS */}
         <CRMFilterBar
           searchValue={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           searchPlaceholder="Search by lead name, outcome, notes..."
           onReset={() => {
             setSearch('');

@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { CollectPaymentModal } from './modals/MemberActionModals';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
 type QuickViewTab = 'all' | 'active' | 'expiring_soon' | 'expired' | 'frozen' | 'outstanding';
 
@@ -63,6 +64,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [quickView, setQuickView] = useState<QuickViewTab>('active');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -273,7 +275,13 @@ export const MemberDirectoryWorkspace: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['members'] }),
+                  queryClient.invalidateQueries({ queryKey: ['member-kpis'] }),
+                  refetch(),
+                ]);
+              }}
               disabled={isFetching}
               className="gap-1.5"
             >
@@ -328,7 +336,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               placeholder="Search by Member ID, Name, Phone, or Email..."
               className="pl-9 bg-background h-9 text-sm"
             />

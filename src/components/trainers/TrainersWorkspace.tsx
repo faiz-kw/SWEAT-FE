@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
@@ -37,6 +38,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts';
 import { api } from '@/api/client';
 import { workforceApi } from '@/api/endpoints/workforceApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { approvalsApi } from '@/api/endpoints/approvalsApi';
 import { fetchUsersApi } from '@/api/endpoints/api-admin';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
@@ -106,6 +108,7 @@ export function TrainersWorkspace() {
 
   const [activeTab, setActiveTab] = React.useState<'directory' | 'classes' | 'availability'>('directory');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchQuery, setSearchQuery);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
@@ -196,6 +199,7 @@ export function TrainersWorkspace() {
     isError,
     error,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['trainers', statusFilter, debouncedSearch, directoryBranchId, page, pageSize],
     queryFn: () =>
@@ -367,11 +371,17 @@ export function TrainersWorkspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['trainers'] }),
+                  refetch(),
+                ]);
+              }}
+              disabled={isFetching}
               className="gap-1.5 h-9"
               title="Refresh real-time data"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={cn("w-3.5 h-3.5 transition-transform", isFetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             {!isTrainer && (
@@ -490,7 +500,7 @@ export function TrainersWorkspace() {
                 <Input
                   placeholder="Search name, code, email or bio..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 h-9 text-xs sm:text-sm"
                 />
               </div>

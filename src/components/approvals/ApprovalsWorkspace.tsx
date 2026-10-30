@@ -27,6 +27,8 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin } from '@/lib/nav';
 import { usePermissions } from '../../lib/permissions';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 
 interface ApprovalsWorkspaceProps {
   initialTab?: 'pending' | 'history' | 'governance';
@@ -47,6 +49,7 @@ export const ApprovalsWorkspace: React.FC<ApprovalsWorkspaceProps> = ({
     can('automation.approvals.view');
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'governance'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [typeFilter] = useState<string>('ALL');
 
   // Decision Modal State
@@ -61,6 +64,7 @@ export const ApprovalsWorkspace: React.FC<ApprovalsWorkspaceProps> = ({
     data: requests = [],
     isLoading: loadingRequests,
     refetch: refetchRequests,
+    isFetching: fetchingRequests,
   } = useQuery({
     queryKey: ['approval-requests'],
     queryFn: () => approvalsApi.getRequests(),
@@ -172,14 +176,19 @@ export const ApprovalsWorkspace: React.FC<ApprovalsWorkspaceProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              refetchRequests();
-              refetchActions();
+            onClick={async () => {
+              await Promise.allSettled([
+                queryClient.invalidateQueries({ queryKey: ['approval-requests'] }),
+                queryClient.invalidateQueries({ queryKey: ['approval-actions'] }),
+                refetchRequests(),
+                refetchActions(),
+              ]);
             }}
+            disabled={fetchingRequests}
             title="Refresh"
             className="gap-1.5"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={cn("size-3.5 transition-transform", fetchingRequests && "animate-spin")} />
             <span>Refresh</span>
           </Button>
         }
@@ -241,7 +250,7 @@ export const ApprovalsWorkspace: React.FC<ApprovalsWorkspaceProps> = ({
                 <Input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search request type, requester..."
                   className="pl-9 bg-background"
                 />

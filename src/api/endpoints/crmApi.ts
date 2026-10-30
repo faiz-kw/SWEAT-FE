@@ -1211,7 +1211,8 @@ export const crmApi = {
 
   getMissedCalls: async (): Promise<Array<{
     id: string;
-    call_uuid: string;
+    call_uuid?: string;
+    session_id?: string;
     started_at: string;
     lead: {
       id: string;
@@ -1226,24 +1227,26 @@ export const crmApi = {
     status: string;
   }>> => {
     const res = await api.get<{
-      missed_calls: Array<{
-        id: string;
-        call_uuid: string;
-        started_at: string;
-        lead: {
-          id: string;
-          first_name: string;
-          last_name: string;
-          branch_name?: string;
-          masked_phone: string;
-          status: string;
-        } | null;
-        user_phone_number: string;
-        sales_rep_name?: string;
-        status: string;
-      }>;
+      missed_calls?: Array<any>;
+      results?: Array<any>;
     }>('/tenant/crm/telephony/missed-calls/');
-    return res.data?.missed_calls || [];
+    const list = res.data?.missed_calls || res.data?.results || [];
+    return list.map((item: any) => ({
+      id: item.id || item.session_id,
+      session_id: item.session_id || item.id,
+      started_at: item.started_at || item.called_at,
+      lead: item.lead || (item.lead_id ? {
+        id: item.lead_id,
+        first_name: item.lead_name?.split(' ')[0] || item.lead_name || 'Prospect',
+        last_name: item.lead_name?.split(' ').slice(1).join(' ') || '',
+        branch_name: item.branch_name,
+        masked_phone: item.masked_phone,
+        status: item.status || 'NEW',
+      } : null),
+      user_phone_number: item.user_phone_number || item.phone || '',
+      sales_rep_name: item.sales_rep_name,
+      status: item.status || 'NO_ANSWER',
+    }));
   },
 
   getAgentPresence: async (): Promise<{

@@ -58,6 +58,8 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 import { BookTrialModal } from '../crm/BookTrialModal';
 import { MemberParqSigningModal } from '../members/modals/MemberParqSigningModal';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 
 interface BookingsWorkspaceProps {
   initialTab?: 'bookings' | 'waitlist' | 'policies';
@@ -78,6 +80,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     return initialTab;
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
@@ -219,6 +222,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     data: paginatedBookings,
     isLoading: loadingBookings,
     refetch: refetchBookings,
+    isFetching: fetchingBookings,
   } = useQuery({
     queryKey: [
       'bookings',
@@ -577,14 +581,19 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                refetchBookings();
-                refetchPolicies();
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['bookings'] }),
+                  queryClient.invalidateQueries({ queryKey: ['booking-policies'] }),
+                  refetchBookings(),
+                  refetchPolicies(),
+                ]);
               }}
+              disabled={fetchingBookings}
               title="Refresh"
               className="gap-1.5"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn("size-3.5 transition-transform", fetchingBookings && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             {canCreate && (
@@ -664,7 +673,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                   <Input
                     type="text"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder="Search booking #, member name, class title, branch..."
                     className="h-8 pl-9 bg-background text-xs"
                   />

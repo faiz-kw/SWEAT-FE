@@ -27,6 +27,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 
 export const AppointmentsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
@@ -35,6 +37,7 @@ export const AppointmentsWorkspace: React.FC = () => {
   const canEdit = can('ops.appointments.edit');
   const [activeTab, setActiveTab] = useState<'appointments' | 'types'>('appointments');
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Modal states
@@ -66,6 +69,7 @@ export const AppointmentsWorkspace: React.FC = () => {
     data: appointments = [],
     isLoading: loadingAppointments,
     refetch: refetchAppointments,
+    isFetching: fetchingAppointments,
   } = useQuery({
     queryKey: ['appointments', selectedDate],
     queryFn: () => appointmentsApi.getAppointments({ date: selectedDate }),
@@ -175,14 +179,19 @@ export const AppointmentsWorkspace: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                refetchAppointments();
-                refetchTypes();
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+                  queryClient.invalidateQueries({ queryKey: ['appointment-types'] }),
+                  refetchAppointments(),
+                  refetchTypes(),
+                ]);
               }}
+              disabled={fetchingAppointments}
               title="Refresh"
               className="gap-1.5"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn("size-3.5 transition-transform", fetchingAppointments && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
@@ -225,7 +234,7 @@ export const AppointmentsWorkspace: React.FC = () => {
                   type="text"
                   placeholder="Search by member name, number or service..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-background"
                 />
               </div>

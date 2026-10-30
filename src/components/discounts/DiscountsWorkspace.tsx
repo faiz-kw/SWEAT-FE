@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { discountsApi } from '@/api/endpoints/discountsApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { catalogApi } from '@/api/endpoints/catalogApi';
 import { api } from '@/api/client';
 import {
@@ -134,6 +135,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const defaultTab = initialTab || (mode === 'offers' ? 'rules' : 'campaigns');
   const [activeTab, setActiveTab] = useState<'campaigns' | 'rules' | 'redemptions' | 'simulator'>(defaultTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   const displayTitle =
@@ -247,6 +249,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     isLoading: loadingRules,
     isError: errorRules,
     refetch: refetchRules,
+    isFetching: fetchingRules,
   } = useQuery({
     queryKey: ['discount-rules'],
     queryFn: () => discountsApi.getEligibilityRules(),
@@ -761,17 +764,23 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                refetchCampaigns();
-                refetchRules();
-                refetchRedemptions();
-                if (simUserProfileId) refetchMemberContext();
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['discount-campaigns'] }),
+                  queryClient.invalidateQueries({ queryKey: ['discount-rules'] }),
+                  queryClient.invalidateQueries({ queryKey: ['discount-redemptions'] }),
+                  refetchCampaigns(),
+                  refetchRules(),
+                  refetchRedemptions(),
+                  simUserProfileId ? refetchMemberContext() : Promise.resolve(),
+                ]);
                 toast.info('Discounts and rules refreshed');
               }}
+              disabled={fetchingRules}
               className="gap-1.5 h-9"
               title="Refresh discounts"
             >
-              <RotateCw className="w-3.5 h-3.5" />
+              <RotateCw className={cn("w-3.5 h-3.5 transition-transform", fetchingRules && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
 
@@ -910,7 +919,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
           <div className="space-y-6">
             <CRMFilterBar
               searchValue={searchTerm}
-              onSearchChange={setSearchTerm}
+              onSearchChange={handleSearchChange}
               searchPlaceholder="Search campaigns or promo codes..."
               onReset={() => {
                 setSearchTerm('');

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -23,6 +24,7 @@ import {
   Link,
 } from 'lucide-react';
 import { commerceApi } from '@/api/endpoints/commerceApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { crmApi } from '@/api/endpoints/crmApi';
 import {
   Order,
@@ -46,6 +48,7 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 import { toast } from 'sonner';
 import { CashFlowReportPanel } from './CashFlowReportPanel';
+import { POSPaymentModal } from './POSPaymentModal';
 
 export type FinanceTab =
   | 'orders'
@@ -69,6 +72,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
 
   const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [paymentSubView, setPaymentSubView] = useState<'all' | 'cash_report'>('all');
   const [cashReportDate, setCashReportDate] = useState<string>('all');
@@ -96,6 +100,13 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
   const [isRefundOpen, setIsRefundOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedTxn, setSelectedTxn] = useState<PaymentTransaction | null>(null);
+  const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
+  const [posOrder, setPosOrder] = useState<Order | null>(null);
+
+  const openPOSModal = (order: Order) => {
+    setPosOrder(order);
+    setIsPOSModalOpen(true);
+  };
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -391,10 +402,11 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
               variant="outline"
               size="sm"
               onClick={handleRefreshAll}
+              disabled={isRefreshing}
               title="Refresh"
               className="gap-1.5 h-8 text-xs"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn("size-3.5 transition-transform", isRefreshing && "animate-spin")} />
               <span>Refresh</span>
             </Button>
           </div>
@@ -472,7 +484,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   type="text"
                   placeholder="Search invoices by number, member, or order..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-card text-xs"
                 />
               </div>
@@ -803,7 +815,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   type="text"
                   placeholder="Search payments by ref, order #, or customer..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-card text-xs"
                 />
               </div>
@@ -957,7 +969,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   type="text"
                   placeholder="Search orders by number, customer, or package..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-card text-xs"
                 />
               </div>
@@ -1086,7 +1098,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   type="text"
                   placeholder="Search outstanding dues by customer or order..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-card text-xs"
                 />
               </div>
@@ -1169,10 +1181,19 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                           <Button
                             variant="default"
                             size="sm"
-                            className="w-full h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                            className="w-1/2 h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5"
+                            onClick={() => openPOSModal(order)}
+                          >
+                            <CreditCard className="size-3.5" />
+                            Card Machine
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-1/2 h-8 text-xs font-semibold"
                             onClick={() => openRecordPaymentModal(order)}
                           >
-                            Collect Installment
+                            Manual / Cash
                           </Button>
                         </div>
                       )}
@@ -1240,7 +1261,7 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
                   type="text"
                   placeholder="Search refunds by order, customer, or reason..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-9 bg-card text-xs"
                 />
               </div>
@@ -1526,6 +1547,18 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
           } as any}
         />
       )}
+      {/* MODAL 3: IN-PERSON POS PAYMENT */}
+      <POSPaymentModal
+        isOpen={isPOSModalOpen}
+        onClose={() => {
+          setIsPOSModalOpen(false);
+          setPosOrder(null);
+        }}
+        order={posOrder}
+        onPaymentSuccess={() => {
+          refetchOrders();
+        }}
+      />
     </div>
   );
 };

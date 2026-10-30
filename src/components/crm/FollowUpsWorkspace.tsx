@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
 import { crmApi } from '@/api/endpoints/crmApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type {
   SalesFollowupTask,
   FollowupTaskType,
@@ -123,6 +124,7 @@ export function FollowUpsWorkspace() {
   }, []);
 
   const [search, setSearch] = React.useState('');
+  const { handleSearchChange } = useGlobalSearchSync(search, setSearch);
   const [selectedAgent, setSelectedAgent] = React.useState<string>('ALL');
 
   // Lead 360 modal state
@@ -158,6 +160,7 @@ export function FollowUpsWorkspace() {
     isLoading,
     isError,
     refetch: refetchTasks,
+    isFetching: isTasksFetching,
   } = useQuery({
     queryKey: ['sales-followups', activeTab, selectedAgent],
     queryFn: () => {
@@ -333,14 +336,19 @@ export function FollowUpsWorkspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                refetchTasks();
-                refetchCounts();
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['sales-followups'] }),
+                  queryClient.invalidateQueries({ queryKey: ['sales-followup-counts'] }),
+                  refetchTasks(),
+                  refetchCounts(),
+                ]);
               }}
+              disabled={isTasksFetching}
               className="gap-1.5 h-9"
               title="Refresh queue"
             >
-              <RotateCw className="w-3.5 h-3.5" />
+              <RotateCw className={cn("w-3.5 h-3.5 transition-transform", isTasksFetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             {canEdit && (
@@ -437,7 +445,7 @@ export function FollowUpsWorkspace() {
         {/* SEARCH & FILTER BAR */}
         <CRMFilterBar
           searchValue={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           searchPlaceholder="Search tasks by lead name..."
           onReset={() => {
             setSearch('');

@@ -46,6 +46,21 @@ export function InboundCallDrawer({
   const isRinging = callState === 'RINGING_INBOUND';
   const isInCall = callState === 'CONNECTED';
 
+  const handleAnswer = () => {
+    answerCall();
+    onDismiss();
+  };
+
+  const handleDecline = () => {
+    declineCall();
+    onDismiss();
+  };
+
+  const handleHangup = () => {
+    hangupCall();
+    onDismiss();
+  };
+
   return (
     <div
       className="fixed top-16 right-3 sm:right-6 left-3 sm:left-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] z-[9999] pointer-events-auto rounded-2xl border-2 border-emerald-500/40 bg-card/95 backdrop-blur-xl p-4 sm:p-5 shadow-2xl shadow-emerald-500/10 text-card-foreground overflow-hidden animate-in slide-in-from-top-4 duration-300"
@@ -136,7 +151,7 @@ export function InboundCallDrawer({
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={hangupCall}
+                onClick={handleHangup}
                 className="h-7 px-3 text-xs font-bold gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white"
               >
                 <PhoneOff className="size-3" /> Hang Up
@@ -145,7 +160,7 @@ export function InboundCallDrawer({
               <>
                 <Button
                   size="sm"
-                  onClick={answerCall}
+                  onClick={handleAnswer}
                   className="h-7 px-3 text-xs font-bold gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30"
                 >
                   <PhoneCall className="size-3" /> Answer
@@ -153,7 +168,7 @@ export function InboundCallDrawer({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={declineCall}
+                  onClick={handleDecline}
                   className="h-7 px-2 text-xs text-muted-foreground hover:text-rose-500"
                 >
                   Decline

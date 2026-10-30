@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings, Delete, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Phone, PhoneCall, PhoneOff, Mic, MicOff, Volume2, X, Settings, Delete, RefreshCw, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -55,7 +55,9 @@ export function WebPhoneBar() {
   const isConnected = connectionStatus === "REGISTERED";
   const isInCall = callState === "CONNECTED";
   const isDialing = callState === "DIALING_OUTBOUND";
+  const isRingingOutbound = callState === "RINGING_OUTBOUND";
   const isRinging = callState === "RINGING_INBOUND";
+  const isConnecting = isDialing || isRingingOutbound;
 
   const handleNumberChange = (raw: string) => {
     // Only accept numbers
@@ -102,7 +104,7 @@ export function WebPhoneBar() {
     <>
       <div className="flex items-center gap-2">
         {/* Active Call Floating Capsule */}
-        {(isInCall || isDialing || isRinging) && activeCall && (
+        {(isInCall || isConnecting || isRinging) && activeCall && (
           <div className="flex items-center gap-2.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 animate-in fade-in zoom-in duration-200">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -111,7 +113,18 @@ export function WebPhoneBar() {
 
             <div className="flex items-center gap-1.5 text-xs font-semibold">
               {isRinging && <span>Incoming from {activeCall.displayName}...</span>}
-              {isDialing && <span>Dialing {activeCall.displayName}...</span>}
+              {isDialing && (
+                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                  <Loader2 className="size-3 animate-spin text-amber-500" />
+                  Connecting to carrier...
+                </span>
+              )}
+              {isRingingOutbound && (
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <PhoneCall className="size-3 text-emerald-500 animate-pulse" />
+                  Ringing {activeCall.displayName}...
+                </span>
+              )}
               {isInCall && (
                 <>
                   <Volume2 className="size-3.5 text-emerald-500 animate-pulse" />
@@ -145,20 +158,32 @@ export function WebPhoneBar() {
               </div>
             )}
 
-            {(isInCall || isDialing) && (
+            {(isInCall || isConnecting) && (
               <div className="flex items-center gap-1 ml-1">
                 {isInCall && (
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={toggleMute}
-                    title={activeCall.isMuted ? "Unmute" : "Mute"}
+                    title={activeCall.isMuted ? "Unmute Microphone" : "Mute Microphone"}
                     className={cn(
-                      "h-6 w-6 p-0 rounded-full",
-                      activeCall.isMuted ? "bg-rose-500/20 text-rose-500" : "hover:bg-emerald-500/20"
+                      "h-6 px-1.5 text-xs font-medium rounded-full gap-1 transition-colors cursor-pointer",
+                      activeCall.isMuted
+                        ? "bg-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/30 border border-rose-500/40"
+                        : "hover:bg-emerald-500/20 text-foreground"
                     )}
                   >
-                    {activeCall.isMuted ? <MicOff className="size-3.5 text-rose-500" /> : <Mic className="size-3.5" />}
+                    {activeCall.isMuted ? (
+                      <>
+                        <MicOff className="size-3.5 text-rose-500" />
+                        <span className="text-[10px] font-bold">Muted</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="size-3.5 text-emerald-500" />
+                        <span className="text-[10px]">Mute</span>
+                      </>
+                    )}
                   </Button>
                 )}
 

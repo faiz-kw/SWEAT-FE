@@ -32,6 +32,7 @@ import {
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type {
   TrialBooking,
   TrialConfirmationStatus,
@@ -47,6 +48,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -82,6 +84,7 @@ export function TrialManagementWorkspace() {
   const [selectedStatus, setSelectedStatus] = React.useState<string>('ALL');
   const [selectedConfStatus, setSelectedConfStatus] = React.useState<string>('ALL');
   const [searchQuery, setSearchQuery] = React.useState<string>('');
+  const { handleSearchChange } = useGlobalSearchSync(searchQuery, setSearchQuery);
   const [dateFilter, setDateFilter] = React.useState<string>('');
 
   // Sorting State: Default to current date / newest first (Descending)
@@ -145,6 +148,7 @@ export function TrialManagementWorkspace() {
     isLoading: isTrialsLoading,
     isError: isTrialsError,
     refetch: refetchTrials,
+    isFetching: isTrialsFetching,
   } = useQuery({
     queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery, sortDirection],
     queryFn: () => {
@@ -396,11 +400,18 @@ export function TrialManagementWorkspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetchTrials()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['trial-bookings'] }),
+                  queryClient.invalidateQueries({ queryKey: ['trial-stats'] }),
+                  refetchTrials(),
+                ]);
+              }}
+              disabled={isTrialsFetching}
               className="gap-1.5 h-9"
               title="Refresh trial bookings"
             >
-              <RotateCw className="w-3.5 h-3.5" />
+              <RotateCw className={cn("w-3.5 h-3.5 transition-transform", isTrialsFetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             {canEdit && (
@@ -472,7 +483,7 @@ export function TrialManagementWorkspace() {
               <Input
                 placeholder="Search lead, class, phone..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={handleSearchChange}
                 className="pl-8 text-xs h-9"
               />
             </div>

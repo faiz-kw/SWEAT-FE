@@ -25,6 +25,7 @@ import {
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
 import { useApp } from '@/contexts';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
 export interface MembershipsWorkspaceProps {
   initialTab?: 'memberships' | 'freezes' | undefined;
@@ -51,6 +53,8 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
     (initialTab as any) === 'freezes' ? 'freezes' : 'memberships'
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [page, setPage] = useState(1);
@@ -265,14 +269,27 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              refetchMemberships();
-              refetchFreezes();
+            onClick={async () => {
+              setIsManualRefreshing(true);
+              const start = Date.now();
+              try {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['memberships'] }),
+                  queryClient.invalidateQueries({ queryKey: ['membership-freezes'] }),
+                  refetchMemberships(),
+                  refetchFreezes(),
+                ]);
+              } finally {
+                const elapsed = Date.now() - start;
+                setTimeout(() => setIsManualRefreshing(false), Math.max(0, 450 - elapsed));
+              }
+
             }}
+            disabled={fetchingMemberships || fetchingFreezes || isManualRefreshing}
             title="Refresh Data"
             className="gap-1.5"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={cn("size-3.5 transition-transform", (fetchingMemberships || fetchingFreezes || isManualRefreshing) && "animate-spin")} />
             <span>Refresh</span>
           </Button>
         }
@@ -316,7 +333,7 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                   type="text"
                   placeholder="Search member, ID, or package..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   className="pl-9 bg-background"
                 />
               </div>
@@ -379,7 +396,7 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <button
                                       type="button"
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (mem.user_profile) {
                                           navigate({
                                             to: '/members/client-360',

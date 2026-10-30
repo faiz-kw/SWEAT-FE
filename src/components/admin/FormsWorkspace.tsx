@@ -1,4 +1,5 @@
 import { api } from '@/api/client';
+import { cn } from '@/lib/utils';
 import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -277,6 +278,7 @@ export const FormsWorkspace: React.FC = () => {
     data: forms = [],
     isLoading,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['intake-forms'],
     queryFn: () => formsApi.getForms(),
@@ -580,10 +582,16 @@ export const FormsWorkspace: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['admin-forms'] }),
+                  refetch(),
+                ]);
+              }}
+              disabled={isFetching}
               className="gap-1.5"
             >
-              <RefreshCw className="size-3.5" />
+              <RefreshCw className={cn("size-3.5 transition-transform", isFetching && "animate-spin")} />
               <span>Refresh</span>
             </Button>
             <Button

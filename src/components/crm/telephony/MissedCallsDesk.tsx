@@ -183,7 +183,7 @@ export function MissedCallsDesk() {
                     )}
                   </div>
 
-                  {item.lead?.id ? (
+                  {(item.lead?.id || item.user_phone_number) ? (
                     <Button
                       size="sm"
                       onClick={() => handleCallback(item)}

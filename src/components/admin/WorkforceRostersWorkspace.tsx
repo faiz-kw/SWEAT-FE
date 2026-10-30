@@ -11,6 +11,7 @@
  */
 
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
@@ -226,10 +227,11 @@ export function WorkforceRostersWorkspace() {
               variant="outline"
               size="sm"
               onClick={handleRefresh}
+              disabled={isRefreshing}
               className="gap-1.5 h-9"
               title="Refresh roster data"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={cn("w-3.5 h-3.5 transition-transform", isRefreshing && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             <Button

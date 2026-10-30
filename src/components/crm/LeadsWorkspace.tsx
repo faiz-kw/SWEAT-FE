@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users,
@@ -78,6 +79,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useRouter, useLocation } from '@tanstack/react-router';
 import { CRMPageHeader } from './common/CRMPageHeader';
 import { CRMKpiTile } from './common/CRMKpiTile';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { CRMEmptyState } from './common/CRMEmptyState';
 import { CRMErrorState } from './common/CRMErrorState';
 import { formatCrmLabel, formatBranchOptionLabel, formatBranchTitle, formatBranchAddressOnly } from '@/lib/crmLabels';
@@ -260,6 +262,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const canView = can('crm.leads.view') || can('sales.leads.view') || canCreate || canEdit;
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const { handleSearchChange, clearSearch } = useGlobalSearchSync(searchQuery, setSearchQuery);
+  const [isManualRefreshing, setIsManualRefreshing] = React.useState(false);
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
   const [sourceFilter, setSourceFilter] = React.useState<string>('ALL');
   const [campaignFilter, setCampaignFilter] = React.useState<string>('');
@@ -342,6 +346,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     isError,
     error,
     refetch,
+    isFetching,
   } = useQuery({
     queryKey: ['leads', statusFilter, searchQuery, sourceFilter, campaignFilter, slaFilter, branchFilter, scopeFilter, myDayBucket, effectiveDateFrom, effectiveDateTo, currentPage, pageSize, viewMode, sortField, sortDirection],
     queryFn: () => {
@@ -782,11 +787,26 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={async () => {
+                setIsManualRefreshing(true);
+                const start = Date.now();
+                try {
+                  await Promise.allSettled([
+                    queryClient.invalidateQueries({ queryKey: ['leads'] }),
+                    queryClient.invalidateQueries({ queryKey: ['lead-summary-metrics'] }),
+                    queryClient.invalidateQueries({ queryKey: ['pipeline-counts'] }),
+                    refetch(),
+                  ]);
+                } finally {
+                  const elapsed = Date.now() - start;
+                  setTimeout(() => setIsManualRefreshing(false), Math.max(0, 450 - elapsed));
+                }
+              }}
+              disabled={isFetching || isManualRefreshing}
               className="gap-1.5 h-9"
               title="Refresh leads"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={cn("w-3.5 h-3.5 transition-transform", (isFetching || isManualRefreshing) && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
 
@@ -896,13 +916,13 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             <Input
               placeholder="Search leads by prospect name, phone number, email address, program, or city location..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-11 pr-10 h-11 text-sm bg-card border-border/80 focus:bg-background rounded-xl shadow-xs w-full"
             />
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
+                onClick={clearSearch}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-muted"
                 title="Clear search"
               >

@@ -30,6 +30,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '../../lib/permissions';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 
 interface RewardsWorkspaceProps {
   initialTab?: 'referrals' | 'programs' | 'accounts' | 'ledger' | 'rules';
@@ -45,6 +47,7 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
     'referrals' | 'programs' | 'accounts' | 'ledger' | 'rules'
   >(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Modals
@@ -61,6 +64,7 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
     data: referrals = [],
     isLoading: loadingReferrals,
     refetch: refetchReferrals,
+    isFetching: fetchingReferrals,
   } = useQuery({
     queryKey: ['referrals'],
     queryFn: () => rewardsApi.getReferrals(),
@@ -189,18 +193,28 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                refetchReferrals();
-                refetchPrograms();
-                refetchIdentifiers();
-                refetchAccounts();
-                refetchLedgers();
-                refetchQualRules();
-                refetchBenefitRules();
+              onClick={async () => {
+                await Promise.allSettled([
+                  queryClient.invalidateQueries({ queryKey: ['referrals'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-programs'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-identifiers'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-accounts'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-ledger-entries'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-qualification-rules'] }),
+                  queryClient.invalidateQueries({ queryKey: ['reward-benefit-rules'] }),
+                  refetchReferrals(),
+                  refetchPrograms(),
+                  refetchIdentifiers(),
+                  refetchAccounts(),
+                  refetchLedgers(),
+                  refetchQualRules(),
+                  refetchBenefitRules(),
+                ]);
               }}
+              disabled={fetchingReferrals}
               className="gap-1.5"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={cn("h-4 w-4 transition-transform", fetchingReferrals && "animate-spin")} />
               <span>Refresh</span>
             </Button>
           </div>
@@ -326,7 +340,7 @@ export const RewardsWorkspace: React.FC<RewardsWorkspaceProps> = ({
                 <Input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search referral code, referrer, referee..."
                   className="pl-9 text-sm"
                 />

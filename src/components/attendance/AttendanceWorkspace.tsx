@@ -16,6 +16,8 @@ import { attendanceApi } from '@/api/endpoints/attendanceApi';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { cn } from '@/lib/utils';
 
 interface AttendanceWorkspaceProps {
   initialTab?: 'attendance' | 'discipline' | 'access' | 'policies';
@@ -27,6 +29,7 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'attendance' | 'discipline' | 'access' | 'policies'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
+  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Queries
@@ -34,6 +37,7 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
     data: attendanceRecords = [],
     isLoading: loadingAttendance,
     refetch: refetchAttendance,
+    isFetching: fetchingAttendance,
   } = useQuery({
     queryKey: ['attendance-records', statusFilter],
     queryFn: () =>
@@ -107,16 +111,23 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              refetchAttendance();
-              refetchStates();
-              refetchAccess();
-              refetchPolicies();
+            onClick={async () => {
+              await Promise.allSettled([
+                queryClient.invalidateQueries({ queryKey: ['attendance-records'] }),
+                queryClient.invalidateQueries({ queryKey: ['member-attendance-states'] }),
+                queryClient.invalidateQueries({ queryKey: ['turnstile-access-events'] }),
+                queryClient.invalidateQueries({ queryKey: ['attendance-policies'] }),
+                refetchAttendance(),
+                refetchStates(),
+                refetchAccess(),
+                refetchPolicies(),
+              ]);
             }}
+            disabled={fetchingAttendance}
             title="Refresh"
             className="gap-1.5"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={cn("size-3.5 transition-transform", fetchingAttendance && "animate-spin")} />
             <span>Refresh</span>
           </Button>
         }
@@ -190,7 +201,7 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
                 <Input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search attendee, booking #..."
                   className="pl-9 bg-background"
                 />

@@ -61,6 +61,8 @@ interface AppState {
   tenantName: string;
   role: string;
   branding: TenantBrandingProfile | null;
+  globalSearchQuery: string;
+  setGlobalSearchQuery: (q: string) => void;
 }
 
 const Ctx = React.createContext<AppState | null>(null);
@@ -75,6 +77,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [density, setDensity] = React.useState<Density>("default");
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = React.useState("");
 
   // Theme state with localStorage persistence.
   // IMPORTANT: Always initialise as "light" (deterministic SSR value).
@@ -191,6 +194,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     tenantName: user?.tenantName || (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Global Platform HQ' : 'Tenant Organization'),
     role: user?.role ?? (user?.userType === 'platform' || (!user?.tenantId && user?.isSuperAdmin) ? 'Super Admin' : 'Member'),
     branding: user?.branding ?? null,
+    globalSearchQuery,
+    setGlobalSearchQuery,
   }), [
     locationId,
     range,
@@ -208,6 +213,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     user?.isSuperAdmin,
     user?.role,
     user?.branding,
+    globalSearchQuery,
+    setGlobalSearchQuery,
   ]);
 
   return (

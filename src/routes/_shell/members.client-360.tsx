@@ -68,7 +68,7 @@ function Member360RouteComponent() {
     if (!search.memberId || search.memberId.trim() === "") {
       const firstMemberId = directoryData?.results?.[0]?.id;
       if (firstMemberId) {
-        navigate({ to: "/_shell/members/client-360", search: { memberId: firstMemberId } as any, replace: true });
+        navigate({ to: "/members/client-360", search: { memberId: firstMemberId } as any, replace: true });
       }
     }
   }, [search.memberId, directoryData, navigate]);
