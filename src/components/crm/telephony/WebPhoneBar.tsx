@@ -50,14 +50,16 @@ export function WebPhoneBar() {
   const [targetNumber, setTargetNumber] = React.useState("");
   const [isReconnecting, setIsReconnecting] = React.useState(false);
 
-  if (!isSupported) return null;
 
   const isConnected = connectionStatus === "REGISTERED";
   const isInCall = callState === "CONNECTED";
   const isDialing = callState === "DIALING_OUTBOUND";
   const isRingingOutbound = callState === "RINGING_OUTBOUND";
-  const isRinging = callState === "RINGING_INBOUND";
-  const isConnecting = isDialing || isRingingOutbound;
+  const isInboundRinging =
+    callState === "RINGING_INBOUND" ||
+    (activeCall?.direction === "INBOUND" && !isInCall && callState !== "IDLE");
+  const isOutboundConnecting =
+    (isDialing || isRingingOutbound) && activeCall?.direction !== "INBOUND";
 
   const handleNumberChange = (raw: string) => {
     // Only accept numbers
@@ -104,7 +106,7 @@ export function WebPhoneBar() {
     <>
       <div className="flex items-center gap-2">
         {/* Active Call Floating Capsule */}
-        {(isInCall || isConnecting || isRinging) && activeCall && (
+        {(isInCall || isOutboundConnecting || isInboundRinging) && activeCall && (
           <div className="flex items-center gap-2.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 animate-in fade-in zoom-in duration-200">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -112,14 +114,19 @@ export function WebPhoneBar() {
             </span>
 
             <div className="flex items-center gap-1.5 text-xs font-semibold">
-              {isRinging && <span>Incoming from {activeCall.displayName}...</span>}
-              {isDialing && (
+              {isInboundRinging && (
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+                  <PhoneCall className="size-3.5 text-emerald-500 animate-bounce" />
+                  Incoming from {activeCall.displayName}...
+                </span>
+              )}
+              {isOutboundConnecting && isDialing && (
                 <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
                   <Loader2 className="size-3 animate-spin text-amber-500" />
                   Connecting to carrier...
                 </span>
               )}
-              {isRingingOutbound && (
+              {isOutboundConnecting && isRingingOutbound && (
                 <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                   <PhoneCall className="size-3 text-emerald-500 animate-pulse" />
                   Ringing {activeCall.displayName}...
@@ -136,29 +143,7 @@ export function WebPhoneBar() {
               )}
             </div>
 
-            {/* Controls */}
-            {isRinging && (
-              <div className="flex items-center gap-1 ml-1">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={answerCall}
-                  className="h-6 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full gap-1"
-                >
-                  <PhoneCall className="size-3" /> Answer
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={declineCall}
-                  className="h-6 px-2 text-xs rounded-full"
-                >
-                  Decline
-                </Button>
-              </div>
-            )}
-
-            {(isInCall || isConnecting) && (
+            {(isInCall || isOutboundConnecting) && (
               <div className="flex items-center gap-1 ml-1">
                 {isInCall && (
                   <Button

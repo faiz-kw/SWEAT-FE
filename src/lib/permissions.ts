@@ -13,20 +13,33 @@
 import { useAuth } from '@/contexts';
 import type { AuthUser } from '@/services';
 
+const ORG_ADMIN_ROLES = [
+  'ORG_ADMIN',
+  'ORGANIZATION_ADMIN',
+  'ORGANIZATION ADMIN',
+  'ORGANIZATION ADMINISTRATOR',
+  'ORG ADMIN',
+  'TENANT_ADMIN',
+  'TENANT ADMIN',
+  'TENANT_OWNER',
+  'TENANT OWNER',
+  'SUPER_ADMIN',
+  'SUPER ADMIN',
+];
+
 function isUserOrgOrSuperAdmin(user: AuthUser | null | undefined): boolean {
   if (!user) return false;
   if (user.isSuperAdmin) return true;
   if (user.userType === 'platform' && !user.tenantId) return true;
-  if (user.isOrgWide) return true;
   const roleStr = (user.role || '').toUpperCase().trim();
-  if (['ORG_ADMIN', 'ORGANIZATION ADMINISTRATOR', 'TENANT_ADMIN', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(roleStr)) {
+  if (ORG_ADMIN_ROLES.includes(roleStr)) {
     return true;
   }
   return Boolean(
     user.roles?.some((r) => {
       const code = (r.code || '').toUpperCase().trim();
-      const scope = (r.scope || '').toUpperCase().trim();
-      return scope === 'ORG' || code === 'ORG_ADMIN' || code === 'TENANT_ADMIN';
+      const name = (r.name || '').toUpperCase().trim();
+      return ORG_ADMIN_ROLES.includes(code) || ORG_ADMIN_ROLES.includes(name);
     })
   );
 }
@@ -99,6 +112,23 @@ export function hasAllPermissions(
   if (validCodes.length === 0) return true;
 
   return validCodes.every((code) => hasPermission(user, code));
+}
+
+/**
+ * Evaluates whether a user is authorized to view and use Sales Calling & Telephony features.
+ * Access is governed strictly by the RBAC Permission Matrix:
+ * - Master Organization Administrators / Super Admins
+ * - Or users granted calling / sales permissions by the Admin in Roles & Permissions:
+ *   'crm.leads.edit', 'crm.leads.view', 'crm.communications.send', 'crm.ai-calling.view', 'crm.calling.access'
+ */
+export function canAccessTelephony(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  if (isUserOrgOrSuperAdmin(user)) return true;
+  return Boolean(
+    hasPermission(user, 'crm.telephony.access') ||
+    hasPermission(user, 'crm.calling.access') ||
+    hasPermission(user, 'crm.ai-calling.view')
+  );
 }
 
 /**

@@ -1,5 +1,6 @@
+import { createPortal } from "react-dom";
 import * as React from "react";
-import { PhoneCall, User, MapPin, FileText, ExternalLink, X, Headphones, UserCheck, UserPlus, Sparkles } from "lucide-react";
+import { PhoneCall, User, MapPin, FileText, ExternalLink, X, Headphones, UserCheck, UserPlus, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWebRTCPhone } from "./WebRTCPhoneContext";
@@ -37,18 +38,40 @@ export function InboundCallDrawer({
   onOpenLead,
   onOpenNewLead,
 }: InboundCallDrawerProps) {
+  // ⚠️ All hooks MUST be called before any early return (React Rules of Hooks)
+  const { callState, answerCall, declineCall, hangupCall, activeCall } = useWebRTCPhone();
+  const [isAnswering, setIsAnswering] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsAnswering(false);
+  }, [call?.session_id, callState]);
+
+  // Early return AFTER all hooks
   if (!call) return null;
 
-  const { callState, answerCall, declineCall, hangupCall, activeCall } = useWebRTCPhone();
   const isMember = call.caller_type === 'MEMBER';
   const isLead = call.caller_type === 'LEAD';
   const isNew = call.caller_type === 'NEW';
-  const isRinging = callState === 'RINGING_INBOUND';
+  const isInboundRinging =
+    callState === 'RINGING_INBOUND' ||
+    (activeCall?.direction === 'INBOUND' && callState !== 'CONNECTED');
+  const isRinging = isInboundRinging;
   const isInCall = callState === 'CONNECTED';
 
-  const handleAnswer = () => {
-    answerCall();
-    onDismiss();
+  const handleAnswer = async () => {
+    setIsAnswering(true);
+    try {
+      await answerCall({
+        caller_phone: call.caller_phone,
+        lead_name: call.lead_name,
+        lead_id: call.lead_id,
+        member_id: call.member_id,
+      });
+    } catch {
+      setIsAnswering(false);
+    }
+    // Note: Do NOT call onDismiss() prematurely.
+    // TelephonyManager automatically dismisses the drawer as soon as callState transitions to "CONNECTED".
   };
 
   const handleDecline = () => {
@@ -61,9 +84,9 @@ export function InboundCallDrawer({
     onDismiss();
   };
 
-  return (
+  const drawerContent = (
     <div
-      className="fixed top-16 right-3 sm:right-6 left-3 sm:left-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] z-[9999] pointer-events-auto rounded-2xl border-2 border-emerald-500/40 bg-card/95 backdrop-blur-xl p-4 sm:p-5 shadow-2xl shadow-emerald-500/10 text-card-foreground overflow-hidden animate-in slide-in-from-top-4 duration-300"
+      className="fixed top-16 right-3 sm:right-6 left-3 sm:left-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] z-[99999] pointer-events-auto rounded-2xl border-2 border-emerald-500/40 bg-card/95 backdrop-blur-xl p-4 sm:p-5 shadow-2xl shadow-emerald-500/10 text-card-foreground overflow-hidden animate-in slide-in-from-top-4 duration-300"
       role="alert"
       aria-live="assertive"
     >
@@ -160,10 +183,19 @@ export function InboundCallDrawer({
               <>
                 <Button
                   size="sm"
+                  disabled={isAnswering}
                   onClick={handleAnswer}
-                  className="h-7 px-3 text-xs font-bold gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30"
+                  className="h-8 px-4 text-xs font-bold gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/40 animate-pulse"
                 >
-                  <PhoneCall className="size-3" /> Answer
+                  {isAnswering ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin" /> Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <PhoneCall className="size-3" /> Answer
+                    </>
+                  )}
                 </Button>
                 <Button
                   size="sm"
@@ -229,4 +261,9 @@ export function InboundCallDrawer({
       </div>
     </div>
   );
+
+  if (typeof document !== "undefined") {
+    return createPortal(drawerContent, document.body);
+  }
+  return drawerContent;
 }

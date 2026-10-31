@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useApp, useLocations, useAuth } from "@/contexts";
 import { ALL_NAV_ITEMS, findNavItem, isOrganizationAdmin } from "@/lib/nav";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, canAccessTelephony } from "@/lib/permissions";
 import { isSubmoduleAllowed } from "@/lib/modules-config";
 import { useRouterState, useRouter, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
@@ -193,7 +193,7 @@ export function Topbar() {
 
   const isSuperAdmin = (user?.userType === 'platform' || !user?.tenantId) && (!!(user?.isSuperAdmin) || user?.role === "Super Admin");
   const isOrgAdmin = isOrganizationAdmin(user);
-  const canAccessTelephony = isOrgAdmin || hasPermission(user, 'crm.leads.edit') || hasPermission(user, 'crm.leads.view');
+  const canShowTelephony = canAccessTelephony(user);
   const enabledModules = user?.enabledModules ?? null;
 
   const searchResults = React.useMemo(() => {
@@ -649,7 +649,7 @@ export function Topbar() {
           </Select>
 
           {/* Sales Calling: WebRTC Phone, Agent Presence & Missed Calls Desk (Restricted to Sales & Admin roles) */}
-          {canAccessTelephony && (
+          {canShowTelephony && (
             <>
               <WebPhoneBar />
               <AgentPresenceWidget />
