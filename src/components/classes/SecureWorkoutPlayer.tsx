@@ -110,6 +110,20 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
         </div>
       </div>
 
+      {/* 3. Bottom-Left Security Shield: Blocks YouTube video watermark, end-card link & copy link icons */}
+      <div
+        className="absolute bottom-0 left-0 z-30 pointer-events-auto flex items-center gap-1.5 bg-black px-4 py-2.5 rounded-tr-xl border-t border-r border-white/15 shadow-2xl min-w-[140px] h-12 select-none cursor-default"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+        title="Protected Stream"
+      >
+        <Lock className="size-3.5 text-primary shrink-0" />
+        <span className="text-xs text-white/90 font-medium tracking-wide">Protected</span>
+      </div>
+
       {/* 4. Bottom-Right Expanded Shield: Completely covers YouTube Logo & 'Watch on YouTube' button */}
       <div
         className="absolute bottom-0 right-0 z-30 pointer-events-auto flex items-center justify-center gap-2 bg-black px-5 py-2.5 rounded-tl-xl border-t border-l border-white/15 shadow-2xl min-w-[210px] h-12 select-none cursor-default"

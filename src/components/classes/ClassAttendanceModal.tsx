@@ -434,12 +434,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                   </div>
                 </div>
               )}
-              {classVideoData?.instructions && (
-                <div className="text-[11px] text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-                  <span className="font-semibold text-foreground">Trainer Instructions: </span>
-                  {classVideoData.instructions}
-                </div>
-              )}
+
             </div>
           )}
 
@@ -634,8 +629,13 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                           )}
 
                           {booking.package_name && (
-                            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
-                              {booking.package_name}
+                            <span className="text-2xs px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold inline-flex items-center gap-1.5">
+                              <span>{booking.package_name}</span>
+                              {booking.total_sessions != null && (
+                                <span className="text-3xs font-mono font-bold text-primary/80 bg-primary/15 px-1 rounded">
+                                  {booking.consumed_sessions ?? 0}/{booking.total_sessions} Used
+                                </span>
+                              )}
                             </span>
                           )}
 
@@ -652,19 +652,12 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
 
                         <div className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                           {displayMemberNumber && (
-                            <span className="font-mono font-medium text-foreground/80 bg-muted/60 px-1 rounded">
+                            <span className="font-mono font-medium text-foreground/90 bg-muted/70 px-1.5 py-0.5 rounded border border-border/50">
                               {displayMemberNumber}
                             </span>
                           )}
-                          {displayEmail && <span>{displayEmail}</span>}
-                          {displayPhone && (
-                            <>
-                              <span>•</span>
-                              <span>{displayPhone}</span>
-                            </>
-                          )}
                           <span>•</span>
-                          <span>Ref: {booking.booking_number || booking.id.slice(0, 8)}</span>
+                          <span className="text-muted-foreground">Ref: {booking.booking_number || booking.id.slice(0, 8)}</span>
                           {booking.attendance_record?.check_in_at && (
                             <>
                               <span>•</span>
