@@ -130,7 +130,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
   const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
-  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('today');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
@@ -496,7 +496,7 @@ export const ClassesWorkspace: React.FC = () => {
 
   const activeTemplatesCount = React.useMemo(() => {
     const active = templates.filter((t) => t.status === 'ACTIVE');
-    if (!globalBranchId) {
+    if (!globalBranchId || globalBranchId === 'ALL' || globalBranchId.toUpperCase() === 'ALL') {
       return active.length;
     }
     return active.filter((t) => {
@@ -2406,7 +2406,7 @@ export const ClassesWorkspace: React.FC = () => {
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    Today
+                    Today (Nov 3)
                   </button>
                   <button
                     type="button"
@@ -2453,6 +2453,12 @@ export const ClassesWorkspace: React.FC = () => {
                     All Dates
                   </button>
                 </div>
+
+                {dateFilterMode === 'today' && (
+                  <span className="text-[11px] text-muted-foreground hidden lg:inline-flex items-center gap-1 bg-muted/60 px-2.5 py-1 rounded-md border border-border/50">
+                    Showing today's schedule (Nov 3). Click <strong>All Dates</strong> to view the entire month.
+                  </span>
+                )}
 
                 {/* Custom Date Input */}
                 {dateFilterMode === 'custom' && (
@@ -2633,12 +2639,12 @@ export const ClassesWorkspace: React.FC = () => {
                         ];
                         const hasTrainer = allTrainers.length > 0;
 
-                        const startTimeFormatted = occ.start_at
-                          ? formatTime12h(occ.start_at)
-                          : (occ.start_time ? formatTime12h(occ.start_time) : '');
-                        const endTimeFormatted = occ.end_at
-                          ? formatTime12h(occ.end_at)
-                          : (occ.end_time ? formatTime12h(occ.end_time) : '');
+                        const startTimeFormatted = occ.start_time
+                          ? formatTime12h(occ.start_time)
+                          : (occ.start_at ? formatTime12h(occ.start_at) : '');
+                        const endTimeFormatted = occ.end_time
+                          ? formatTime12h(occ.end_time)
+                          : (occ.end_at ? formatTime12h(occ.end_at) : '');
 
                         const bookedCount = occ.booking_count ?? 0;
                         const waitlistCount = occ.waitlist_count ?? 0;
@@ -2866,12 +2872,12 @@ export const ClassesWorkspace: React.FC = () => {
                   ];
                   const hasTrainer = allTrainers.length > 0;
 
-                  const startTimeFormatted = occ.start_at
-                    ? formatTime12h(occ.start_at)
-                    : (occ.start_time ? formatTime12h(occ.start_time) : '');
-                  const endTimeFormatted = occ.end_at
-                    ? formatTime12h(occ.end_at)
-                    : (occ.end_time ? formatTime12h(occ.end_time) : '');
+                  const startTimeFormatted = occ.start_time
+                    ? formatTime12h(occ.start_time)
+                    : (occ.start_at ? formatTime12h(occ.start_at) : '');
+                  const endTimeFormatted = occ.end_time
+                    ? formatTime12h(occ.end_time)
+                    : (occ.end_at ? formatTime12h(occ.end_at) : '');
 
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;
@@ -4533,6 +4539,7 @@ export const ClassesWorkspace: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
           queryClient.invalidateQueries({ queryKey: ['class-categories'] });
           queryClient.invalidateQueries({ queryKey: ['class-templates'] });
+          queryClient.invalidateQueries({ queryKey: ['calendar-occurrences'] });
           toast.success('Classes schedule updated from Excel!');
         }}
       />

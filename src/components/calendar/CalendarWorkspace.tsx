@@ -192,6 +192,7 @@ export const CalendarWorkspace: React.FC = () => {
         to_date: toDateStr,
         trainer_id: effectiveTrainerId,
         branch_id: selectedBranchId === 'ALL' ? undefined : selectedBranchId,
+        page_size: 2000,
       }),
   });
 
