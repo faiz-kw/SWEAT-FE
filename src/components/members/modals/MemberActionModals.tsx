@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { fetchTenantSettingsApi } from '@/api/endpoints/api-admin';
 import { discountsApi } from '@/api/endpoints/discountsApi';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { formatCurrency } from '@/utils/currencyUtils';
@@ -376,6 +377,7 @@ export const UpgradeModal: React.FC<{
   const queryClient = useQueryClient();
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Upgraded to higher session tier plan');
 
   const contracts = useMemo(() => {
@@ -444,7 +446,7 @@ export const UpgradeModal: React.FC<{
     return Number(selectedContract?.catalog_price || selectedContract?.contract_snapshot?.catalog_price || 0);
   }, [selectedContract]);
 
-  // Real Active Packages matching the member's current program, filtered for HIGHER tiers
+  // Real Active Packages matching the member's current program, filtered for strictly HIGHER session tiers
   const candidateUpgradePlans = useMemo(() => {
     const plansList = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
     if (!Array.isArray(plansList) || plansList.length === 0) {
@@ -457,42 +459,54 @@ export const UpgradeModal: React.FC<{
 
     return plansList
       .filter((p: any) => {
-        // Must be currently active in the system
+        // Must be active
         if (p.is_active === false || p.status === 'INACTIVE' || p.status === 'ARCHIVED') return false;
 
         // Exclude current package ID
         const pId = p.id || p.package_id;
         if (currentPkgId && (pId === currentPkgId || p.package_id === currentPkgId)) return false;
 
-        // Program match: by program_id OR by program_name equality OR containment (e.g. Bootcamp)
-        if (currentProgId && p.program_id && p.program_id === currentProgId) {
-          return true;
-        }
-        if (currentProg) {
+        // Program match:
+        if (currentProgId && p.program_id) {
+          if (p.program_id !== currentProgId) return false;
+        } else if (currentProg && currentProg !== 'standard' && currentProg !== 'general') {
           const pProg = (p.program_name || '').trim().toLowerCase();
           const pName = (p.name || '').trim().toLowerCase();
-          if (pProg === currentProg) return true;
-          if (pProg && (pProg.includes(currentProg) || currentProg.includes(pProg))) return true;
-          if (pName && pName.includes(currentProg)) return true;
+          const matchProg = (pProg && (pProg === currentProg || pProg.includes(currentProg) || currentProg.includes(pProg)))
+            || (pName && (pName.includes(currentProg) || currentProg.includes(pName)));
+          if (!matchProg) return false;
         }
-        return false;
+        return true;
       })
       .map((p: any) => {
-        const match = (p.name || '').match(/(\d+)\s*session/i);
-        const sCount = match
-          ? parseInt(match[1], 10)
-          : (p.total_sessions || p.session_count || (p.duration_months ? p.duration_months * 24 : 0));
+        let sCount = 0;
+        if (p.total_sessions && Number(p.total_sessions) > 0) {
+          sCount = Number(p.total_sessions);
+        } else if (p.session_count && Number(p.session_count) > 0) {
+          sCount = Number(p.session_count);
+        } else {
+          // Extract session number from package name: "Performance 36" -> 36, "Transform 72" -> 72, "Bootcamp - 500" -> 500
+          const matchSession = (p.name || '').match(/(\d+)\s*(?:sessions?|sess)?/i);
+          if (matchSession) {
+            sCount = parseInt(matchSession[1], 10);
+          } else if (p.duration_months && p.duration_months <= 12) {
+            sCount = p.duration_months * 24;
+          }
+        }
+
+        const validityDays = p.validity_days || p.total_days || (p.duration_months && p.duration_months <= 12 ? p.duration_months * 30 : (p.duration_months || 90));
+
         return {
           id: p.id || p.package_id,
           name: p.name,
           program: p.program_name || selectedContract?.program_name || member?.program_name || 'Standard Program',
           sessions: sCount,
           price: Number(p.price || 0),
-          validity_days: p.validity_days || (p.duration_months ? p.duration_months * 30 : 90),
+          validity_days: validityDays,
         };
       })
-      // Strictly higher tier: more sessions OR higher price with equal/more sessions
-      .filter((p: any) => p.sessions > currentSessions || (p.price > currentPlanPrice && p.sessions >= currentSessions))
+      // Strictly higher tier: only packages having MORE sessions than member currently holds AND higher price
+      .filter((p: any) => p.sessions > currentSessions && p.price > currentPlanPrice)
       .sort((a: any, b: any) => a.sessions - b.sessions || a.price - b.price);
   }, [rawPlans, currentSessions, currentPlanPrice, selectedContract, member]);
 
@@ -517,7 +531,7 @@ export const UpgradeModal: React.FC<{
   const extraSessionsAdded = selectedTargetPlan ? Math.max(0, selectedTargetPlan.sessions - currentSessions) : 0;
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (extraPayload?: any) =>
       membersApi.upgradeMembership(member.id, {
         membership_id: selectedContract?.membership_id || selectedContract?.id,
         package_id: selectedTargetPlan?.id || selectedPackageId,
@@ -526,6 +540,7 @@ export const UpgradeModal: React.FC<{
         payment_amount: differenceToPay,
         difference_amount: differenceToPay,
         reason: `${reason}: upgraded from ${currentSessions} to ${selectedTargetPlan?.sessions} sessions`,
+        ...(extraPayload || {}),
       } as any),
     onSuccess: (res) => {
       toast.success(res.message || 'Membership upgraded successfully!');
@@ -538,6 +553,66 @@ export const UpgradeModal: React.FC<{
       toast.error(err?.response?.data?.error || err.message || 'Failed to upgrade membership');
     },
   });
+
+  const handleExecuteUpgrade = async () => {
+    if (!selectedTargetPlan) return;
+    if (differenceToPay > 0 && paymentMethod === 'ONLINE') {
+      try {
+        await openRazorpayCheckout({
+          amount: differenceToPay,
+          currency: 'INR',
+          name: 'Sweat Fitness Club',
+          description: `Upgrade to ${selectedTargetPlan.name} (${selectedTargetPlan.sessions} Sessions)`,
+          prefill: {
+            name: member?.name,
+            contact: member?.phone,
+            email: member?.email,
+          },
+          themeColor: '#4f46e5',
+          onSuccess: async (verifyData: any) => {
+            await mutation.mutateAsync({
+              razorpay_payment_id: verifyData.razorpay_payment_id,
+              razorpay_signature: verifyData.razorpay_signature,
+            } as any);
+          },
+          onError: (err: any) => {
+            toast.error(err?.message || 'Payment cancelled or failed.');
+          },
+        });
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
+      }
+      return;
+    }
+
+    if (differenceToPay > 0 && paymentMethod === 'PAYMENT_LINK') {
+      const payUrl = `https://pay.sweatfitness.in/upgrade/${member?.id || 'pay'}?amount=${differenceToPay}&pkg=${selectedTargetPlan.id}`;
+      setGeneratedLink({
+        paymentUrl: payUrl,
+        amount: differenceToPay,
+        orderNumber: `ORD-UPG-${Date.now().toString().slice(-6)}`,
+        memberName: member?.name,
+        memberPhone: member?.phone,
+        packageName: `Upgrade to ${selectedTargetPlan.name} (+${extraSessionsAdded} Extra Sessions)`,
+      });
+      return;
+    }
+
+    mutation.mutate();
+  };
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -699,11 +774,14 @@ export const UpgradeModal: React.FC<{
             Cancel
           </Button>
           <Button
-            onClick={() => mutation.mutate()}
+            onClick={handleExecuteUpgrade}
             disabled={mutation.isPending || !selectedTargetPlan}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Execute Upgrade
+            {paymentMethod === 'ONLINE' && differenceToPay > 0
+              ? `Pay ₹${differenceToPay.toLocaleString()} & Upgrade`
+              : 'Execute Upgrade'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -723,7 +801,10 @@ export const ExtendModal: React.FC<{
 }> = ({ isOpen, onClose, member, activeContracts = [], pricingConfig }) => {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
+  const [extendMode, setExtendMode] = useState<'TIER' | 'CUSTOM_DATE'>('TIER');
+  const [customDate, setCustomDate] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
+  const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
 
   const contracts = useMemo(() => {
@@ -756,6 +837,17 @@ export const ExtendModal: React.FC<{
   const pendingSessions = selectedContract?.home_sessions_remaining ?? (member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
   const canExtend = pendingSessions > 0 || (member?.status === 'ACTIVE');
 
+  // Base expiry calculation
+  const rawExpiry = selectedContract?.end_date || member?.expiry_date;
+  const baseDate = useMemo(() => {
+    return rawExpiry && !isNaN(new Date(rawExpiry).getTime()) ? new Date(rawExpiry) : new Date();
+  }, [rawExpiry]);
+
+  const minSelectableDate = useMemo(() => {
+    const nextDay = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000);
+    return nextDay.toISOString().split('T')[0];
+  }, [baseDate]);
+
   // Configured extension tiers from pricingConfig
   const extensionTiers = useMemo(() => {
     if (Array.isArray(pricingConfig?.extension_tiers) && pricingConfig.extension_tiers.length > 0) {
@@ -770,26 +862,51 @@ export const ExtendModal: React.FC<{
     ];
   }, [pricingConfig]);
 
-  const currentTier = extensionTiers.find((t: any) => t.days === days) || { days, fee: Math.round(days * 33.33) };
+  const per30 = Number(pricingConfig?.extension_fee_per_30_days) || 1050;
+  const perDayRate = pricingConfig?.extension_per_day_fee
+    ? Number(pricingConfig.extension_per_day_fee)
+    : Math.max(1, Math.round(per30 / 30));
+
+  const effectiveDays = useMemo(() => {
+    if (extendMode === 'CUSTOM_DATE' && customDate) {
+      const targetTime = new Date(customDate).getTime();
+      const diffDays = Math.round((targetTime - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+      return Math.max(1, diffDays);
+    }
+    return days;
+  }, [extendMode, customDate, baseDate, days]);
+
+  const effectiveFee = useMemo(() => {
+    if (extendMode === 'CUSTOM_DATE') {
+      return Math.round(effectiveDays * perDayRate);
+    }
+    const tier = extensionTiers.find((t: any) => t.days === days);
+    return tier ? tier.fee : Math.round(effectiveDays * perDayRate);
+  }, [extendMode, effectiveDays, perDayRate, extensionTiers, days]);
 
   // Calculate New Extended Expiry Date preview safely
   const newExtendedExpiry = useMemo(() => {
-    const raw = selectedContract?.end_date || member?.expiry_date;
-    const baseDate = raw && !isNaN(new Date(raw).getTime()) ? new Date(raw) : new Date();
+    if (extendMode === 'CUSTOM_DATE' && customDate) {
+      const d = new Date(customDate);
+      return !isNaN(d.getTime())
+        ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : customDate;
+    }
     const extended = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
     return !isNaN(extended.getTime())
       ? extended.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
       : `${days} days extended`;
-  }, [selectedContract?.end_date, member?.expiry_date, days]);
+  }, [extendMode, customDate, baseDate, days]);
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (extraPayload?: any) =>
       membersApi.extendMembership(selectedContract?.membership_id || member?.id, {
-        days,
-        fee: currentTier.fee,
+        days: effectiveDays,
+        fee: effectiveFee,
         payment_method: paymentMethod,
-        reason: `${reason} (+${days} days)`,
-      }),
+        reason: `${reason} (+${effectiveDays} days)`,
+        ...(extraPayload || {}),
+      } as any),
     onSuccess: (res) => {
       toast.success(res.message || 'Validity extension applied successfully!');
       queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
@@ -801,6 +918,65 @@ export const ExtendModal: React.FC<{
       toast.error(err?.response?.data?.error || err.message || 'Failed to extend membership');
     },
   });
+
+  const handleExecuteExtend = async () => {
+    if (effectiveFee > 0 && paymentMethod === 'ONLINE') {
+      try {
+        await openRazorpayCheckout({
+          amount: effectiveFee,
+          currency: 'INR',
+          name: 'Sweat Fitness Club',
+          description: `Validity Extension (+${effectiveDays} Days)`,
+          prefill: {
+            name: member?.name,
+            contact: member?.phone,
+            email: member?.email,
+          },
+          themeColor: '#d97706',
+          onSuccess: async (verifyData: any) => {
+            await mutation.mutateAsync({
+              razorpay_payment_id: verifyData.razorpay_payment_id,
+              razorpay_signature: verifyData.razorpay_signature,
+            } as any);
+          },
+          onError: (err: any) => {
+            toast.error(err?.message || 'Payment cancelled or failed.');
+          },
+        });
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
+      }
+      return;
+    }
+
+    if (effectiveFee > 0 && paymentMethod === 'PAYMENT_LINK') {
+      const payUrl = `https://pay.sweatfitness.in/extend/${member?.id || 'pay'}?amount=${effectiveFee}&days=${effectiveDays}`;
+      setGeneratedLink({
+        paymentUrl: payUrl,
+        amount: effectiveFee,
+        orderNumber: `ORD-EXT-${Date.now().toString().slice(-6)}`,
+        memberName: member?.name,
+        memberPhone: member?.phone,
+        packageName: `Validity Extension (+${effectiveDays} Days - Valid till ${newExtendedExpiry})`,
+      });
+      return;
+    }
+
+    mutation.mutate();
+  };
+
+  if (generatedLink) {
+    return (
+      <PaymentLinkShareModal
+        isOpen={Boolean(generatedLink)}
+        onClose={() => {
+          setGeneratedLink(null);
+          onClose();
+        }}
+        data={generatedLink}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -858,42 +1034,79 @@ export const ExtendModal: React.FC<{
             </div>
           )}
 
-          {/* Configured Extension Options */}
+          {/* Extension Duration Selector: Tiers vs Custom Date */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Select Extension Duration</Label>
-              {pricingConfig?.extension_fee_per_30_days && (
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  Base Fee: ₹{pricingConfig.extension_fee_per_30_days} / 30 days
-                </span>
-              )}
+              <Label className="text-xs font-semibold">Extension Duration Method</Label>
+              <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setExtendMode('TIER')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                    extendMode === 'TIER'
+                      ? 'bg-background text-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Quick Days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtendMode('CUSTOM_DATE')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                    extendMode === 'CUSTOM_DATE'
+                      ? 'bg-background text-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Select Date 📅
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {extensionTiers.map((tier: any) => {
-                const isSelected = days === tier.days;
-                return (
-                  <button
-                    key={tier.days}
-                    type="button"
-                    disabled={!canExtend}
-                    onClick={() => setDays(tier.days)}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? 'border-amber-500 bg-amber-500/10 shadow-sm'
-                        : 'border-border hover:bg-muted/40 disabled:opacity-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
-                      <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground block mt-1">
-                      Preserves {pendingSessions} sessions
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+
+            {extendMode === 'TIER' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {extensionTiers.map((tier: any) => {
+                  const isSelected = days === tier.days;
+                  return (
+                    <button
+                      key={tier.days}
+                      type="button"
+                      disabled={!canExtend}
+                      onClick={() => setDays(tier.days)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? 'border-amber-500 bg-amber-500/10 shadow-sm'
+                          : 'border-border hover:bg-muted/40 disabled:opacity-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
+                        <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground block mt-1">
+                        Preserves {pendingSessions} sessions
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 bg-muted/20 border border-border/80 rounded-xl space-y-2">
+                <Label className="text-xs font-medium text-foreground">Select Target Expiry Date</Label>
+                <Input
+                  type="date"
+                  min={minSelectableDate}
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="bg-background text-sm font-medium"
+                />
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+                  <span>Calculated Extension: <strong className="text-foreground">+{effectiveDays} Days</strong></span>
+                  <span>Rate: <strong className="text-foreground">₹{perDayRate} / day</strong></span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* New Validity Preview */}
@@ -916,7 +1129,7 @@ export const ExtendModal: React.FC<{
               <div className="border-t border-border/50 pt-2 flex justify-between items-center">
                 <span className="font-bold text-sm">Extension Amount to Pay:</span>
                 <span className="font-extrabold text-base text-amber-600 dark:text-amber-400">
-                  ₹{currentTier.fee.toLocaleString()}
+                  ₹{effectiveFee.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -944,12 +1157,14 @@ export const ExtendModal: React.FC<{
             Cancel
           </Button>
           <Button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !canExtend}
-            className="bg-amber-600 hover:bg-amber-700 text-white"
+            onClick={handleExecuteExtend}
+            disabled={mutation.isPending || !canExtend || (extendMode === 'CUSTOM_DATE' && !customDate)}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Pay & Extend Validity
+            {paymentMethod === 'ONLINE' && effectiveFee > 0
+              ? `Pay ₹${effectiveFee.toLocaleString()} & Extend`
+              : 'Pay & Extend Validity'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1202,9 +1417,42 @@ export const FreezeModal: React.FC<{
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || freezeDays <= 0}>
+          <Button
+            onClick={() => {
+              const feeVal = parseFloat(feeAmount || String(configuredFreezeFee)) || 0;
+              if (chargeFee && feeVal > 0 && (paymentMethod === 'ONLINE' || paymentMethod === 'CARD')) {
+                openRazorpayCheckout({
+                  keyId: '',
+                  orderId: `FRZ-${Date.now()}`,
+                  razorpayOrderId: '',
+                  amount: feeVal,
+                  name: 'SWEAT Fitness & Wellness',
+                  description: `Membership Freeze Fee (${freezeDays} days)`,
+                  prefill: {
+                    name: member?.name,
+                    email: member?.email,
+                    contact: member?.phone,
+                  },
+                  onSuccess: async (paymentId, signature) => {
+                    toast.success('Payment received via Razorpay! Applying freeze...');
+                    await mutation.mutateAsync();
+                  },
+                  onFailure: () => {
+                    toast.error('Payment was not completed. Freeze not applied.');
+                  },
+                });
+                return;
+              }
+              mutation.mutate();
+            }}
+            disabled={mutation.isPending || freezeDays <= 0}
+          >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {chargeFee && Number(feeAmount) > 0 ? `Pay ₹${feeAmount} & Freeze` : 'Confirm Freeze'}
+            {chargeFee && Number(feeAmount) > 0 && paymentMethod === 'ONLINE'
+              ? `Pay ₹${feeAmount} & Freeze`
+              : chargeFee && Number(feeAmount) > 0
+              ? `Collect ₹${feeAmount} & Freeze`
+              : 'Confirm Freeze'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1661,14 +1909,24 @@ export const BuyPassportModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
 
-  const packs = [
-    { id: 'PACK_5', name: '5 Sessions Pack', sessions: 5, price: 2500, perSession: 500, badge: 'Standard' },
-    { id: 'PACK_10', name: '10 Sessions Pack', sessions: 10, price: 4500, perSession: 450, badge: 'Popular • 10% OFF' },
-    { id: 'PACK_20', name: '20 Sessions Pack', sessions: 20, price: 8000, perSession: 400, badge: 'Best Value • 20% OFF' },
-  ];
+  // Read centralized Passport pricing from Administration Settings
+  const { data: adminSettings } = useQuery({
+    queryKey: ['tenant-settings'],
+    queryFn: () => fetchTenantSettingsApi(),
+    enabled: isOpen,
+  });
+
+  const passportConfig = adminSettings?.membership_config?.passport_config;
+  const costPerSession = Number(passportConfig?.cost_per_session) || 500;
+
+  const packs = useMemo(() => [
+    { id: 'PACK_5', name: '5 Sessions Pack', sessions: 5, price: 5 * costPerSession, perSession: costPerSession, badge: 'Standard' },
+    { id: 'PACK_10', name: '10 Sessions Pack', sessions: 10, price: Math.round(10 * costPerSession * 0.9), perSession: Math.round(costPerSession * 0.9), badge: 'Popular • 10% OFF' },
+    { id: 'PACK_20', name: '20 Sessions Pack', sessions: 20, price: Math.round(20 * costPerSession * 0.8), perSession: Math.round(costPerSession * 0.8), badge: 'Best Value • 20% OFF' },
+  ], [costPerSession]);
 
   const selectedSessions = packType === 'CUSTOM' ? customSessions : (packs.find((p) => p.id === packType)?.sessions || 10);
-  const selectedPrice = packType === 'CUSTOM' ? customSessions * 450 : (packs.find((p) => p.id === packType)?.price || 4500);
+  const selectedPrice = packType === 'CUSTOM' ? customSessions * costPerSession : (packs.find((p) => p.id === packType)?.price || (10 * costPerSession));
 
   const idempotencyKey = useMemo(() => `passport-${member?.id || 'id'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member?.id]);
 
@@ -1705,6 +1963,49 @@ export const BuyPassportModal: React.FC<{
       toast.error(err?.response?.data?.error || err.message || 'Failed to purchase passport sessions');
     },
   });
+
+  const handleExecuteBuyPassport = async () => {
+    if (selectedPrice > 0 && paymentMethod === 'ONLINE') {
+      try {
+        await openRazorpayCheckout({
+          amount: selectedPrice,
+          currency: 'INR',
+          name: 'Sweat Fitness Club',
+          description: `Passport Access (${selectedSessions} Cross-Branch Sessions)`,
+          prefill: {
+            name: member?.name,
+            contact: member?.phone,
+            email: member?.email,
+          },
+          themeColor: '#4f46e5',
+          onSuccess: async () => {
+            await mutation.mutateAsync();
+          },
+          onError: (err: any) => {
+            toast.error(err?.message || 'Payment cancelled or failed.');
+          },
+        });
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
+      }
+      return;
+    }
+
+    if (selectedPrice > 0 && paymentMethod === 'PAYMENT_LINK') {
+      const payUrl = `https://pay.sweatfitness.in/passport/${member?.id || 'pay'}?amount=${selectedPrice}`;
+      setGeneratedLink({
+        paymentUrl: payUrl,
+        amount: selectedPrice,
+        orderNumber: `ORD-PASS-${Date.now().toString().slice(-6)}`,
+        memberName: member?.name,
+        memberPhone: member?.phone,
+        packageName: `Passport Access (${selectedSessions} Cross-Branch Sessions)`,
+      });
+      return;
+    }
+
+    mutation.mutate();
+  };
 
   if (generatedLink) {
     return (
@@ -1833,9 +2134,9 @@ export const BuyPassportModal: React.FC<{
             Cancel
           </Button>
           <Button
-            onClick={() => mutation.mutate()}
+            onClick={handleExecuteBuyPassport}
             disabled={mutation.isPending || selectedSessions <= 0}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Pay ₹{selectedPrice.toLocaleString()} & Allocate

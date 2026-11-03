@@ -138,12 +138,12 @@ export async function openRazorpayCheckout(opts: RazorpayCheckoutOptions): Promi
   };
 
   const options: Record<string, any> = {
-    key: opts.keyId || 'rzp_test_placeholder',
+    key: opts.keyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
     amount: finalAmountPaise,
     currency: opts.currency || 'INR',
     name: opts.name || 'SWEAT',
     description: opts.description || 'SWEAT Membership Checkout',
-    order_id: opts.razorpayOrderId,
+    ...(opts.razorpayOrderId ? { order_id: opts.razorpayOrderId } : {}),
     prefill: opts.prefill || {},
     theme: {
       color: opts.themeColor || '#10b981',

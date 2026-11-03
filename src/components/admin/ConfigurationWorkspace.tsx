@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check, Snowflake, Sliders, CheckCircle2, QrCode } from "lucide-react";
+import { Settings, Save, Clock, Receipt, ShieldAlert, Sparkles, RefreshCw, RotateCcw, CreditCard, Banknote, ShieldCheck, Smartphone, Landmark, Wallet, AlertCircle, Building2, BellRing, Play, Check, Snowflake, Sliders, CheckCircle2, QrCode, Globe } from "lucide-react";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { membershipsApi } from "@/api/endpoints/membershipsApi";
 import type { MembershipPolicyConfig, MembershipChangePolicy } from "@/types/memberships";
@@ -1423,6 +1423,216 @@ export function ConfigurationWorkspace() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* SECTION: Passport (Cross-Branch Studio Access) Administration Policy */}
+              <div className="bg-card rounded-xl border border-indigo-500/30 p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Globe className="size-4 text-indigo-500" />
+                      <h2 className="text-base font-semibold text-foreground">
+                        Passport (Cross-Branch Studio Access) Policy
+                      </h2>
+                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-md">
+                        Administration Central Policy
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Centralized rules for cross-branch studio access, pricing per passport session, and session booking allowances.
+                      (These administration settings override individual package configurations).
+                    </p>
+                  </div>
+                  {isOrgAdmin && (
+                    <Button
+                      size="sm"
+                      disabled={saving}
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          await updateTenantSettingsApi(settings);
+                          toast.success("Passport administration configuration saved successfully!");
+                        } catch (err: any) {
+                          toast.error(err?.data?.detail || err?.message || "Failed to save passport configuration");
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                    >
+                      <Save className="size-3.5" />
+                      <span>Save Passport Policy</span>
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+                  {/* Enable Passport Access */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">Enable Passport Studio Access</Label>
+                      <Switch
+                        disabled={!isOrgAdmin}
+                        checked={settings.membership_config?.passport_config?.is_enabled ?? true}
+                        onCheckedChange={(val) => {
+                          setSettings((prev) => ({
+                            ...prev,
+                            membership_config: {
+                              ...(prev.membership_config || {}),
+                              passport_config: {
+                                ...(prev.membership_config?.passport_config || {
+                                  is_enabled: true,
+                                  cost_per_session: 500,
+                                  default_sessions: 0,
+                                  allow_cross_branch_booking: true,
+                                  is_unlimited_cross: false,
+                                }),
+                                is_enabled: val,
+                              },
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-muted-foreground block">
+                      When enabled, allows members with passport allowance to access non-home branch studios.
+                    </span>
+                  </div>
+
+                  {/* Passport Cost Per Session */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-1.5">
+                    <Label className="text-xs font-semibold text-foreground">Passport Cost Per Session (₹)</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      disabled={!isOrgAdmin}
+                      value={settings.membership_config?.passport_config?.cost_per_session ?? 500}
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value) || 0);
+                        setSettings((prev) => ({
+                          ...prev,
+                          membership_config: {
+                            ...(prev.membership_config || {}),
+                            passport_config: {
+                              ...(prev.membership_config?.passport_config || {
+                                is_enabled: true,
+                                cost_per_session: 500,
+                                default_sessions: 0,
+                                allow_cross_branch_booking: true,
+                                is_unlimited_cross: false,
+                              }),
+                              cost_per_session: val,
+                            },
+                          },
+                        }));
+                      }}
+                      className="h-8 text-xs font-bold"
+                    />
+                    <span className="text-[11px] text-muted-foreground block">
+                      Fee charged per passport session when purchasing cross-branch access packs.
+                    </span>
+                  </div>
+
+                  {/* Allow Cross-Branch Booking */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">Allow Cross-Branch Booking</Label>
+                      <Switch
+                        disabled={!isOrgAdmin}
+                        checked={settings.membership_config?.passport_config?.allow_cross_branch_booking ?? true}
+                        onCheckedChange={(val) => {
+                          setSettings((prev) => ({
+                            ...prev,
+                            membership_config: {
+                              ...(prev.membership_config || {}),
+                              passport_config: {
+                                ...(prev.membership_config?.passport_config || {
+                                  is_enabled: true,
+                                  cost_per_session: 500,
+                                  default_sessions: 0,
+                                  allow_cross_branch_booking: true,
+                                  is_unlimited_cross: false,
+                                }),
+                                allow_cross_branch_booking: val,
+                              },
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-muted-foreground block">
+                      Permits members to book classes or sessions at any branch location.
+                    </span>
+                  </div>
+
+                  {/* Default Included Sessions */}
+                  <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-1.5">
+                    <Label className="text-xs font-semibold text-foreground">Default Included Passport Sessions</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      disabled={!isOrgAdmin}
+                      value={settings.membership_config?.passport_config?.default_sessions ?? 0}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                        setSettings((prev) => ({
+                          ...prev,
+                          membership_config: {
+                            ...(prev.membership_config || {}),
+                            passport_config: {
+                              ...(prev.membership_config?.passport_config || {
+                                is_enabled: true,
+                                cost_per_session: 500,
+                                default_sessions: 0,
+                                allow_cross_branch_booking: true,
+                                is_unlimited_cross: false,
+                              }),
+                              default_sessions: val,
+                            },
+                          },
+                        }));
+                      }}
+                      className="h-8 text-xs font-bold"
+                    />
+                    <span className="text-[11px] text-muted-foreground block">
+                      Default passport quota credited on enrollment if not specified.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Unlimited Cross-Branch Access Toggle */}
+                <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs font-semibold text-foreground">Allow Unlimited Cross-Branch Access (All Active Members)</Label>
+                    <span className="text-[11px] text-muted-foreground block mt-0.5">
+                      When enabled, all members with an active package can book and attend sessions at any studio branch without passport fee deduction.
+                    </span>
+                  </div>
+                  <Switch
+                    disabled={!isOrgAdmin}
+                    checked={settings.membership_config?.passport_config?.is_unlimited_cross ?? false}
+                    onCheckedChange={(val) => {
+                      setSettings((prev) => ({
+                        ...prev,
+                        membership_config: {
+                          ...(prev.membership_config || {}),
+                          passport_config: {
+                            ...(prev.membership_config?.passport_config || {
+                              is_enabled: true,
+                              cost_per_session: 500,
+                              default_sessions: 0,
+                              allow_cross_branch_booking: true,
+                              is_unlimited_cross: false,
+                            }),
+                            is_unlimited_cross: val,
+                          },
+                        },
+                      }));
+                    }}
+                  />
+                </div>
               </div>
 
               {/* SECTION 2: Change & Upgrade Policies */}
