@@ -35,7 +35,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
 import { toast } from 'sonner';
@@ -249,6 +251,7 @@ export const ClassesWorkspace: React.FC = () => {
   }, []);
 
   // Modals state
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ClassCategory | null>(null);
 
@@ -1301,6 +1304,16 @@ export const ClassesWorkspace: React.FC = () => {
             >
               <RefreshCw className={cn("size-3.5 transition-transform", fetchingOccurrences && "animate-spin")} />
               <span>Refresh</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsExcelImportOpen(true)}
+              className="gap-1.5 h-8 text-xs font-semibold"
+              title="Upload classes or schedule from Excel"
+            >
+              <FileSpreadsheet className="size-3.5 text-emerald-600" />
+              <span>Upload Excel</span>
             </Button>
             {primaryTab === 'sessions' && canCreate && (
               <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
@@ -4509,6 +4522,20 @@ export const ClassesWorkspace: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Universal Excel Import Wizard Modal */}
+      <ExcelImportWizardModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        defaultEntityType="CLASS_SCHEDULE"
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+          queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
+          queryClient.invalidateQueries({ queryKey: ['class-categories'] });
+          queryClient.invalidateQueries({ queryKey: ['class-templates'] });
+          toast.success('Classes schedule updated from Excel!');
+        }}
+      />
 
       {/* Attendance & Bookings Modal */}
       <ClassAttendanceModal

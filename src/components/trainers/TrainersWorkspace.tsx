@@ -32,7 +32,9 @@ import {
   Trash2,
   CalendarDays,
   MoreHorizontal,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts';
@@ -114,6 +116,7 @@ export function TrainersWorkspace() {
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [isExcelImportOpen, setIsExcelImportOpen] = React.useState(false);
   const [isLeaveApplyOpen, setIsLeaveApplyOpen] = React.useState(false);
   const [isApprovalsModalOpen, setIsApprovalsModalOpen] = React.useState(false);
   const [isAllottedClassesOpen, setIsAllottedClassesOpen] = React.useState(false);
@@ -386,6 +389,16 @@ export function TrainersWorkspace() {
             </Button>
             {!isTrainer && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsExcelImportOpen(true)}
+                  className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
+                  title="Upload Trainer Roster or Directory from Excel"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Upload Excel</span>
+                </Button>
                 <Link to="/admin/rosters">
                   <Button
                     variant="outline"
@@ -1778,6 +1791,18 @@ export function TrainersWorkspace() {
       )}
 
       {/* Trainer Allotted Classes & Attendance Modal */}
+      {/* Universal Excel Import Wizard Modal */}
+      <ExcelImportWizardModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        defaultEntityType="TRAINER_ROSTER"
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['trainers'] });
+          refetch();
+          toast.success('Trainer data refreshed from Excel!');
+        }}
+      />
+
       {isAllottedClassesOpen && (
         <TrainerAllottedClassesModal
           trainer={isTrainer ? (currentTrainer || selectedTrainer) : selectedTrainer}

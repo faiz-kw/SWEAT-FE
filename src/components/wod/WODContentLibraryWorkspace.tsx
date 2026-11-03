@@ -42,6 +42,7 @@ import {
 } from "@/api/endpoints/wodApi";
 import { api } from "@/api/client";
 import { SecureWorkoutPlayer } from "../classes/SecureWorkoutPlayer";
+import { ExcelImportWizardModal } from "../common/ExcelImportWizardModal";
 
 const TAG_GROUPS: { code: WODTagGroup; label: string; requiredForMovement?: boolean }[] = [
   { code: "PROGRAM", label: "Program / Class Type", requiredForMovement: true },
@@ -137,6 +138,7 @@ export function WODContentLibraryWorkspace() {
   const [importLoading, setImportLoading] = useState<boolean>(false);
   const [duplicateStrategy, setDuplicateStrategy] = useState<"UPDATE" | "SKIP">("UPDATE");
   const [autoDownloadVideos, setAutoDownloadVideos] = useState<boolean>(true);
+  const [isUploadWizardOpen, setIsUploadWizardOpen] = useState<boolean>(false);
 
   // Tag Management state
   const [selectedTagGroup, setSelectedTagGroup] = useState<WODTagGroup>("PROGRAM");
@@ -611,12 +613,12 @@ export function WODContentLibraryWorkspace() {
             onClick={() => {
               setImportFile(null);
               setImportPreview(null);
-              setIsImportOpen(true);
+              setIsUploadWizardOpen(true);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            Import Excel / CSV
+            Upload Excel
           </button>
 
           <button
@@ -1662,6 +1664,16 @@ export function WODContentLibraryWorkspace() {
       )}
 
       {/* Excel Import Preview & Confirm Modal */}
+      <ExcelImportWizardModal
+        isOpen={isUploadWizardOpen}
+        onClose={() => setIsUploadWizardOpen(false)}
+        defaultEntityType="WOD_VIDEO"
+        onImportComplete={() => {
+          void loadItems();
+          void loadSummary();
+        }}
+      />
+
       {isImportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
