@@ -300,6 +300,9 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     }
   };
 
+  const activeSheets = (summary?.sheet_breakdown || []).filter((sb) => sb.found > 0);
+  const otherSheets = (summary?.sheet_breakdown || []).filter((sb) => sb.found === 0);
+
   const filteredRows = rows
     .filter((r) => !filterErrorsOnly || r.status === 'ERROR' || r.status === 'WARNING')
     .filter((r) => selectedSheetFilter === 'ALL' || r.sheet === selectedSheetFilter);
@@ -314,9 +317,9 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                 <FileSpreadsheet className="w-5 h-5" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-bold">Universal Excel Upload Engine</DialogTitle>
+                <DialogTitle className="text-xl font-bold">Excel Schedule & Video Importer</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Smart entity detection, dry-run simulation, and atomic transaction commit.
+                  Check and upload class timetables, daily workout videos, and trainer shifts.
                 </DialogDescription>
               </div>
             </div>
@@ -359,9 +362,9 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   </div>
                 ) : (
                   <div>
-                    <p className="font-semibold text-foreground text-sm">Drop your Excel workbook here or browse</p>
+                    <p className="font-semibold text-foreground text-sm">Drop your Excel file here or click to browse</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Supports .xlsx, .xls, and .csv with multi-sheet detection
+                      Supports Excel workbooks (.xlsx, .xls) and CSV files
                     </p>
                   </div>
                 )}
@@ -372,7 +375,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             <div className="bg-muted/40 p-4 rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" /> Target Entity Format
+                  <Sparkles className="w-3.5 h-3.5 text-primary" /> What type of data is this file?
                 </label>
                 {isDetecting && (
                   <span className="text-xs text-primary flex items-center gap-1">
@@ -414,11 +417,11 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               >
                 {isSimulating ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Simulating Dry Run...
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Checking File...
                   </>
                 ) : (
                   <>
-                    Inspect & Preview <ArrowRight className="w-4 h-4" />
+                    Review File <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </Button>
@@ -432,7 +435,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             {/* Active Entity Badge, Month Selector & Switcher */}
             <div className="flex flex-wrap items-center justify-between gap-2 pb-1 bg-muted/30 p-2.5 rounded-lg border">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground font-medium">Format:</span>
+                <span className="text-xs text-muted-foreground font-medium">File Type:</span>
                 <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-0.5">
                   {formatEntityLabel(entityType)}
                 </Badge>
@@ -441,7 +444,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   onClick={() => setStep(1)}
                   className="text-xs text-primary hover:underline ml-1 font-medium"
                 >
-                  (Switch format)
+                  (Change)
                 </button>
               </div>
 
@@ -449,7 +452,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               {summary.available_months && summary.available_months.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                    <CalendarDays className="w-3.5 h-3.5 text-primary" /> Target Month:
+                    <CalendarDays className="w-3.5 h-3.5 text-primary" /> Month:
                   </span>
                   <select
                     value={selectedMonth || summary.selected_month || ''}
@@ -480,46 +483,63 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-primary" />
-                    Source Sheet Transparency & Data Origin ({summary.selected_month}):
+                    Data Found in File ({summary.selected_month}):
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    Click any sheet to filter rows and cross-verify with original Excel
-                  </span>
+                  {activeSheets.length > 1 && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Click any sheet to filter rows
+                    </span>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSheetFilter('ALL')}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
-                      selectedSheetFilter === 'ALL'
-                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                        : 'bg-background hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    All Sheets ({rows.length} records)
-                  </button>
-                  {summary.sheet_breakdown.map((sb, idx) => (
+
+                {/* If only 1 sheet has data for this month */}
+                {activeSheets.length === 1 && (
+                  <div className="flex items-center flex-wrap gap-2 text-xs">
+                    <span className="text-muted-foreground">Reading schedule from:</span>
+                    <span className="px-2.5 py-1 rounded-md font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
+                      {activeSheets[0].sheet} ({activeSheets[0].found} classes)
+                    </span>
+                    {otherSheets.length > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        (Ignored non-timetable sheets: {otherSheets.map((s) => s.sheet).join(', ')})
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* If multiple sheets have data for this month */}
+                {activeSheets.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => setSelectedSheetFilter(sb.sheet)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors flex items-center gap-1.5 ${
-                        selectedSheetFilter === sb.sheet
+                      onClick={() => setSelectedSheetFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
+                        selectedSheetFilter === 'ALL'
                           ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                          : sb.status === 'ACTIVE'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
-                          : 'bg-muted/60 border-muted text-muted-foreground opacity-60'
+                          : 'bg-background hover:bg-muted text-muted-foreground'
                       }`}
                     >
-                      <span>{sb.sheet}</span>
-                      <Badge variant="outline" className={`text-[10px] py-0 px-1 font-mono ${
-                        sb.status === 'ACTIVE' ? 'border-emerald-500/40 text-emerald-600' : ''
-                      }`}>
-                        {sb.found} {sb.status === 'SKIPPED' ? 'skipped' : 'rows'}
-                      </Badge>
+                      All Sheets ({rows.length})
                     </button>
-                  ))}
-                </div>
+                    {activeSheets.map((sb, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSelectedSheetFilter(sb.sheet)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                          selectedSheetFilter === sb.sheet
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        <span>{sb.sheet}</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-mono border-emerald-500/40 text-emerald-600">
+                          {sb.found}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -545,12 +565,12 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             {/* Metric Cards */}
             <div className="grid grid-cols-4 gap-3">
               <div className="bg-card border rounded-xl p-3">
-                <p className="text-[11px] text-muted-foreground font-medium">Total Rows</p>
+                <p className="text-[11px] text-muted-foreground font-medium">Total Found</p>
                 <p className="text-xl font-bold text-foreground mt-1">{summary.total_rows}</p>
               </div>
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready (Valid)
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready to Upload
                 </p>
                 <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                   {summary.valid_rows}
@@ -558,7 +578,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               </div>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Warnings
+                  <AlertTriangle className="w-3.5 h-3.5" /> Minor Notes
                 </p>
                 <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">
                   {summary.warning_rows}
@@ -566,7 +586,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               </div>
               <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-3">
                 <p className="text-[11px] text-destructive font-medium flex items-center gap-1">
-                  <XCircle className="w-3.5 h-3.5" /> Errors
+                  <XCircle className="w-3.5 h-3.5" /> Needs Attention
                 </p>
                 <p className="text-xl font-bold text-destructive mt-1">{summary.error_rows}</p>
               </div>
@@ -575,7 +595,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             {/* Filter Toggle & Bulk Actions */}
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                Displaying simulated records ({filteredRows.length} shown)
+                Showing {filteredRows.length} {filteredRows.length === 1 ? 'row' : 'rows'}
               </span>
               <div className="flex items-center gap-2">
                 {summary.error_rows > 0 && (
@@ -609,8 +629,8 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               <table className="w-full text-left text-xs">
                 <thead className="bg-muted sticky top-0 border-b z-10">
                   <tr>
-                    <th className="p-2 font-semibold">Excel Row</th>
-                    <th className="p-2 font-semibold">Source Sheet</th>
+                    <th className="p-2 font-semibold">Row</th>
+                    <th className="p-2 font-semibold">Sheet</th>
                     <th className="p-2 font-semibold">Status</th>
                     {entityType === 'WOD_VIDEO' && (
                       <>
@@ -622,9 +642,9 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                     )}
                     {entityType === 'CLASS_SCHEDULE' && (
                       <>
-                        <th className="p-2 font-semibold">Branch</th>
+                        <th className="p-2 font-semibold">Studio / Branch</th>
                         <th className="p-2 font-semibold">Room</th>
-                        <th className="p-2 font-semibold">Day Pattern</th>
+                        <th className="p-2 font-semibold">Days</th>
                         <th className="p-2 font-semibold">Time Slot</th>
                         <th className="p-2 font-semibold">Class Type</th>
                       </>
@@ -636,7 +656,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                         <th className="p-2 font-semibold">Trainer</th>
                       </>
                     )}
-                    <th className="p-2 font-semibold">Validation Notes</th>
+                    <th className="p-2 font-semibold">Status Details</th>
                     <th className="p-2 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
@@ -654,17 +674,17 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                       <td className="p-2">
                         {r.status === 'VALID' && (
                           <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px]">
-                            Valid
+                            Ready
                           </Badge>
                         )}
                         {r.status === 'WARNING' && (
                           <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px]">
-                            Warning
+                            Note
                           </Badge>
                         )}
                         {r.status === 'ERROR' && (
                           <Badge variant="destructive" className="text-[10px]">
-                            Error
+                            Needs Fix
                           </Badge>
                         )}
                       </td>
@@ -743,11 +763,11 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                 >
                   {isCommitting ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" /> Committing Batch...
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Saving to Calendar...
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4" /> Confirm & Upload {summary.valid_rows} Records
+                      <Check className="w-4 h-4" /> Save & Publish {summary.valid_rows} {entityType === 'CLASS_SCHEDULE' ? 'Classes' : entityType === 'WOD_VIDEO' ? 'Videos' : 'Records'}
                     </>
                   )}
                 </Button>
@@ -763,14 +783,14 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-foreground">Upload Executed Successfully!</h3>
+              <h3 className="text-xl font-bold text-foreground">Upload Finished Successfully!</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                The atomic transaction committed with zero database conflicts.
+                All records have been saved into your system.
               </p>
             </div>
             <div className="flex justify-center gap-4 text-left max-w-sm mx-auto">
               <div className="bg-muted/50 p-4 rounded-xl flex-1 text-center">
-                <p className="text-xs text-muted-foreground">Records Created</p>
+                <p className="text-xs text-muted-foreground">New Records Added</p>
                 <p className="text-2xl font-bold text-foreground mt-1">{importResult.created_count}</p>
               </div>
               <div className="bg-muted/50 p-4 rounded-xl flex-1 text-center">
