@@ -472,8 +472,13 @@ export async function createRoleApi(payload: {
   return res.data;
 }
 
-export async function updateRoleApi(roleId: string, payload: Partial<RoleDefRow>): Promise<RoleDefRow> {
-  const res = await api.patch<RoleDefRow>(`/tenant/roles/${roleId}/`, payload);
+export async function updateRoleApi(
+  roleId: string,
+  payload: Partial<RoleDefRow> & Record<string, any>,
+  tenantId?: string
+): Promise<RoleDefRow> {
+  const qs = tenantId && tenantId !== 'all' ? `?tenant=${tenantId}` : '';
+  const res = await api.patch<RoleDefRow>(`/tenant/roles/${roleId}/${qs}`, payload);
   return res.data;
 }
 

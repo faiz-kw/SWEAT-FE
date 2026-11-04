@@ -57,6 +57,7 @@ import {
   fetchUsersApi,
   updateUserApi,
   fetchTenantsForDropdownApi,
+  fetchDepartmentsApi,
   type RoleDefRow,
   type PermissionDefRow,
   type AdminUserRow,
@@ -107,21 +108,38 @@ export function RolesWorkspace() {
   const [selectedUserId, setSelectedUserId] = React.useState<string>("");
   const [assigningUser, setAssigningUser] = React.useState(false);
 
+  // Departments list for role association
+  const [departments, setDepartments] = React.useState<{ id: string; name: string }[]>([]);
+
+  // Edit Role Modal state
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [editingRole, setEditingRole] = React.useState<RoleDefRow | null>(null);
+  const [editRoleName, setEditRoleName] = React.useState("");
+  const [editRoleCode, setEditRoleCode] = React.useState("");
+  const [editRoleDescription, setEditRoleDescription] = React.useState("");
+  const [editRoleScope, setEditRoleScope] = React.useState<"ORG" | "BRANCH">("ORG");
+  const [editRoleDepartmentId, setEditRoleDepartmentId] = React.useState<string>("none");
+  const [editRoleIsActive, setEditRoleIsActive] = React.useState(true);
+  const [savingEdit, setSavingEdit] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
+
   // Load Data
   const loadData = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedRoles, fetchedPerms, fetchedUsers, fetchedTenants] = await Promise.all([
+      const [fetchedRoles, fetchedPerms, fetchedUsers, fetchedTenants, fetchedDepts] = await Promise.all([
         fetchRolesApi(isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined),
         fetchPermissionsApi(),
         fetchUsersApi(),
         isPlatformAdmin ? fetchTenantsForDropdownApi() : Promise.resolve([]),
+        fetchDepartmentsApi().catch(() => []),
       ]);
 
       setRoles(fetchedRoles);
       setPermissions(fetchedPerms);
       setUsers(fetchedUsers);
       setTenants(fetchedTenants);
+      setDepartments(fetchedDepts || []);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || err?.message || "Failed to load role definitions.");
     } finally {
@@ -251,6 +269,75 @@ export function RolesWorkspace() {
       toast.error(err?.response?.data?.detail || err?.message || "Failed to update permissions.");
     } finally {
       setSavingPerms(false);
+    }
+  };
+
+  // Open Edit Role Modal
+  const handleOpenEditModal = (role: RoleDefRow) => {
+    setEditingRole(role);
+    setEditRoleName(role.name || "");
+    setEditRoleCode(role.code || "");
+    setEditRoleDescription(role.description || "");
+    setEditRoleScope((role.scope === "BRANCH" ? "BRANCH" : "ORG") as "ORG" | "BRANCH");
+    setEditRoleDepartmentId((role as any).department || (role as any).department_id || "none");
+    setEditRoleIsActive(role.is_active !== false);
+    setEditError(null);
+    setEditModalOpen(true);
+  };
+
+  // Save Role Edit
+  const handleSaveEditRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRole) return;
+
+    const trimmedName = editRoleName.trim();
+    if (!trimmedName) {
+      const err = "Please provide a valid role name.";
+      setEditError(err);
+      toast.error(err);
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const payload: Partial<RoleDefRow> & { department?: string | null } = {
+        name: trimmedName,
+        description: editRoleDescription.trim(),
+        scope: editRoleScope,
+      };
+
+      // Include code and is_active for custom roles (system roles protect these)
+      if (!editingRole.is_system) {
+        if (editRoleCode.trim()) {
+          payload.code = editRoleCode.trim();
+        }
+        payload.is_active = editRoleIsActive;
+      }
+
+      if (editRoleDepartmentId && editRoleDepartmentId !== "none") {
+        payload.department = editRoleDepartmentId;
+      } else {
+        payload.department = null;
+      }
+
+      const updated = await updateRoleApi(
+        editingRole.id,
+        payload,
+        isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined
+      );
+
+      toast.success(`Role "${updated?.name || trimmedName}" updated successfully.`);
+      setEditModalOpen(false);
+      setEditingRole(null);
+      await loadData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || "Failed to update role.";
+      setEditError(msg);
+      toast.error(msg);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -509,7 +596,7 @@ export function RolesWorkspace() {
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-1 flex-wrap">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
@@ -517,6 +604,15 @@ export function RolesWorkspace() {
                         className="h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 cursor-pointer"
                       >
                         <KeyRound className="size-3 mr-1" /> Permissions
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEditModal(role)}
+                        className="h-7 px-2 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                        title="Edit Role & Details"
+                      >
+                        <Edit2 className="size-3 mr-1 text-primary" /> Edit
                       </Button>
                       <Button
                         variant="ghost"
@@ -564,6 +660,247 @@ export function RolesWorkspace() {
           </div>
         )}
       </PageBody>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-lg bg-card border-border rounded-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Edit2 className="size-4 text-primary" /> Edit Role & Access Profile
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Update role display name, operational scope, description, and settings.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingRole && (
+            <form onSubmit={handleSaveEditRole} className="space-y-4 pt-2">
+              {editError && (
+                <div className="p-3 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* Role Type Indicator */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border text-xs">
+                <div className="flex items-center gap-2">
+                  <Shield className="size-4 text-primary" />
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      {editingRole.is_system ? "Built-in System Role" : "Custom Tenant Role"}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground block font-mono">
+                      ID: {editingRole.id}
+                    </span>
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-bold uppercase tracking-wider ${
+                    editingRole.is_system
+                      ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                      : "bg-primary/10 text-primary border-primary/30"
+                  }`}
+                >
+                  {editingRole.is_system ? "System Protected" : "Custom"}
+                </Badge>
+              </div>
+
+              {/* Role Name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-role-name" className="text-xs font-semibold">
+                  Role Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="edit-role-name"
+                  value={editRoleName}
+                  onChange={(e) => setEditRoleName(e.target.value)}
+                  placeholder="e.g. Senior Floor Coach, Head of Sales"
+                  className="h-8 text-xs bg-background"
+                  required
+                />
+              </div>
+
+              {/* Role Code / Identifier */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="edit-role-code" className="text-xs font-semibold">
+                    System Identifier / Code
+                  </Label>
+                  {editingRole.is_system && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Lock className="size-2.5" /> Immutable for system roles
+                    </span>
+                  )}
+                </div>
+                <Input
+                  id="edit-role-code"
+                  value={editRoleCode}
+                  onChange={(e) => setEditRoleCode(e.target.value)}
+                  disabled={editingRole.is_system}
+                  placeholder="e.g. COACH, HEAD_TRAINER"
+                  className="h-8 text-xs font-mono bg-background disabled:opacity-60 disabled:bg-muted"
+                />
+              </div>
+
+              {/* Scope Selection */}
+              {(() => {
+                const isOrgAdminRole = editingRole.code === "ORG_ADMIN" || editingRole.code === "tenant_admin";
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Clearance Scope</Label>
+                      {isOrgAdminRole && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Lock className="size-2.5" /> Fixed for root Organization Administrator
+                        </span>
+                      )}
+                    </div>
+                    {isOrgAdminRole ? (
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30 text-xs">
+                        <span className="font-medium text-foreground">
+                          Organization-Wide Scope (All Branches Clearance)
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-bold">
+                          ORG
+                        </Badge>
+                      </div>
+                    ) : (
+                      <Select
+                        value={editRoleScope}
+                        onValueChange={(val: "ORG" | "BRANCH") => setEditRoleScope(val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Select Scope" />
+                        </SelectTrigger>
+                        <SelectContent className="text-xs">
+                          <SelectItem value="ORG">
+                            Organization-Wide Scope (All Branches Clearance)
+                          </SelectItem>
+                          <SelectItem value="BRANCH">
+                            Branch Scope (Single Location Clearance)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Organization-scoped roles grant access across all branches. Branch-scoped roles restrict staff to designated facilities.
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Department (if departments exist) */}
+              {departments.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Department Assignment (Optional)</Label>
+                  <Select
+                    value={editRoleDepartmentId}
+                    onValueChange={setEditRoleDepartmentId}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background">
+                      <SelectValue placeholder="No Department" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs">
+                      <SelectItem value="none">No Department (General)</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-role-desc" className="text-xs font-semibold">
+                  Description & Operational Duties
+                </Label>
+                <textarea
+                  id="edit-role-desc"
+                  value={editRoleDescription}
+                  onChange={(e) => setEditRoleDescription(e.target.value)}
+                  placeholder="Outline this role's operational duties, staff privileges, and responsibility bounds..."
+                  className="w-full text-xs p-2.5 rounded-lg border border-border bg-background min-h-[70px] resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Active Toggle for Custom Roles */}
+              {!editingRole.is_system && (
+                <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20">
+                  <div>
+                    <span className="text-xs font-semibold text-foreground block">
+                      Role Active Status
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Deactivated roles cannot be assigned to new staff members.
+                    </span>
+                  </div>
+                  <Switch
+                    checked={editRoleIsActive}
+                    onCheckedChange={setEditRoleIsActive}
+                  />
+                </div>
+              )}
+
+              {/* Granular Permissions Shortcut Banner */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-primary/20 bg-primary/5 text-xs">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="size-3.5 text-primary" />
+                  <span className="text-[11px] text-muted-foreground">
+                    Looking to configure module capabilities?
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const r = editingRole;
+                    setEditModalOpen(false);
+                    if (r) handleOpenPermsModal(r);
+                  }}
+                  className="h-6 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 cursor-pointer"
+                >
+                  Manage Permissions →
+                </Button>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditModalOpen(false)}
+                  disabled={savingEdit}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={savingEdit}
+                  className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer gap-1.5"
+                >
+                  {savingEdit ? (
+                    <>
+                      <RefreshCw className="size-3 animate-spin" /> Saving Changes...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="size-3" /> Save Changes
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create Custom Role Dialog */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>

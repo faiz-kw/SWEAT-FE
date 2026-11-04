@@ -27,9 +27,13 @@ import {
   Copy,
   ChevronLeft,
   ChevronRight,
+  X,
+  RotateCcw,
+  Filter,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
@@ -156,6 +160,7 @@ export function UsersWorkspace() {
   const [departments, setDepartments] = React.useState<{ id: string; name: string; code?: string }[]>([]);
   const [tenants, setTenants] = React.useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [isFetching, setIsFetching] = React.useState(false);
   const [fetchError, setFetchError] = React.useState<string | null>(null);
 
   // Filters
@@ -167,6 +172,37 @@ export function UsersWorkspace() {
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [selectedTenantId, setSelectedTenantId] = React.useState<string>("all");
   const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
+
+  const usersCountRef = React.useRef(0);
+  usersCountRef.current = users.length;
+
+  const activeFilterCount = React.useMemo(() => {
+    let count = 0;
+    if (search.trim()) count++;
+    if (branchFilter !== "all") count++;
+    if (departmentFilter !== "all") count++;
+    if (roleFilter !== "all") count++;
+    if (statusFilter !== "all") count++;
+    if (isPlatformAdmin && selectedTenantId !== "all") count++;
+    return count;
+  }, [search, branchFilter, departmentFilter, roleFilter, statusFilter, isPlatformAdmin, selectedTenantId]);
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const resetAllFilters = React.useCallback(() => {
+    setSearch("");
+    setDebouncedSearch("");
+    setBranchFilter("all");
+    setDepartmentFilter("all");
+    setRoleFilter("all");
+    setStatusFilter("all");
+    if (isPlatformAdmin) setSelectedTenantId("all");
+  }, [isPlatformAdmin]);
+
+  const handleClearSearch = React.useCallback(() => {
+    setSearch("");
+    setDebouncedSearch("");
+  }, []);
 
   // Pagination State
   const [page, setPage] = React.useState(1);
@@ -183,7 +219,7 @@ export function UsersWorkspace() {
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search);
-    }, 250);
+    }, 180);
     return () => window.clearTimeout(timer);
   }, [search]);
 
@@ -334,20 +370,26 @@ export function UsersWorkspace() {
 
   // Load Paginated Users Data
   const loadData = React.useCallback(async () => {
-    setLoading(true);
+    if (usersCountRef.current === 0) {
+      setLoading(true);
+    } else {
+      setIsFetching(true);
+    }
     setFetchError(null);
     try {
-      await loadMetadata();
-      const paginated = await fetchUsersPaginatedApi({
-        page,
-        page_size: pageSize,
-        role: roleFilter === "all" ? undefined : roleFilter,
-        department: !isPlatformAdmin && departmentFilter !== "all" ? departmentFilter : undefined,
-        location: branchFilter === "all" ? undefined : branchFilter,
-        status: statusFilter === "all" ? undefined : statusFilter,
-        search: debouncedSearch || undefined,
-        tenantId: isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined,
-      });
+      const [_, paginated] = await Promise.all([
+        loadMetadata(),
+        fetchUsersPaginatedApi({
+          page,
+          page_size: pageSize,
+          role: roleFilter === "all" ? undefined : roleFilter,
+          department: !isPlatformAdmin && departmentFilter !== "all" ? departmentFilter : undefined,
+          location: branchFilter === "all" ? undefined : branchFilter,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          search: debouncedSearch || undefined,
+          tenantId: isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined,
+        }),
+      ]);
 
       setUsers(paginated.results);
       setTotalCount(paginated.count);
@@ -361,6 +403,7 @@ export function UsersWorkspace() {
       toast.error(msg);
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
   }, [
     loadMetadata,
@@ -651,10 +694,10 @@ export function UsersWorkspace() {
               variant="outline"
               size="sm"
               onClick={loadData}
-              disabled={loading}
+              disabled={loading || isFetching}
               className="gap-1.5 text-xs font-semibold"
             >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`size-3.5 ${(loading || isFetching) ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Link to="/admin/rosters">
@@ -686,25 +729,25 @@ export function UsersWorkspace() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <KpiTile
               title="Total Registered Users"
-              value={totalUsersCount}
+              value={loading && users.length === 0 ? "..." : totalUsersCount}
               change="All Platform & Tenant Accounts"
               variant="neutral"
             />
             <KpiTile
               title="🌐 SaaS Platform Admins"
-              value={platformUsersCount}
+              value={loading && users.length === 0 ? "..." : platformUsersCount}
               change="Global Cross-Tenant HQ"
               variant="positive"
             />
             <KpiTile
               title="🏢 Tenant Gym Staff"
-              value={tenantUsersCount}
+              value={loading && users.length === 0 ? "..." : tenantUsersCount}
               change="Gym Owners, Managers & Coaches"
               variant="neutral"
             />
             <KpiTile
               title="Invited / Pending"
-              value={pendingCount}
+              value={loading && users.length === 0 ? "..." : pendingCount}
               change="Awaiting Activation"
               variant={pendingCount > 0 ? "warning" : "neutral"}
             />
@@ -714,25 +757,25 @@ export function UsersWorkspace() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <KpiTile
               title="Total Tenant Users"
-              value={totalUsersCount}
+              value={loading && users.length === 0 ? "..." : totalUsersCount}
               change="Current Organization Staff"
               variant="neutral"
             />
             <KpiTile
               title="Active Staff"
-              value={activeCount}
+              value={loading && users.length === 0 ? "..." : activeCount}
               change="Operational & Authorized"
               variant="positive"
             />
             <KpiTile
               title="Inactive / Disabled"
-              value={inactiveCount}
+              value={loading && users.length === 0 ? "..." : inactiveCount}
               change="Deactivated Accounts"
               variant={inactiveCount > 0 ? "warning" : "neutral"}
             />
             <KpiTile
               title="Invited / Pending"
-              value={pendingCount}
+              value={loading && users.length === 0 ? "..." : pendingCount}
               change="Awaiting Credentials Setup"
               variant={pendingCount > 0 ? "warning" : "neutral"}
             />
@@ -780,42 +823,88 @@ export function UsersWorkspace() {
           </div>
         )}
 
-        {/* Filters and Search Bar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, email, phone, role..."
-              className="h-8 pl-8 text-xs bg-background"
-            />
+        {/* Filters and Search Bar - 100% Perfect Responsive & Fast */}
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5 bg-card p-3 rounded-xl border border-border shadow-2xs">
+          {/* Search bar & quick reset */}
+          <div className="flex items-center gap-2 flex-1 min-w-[200px] xl:max-w-md">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, email, phone, role..."
+                className="h-8 pl-8 pr-8 text-xs bg-background"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetAllFilters}
+                className="h-8 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer shrink-0"
+                title="Reset all filters"
+              >
+                <RotateCcw className="size-3 mr-1 text-muted-foreground" />
+                <span className="hidden sm:inline">Reset</span>
+                <Badge
+                  variant="secondary"
+                  className="ml-1 px-1.5 py-0 text-[10px] h-4 font-bold bg-primary/15 text-primary"
+                >
+                  {activeFilterCount}
+                </Badge>
+              </Button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Filter dropdowns:
+              Mobile (<640px): 2-col balanced grid
+              Tablet / Laptop (640px - 1279px): 3 or 4 equal columns spanning full width
+              Desktop (>=1280px / xl): inline row next to search with calibrated widths
+          */}
+          <div
+            className={cn(
+              "grid gap-2 w-full xl:w-auto xl:flex xl:items-center xl:flex-nowrap",
+              isPlatformAdmin
+                ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:flex"
+                : departments.length > 0
+                  ? "grid-cols-2 sm:grid-cols-4 xl:flex"
+                  : "grid-cols-2 sm:grid-cols-3 xl:flex"
+            )}
+          >
             {/* Platform mode tenant selector */}
             {isPlatformAdmin && tenants.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Building2 className="size-3.5 text-muted-foreground" />
-                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-                  <SelectTrigger className="h-8 text-xs w-44 bg-background">
+              <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                <SelectTrigger className="h-8 text-xs w-full xl:w-[160px] bg-background">
+                  <div className="flex items-center gap-1.5 min-w-0 truncate">
+                    <Building2 className="size-3 text-muted-foreground shrink-0" />
                     <SelectValue placeholder="All Tenants" />
-                  </SelectTrigger>
-                  <SelectContent className="text-xs">
-                    <SelectItem value="all">All Tenants & Platform</SelectItem>
-                    {tenants.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="all">All Tenants & Platform</SelectItem>
+                  {tenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
             {/* Branch Filter */}
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="h-8 text-xs min-w-[130px] max-w-[200px] bg-background">
+              <SelectTrigger className="h-8 text-xs w-full xl:w-[150px] 2xl:w-[165px] bg-background">
                 <SelectValue placeholder="Branch" />
               </SelectTrigger>
               <SelectContent className="text-xs max-h-64">
@@ -828,7 +917,7 @@ export function UsersWorkspace() {
                   return (
                     <SelectItem key={b.id} value={b.id} textValue={displayName} className="py-1.5 cursor-pointer">
                       <div className="flex flex-col text-left min-w-0">
-                        <span className="font-semibold">{displayName}</span>
+                        <span className="font-semibold truncate">{displayName}</span>
                         {addressDisplay && (
                           <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
                             {addressDisplay}
@@ -844,7 +933,7 @@ export function UsersWorkspace() {
             {/* Department Filter (Tenant Mode) */}
             {!isPlatformAdmin && departments.length > 0 && (
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger className="h-8 text-xs w-36 bg-background">
+                <SelectTrigger className="h-8 text-xs w-full xl:w-[135px] 2xl:w-[150px] bg-background">
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent className="text-xs">
@@ -860,7 +949,7 @@ export function UsersWorkspace() {
 
             {/* Role Filter */}
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="h-8 text-xs w-36 bg-background">
+              <SelectTrigger className="h-8 text-xs w-full xl:w-[130px] 2xl:w-[145px] bg-background">
                 <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent className="text-xs">
@@ -875,7 +964,7 @@ export function UsersWorkspace() {
 
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 text-xs w-28 bg-background">
+              <SelectTrigger className="h-8 text-xs w-full xl:w-[110px] 2xl:w-[120px] bg-background">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent className="text-xs">
@@ -889,10 +978,27 @@ export function UsersWorkspace() {
         </div>
 
         {/* Content States: Loading, Error, Empty, Success */}
-        {loading ? (
-          <div className="flex flex-col h-64 items-center justify-center gap-3 border border-border rounded-xl bg-card">
-            <RefreshCw className="size-6 animate-spin text-primary" />
-            <p className="text-xs font-semibold text-muted-foreground">Loading authorized staff directory...</p>
+        {loading && users.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs p-4 space-y-3">
+            <div className="flex items-center justify-between pb-3 border-b border-border/60">
+              <div className="h-4 w-36 bg-muted/60 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-muted/40 rounded animate-pulse" />
+            </div>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex items-center justify-between py-2.5 gap-4 border-b border-border/30 last:border-0">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="size-8 rounded-lg bg-muted/60 animate-pulse shrink-0" />
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="h-3.5 w-32 sm:w-44 bg-muted/60 rounded animate-pulse" />
+                    <div className="h-2.5 w-40 sm:w-60 bg-muted/40 rounded animate-pulse" />
+                  </div>
+                </div>
+                <div className="hidden sm:block h-5 w-24 bg-muted/50 rounded-full animate-pulse shrink-0" />
+                <div className="hidden md:block h-3.5 w-28 bg-muted/40 rounded animate-pulse shrink-0" />
+                <div className="h-5 w-16 bg-muted/50 rounded-full animate-pulse shrink-0" />
+                <div className="h-6 w-16 bg-muted/40 rounded animate-pulse shrink-0" />
+              </div>
+            ))}
           </div>
         ) : fetchError ? (
           <div className="p-8 text-center border border-destructive/20 rounded-xl bg-destructive/5 space-y-3">
@@ -926,8 +1032,15 @@ export function UsersWorkspace() {
           </div>
         ) : (
           <>
+            {/* Background fetching indicator */}
+            {isFetching && (
+              <div className="h-0.5 w-full bg-primary/20 overflow-hidden rounded-full -mt-1 mb-2">
+                <div className="h-full bg-primary w-2/5 animate-pulse" />
+              </div>
+            )}
+
             {/* Desktop / Tablet Table View (>= 768px) */}
-            <div className="hidden md:block rounded-xl border border-border bg-card overflow-hidden shadow-xs">
+            <div className={cn("hidden md:block rounded-xl border border-border bg-card overflow-hidden shadow-xs", isFetching && "opacity-60 pointer-events-none transition-opacity duration-150")}>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -1137,7 +1250,7 @@ export function UsersWorkspace() {
             </div>
 
             {/* Mobile Cards View (< 768px: optimized for 320px, 375px, 480px) */}
-            <div className="md:hidden space-y-2.5">
+            <div className={cn("md:hidden space-y-2.5", isFetching && "opacity-60 pointer-events-none transition-opacity duration-150")}>
               {filteredUsers.map((u) => {
                 const isRoot = u.id === "USR-ADMIN" || u.email === "admin";
                 const isPlat = isPlatformAccount(u);
