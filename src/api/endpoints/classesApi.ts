@@ -23,8 +23,8 @@ import {
 
 export const classesApi = {
   // --- Class Categories ---
-  async getCategories(): Promise<ClassCategory[]> {
-    const res = await api.get<any>('/tenant/class-categories/');
+  async getCategories(params?: { status?: string }): Promise<ClassCategory[]> {
+    const res = await api.get<any>('/tenant/class-categories/', { params: params || { status: 'ACTIVE' } });
     return res.data?.results || res.data || [];
   },
 
@@ -43,8 +43,10 @@ export const classesApi = {
   },
 
   // --- Class Templates ---
-  async getTemplates(categoryId?: string): Promise<ClassTemplate[]> {
-    const params = categoryId ? { category_id: categoryId } : {};
+  async getTemplates(paramsOrCategoryId?: string | { category_id?: string; status?: string }): Promise<ClassTemplate[]> {
+    const params = typeof paramsOrCategoryId === 'string'
+      ? { category_id: paramsOrCategoryId, status: 'ACTIVE' }
+      : { status: 'ACTIVE', ...(paramsOrCategoryId || {}) };
     const res = await api.get<any>('/tenant/class-templates/', { params });
     return res.data?.results || res.data || [];
   },
@@ -334,8 +336,10 @@ export const classesApi = {
     return res.data?.results || res.data || [];
   },
 
-  async getTrainers(): Promise<TrainerProfileOption[]> {
-    const res = await api.get<any>('/tenant/trainer-profiles/');
+  async getTrainers(params?: { trainer_status?: string; page_size?: number }): Promise<TrainerProfileOption[]> {
+    const res = await api.get<any>('/tenant/trainer-profiles/', {
+      params: { trainer_status: 'ACTIVE', page_size: 250, ...(params || {}) }
+    });
     return res.data?.results || res.data || [];
   },
 

@@ -160,11 +160,46 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   onImportComplete,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [entityType, setEntityType] = useState<IngestionEntityType>(defaultEntityType);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedSheetFilter, setSelectedSheetFilter] = useState<string>('ALL');
+  const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
+  const [editingRowData, setEditingRowData] = useState<RowPreview | null>(null);
+  const [summary, setSummary] = useState<PreviewSummary | null>(null);
+  const [rows, setRows] = useState<RowPreview[]>([]);
+  const [importResult, setImportResult] = useState<any>(null);
+
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+
+  // Simulated Occurrences & Shifts
   const [simulatedOccurrences, setSimulatedOccurrences] = useState<SimulatedOccurrence[]>([]);
   const [occurrencesSummary, setOccurrencesSummary] = useState<any>(null);
   const [isSimulatingOccurrences, setIsSimulatingOccurrences] = useState(false);
   const [availableBranches, setAvailableBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [availableTemplates, setAvailableTemplates] = useState<Array<{ id: string; name: string; code: string; default_capacity: number; category_name: string }>>([]);
+
+  const [simulatedShifts, setSimulatedShifts] = useState<SimulatedTrainerShift[]>([]);
+  const [shiftsSummary, setShiftsSummary] = useState<any>(null);
+  const [isSimulatingShifts, setIsSimulatingShifts] = useState(false);
+
+  // CRM Step 3 View and Filter states
+  const [crmSearchQuery, setCrmSearchQuery] = useState('');
+  const [crmBranchFilter, setCrmBranchFilter] = useState('ALL');
+  const [crmTemplateFilter, setCrmTemplateFilter] = useState('ALL');
+  const [crmDateFilter, setCrmDateFilter] = useState('ALL');
+  const [crmTrainerFilter, setCrmTrainerFilter] = useState('ALL');
+  const [crmShiftFilter, setCrmShiftFilter] = useState('ALL');
+  const [crmViewMode, setCrmViewMode] = useState<'cards' | 'table'>('cards');
+  const [crmSortOrder, setCrmSortOrder] = useState<'date_asc' | 'date_desc'>('date_asc');
+  const [selectedOccIds, setSelectedOccIds] = useState<Set<string>>(new Set());
+  const [editingOcc, setEditingOcc] = useState<SimulatedOccurrence | null>(null);
+  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<string>>(new Set());
+  const [editingShift, setEditingShift] = useState<SimulatedTrainerShift | null>(null);
   // CRM Direct queries for Branches, Categories, and Templates
   const { data: crmBranches = [] } = useQuery({
     queryKey: ['tenant-branches'],
@@ -222,12 +257,13 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   const allTemplatesList = React.useMemo(() => {
     const map = new Map<string, any>();
     (crmTemplates as any[]).forEach((t) => {
-      if (t?.name) {
+      if (t?.name && (!t.status || t.status === 'ACTIVE')) {
         const catName = t.category?.name || (typeof t.category === 'string' ? t.category : 'General');
         map.set(String(t.id), {
           id: String(t.id),
           name: t.name.trim(),
           code: t.code || '',
+          status: t.status || 'ACTIVE',
           category_name: catName,
           category_id: t.category?.id || (typeof t.category === 'string' ? t.category : null),
           default_capacity: t.default_capacity || 12,
@@ -237,11 +273,12 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
       }
     });
     availableTemplates.forEach((t) => {
-      if (t?.name && !map.has(String(t.id))) {
+      if (t?.name && (!t.status || t.status === 'ACTIVE') && !map.has(String(t.id))) {
         map.set(String(t.id), {
           id: String(t.id),
           name: t.name.trim(),
           code: t.code || '',
+          status: t.status || 'ACTIVE',
           category_name: t.category_name || 'General',
           category_id: null,
           default_capacity: t.default_capacity || 12,
@@ -257,7 +294,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
     const set = new Map<string, string>();
     (crmCategories as any[]).forEach((c) => {
-      if (c?.name && !isUuid(c.name.trim())) {
+      if (c?.name && (!c.status || c.status === 'ACTIVE') && !isUuid(c.name.trim())) {
         set.set(c.name.trim().toLowerCase(), c.name.trim());
       }
     });
@@ -269,8 +306,51 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     return Array.from(set.values()).sort();
   }, [crmCategories, allTemplatesList]);
 
+  const distinctOccurrenceDates = React.useMemo(() => {
+    const dateMap = new Map<string, { date: string; label: string; count: number }>();
+    simulatedOccurrences.forEach((o) => {
+      if (o.status === 'DELETED') return;
+      const d = o.date;
+      if (!d) return;
+      if (!dateMap.has(d)) {
+        dateMap.set(d, {
+          date: d,
+          label: o.date_label || d,
+          count: 0,
+        });
+      }
+      dateMap.get(d)!.count += 1;
+    });
+    return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [simulatedOccurrences]);
+
+  const distinctShiftDates = React.useMemo(() => {
+    const shiftDateMap = new Map<string, { key: string; label: string; count: number; startDay: number }>();
+    simulatedShifts.forEach((s) => {
+      if (s.status === 'DELETED') return;
+      const key = s.date_label || s.week_column || 'General';
+      if (!shiftDateMap.has(key)) {
+        shiftDateMap.set(key, {
+          key,
+          label: s.date_label || s.week_column || key,
+          count: 0,
+          startDay: s.start_day || 0,
+        });
+      }
+      shiftDateMap.get(key)!.count += 1;
+    });
+    return Array.from(shiftDateMap.values()).sort((a, b) => a.startDay - b.startDay);
+  }, [simulatedShifts]);
+
   const isOccMatchFilter = (o: SimulatedOccurrence) => {
     if (o.status === 'DELETED') return false;
+
+    // Date filter
+    if (crmDateFilter !== 'ALL') {
+      if (o.date !== crmDateFilter && o.date_label !== crmDateFilter) {
+        return false;
+      }
+    }
 
     // Branch filter
     if (crmBranchFilter !== 'ALL') {
@@ -319,17 +399,12 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     return true;
   };
 
-  const [simulatedShifts, setSimulatedShifts] = useState<SimulatedTrainerShift[]>([]);
-  const [shiftsSummary, setShiftsSummary] = useState<any>(null);
-  const [isSimulatingShifts, setIsSimulatingShifts] = useState(false);
-  const [crmTrainerFilter, setCrmTrainerFilter] = useState('ALL');
-  const [crmShiftFilter, setCrmShiftFilter] = useState('ALL');
-  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<string>>(new Set());
-  const [editingShift, setEditingShift] = useState<SimulatedTrainerShift | null>(null);
+
 
   const allTrainersList = React.useMemo(() => {
     const map = new Map<string, { id: string; name: string; code: string }>();
     (crmTrainers as any[]).forEach((t) => {
+      if (t?.trainer_status && t.trainer_status !== 'ACTIVE') return;
       const name = t.trainer_name || t.name || t.full_name || t.display_name;
       if (name) {
         map.set(name.trim().toLowerCase(), {
@@ -353,6 +428,15 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
 
   const isShiftMatchFilter = (s: SimulatedTrainerShift) => {
     if (s.status === 'DELETED') return false;
+
+    // Date / Week filter
+    if (crmDateFilter !== 'ALL') {
+      const matchDate =
+        s.date_label === crmDateFilter ||
+        s.week_column === crmDateFilter ||
+        String(s.start_day) === crmDateFilter;
+      if (!matchDate) return false;
+    }
 
     // Branch filter
     if (crmBranchFilter !== 'ALL') {
@@ -401,28 +485,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     return true;
   };
 
-  const [crmSearchQuery, setCrmSearchQuery] = useState('');
-  const [crmBranchFilter, setCrmBranchFilter] = useState('ALL');
-  const [crmTemplateFilter, setCrmTemplateFilter] = useState('ALL');
-  const [crmViewMode, setCrmViewMode] = useState<'cards' | 'table'>('cards');
-  const [crmSortOrder, setCrmSortOrder] = useState<'date_asc' | 'date_desc'>('date_asc');
-  const [selectedOccIds, setSelectedOccIds] = useState<Set<string>>(new Set());
-  const [editingOcc, setEditingOcc] = useState<SimulatedOccurrence | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [isCommitting, setIsCommitting] = useState(false);
 
-  const [entityType, setEntityType] = useState<IngestionEntityType>(defaultEntityType);
-  const [summary, setSummary] = useState<PreviewSummary | null>(null);
-  const [rows, setRows] = useState<RowPreview[]>([]);
-  const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [selectedSheetFilter, setSelectedSheetFilter] = useState<string>('ALL');
-  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
-  const [editingRowData, setEditingRowData] = useState<RowPreview | null>(null);
-  const [importResult, setImportResult] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -441,6 +504,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     setCrmSearchQuery('');
     setCrmBranchFilter('ALL');
     setCrmTemplateFilter('ALL');
+    setCrmDateFilter('ALL');
     setCrmViewMode('cards');
     setSelectedOccIds(new Set());
     setEditingOcc(null);
@@ -1507,6 +1571,20 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   )}
                 </select>
 
+                {/* Date Filter */}
+                <select
+                  value={crmDateFilter}
+                  onChange={(e) => setCrmDateFilter(e.target.value)}
+                  className="text-xs bg-background border border-border rounded-md px-2.5 py-1.5 text-foreground font-medium max-w-[210px]"
+                >
+                  <option value="ALL">All Dates ({distinctOccurrenceDates.length} Days)</option>
+                  {distinctOccurrenceDates.map((item) => (
+                    <option key={item.date} value={item.date}>
+                      {item.label} ({item.count})
+                    </option>
+                  ))}
+                </select>
+
                 {/* Sort Order */}
                 <select
                   value={crmSortOrder}
@@ -1900,6 +1978,20 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   {allTrainersList.map((t) => (
                     <option key={t.id || t.name} value={t.name}>
                       {t.name} ({t.code || 'TRN'})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Date / Week Filter */}
+                <select
+                  value={crmDateFilter}
+                  onChange={(e) => setCrmDateFilter(e.target.value)}
+                  className="text-xs bg-background border border-border rounded-md px-2.5 py-1.5 text-foreground font-medium max-w-[220px]"
+                >
+                  <option value="ALL">All Dates / Weeks ({distinctShiftDates.length})</option>
+                  {distinctShiftDates.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.label} ({item.count})
                     </option>
                   ))}
                 </select>
