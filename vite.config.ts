@@ -10,7 +10,7 @@ import { loadEnv } from "vite";
 const env = loadEnv(process.env["NODE_ENV"] || "development", process.cwd(), "");
 const backendUrl =
   env["VITE_BACKEND_URL"] ||
-  (env["VITE_API_BASE_URL"] ? env["VITE_API_BASE_URL"].replace(/\/api\/v1\/?$/, "") : "https://api.fitness.vibecopilot.ai");
+  (env["VITE_API_BASE_URL"] ? env["VITE_API_BASE_URL"].replace(/\/api\/v1\/?$/, "") : "https://api.sweatfitwellness.com");
 
 export default defineConfig({
   vite: {
