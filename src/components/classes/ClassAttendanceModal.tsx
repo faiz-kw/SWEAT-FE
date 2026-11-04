@@ -21,6 +21,7 @@ import {
   Sparkles,
   Dumbbell,
   Target,
+  Layers,
   ChevronDown,
   ChevronUp,
   Award,
@@ -134,6 +135,18 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     }
     return [];
   }, [classVideoData?.targeted_muscles]);
+
+  const equipmentRequired = React.useMemo(() => {
+    const raw = classVideoData?.equipment_required;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(/[,+/&|]/).map((s) => s.trim()) : [String(m)])).filter(Boolean);
+    }
+    if (typeof raw === 'string') {
+      return raw.split(/[,+/&|]/).map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  }, [classVideoData?.equipment_required]);
 
   const recordAttendanceMutation = useMutation({
     mutationFn: ({
@@ -431,6 +444,29 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                         {muscle}
                       </Badge>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Equipment Required Section */}
+              {(equipmentRequired.length > 0 || classVideoData?.raw_equipment) && (
+                <div className="pt-2 border-t border-border/40">
+                  <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                    <Layers className="size-3 text-primary" />
+                    <span>Equipment Required:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {equipmentRequired.length > 0 ? (
+                      equipmentRequired.map((equip: string) => (
+                        <Badge key={equip} variant="outline" className="text-[11px] px-2.5 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-medium">
+                          {equip}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="outline" className="text-[11px] px-2.5 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-medium">
+                        {classVideoData?.raw_equipment}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               )}

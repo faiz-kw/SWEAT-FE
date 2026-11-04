@@ -182,14 +182,34 @@ export const CommerceWorkspace: React.FC<CommerceWorkspaceProps> = ({ initialTab
     enabled: activeTab === 'payments',
   });
 
-  const handleRefreshAll = () => {
-    refetchSummary();
-    refetchOrders();
-    refetchInvoices();
-    refetchTransactions();
-    refetchRefunds();
-    refetchCashReport();
-    toast.success('Finance records refreshed from backend');
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const isRefreshing = isManualRefreshing;
+
+  const handleRefreshAll = async () => {
+    setIsManualRefreshing(true);
+    const start = Date.now();
+    try {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['commerce-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['refunds'] }),
+        queryClient.invalidateQueries({ queryKey: ['cash-flow-report'] }),
+        refetchSummary(),
+        refetchOrders(),
+        refetchInvoices(),
+        refetchTransactions(),
+        refetchRefunds(),
+        refetchCashReport(),
+      ]);
+      toast.success('Finance records refreshed from backend');
+    } catch {
+      toast.error('Failed to refresh finance records');
+    } finally {
+      const elapsed = Date.now() - start;
+      setTimeout(() => setIsManualRefreshing(false), Math.max(0, 450 - elapsed));
+    }
   };
 
   // Mutations

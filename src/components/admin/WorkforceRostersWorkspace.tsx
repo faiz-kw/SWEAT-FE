@@ -79,6 +79,7 @@ export function WorkforceRostersWorkspace() {
   const {
     data: trainers = [],
     isLoading: isLoadingTrainers,
+    isFetching: isFetchingTrainers,
     isError,
     error,
     refetch: refetchTrainers,
@@ -95,6 +96,7 @@ export function WorkforceRostersWorkspace() {
   const {
     data: allWorkSchedules = [],
     isLoading: isLoadingSchedules,
+    isFetching: isFetchingSchedules,
     refetch: refetchSchedules,
   } = useQuery({
     queryKey: ['admin-work-schedules', selectedBranchId, weekInfo.startDate, weekInfo.endDate],
@@ -107,7 +109,11 @@ export function WorkforceRostersWorkspace() {
   });
 
   // Pending Leave Requests count for Admin
-  const { data: pendingLeaveRequests = [] } = useQuery({
+  const {
+    data: pendingLeaveRequests = [],
+    isFetching: isFetchingLeaves,
+    refetch: refetchLeaves,
+  } = useQuery({
     queryKey: ['admin-pending-leave-approvals'],
     queryFn: () =>
       approvalsApi.getRequests({
@@ -115,6 +121,9 @@ export function WorkforceRostersWorkspace() {
         status: 'PENDING',
       }),
   });
+
+  const [isManualRefreshing, setIsManualRefreshing] = React.useState(false);
+  const isRefreshing = isFetchingTrainers || isFetchingSchedules || isFetchingLeaves || isManualRefreshing;
 
   // Map employee_profile to schedules map { [dayOfWeek]: { startTime, endTime } }
   // Prioritizes week-specific TEMPORARY shifts over recurring templates
@@ -152,10 +161,25 @@ export function WorkforceRostersWorkspace() {
     });
   }, [trainers, roleFilter]);
 
-  const handleRefresh = () => {
-    refetchTrainers();
-    refetchSchedules();
-    toast.success('Roster data refreshed.');
+  const handleRefresh = async () => {
+    setIsManualRefreshing(true);
+    const start = Date.now();
+    try {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['admin-trainers-roster'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-work-schedules'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-pending-leave-approvals'] }),
+        refetchTrainers(),
+        refetchSchedules(),
+        refetchLeaves(),
+      ]);
+      toast.success('Roster data refreshed.');
+    } catch {
+      toast.error('Failed to refresh roster data.');
+    } finally {
+      const elapsed = Date.now() - start;
+      setTimeout(() => setIsManualRefreshing(false), Math.max(0, 450 - elapsed));
+    }
   };
 
   const handleExportCsv = () => {

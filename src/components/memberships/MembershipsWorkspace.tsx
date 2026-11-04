@@ -34,6 +34,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 import { usePermissions } from '../../lib/permissions';
 import { useApp } from '@/contexts';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
@@ -52,6 +53,12 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const [activeTab, setActiveTab] = useState<'memberships' | 'freezes'>(
     (initialTab as any) === 'freezes' ? 'freezes' : 'memberships'
   );
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab((initialTab as any) === 'freezes' ? 'freezes' : 'memberships');
+    }
+  }, [initialTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -127,13 +134,16 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const totalPages = membershipPage?.total_pages || 1;
 
   const {
-    data: freezes = [],
+    data: rawFreezes = [],
     isLoading: loadingFreezes,
+    isFetching: fetchingFreezes,
     refetch: refetchFreezes,
   } = useQuery({
     queryKey: ['membership-freezes'],
     queryFn: () => membershipsApi.getFreezes(),
   });
+
+  const freezes = Array.isArray(rawFreezes) ? rawFreezes : (rawFreezes?.results ?? []);
 
   // Real-time calculation quotes
   const {
@@ -160,11 +170,20 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['memberships'] });
       queryClient.invalidateQueries({ queryKey: ['membership-freezes'] });
+      toast.success('Membership freeze applied successfully.');
       setIsFreezeOpen(false);
       setSelectedMembership(null);
       setFreezeFrom('');
       setFreezeUntil('');
       setFreezeReason('');
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        'Failed to apply freeze.'
+      );
     },
   });
 
@@ -172,10 +191,19 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
     mutationFn: ({ id, data }: { id: string; data: any }) => membershipsApi.extendMembership(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['memberships'] });
+      toast.success('Membership validity extended successfully.');
       setIsExtendOpen(false);
       setSelectedMembership(null);
       setExtendDays(7);
       setExtendReason('');
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        'Failed to extend membership.'
+      );
     },
   });
 

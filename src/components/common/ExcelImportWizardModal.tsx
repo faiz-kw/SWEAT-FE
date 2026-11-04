@@ -92,6 +92,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
   const [editingRowData, setEditingRowData] = useState<RowPreview | null>(null);
   const [importResult, setImportResult] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +104,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     setFilterErrorsOnly(false);
     setSelectedMonth('');
     setSelectedSheetFilter('ALL');
+    setSearchQuery('');
     setImportResult(null);
     setIsDetecting(false);
     setIsSimulating(false);
@@ -268,8 +270,11 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
       if (selectedMonth) {
         formData.append('target_month', selectedMonth);
       }
-      // Pass the curated list of valid rows directly
-      const validCuratedRows = rows.filter((r) => r.status !== 'ERROR');
+      // Target either the single selected sheet or all sheets
+      const targetRows = (selectedSheetFilter && selectedSheetFilter !== 'ALL')
+        ? rows.filter((r) => r.sheet === selectedSheetFilter)
+        : rows;
+      const validCuratedRows = targetRows.filter((r) => r.status !== 'ERROR');
       formData.append('curated_rows', JSON.stringify(validCuratedRows));
 
       const res = await api.post<any>('/tenant/excel-imports/confirm/', formData);
@@ -292,7 +297,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
       case 'CLASS_SCHEDULE':
         return 'Class Timetable & Schedule';
       case 'WOD_VIDEO':
-        return 'Workout Videos (WOD)';
+        return 'Class Workout Videos';
       case 'TRAINER_ROSTER':
         return 'Trainer Shift Roster';
       default:
@@ -305,7 +310,32 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
 
   const filteredRows = rows
     .filter((r) => !filterErrorsOnly || r.status === 'ERROR' || r.status === 'WARNING')
-    .filter((r) => selectedSheetFilter === 'ALL' || r.sheet === selectedSheetFilter);
+    .filter((r) => selectedSheetFilter === 'ALL' || r.sheet === selectedSheetFilter)
+    .filter((r) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const searchableText = [
+        r.branch,
+        r.room,
+        r.day_pattern,
+        r.time_slot,
+        r.class_type,
+        r.outlet,
+        r.shift,
+        r.trainer_name,
+        r.video_url,
+        r.muscle_group,
+        r.volume,
+        r.category_name,
+        r.program,
+        r.sheet,
+        ...(r.messages || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(q);
+    });
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
@@ -386,7 +416,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { id: 'CLASS_SCHEDULE', label: 'Class Timetable', desc: 'MWF/TT/SS slots & studios' },
-                  { id: 'WOD_VIDEO', label: 'Workout Videos', desc: 'Daily YouTube links & WODs' },
+                  { id: 'WOD_VIDEO', label: 'Class Workout Videos', desc: 'Daily YouTube links & class videos' },
                   { id: 'TRAINER_ROSTER', label: 'Trainer Roster', desc: 'Weekly shifts & rotations' },
                 ].map((item) => (
                   <button
@@ -497,7 +527,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   <div className="flex items-center flex-wrap gap-2 text-xs">
                     <span className="text-muted-foreground">Reading schedule from:</span>
                     <span className="px-2.5 py-1 rounded-md font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
-                      {activeSheets[0].sheet} ({activeSheets[0].found} classes)
+                      {activeSheets[0].sheet} ({entityType === 'CLASS_SCHEDULE' ? `${activeSheets[0].found} weekly timetable rules — generates ~${Math.round(activeSheets[0].found * 9.25)} monthly sessions for ${summary.selected_month || 'month'}` : `${activeSheets[0].found} records`})
                     </span>
                     {otherSheets.length > 0 && (
                       <span className="text-[11px] text-muted-foreground">
@@ -592,11 +622,35 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               </div>
             </div>
 
-            {/* Filter Toggle & Bulk Actions */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                Showing {filteredRows.length} {filteredRows.length === 1 ? 'row' : 'rows'}
-              </span>
+            {/* Filter Toggle, Search Bar & Bulk Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  Showing {filteredRows.length} of {rows.length} {rows.length === 1 ? 'row' : 'rows'}
+                </span>
+                {/* Search Bar */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter by class, branch, time, trainer..."
+                    className="w-56 lg:w-72 pl-7 pr-7 py-1 text-xs rounded-md border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="absolute left-2 top-1.5 text-muted-foreground">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </span>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 {summary.error_rows > 0 && (
                   <Button
@@ -638,6 +692,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                         <th className="p-2 font-semibold">Volume</th>
                         <th className="p-2 font-semibold">YouTube Link</th>
                         <th className="p-2 font-semibold">Muscle Group</th>
+                        <th className="p-2 font-semibold">Equipment Required</th>
                       </>
                     )}
                     {entityType === 'CLASS_SCHEDULE' && (
@@ -694,6 +749,9 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                           <td className="p-2 font-medium">{r.volume}</td>
                           <td className="p-2 max-w-xs truncate text-muted-foreground">{r.video_url}</td>
                           <td className="p-2">{r.muscle_group}</td>
+                          <td className="p-2 text-muted-foreground max-w-[160px] truncate" title={r.equipment || ''}>
+                            {r.equipment || '—'}
+                          </td>
                         </>
                       )}
                       {entityType === 'CLASS_SCHEDULE' && (
@@ -756,18 +814,35 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                 <Button variant="outline" onClick={() => handleDialogClose(false)}>
                   Cancel
                 </Button>
+                {selectedSheetFilter !== 'ALL' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedSheetFilter('ALL');
+                    }}
+                    disabled={isCommitting}
+                    className="text-xs"
+                    title="Switch to all sheets"
+                  >
+                    View All Sheets ({summary.valid_rows})
+                  </Button>
+                )}
                 <Button
                   onClick={handleConfirmImport}
-                  disabled={isCommitting || summary.valid_rows === 0}
+                  disabled={isCommitting || (selectedSheetFilter !== 'ALL' ? rows.filter((r) => r.sheet === selectedSheetFilter && r.status !== 'ERROR').length === 0 : summary.valid_rows === 0)}
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                   {isCommitting ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" /> Saving to Calendar...
                     </>
+                  ) : selectedSheetFilter !== 'ALL' ? (
+                    <>
+                      <Check className="w-4 h-4" /> Save & Publish &ldquo;{selectedSheetFilter}&rdquo; ({rows.filter((r) => r.sheet === selectedSheetFilter && r.status !== 'ERROR').length} {entityType === 'CLASS_SCHEDULE' ? 'Classes' : entityType === 'WOD_VIDEO' ? 'Videos' : 'Records'})
+                    </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4" /> Save & Publish {summary.valid_rows} {entityType === 'CLASS_SCHEDULE' ? 'Classes' : entityType === 'WOD_VIDEO' ? 'Videos' : 'Records'}
+                      <Check className="w-4 h-4" /> Save & Publish All Sheets ({summary.valid_rows} {entityType === 'CLASS_SCHEDULE' ? 'Classes' : entityType === 'WOD_VIDEO' ? 'Videos' : 'Records'})
                     </>
                   )}
                 </Button>
@@ -831,6 +906,16 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                     />
                   </div>
                   <div>
+                    <label className="font-semibold text-foreground">Workout Category / Class Name:</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Pilates Total, Bootcamp, Glutes, HIIT"
+                      value={editingRowData.category_name || editingRowData.program || ''}
+                      onChange={(e) => setEditingRowData({ ...editingRowData, category_name: e.target.value, program: e.target.value })}
+                      className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
+                    />
+                  </div>
+                  <div>
                     <label className="font-semibold text-foreground">Volume Code (e.g. V20):</label>
                     <input
                       type="text"
@@ -872,6 +957,28 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
 
               {entityType === 'CLASS_SCHEDULE' && (
                 <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="font-semibold text-foreground">Studio / Branch:</label>
+                      <input
+                        type="text"
+                        value={editingRowData.branch || ''}
+                        onChange={(e) => setEditingRowData({ ...editingRowData, branch: e.target.value })}
+                        placeholder="e.g. SWEAT HQ, SWEAT Pilates"
+                        className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-semibold text-foreground">Room:</label>
+                      <input
+                        type="text"
+                        value={editingRowData.room || ''}
+                        onChange={(e) => setEditingRowData({ ...editingRowData, room: e.target.value })}
+                        placeholder="e.g. Pilates, Bootcamp"
+                        className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="font-semibold text-foreground">Time Slot (e.g. 06:30 - 07:30):</label>
                     <input
@@ -887,6 +994,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                       type="text"
                       value={editingRowData.class_type || ''}
                       onChange={(e) => setEditingRowData({ ...editingRowData, class_type: e.target.value })}
+                      placeholder="e.g. Pilates Total, Pilates Stretch, Bootcamp Total"
                       className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
                     />
                   </div>
@@ -897,6 +1005,41 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                       value={editingRowData.day_pattern || ''}
                       onChange={(e) => setEditingRowData({ ...editingRowData, day_pattern: e.target.value })}
                       className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs font-mono"
+                    />
+                  </div>
+                </>
+              )}
+
+              {entityType === 'TRAINER_ROSTER' && (
+                <>
+                  <div>
+                    <label className="font-semibold text-foreground">Studio / Outlet:</label>
+                    <input
+                      type="text"
+                      value={editingRowData.outlet || ''}
+                      onChange={(e) => setEditingRowData({ ...editingRowData, outlet: e.target.value })}
+                      placeholder="e.g. SWEAT HQ (Andheri), SWEAT Pilates (Malad)"
+                      className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-foreground">Shift / Day:</label>
+                    <input
+                      type="text"
+                      value={editingRowData.shift || ''}
+                      onChange={(e) => setEditingRowData({ ...editingRowData, shift: e.target.value })}
+                      placeholder="e.g. Morning Shift, Evening Shift, Weekend Saturday"
+                      className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-foreground">Assigned Trainer(s):</label>
+                    <input
+                      type="text"
+                      value={editingRowData.trainer_name || ''}
+                      onChange={(e) => setEditingRowData({ ...editingRowData, trainer_name: e.target.value })}
+                      placeholder="e.g. Sairaj, Saeed (comma-separated)"
+                      className="w-full mt-1 px-2.5 py-1.5 border rounded bg-background text-foreground text-xs"
                     />
                   </div>
                 </>
