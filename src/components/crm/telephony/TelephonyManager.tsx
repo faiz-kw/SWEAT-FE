@@ -46,6 +46,9 @@ export function TelephonyManager() {
   const queryClient = useQueryClient();
   const { callState, lastEndedCall, clearLastEndedCall, activeCall } = useWebRTCPhone();
 
+  // SSE Connection & polling fallback state
+  const [isSseActive, setIsSseActive] = React.useState<boolean>(false);
+
   // Active call popup & disposition state (declared at top before effects)
   const [activeCallPopup, setActiveCallPopup] = React.useState<InboundCallPopupData | null>(null);
   const [callEndedData, setCallEndedData] = React.useState<CallEndedData | null>(null);
@@ -210,7 +213,8 @@ export function TelephonyManager() {
         return null;
       }
     },
-    refetchInterval: 2500,
+    // Step 6: Back off polling to 30s while SSE is active, immediately restore 2.5s fallback when SSE drops
+    refetchInterval: isSseActive ? 30000 : 2500,
     enabled: Boolean(isAuthenticated && user),
   });
 
@@ -231,6 +235,7 @@ export function TelephonyManager() {
 
         eventSource.addEventListener("CONNECTED", (e: MessageEvent) => {
           console.debug("[Telephony SSE] Stream connected:", e.data);
+          setIsSseActive(true);
           queryClient.invalidateQueries({ queryKey: ["telephony-presence"] });
         });
 
@@ -288,6 +293,7 @@ export function TelephonyManager() {
 
         eventSource.onerror = (err) => {
           console.debug("[Telephony SSE] Connection error/closed, retrying in 5s:", err);
+          setIsSseActive(false);
           eventSource?.close();
           eventSource = null;
           reconnectTimeout = setTimeout(connectSSE, 5000);
@@ -300,6 +306,7 @@ export function TelephonyManager() {
     connectSSE();
 
     return () => {
+      setIsSseActive(false);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) eventSource.close();
     };
