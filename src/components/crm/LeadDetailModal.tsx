@@ -4362,7 +4362,7 @@ export function LeadDetailModal({
                         ? 'We cannot verify calling permission right now. Ask the person for permission before calling.'
                         : 'This person has not given permission for AI phone calls. Ask the person for permission before calling.'}
                     </p>
-                    {canEdit && !isDnc && vcStatus !== 'WITHDRAWN' && (
+                    {canEdit && (
                       <div className="pt-2">
                         <Button
                           type="button"
