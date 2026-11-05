@@ -441,6 +441,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState({
     class_template: '',
     branch: '',
+    branches: [] as string[],
     recurrence_type: 'WEEKLY',
     days_of_week: [1, 2, 3, 4, 5] as number[],
     start_time: '08:30',
@@ -452,6 +453,13 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
     trial_capacity_override: '',
     waitlist_capacity_override: '',
     status: 'ACTIVE',
+    auto_generate_slots: true,
+    generate_from_date: new Date().toISOString().split('T')[0],
+    generate_to_date: (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 30);
+      return d.toISOString().split('T')[0];
+    })(),
   });
 
   const [occurrenceForm, setOccurrenceForm] = useState({
@@ -909,10 +917,12 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const openNewRuleModal = () => {
     setRuleError(null);
     setEditingRule(null);
-    const defaultBranchId = selectedBranchFilter || (branches.length === 1 ? branches[0].id : '');
+    const initialBranches = selectedBranchFilter ? [selectedBranchFilter] : branches.map((b) => b.id);
+    const defaultBranchId = selectedBranchFilter || (initialBranches[0] || '');
     setRuleForm({
       class_template: '',
       branch: defaultBranchId,
+      branches: initialBranches,
       recurrence_type: 'WEEKLY',
       days_of_week: [],
       start_time: '',
@@ -924,6 +934,13 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
       trial_capacity_override: '',
       waitlist_capacity_override: '',
       status: 'ACTIVE',
+      auto_generate_slots: true,
+      generate_from_date: new Date().toISOString().split('T')[0],
+      generate_to_date: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        return d.toISOString().split('T')[0];
+      })(),
     });
     setIsCreateRuleOpen(true);
   };
@@ -934,6 +951,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
     setRuleForm({
       class_template: rule.class_template || '',
       branch: rule.branch || '',
+      branches: rule.branch ? [rule.branch] : [],
       recurrence_type: (rule as any).recurrence_type || 'WEEKLY',
       days_of_week: normalizeDaysOfWeek(rule.days_of_week),
       start_time: rule.start_time ? rule.start_time.substring(0, 5) : '',
@@ -945,6 +963,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
       trial_capacity_override: rule.trial_capacity_override != null ? String(rule.trial_capacity_override) : '',
       waitlist_capacity_override: rule.waitlist_capacity_override != null ? String(rule.waitlist_capacity_override) : '',
       status: rule.status || 'ACTIVE',
+      auto_generate_slots: false,
+      generate_from_date: rule.valid_from || new Date().toISOString().split('T')[0],
+      generate_to_date: rule.valid_until || '',
     });
     setIsCreateRuleOpen(true);
   };
@@ -1120,9 +1141,30 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   };
   const saveRuleMutation = useMutation({
     mutationFn: (data: typeof ruleForm) => {
+      if (editingRule) {
+        const payload: any = {
+          class_template: data.class_template,
+          branch: data.branch,
+          recurrence_type: data.recurrence_type || 'WEEKLY',
+          days_of_week: data.days_of_week,
+          start_time: data.start_time,
+          end_time: data.end_time,
+          valid_from: data.valid_from,
+          valid_until: data.valid_until || null,
+          delivery_mode: data.delivery_mode || 'OFFLINE',
+          capacity_override: data.capacity_override ? Number(data.capacity_override) : null,
+          trial_capacity_override: data.trial_capacity_override ? Number(data.trial_capacity_override) : null,
+          waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
+          status: data.status || 'ACTIVE',
+        };
+        return classesApi.updateScheduleRule(editingRule.id, payload);
+      }
+
+      const selectedBranches = data.branches && data.branches.length > 0 ? data.branches : (data.branch ? [data.branch] : []);
       const payload: any = {
         class_template: data.class_template,
-        branch: data.branch,
+        branch: selectedBranches[0] || data.branch,
+        branches: selectedBranches,
         recurrence_type: data.recurrence_type || 'WEEKLY',
         days_of_week: data.days_of_week,
         start_time: data.start_time,
@@ -1134,18 +1176,28 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
         trial_capacity_override: data.trial_capacity_override ? Number(data.trial_capacity_override) : null,
         waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
         status: data.status || 'ACTIVE',
+        generate_slots: data.auto_generate_slots !== false,
+        generate_from_date: data.generate_from_date || data.valid_from,
+        generate_to_date: data.generate_to_date || data.valid_until || null,
       };
-      if (editingRule) {
-        return classesApi.updateScheduleRule(editingRule.id, payload);
-      }
       return classesApi.createScheduleRule(payload);
     },
-    onSuccess: () => {
+    onSuccess: (resp: any) => {
       queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['class-schedule-rules-kpi'] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['today-class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-occurrences-kpi'] });
       setIsCreateRuleOpen(false);
       setEditingRule(null);
       setRuleError(null);
-      toast.success(editingRule ? 'Schedule rule updated' : 'Schedule rule created');
+      if (resp?.occurrences_generated != null && resp.occurrences_generated > 0) {
+        toast.success(`Recurring rule created for ${resp.count || 'all'} branch(es) & ${resp.occurrences_generated} slots generated!`);
+      } else if (resp?.count) {
+        toast.success(`Recurring rule created across ${resp.count} branch(es)`);
+      } else {
+        toast.success(editingRule ? 'Schedule rule updated' : 'Schedule rule created');
+      }
     },
     onError: (err: any) => {
       const resp = err?.response?.data;
@@ -3932,7 +3984,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
             )}
 
             {/* TEMPLATE & BRANCH SELECTION */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
                 <Label className="mb-1 block font-medium">Class Template *</Label>
                 <select
@@ -3971,34 +4023,120 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   ))}
                 </select>
               </div>
-              <div>
-                <Label className="mb-1 block font-medium">Branch *</Label>
-                <select
-                  value={ruleForm.branch}
-                  onChange={(e) => {
-                    const branchId = e.target.value;
-                    setRuleForm((prev) => {
-                      const next = { ...prev, branch: branchId };
-                      if (next.class_template) {
-                        const tpl = templates.find((t) => t.id === next.class_template);
-                        const bAvail = tpl?.branch_availabilities?.find((a: any) => a.branch === branchId);
-                        if (bAvail?.capacity_override != null) {
-                          next.capacity_override = String(bAvail.capacity_override);
-                        } else if (tpl?.default_capacity != null) {
-                          next.capacity_override = String(tpl.default_capacity);
+
+              {editingRule ? (
+                <div>
+                  <Label className="mb-1 block font-medium">Branch *</Label>
+                  <select
+                    value={ruleForm.branch}
+                    onChange={(e) => {
+                      const branchId = e.target.value;
+                      setRuleForm((prev) => {
+                        const next = { ...prev, branch: branchId, branches: [branchId] };
+                        if (next.class_template) {
+                          const tpl = templates.find((t) => t.id === next.class_template);
+                          const bAvail = tpl?.branch_availabilities?.find((a: any) => a.branch === branchId);
+                          if (bAvail?.capacity_override != null) {
+                            next.capacity_override = String(bAvail.capacity_override);
+                          } else if (tpl?.default_capacity != null) {
+                            next.capacity_override = String(tpl.default_capacity);
+                          }
                         }
-                      }
-                      return next;
-                    });
-                  }}
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
+                        return next;
+                      });
+                    }}
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">Select Branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Label className="font-medium text-xs">Select Branches *</Label>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
+                        {ruleForm.branches.length} of {branches.length} Selected
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = branches.map((b) => b.id);
+                          setRuleForm((prev) => ({
+                            ...prev,
+                            branches: allIds,
+                            branch: allIds[0] || prev.branch,
+                          }));
+                        }}
+                        className="text-[11px] font-semibold text-primary hover:underline hover:text-primary/80 transition-colors cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-muted-foreground text-[10px]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRuleForm((prev) => ({
+                            ...prev,
+                            branches: [],
+                            branch: '',
+                          }));
+                        }}
+                        className="text-[11px] font-semibold text-muted-foreground hover:underline hover:text-foreground transition-colors cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl border border-border bg-muted/20 max-h-36 overflow-y-auto">
+                    {branches.map((b) => {
+                      const isSelected = ruleForm.branches.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            setRuleForm((prev) => {
+                              const newBranches = isSelected
+                                ? prev.branches.filter((id) => id !== b.id)
+                                : [...prev.branches, b.id];
+                              return {
+                                ...prev,
+                                branches: newBranches,
+                                branch: newBranches[0] || '',
+                              };
+                            });
+                          }}
+                          className={`flex items-center gap-2 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary text-foreground font-semibold shadow-2xs'
+                              : 'bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30'
+                          }`}
+                        >
+                          <div
+                            className={`size-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
+                              isSelected
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'border-muted-foreground/40 bg-background'
+                            }`}
+                          >
+                            {isSelected && '✓'}
+                          </div>
+                          <span className="truncate flex-1" title={b.name}>
+                            {b.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {(() => {
@@ -4240,6 +4378,52 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 </select>
               </div>
             </div>
+
+            {/* AUTOMATIC SLOT GENERATION SETTINGS */}
+            {!editingRule && (
+              <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="auto_generate_slots"
+                    checked={ruleForm.auto_generate_slots}
+                    onChange={(e) => setRuleForm({ ...ruleForm, auto_generate_slots: e.target.checked })}
+                    className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
+                  />
+                  <div className="flex-1 text-xs">
+                    <label htmlFor="auto_generate_slots" className="font-semibold text-foreground cursor-pointer block">
+                      Generate Class Slots Immediately
+                    </label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Automatically generates scheduled class occurrence slots across all {ruleForm.branches.length || 0} selected branch(es) for the date window below.
+                    </p>
+                  </div>
+                </div>
+
+                {ruleForm.auto_generate_slots && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
+                    <div>
+                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Generate From Date</Label>
+                      <input
+                        type="date"
+                        value={ruleForm.generate_from_date}
+                        onChange={(e) => setRuleForm({ ...ruleForm, generate_from_date: e.target.value })}
+                        className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Generate To Date</Label>
+                      <input
+                        type="date"
+                        value={ruleForm.generate_to_date}
+                        onChange={(e) => setRuleForm({ ...ruleForm, generate_to_date: e.target.value })}
+                        className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -4248,9 +4432,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
               onClick={() => saveRuleMutation.mutate(ruleForm)}
               disabled={
                 !ruleForm.class_template ||
-                !ruleForm.branch ||
+                (editingRule ? !ruleForm.branch : ruleForm.branches.length === 0) ||
                 normalizeDaysOfWeek(ruleForm.days_of_week).length === 0 ||
-                normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d)) ||
+                (ruleForm.branch && normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d))) ||
                 !ruleForm.start_time ||
                 !ruleForm.end_time ||
                 ruleForm.end_time <= ruleForm.start_time ||
@@ -4262,7 +4446,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 ? 'Validating & Saving...'
                 : editingRule
                 ? 'Update Recurring Rule'
-                : 'Save Recurring Rule'}
+                : ruleForm.auto_generate_slots
+                ? `Save Rule & Generate Slots (${ruleForm.branches.length})`
+                : `Save Recurring Rule (${ruleForm.branches.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>
