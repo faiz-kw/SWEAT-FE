@@ -630,22 +630,22 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
     }
     const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Prospect';
 
-    if (isWebPhoneReady) {
-      toast.info(`Dialing ${fullName} directly in browser...`);
-      await makeWebPhoneCall(phoneToCall, fullName, {
-        leadId: lead.id,
-        leadName: fullName,
+    if (!isWebPhoneReady) {
+      toast.error('Vobiz WebPhone Not Ready', {
+        description: 'Please click WebPhone in the top navigation bar to connect before placing calls.',
       });
       return;
     }
 
     try {
       setCallingLeadId(lead.id);
-      toast.info(`Connecting to ${lead.first_name}... Ringing your softphone.`);
-      const res = await crmApi.clickToCall(lead.id);
-      toast.success(res.message || 'Call initiated! Answer your softphone.');
+      toast.info(`Dialing ${fullName} via Vobiz WebPhone...`);
+      await makeWebPhoneCall(phoneToCall, fullName, {
+        leadId: lead.id,
+        leadName: fullName,
+      });
     } catch (err: any) {
-      const errMsg = err?.response?.data?.error || err?.message || 'Failed to initiate click-to-call';
+      const errMsg = err?.message || 'Failed to place call via WebPhone';
       toast.error(errMsg);
     } finally {
       setCallingLeadId(null);

@@ -260,13 +260,15 @@ export function LeadDetailModal({
     const fullName = [currentLead.first_name, currentLead.last_name].filter(Boolean).join(' ') || 'Prospect';
 
     if (isWebPhoneReady) {
-      toast.info(`Dialing ${fullName} directly in browser...`);
+      toast.info(`Dialing ${fullName} via Vobiz WebPhone...`);
       await makeWebPhoneCall(targetPhone, fullName, {
         leadId: currentLead.id,
         leadName: fullName,
       });
     } else {
-      clickToCallMutation.mutate();
+      toast.error('Vobiz WebPhone Not Ready', {
+        description: 'Please click WebPhone in the top navigation bar to connect before placing calls.',
+      });
     }
   };
 

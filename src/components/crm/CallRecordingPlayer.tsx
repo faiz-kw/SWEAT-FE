@@ -157,7 +157,7 @@ export const CallRecordingPlayer: React.FC<CallRecordingPlayerProps> = ({
     if (raw?.includes('/stream/')) {
       return raw;
     }
-    if (callSessionId && (provider?.toUpperCase() === 'VOBIZ' || raw?.includes('vobiz.ai') || title?.toLowerCase().includes('zoiper') || title?.toLowerCase().includes('sales'))) {
+    if (callSessionId && (provider?.toUpperCase() === 'VOBIZ' || raw?.includes('vobiz.ai') || title?.toLowerCase().includes('vobiz') || title?.toLowerCase().includes('sales'))) {
       return `/api/v1/tenant/crm/telephony/recordings/${callSessionId}/stream/`;
     }
     if (!raw && callSessionId) {
