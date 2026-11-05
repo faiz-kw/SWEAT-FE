@@ -716,14 +716,17 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const buildInitialBranchCapacities = (availabilities?: ClassBranchAvailability[]) => {
     const list = availabilities || [];
     return branches.map((b) => {
-      const match = list.find((a: any) => (a.branch === b.id || a.branch_id === b.id));
+      const match = list.find((a: any) => {
+        const branchVal = a.branch_id || (typeof a.branch === 'object' && a.branch ? a.branch.id : a.branch);
+        return String(branchVal) === String(b.id);
+      });
       return {
         branch_id: b.id,
         branch_name: b.name,
         is_enabled: match ? match.status === 'ENABLED' : true,
-        capacity_override: match?.capacity_override != null ? match.capacity_override : '',
-        trial_capacity_override: match?.trial_capacity_override != null ? match.trial_capacity_override : '',
-        waitlist_capacity_override: match?.waitlist_capacity_override != null ? match.waitlist_capacity_override : '',
+        capacity_override: match?.capacity_override != null ? String(match.capacity_override) : '',
+        trial_capacity_override: match?.trial_capacity_override != null ? String(match.trial_capacity_override) : '',
+        waitlist_capacity_override: match?.waitlist_capacity_override != null ? String(match.waitlist_capacity_override) : '',
       };
     });
   };
@@ -1096,6 +1099,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['class-templates-all'] });
+      queryClient.invalidateQueries({ queryKey: ['all-class-branch-availabilities'] });
       setIsCreateTemplateOpen(false);
       setEditingTemplate(null);
       resetTemplateForm();
@@ -1142,9 +1147,11 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const saveRuleMutation = useMutation({
     mutationFn: (data: typeof ruleForm) => {
       if (editingRule) {
+        const selectedBranches = data.branches && data.branches.length > 0 ? data.branches : (data.branch ? [data.branch] : []);
+        const primaryBranch = selectedBranches.includes(editingRule.branch) ? editingRule.branch : (selectedBranches[0] || editingRule.branch);
         const payload: any = {
           class_template: data.class_template,
-          branch: data.branch,
+          branch: primaryBranch,
           recurrence_type: data.recurrence_type || 'WEEKLY',
           days_of_week: data.days_of_week,
           start_time: data.start_time,
@@ -1157,7 +1164,26 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
           waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
           status: data.status || 'ACTIVE',
         };
-        return classesApi.updateScheduleRule(editingRule.id, payload);
+        const updatePromise = classesApi.updateScheduleRule(editingRule.id, payload);
+
+        const additionalBranches = selectedBranches.filter((bId) => bId !== primaryBranch);
+        if (additionalBranches.length > 0) {
+          const createPayload: any = {
+            ...payload,
+            branches: additionalBranches,
+            branch: additionalBranches[0],
+            generate_slots: data.auto_generate_slots !== false,
+            generate_from_date: data.generate_from_date || data.valid_from,
+            generate_to_date: data.generate_to_date || data.valid_until || null,
+          };
+          return Promise.all([updatePromise, classesApi.createScheduleRule(createPayload)]).then(([upd, crt]) => ({
+            ...upd,
+            count: 1 + (crt?.count || additionalBranches.length),
+            occurrences_generated: crt?.occurrences_generated || 0,
+          }));
+        }
+
+        return updatePromise;
       }
 
       const selectedBranches = data.branches && data.branches.length > 0 ? data.branches : (data.branch ? [data.branch] : []);
@@ -2128,6 +2154,12 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                             size="sm"
                             variant="outline"
                             onClick={() => {
+                              const tplAvails = (tpl.branch_availabilities && tpl.branch_availabilities.length > 0)
+                                ? tpl.branch_availabilities
+                                : allBranchAvailabilities.filter((ba: any) => {
+                                    const tplId = ba.class_template_id || (typeof ba.class_template === 'object' && ba.class_template ? ba.class_template.id : ba.class_template);
+                                    return String(tplId) === String(tpl.id);
+                                  });
                               setEditingTemplate(tpl);
                               setTemplateForm({
                                 name: tpl.name,
@@ -2145,7 +2177,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                                 allow_reschedule: tpl.allow_reschedule,
                                 image_url: tpl.image_url || '',
                                 status: tpl.status,
-                                branch_capacities: buildInitialBranchCapacities(tpl.branch_availabilities),
+                                branch_capacities: buildInitialBranchCapacities(tplAvails),
                               });
                               setIsCreateTemplateOpen(true);
                             }}
@@ -4004,14 +4036,6 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                         const em = endM % 60;
                         next.end_time = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
                       }
-                      if (next.branch && tpl) {
-                        const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === next.branch);
-                        if (bAvail?.capacity_override != null) {
-                          next.capacity_override = String(bAvail.capacity_override);
-                        } else if (tpl.default_capacity != null) {
-                          next.capacity_override = String(tpl.default_capacity);
-                        }
-                      }
                       return next;
                     });
                   }}
@@ -4024,125 +4048,94 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 </select>
               </div>
 
-              {editingRule ? (
-                <div>
-                  <Label className="mb-1 block font-medium">Branch *</Label>
-                  <select
-                    value={ruleForm.branch}
-                    onChange={(e) => {
-                      const branchId = e.target.value;
-                      setRuleForm((prev) => {
-                        const next = { ...prev, branch: branchId, branches: [branchId] };
-                        if (next.class_template) {
-                          const tpl = templates.find((t) => t.id === next.class_template);
-                          const bAvail = tpl?.branch_availabilities?.find((a: any) => a.branch === branchId);
-                          if (bAvail?.capacity_override != null) {
-                            next.capacity_override = String(bAvail.capacity_override);
-                          } else if (tpl?.default_capacity != null) {
-                            next.capacity_override = String(tpl.default_capacity);
-                          }
-                        }
-                        return next;
-                      });
-                    }}
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">Select Branch</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Label className="font-medium text-xs">Select Branches *</Label>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
-                        {ruleForm.branches.length} of {branches.length} Selected
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const allIds = branches.map((b) => b.id);
-                          setRuleForm((prev) => ({
-                            ...prev,
-                            branches: allIds,
-                            branch: allIds[0] || prev.branch,
-                          }));
-                        }}
-                        className="text-[11px] font-semibold text-primary hover:underline hover:text-primary/80 transition-colors cursor-pointer"
-                      >
-                        Select All
-                      </button>
-                      <span className="text-muted-foreground text-[10px]">|</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRuleForm((prev) => ({
-                            ...prev,
-                            branches: [],
-                            branch: '',
-                          }));
-                        }}
-                        className="text-[11px] font-semibold text-muted-foreground hover:underline hover:text-foreground transition-colors cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Label className="font-medium text-xs">
+                      {editingRule ? 'Branches (Current & Additional) *' : 'Select Branches *'}
+                    </Label>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
+                      {ruleForm.branches.length} of {branches.length} Selected
+                    </span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = branches.map((b) => b.id);
+                        setRuleForm((prev) => ({
+                          ...prev,
+                          branches: allIds,
+                          branch: allIds[0] || prev.branch,
+                        }));
+                      }}
+                      className="text-[11px] font-semibold text-primary hover:underline hover:text-primary/80 transition-colors cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-muted-foreground text-[10px]">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRuleForm((prev) => ({
+                          ...prev,
+                          branches: [],
+                          branch: '',
+                        }));
+                      }}
+                      className="text-[11px] font-semibold text-muted-foreground hover:underline hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl border border-border bg-muted/20 max-h-36 overflow-y-auto">
-                    {branches.map((b) => {
-                      const isSelected = ruleForm.branches.includes(b.id);
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => {
-                            setRuleForm((prev) => {
-                              const newBranches = isSelected
-                                ? prev.branches.filter((id) => id !== b.id)
-                                : [...prev.branches, b.id];
-                              return {
-                                ...prev,
-                                branches: newBranches,
-                                branch: newBranches[0] || '',
-                              };
-                            });
-                          }}
-                          className={`flex items-center gap-2 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl border border-border bg-muted/20 max-h-36 overflow-y-auto">
+                  {branches.map((b) => {
+                    const isSelected = ruleForm.branches.includes(b.id);
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => {
+                          setRuleForm((prev) => {
+                            const newBranches = isSelected
+                              ? prev.branches.filter((id) => id !== b.id)
+                              : [...prev.branches, b.id];
+                            return {
+                              ...prev,
+                              branches: newBranches,
+                              branch: newBranches[0] || '',
+                            };
+                          });
+                        }}
+                        className={`flex items-center gap-2 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary/10 border-primary text-foreground font-semibold shadow-2xs'
+                            : 'bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div
+                          className={`size-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
                             isSelected
-                              ? 'bg-primary/10 border-primary text-foreground font-semibold shadow-2xs'
-                              : 'bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30'
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'border-muted-foreground/40 bg-background'
                           }`}
                         >
-                          <div
-                            className={`size-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
-                              isSelected
-                                ? 'bg-primary border-primary text-primary-foreground'
-                                : 'border-muted-foreground/40 bg-background'
-                            }`}
-                          >
-                            {isSelected && '✓'}
-                          </div>
-                          <span className="truncate flex-1" title={b.name}>
-                            {b.name}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          {isSelected && '✓'}
+                        </div>
+                        <span className="truncate flex-1" title={b.name}>
+                          {b.name}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </div>
 
             {(() => {
               const selRuleTpl = templates.find((t) => t.id === ruleForm.class_template);
-              const branchAvail = selRuleTpl?.branch_availabilities?.find((a: any) => a.branch === ruleForm.branch);
-              const effectiveCap = branchAvail?.capacity_override != null ? branchAvail.capacity_override : selRuleTpl?.default_capacity;
               return selRuleTpl ? (
                 <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -4152,18 +4145,13 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     </span>
                     <span className="text-muted-foreground text-[11px]">(Auto-fetched from {selRuleTpl.name})</span>
                   </div>
-                  {ruleForm.branch && effectiveCap != null && (
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <Building2 className="size-3 text-primary" />
-                      <span className="text-muted-foreground">Studio Capacity:</span>
-                      <strong className="text-primary font-semibold">{effectiveCap} beds</strong>
-                      {branchAvail?.capacity_override != null ? (
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">Branch Override</span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">Template Default</span>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <Building2 className="size-3 text-primary" />
+                    <span className="text-muted-foreground">Capacity:</span>
+                    <strong className="text-primary font-semibold">
+                      {ruleForm.capacity_override ? `${ruleForm.capacity_override} beds (Rule Override)` : 'Branch-Specific (From Template Setup)'}
+                    </strong>
+                  </div>
                 </div>
               ) : null;
             })()}
@@ -4352,6 +4340,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   onChange={(e) => setRuleForm({ ...ruleForm, capacity_override: e.target.value })}
                   placeholder="Template default"
                 />
+                <span className="text-[10px] text-muted-foreground block mt-0.5">
+                  Leave blank to use each branch's configured studio capacity
+                </span>
               </div>
               <div>
                 <Label className="mb-1 block font-medium">Delivery Mode</Label>
@@ -4380,7 +4371,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
             </div>
 
             {/* AUTOMATIC SLOT GENERATION SETTINGS */}
-            {!editingRule && (
+            {(!editingRule || ruleForm.branches.length > 1) && (
               <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-2.5">
                 <div className="flex items-start gap-2.5">
                   <input
@@ -4432,9 +4423,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
               onClick={() => saveRuleMutation.mutate(ruleForm)}
               disabled={
                 !ruleForm.class_template ||
-                (editingRule ? !ruleForm.branch : ruleForm.branches.length === 0) ||
+                ruleForm.branches.length === 0 ||
                 normalizeDaysOfWeek(ruleForm.days_of_week).length === 0 ||
-                (ruleForm.branch && normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d))) ||
                 !ruleForm.start_time ||
                 !ruleForm.end_time ||
                 ruleForm.end_time <= ruleForm.start_time ||
@@ -4445,7 +4435,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
               {saveRuleMutation.isPending
                 ? 'Validating & Saving...'
                 : editingRule
-                ? 'Update Recurring Rule'
+                ? ruleForm.branches.length > 1
+                  ? `Update & Add Branches (${ruleForm.branches.length})`
+                  : 'Update Recurring Rule'
                 : ruleForm.auto_generate_slots
                 ? `Save Rule & Generate Slots (${ruleForm.branches.length})`
                 : `Save Recurring Rule (${ruleForm.branches.length})`}
