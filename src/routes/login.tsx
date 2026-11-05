@@ -72,7 +72,12 @@ function LoginPage() {
 
   // Form inputs (Password flow)
   const [identifier, setIdentifier] = React.useState('');
-  const [organizationCode, setOrganizationCode] = React.useState('');
+  const [organizationCode, setOrganizationCode] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('pos_last_organization_code') || '';
+    }
+    return '';
+  });
   const [acknowledgment, setAcknowledgment] = React.useState<string | null>(null);
   const organizationInput = React.useRef<HTMLInputElement>(null);
   const [password, setPassword] = React.useState('');
@@ -189,6 +194,9 @@ function LoginPage() {
     setIsSubmitting(true);
 
     try {
+      if (typeof window !== 'undefined' && organizationCode.trim()) {
+        window.localStorage.setItem('pos_last_organization_code', organizationCode.trim().toLowerCase());
+      }
       const res = await login({
         identifier: cleanIdentifier,
         password,

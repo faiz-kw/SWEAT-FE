@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { ClassOccurrence } from '../../types/classes';
 import { SecureWorkoutPlayer } from './SecureWorkoutPlayer';
+import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
 import { formatOccurrenceDate, formatTime12h } from '@/utils/dateTimeUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -82,9 +83,10 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
 
   // Video Streaming State
   const [showVideoPlayer, setShowVideoPlayer] = React.useState(false);
+  const [isAssignVideoModalOpen, setIsAssignVideoModalOpen] = React.useState(false);
   const [rosterTab, setRosterTab] = React.useState<'ALL' | 'MEMBER' | 'TRIAL' | 'WAITLIST'>('ALL');
 
-  const { data: classVideoData } = useQuery({
+  const { data: classVideoData, refetch: refetchVideo } = useQuery({
     queryKey: ['class-occurrence-video-stream', occurrence?.id],
     queryFn: () => (occurrence?.id ? classesApi.getTrainerClassVideo(occurrence.id) : null),
     enabled: isOpen && !!occurrence?.id,
@@ -475,47 +477,67 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
           )}
 
           {/* SECTION 3: Class Workout Video Stream Banner */}
-          {classVideoData?.embed_player_url && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                    <Film className="size-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <span>Class Workout Video</span>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-primary/10 p-2 text-primary shrink-0">
+                  <Film className="size-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span>Class Workout Video</span>
+                    {classVideoData?.embed_player_url ? (
                       <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-semibold">
                         In-App Stream Ready
                       </Badge>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Watch the complete exercise session video with instructions
-                    </p>
+                    ) : (
+                      <Badge variant="outline" className="text-[9px] bg-muted text-muted-foreground border-border font-medium">
+                        Not Assigned
+                      </Badge>
+                    )}
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {classVideoData?.embed_player_url
+                      ? (classVideoData.movement_title || 'Watch the complete exercise session video with instructions')
+                      : 'Assign a workout video from the WOD library for in-studio playback'}
+                  </p>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {classVideoData?.embed_player_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowVideoPlayer(!showVideoPlayer)}
+                    className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                  >
+                    <Video className="size-3" />
+                    <span>{showVideoPlayer ? 'Hide Video' : 'Watch Workout Video'}</span>
+                    {showVideoPlayer ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowVideoPlayer(!showVideoPlayer)}
-                  className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                  onClick={() => setIsAssignVideoModalOpen(true)}
+                  className="h-7 text-xs gap-1 border-border bg-background hover:bg-muted text-foreground font-medium"
                 >
-                  <Video className="size-3" />
-                  <span>{showVideoPlayer ? 'Hide Video' : 'Watch Workout Video'}</span>
-                  {showVideoPlayer ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                  <Sparkles className="size-3 text-primary" />
+                  <span>{classVideoData?.embed_player_url ? 'Change Video' : 'Assign Workout Video'}</span>
                 </Button>
               </div>
-
-              {showVideoPlayer && (
-                <div className="space-y-2 pt-1 animate-in fade-in duration-200">
-                  <SecureWorkoutPlayer embedUrl={classVideoData.embed_player_url} title={occurrence?.template_name || "Class Workout Stream"} />
-                  <p className="text-[10px] text-muted-foreground text-center">
-                    🔒 Streamed directly inside website in privacy mode. External YouTube redirection and downloads are disabled.
-                  </p>
-                </div>
-              )}
             </div>
-          )}
+
+            {showVideoPlayer && classVideoData?.embed_player_url && (
+              <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                <SecureWorkoutPlayer embedUrl={classVideoData.embed_player_url} title={occurrence?.template_name || "Class Workout Stream"} />
+                <p className="text-[10px] text-muted-foreground text-center">
+                  🔒 Streamed directly inside website in privacy mode. External YouTube redirection and downloads are disabled.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* SECTION 4: Member Bookings & Session Roster */}
           <div className="pt-2 space-y-3">
@@ -933,6 +955,15 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
           </DialogContent>
         </Dialog>
       )}
+          {/* Video Assignment Modal */}
+      <AssignWorkoutVideoModal
+        occurrence={occurrence}
+        isOpen={isAssignVideoModalOpen}
+        onClose={() => setIsAssignVideoModalOpen(false)}
+        onAssigned={() => {
+          refetchVideo();
+        }}
+      />
     </Dialog>
   );
 };

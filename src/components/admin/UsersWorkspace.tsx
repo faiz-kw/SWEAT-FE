@@ -232,6 +232,7 @@ export function UsersWorkspace() {
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
   const [userScope, setUserScope] = React.useState<"tenant" | "platform">(isPlatformAdmin ? "platform" : "tenant");
   const [inviteEmail, setInviteEmail] = React.useState("");
+  const [inviteUsername, setInviteUsername] = React.useState("");
   const [inviteFirstName, setInviteFirstName] = React.useState("");
   const [inviteLastName, setInviteLastName] = React.useState("");
   const [invitePhone, setInvitePhone] = React.useState("");
@@ -487,6 +488,7 @@ export function UsersWorkspace() {
 
       await inviteUserApi({
         email: inviteEmail.trim(),
+        username: inviteUsername.trim() || undefined,
         first_name: inviteFirstName.trim(),
         last_name: inviteLastName.trim(),
         phone: invitePhone.trim(),
@@ -507,6 +509,7 @@ export function UsersWorkspace() {
 
       setInviteModalOpen(false);
       setInviteEmail("");
+      setInviteUsername("");
       setInviteFirstName("");
       setInviteLastName("");
       setInvitePhone("");
@@ -1600,6 +1603,25 @@ export function UsersWorkspace() {
                   className="h-8 text-xs bg-background"
                 />
               </div>
+            </div>
+
+            {/* Username / User ID (Login Identifier) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="staff-invite-username" className="text-xs font-semibold">
+                  Username / User ID <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <span className="text-[10px] text-muted-foreground">
+                  Used with password to log in (defaults to email name)
+                </span>
+              </div>
+              <Input
+                id="staff-invite-username"
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
+                placeholder={inviteEmail.trim() ? inviteEmail.split("@")[0].toLowerCase() : "e.g. rahul"}
+                className="h-8 text-xs font-mono bg-background"
+              />
             </div>
 
             {/* Role & Department */}

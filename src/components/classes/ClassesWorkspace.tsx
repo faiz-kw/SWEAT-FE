@@ -8,6 +8,7 @@ import {
   Search,
   RefreshCw,
   Video,
+  Film,
   Award,
   Sparkles,
   Play,
@@ -38,6 +39,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
+import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
 import { toast } from 'sonner';
@@ -134,6 +136,8 @@ export const ClassesWorkspace: React.FC = () => {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
+  const [selectedVideoOccurrence, setSelectedVideoOccurrence] = useState<ClassOccurrence | null>(null);
+  const [isAssignVideoOpen, setIsAssignVideoOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -341,6 +345,7 @@ export const ClassesWorkspace: React.FC = () => {
     capacity: '',
     trial_capacity: '',
     waitlist_capacity: '',
+    video_id: 'AUTO',
   });
 
   const [branchAvailForm, setBranchAvailForm] = useState({
@@ -824,6 +829,7 @@ export const ClassesWorkspace: React.FC = () => {
       capacity: '',
       trial_capacity: '',
       waitlist_capacity: '',
+      video_id: 'AUTO',
     });
     setIsCreateOccurrenceOpen(true);
   };
@@ -1047,6 +1053,12 @@ export const ClassesWorkspace: React.FC = () => {
     },
   });
 
+  const { data: availableVideosForCreate } = useQuery({
+    queryKey: ['available-workout-videos', 'FOR_CREATE'],
+    queryFn: () => classesApi.getAvailableWorkoutVideos({ limit: 100 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const createOccurrenceMutation = useMutation({
     mutationFn: (data: typeof occurrenceForm) => {
       const payload: any = {
@@ -1066,7 +1078,15 @@ export const ClassesWorkspace: React.FC = () => {
       if (data.waitlist_capacity !== '' && data.waitlist_capacity !== null && data.waitlist_capacity !== undefined) {
         payload.waitlist_capacity = Number(data.waitlist_capacity);
       }
-      return classesApi.createOccurrence(payload);
+      const createdOcc = await classesApi.createOccurrence(payload);
+      if (data.video_id && data.video_id !== 'AUTO' && data.video_id !== 'NONE' && (createdOcc as any)?.id) {
+        try {
+          await classesApi.assignOccurrenceVideo((createdOcc as any).id, data.video_id);
+        } catch (e) {
+          console.warn('Could not assign video to new occurrence', e);
+        }
+      }
+      return createdOcc;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
@@ -2841,6 +2861,19 @@ export const ClassesWorkspace: React.FC = () => {
                                     Assign
                                   </Button>
                                 )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedVideoOccurrence(occ);
+                                    setIsAssignVideoOpen(true);
+                                  }}
+                                  className="h-7 px-2 text-xs gap-1 border-primary/20 text-primary hover:bg-primary/10"
+                                  title="Assign or change workout video"
+                                >
+                                  <Film className="size-3" />
+                                  <span>Video</span>
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -3007,6 +3040,19 @@ export const ClassesWorkspace: React.FC = () => {
                             Assign Trainer
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedVideoOccurrence(occ);
+                            setIsAssignVideoOpen(true);
+                          }}
+                          className="text-xs gap-1 border-primary/20 text-primary hover:bg-primary/10"
+                          title="Assign or change workout video"
+                        >
+                          <Film className="size-3" />
+                          <span>Video</span>
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -4106,6 +4152,31 @@ export const ClassesWorkspace: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                <div className="pt-2">
+                  <Label className="mb-1.5 block font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Film className="size-3.5 text-primary" />
+                      <span>Class Workout Video</span>
+                    </span>
+                    <span className="text-2xs text-muted-foreground font-normal">
+                      Auto-syncs by class date or select a specific flow
+                    </span>
+                  </Label>
+                  <select
+                    value={occurrenceForm.video_id || 'AUTO'}
+                    onChange={(e) => setOccurrenceForm({ ...occurrenceForm, video_id: e.target.value })}
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                  >
+                    <option value="AUTO">✨ Auto-Sync from Daily WOD Library (Recommended)</option>
+                    <option value="NONE">No Workout Video</option>
+                    {(availableVideosForCreate?.results || []).map((vid: any) => (
+                      <option key={vid.id} value={vid.id}>
+                        {vid.title} {vid.category_code ? `(${vid.category_code})` : ''} - {vid.date || 'WOD'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               );
             })()}
           </div>
@@ -4541,6 +4612,19 @@ export const ClassesWorkspace: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['class-templates'] });
           queryClient.invalidateQueries({ queryKey: ['calendar-occurrences'] });
           toast.success('Classes schedule updated from Excel!');
+        }}
+      />
+
+      {/* Assign Workout Video Modal */}
+      <AssignWorkoutVideoModal
+        occurrence={selectedVideoOccurrence}
+        isOpen={isAssignVideoOpen && !!selectedVideoOccurrence}
+        onClose={() => {
+          setIsAssignVideoOpen(false);
+          setSelectedVideoOccurrence(null);
+        }}
+        onAssigned={() => {
+          refetchOccurrences();
         }}
       />
 

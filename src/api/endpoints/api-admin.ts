@@ -375,6 +375,7 @@ export async function acceptInviteApi(
 
 export async function inviteUserApi(payload: {
   email: string;
+  username?: string;
   first_name: string;
   last_name?: string;
   phone?: string;
@@ -401,6 +402,7 @@ export async function inviteUserApi(payload: {
     const locId = payload.location_ids?.[0];
     return await createUserApi({
       email: payload.email,
+      username: payload.username?.trim().toLowerCase() || undefined,
       first_name: payload.first_name,
       last_name: payload.last_name || "",
       phone: payload.phone || "",

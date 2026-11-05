@@ -291,6 +291,48 @@ export const classesApi = {
     return res.data;
   },
 
+  async assignOccurrenceVideo(occurrenceId: string, videoId: string | null): Promise<any> {
+    const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/assign-video/`, {
+      video_id: videoId,
+    });
+    return res.data;
+  },
+
+  async getAvailableWorkoutVideos(params?: {
+    category?: string;
+    search?: string;
+    limit?: number;
+  }): Promise<{
+    count: number;
+    results: Array<{
+      id: string;
+      title: string;
+      description: string;
+      video_url: string;
+      embed_url: string;
+      date: string;
+      category_code: string;
+      program: string;
+      sheet: string;
+      targeted_muscles: string;
+      equipment_required: string;
+      classification_status: string;
+    }>;
+  }> {
+    const res = await api.get<any>('/tenant/class-occurrences/available-videos/', { params });
+    return res.data;
+  },
+
+  async simulateWorkoutVideos(data: FormData | { rows: any[]; target_month?: string }): Promise<any> {
+    const isFormData = data instanceof FormData;
+    const res = await api.post<any>(
+      '/tenant/excel-imports/simulate-workout-videos/',
+      data,
+      isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined
+    );
+    return res.data;
+  },
+
   // --- Branch Availability & Pricing ---
   async getBranchAvailabilities(templateId?: string): Promise<ClassBranchAvailability[]> {
     const res = await api.get<any>('/tenant/class-branch-availabilities/');
