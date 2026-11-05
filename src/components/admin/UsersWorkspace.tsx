@@ -13,6 +13,7 @@ import {
   Building2,
   Edit2,
   CheckCircle2,
+  Check,
   XCircle,
   Clock,
   Sparkles,
@@ -243,6 +244,9 @@ export function UsersWorkspace() {
   const [inviteDepartmentId, setInviteDepartmentId] = React.useState("");
   const [inviteReportsToId, setInviteReportsToId] = React.useState("");
   const [inviteBranchId, setInviteBranchId] = React.useState("");
+  const [inviteBranchIds, setInviteBranchIds] = React.useState<string[]>([]);
+  const [invitePrimaryBranchId, setInvitePrimaryBranchId] = React.useState("");
+  const [editPrimaryBranchId, setEditPrimaryBranchId] = React.useState("");
   const [inviteTenantId, setInviteTenantId] = React.useState("");
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
   const [inviteError, setInviteError] = React.useState<string | null>(null);
@@ -323,7 +327,14 @@ export function UsersWorkspace() {
         roles[0];
       setInviteRole(defaultRole.id);
     }
-    if (!inviteBranchId && branches.length > 0) setInviteBranchId(branches[0].id);
+    if (!inviteBranchId && branches.length > 0) {
+      setInviteBranchId(branches[0].id);
+      setInviteBranchIds([branches[0].id]);
+      setInvitePrimaryBranchId(branches[0].id);
+    } else if (branches.length > 0 && inviteBranchIds.length === 0) {
+      setInviteBranchIds([branches[0].id]);
+      setInvitePrimaryBranchId(branches[0].id);
+    }
     if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
     setInviteReportsToId("");
     setInviteModalOpen(true);
@@ -496,7 +507,9 @@ export function UsersWorkspace() {
         role_id: selectedRoleObj?.id,
         department_id: inviteDepartmentId || undefined,
         reports_to_id: !isTargetOrgAdmin && inviteReportsToId ? inviteReportsToId : undefined,
-        location_ids: inviteBranchId ? [inviteBranchId] : undefined,
+        location_ids: inviteBranchIds.length > 0 ? inviteBranchIds : (inviteBranchId ? [inviteBranchId] : undefined),
+        branch_ids: inviteBranchIds.length > 0 ? inviteBranchIds : (inviteBranchId ? [inviteBranchId] : undefined),
+        primary_branch_id: invitePrimaryBranchId || inviteBranchIds[0] || inviteBranchId || undefined,
         password: useCustomPassword && invitePassword.trim() ? invitePassword.trim() : undefined,
         tenant_id: isPlatformAdmin && userScope === "tenant" ? inviteTenantId : undefined,
       });
@@ -519,6 +532,8 @@ export function UsersWorkspace() {
       setInviteDepartmentId("");
       setInviteReportsToId("");
       setInviteBranchId("");
+      setInviteBranchIds([]);
+      setInvitePrimaryBranchId("");
       setInviteError(null);
       loadData();
     } catch (err: any) {
@@ -545,7 +560,23 @@ export function UsersWorkspace() {
     const roleId = roles.find((role) => role.name === user.role || role.code === user.role)?.id || user.branch_access?.[0]?.role_id || "";
     setEditRole(roleId);
     setEditReportsToId(user.reports_to_id || "");
-    setEditBranchAccess(branchAccessForRole(user, roleId));
+    const access = branchAccessForRole(user, roleId);
+    if (user.assigned_branches && user.assigned_branches.length > 0) {
+      for (const b of user.assigned_branches) {
+        access[b.id] = true;
+      }
+    }
+    if (user.active_location_id) {
+      access[user.active_location_id] = true;
+    }
+    setEditBranchAccess(access);
+    const primaryId =
+      user.assigned_branches?.find((b) => b.is_primary)?.id ||
+      user.active_location_id ||
+      (user as any).home_branch ||
+      Object.keys(access).find((k) => access[k]) ||
+      "";
+    setEditPrimaryBranchId(primaryId);
     const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
     setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
     setEditDepartmentId("");
@@ -583,6 +614,8 @@ export function UsersWorkspace() {
         is_active: editStatus === "Active",
         department_id: editDepartmentId || undefined,
         reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null),
+        primary_branch_id: editPrimaryBranchId || undefined,
+        home_branch: editPrimaryBranchId || undefined,
         ...(roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? {
           branch_access: branches.map((branch) => ({
             branch_id: branch.id, enabled: editBranchAccess[branch.id] === true,
@@ -1143,39 +1176,55 @@ export function UsersWorkspace() {
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5 text-muted-foreground">
                               <MapPin className="size-3.5 text-primary shrink-0" />
-                              <div className="flex flex-col min-w-0 max-w-[190px]">
-                                <span className="truncate font-semibold text-foreground text-xs">
-                                  {(() => {
-                                    const matchingBranch = branches.find(
-                                      (b) =>
-                                        b.id === u.active_location_id ||
-                                        b.id === (u as any).home_branch ||
-                                        b.name === u.active_location_name
-                                    );
-                                    if (matchingBranch) {
-                                      return getBranchDisplayName(matchingBranch);
-                                    }
-                                    return u.active_location_name || "All Branches";
-                                  })()}
-                                </span>
+                              <div className="flex flex-col min-w-0 max-w-[200px]">
                                 {(() => {
+                                  const assigned = u.assigned_branches || [];
+                                  const primary = assigned.find((b) => b.is_primary) || (assigned.length > 0 ? assigned[0] : null);
+                                  if (primary) {
+                                    const otherCount = assigned.length - 1;
+                                    const otherNames = assigned.map((b) => b.name).join(", ");
+                                    return (
+                                      <>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="truncate font-semibold text-foreground text-xs" title={primary.name}>
+                                            {primary.name}
+                                          </span>
+                                          {otherCount > 0 && (
+                                            <span
+                                              className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 shrink-0 cursor-help"
+                                              title={`Assigned Branches: ${otherNames}`}
+                                            >
+                                              +{otherCount} more
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="truncate text-[10px] text-muted-foreground" title={primary.name}>
+                                          Primary Studio
+                                        </span>
+                                      </>
+                                    );
+                                  }
+
                                   const matchingBranch = branches.find(
                                     (b) =>
                                       b.id === u.active_location_id ||
                                       b.id === (u as any).home_branch ||
                                       b.name === u.active_location_name
                                   );
-                                  const addr =
-                                    (matchingBranch && getBranchAddressDisplay(matchingBranch)) ||
-                                    u.active_location_address;
-                                  if (addr) {
-                                    return (
-                                      <span className="truncate text-[10px] text-muted-foreground" title={addr}>
-                                        {addr}
+                                  const name = matchingBranch ? getBranchDisplayName(matchingBranch) : (u.active_location_name || "All Branches");
+                                  const addr = (matchingBranch && getBranchAddressDisplay(matchingBranch)) || u.active_location_address;
+                                  return (
+                                    <>
+                                      <span className="truncate font-semibold text-foreground text-xs" title={name}>
+                                        {name}
                                       </span>
-                                    );
-                                  }
-                                  return null;
+                                      {addr && (
+                                        <span className="truncate text-[10px] text-muted-foreground" title={addr}>
+                                          {addr}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
                                 })()}
                               </div>
                             </div>
@@ -1315,6 +1364,14 @@ export function UsersWorkspace() {
                         <MapPin className="size-3 text-primary shrink-0" />
                         <span>
                           {(() => {
+                            const assigned = u.assigned_branches || [];
+                            const primary = assigned.find((b) => b.is_primary) || (assigned.length > 0 ? assigned[0] : null);
+                            if (primary) {
+                              const otherCount = assigned.length - 1;
+                              return otherCount > 0
+                                ? `${primary.name} (+${otherCount} more)`
+                                : primary.name;
+                            }
                             const matchingBranch = branches.find(
                               (b) =>
                                 b.id === u.active_location_id ||
@@ -1674,38 +1731,91 @@ export function UsersWorkspace() {
               )}
             </div>
 
-            {/* Branch Assignment */}
+            {/* Branch Assignment (Multi-branch + Primary Studio) */}
             {branches.length > 0 && (
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Primary Branch Assignment</Label>
-                <Select value={inviteBranchId} onValueChange={setInviteBranchId}>
-                  <SelectTrigger className="min-h-9 h-auto py-1.5 text-xs bg-background">
-                    <SelectValue placeholder="Select branch" />
-                  </SelectTrigger>
-                  <SelectContent className="text-xs max-h-64">
-                    {uniqueBranches.map((b) => {
-                      const displayName = getBranchDisplayName(b);
-                      const addressDisplay = getBranchAddressDisplay(b);
-                      const fullSummary = addressDisplay ? `${displayName} — ${addressDisplay}` : displayName;
-                      return (
-                        <SelectItem key={b.id} value={b.id} textValue={fullSummary} className="py-2 cursor-pointer">
-                          <div className="flex flex-col text-left min-w-0 pr-2">
-                            <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Assigned Branches & Primary Studio</Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    {inviteBranchIds.length === 0
+                      ? "Select at least one branch"
+                      : `${inviteBranchIds.length} branch${inviteBranchIds.length > 1 ? "es" : ""} assigned`}
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 border border-border rounded-xl p-2 bg-muted/10">
+                  {uniqueBranches.map((b) => {
+                    const displayName = getBranchDisplayName(b);
+                    const addressDisplay = getBranchAddressDisplay(b);
+                    const isSelected = inviteBranchIds.includes(b.id);
+                    const isPrimary = invitePrimaryBranchId === b.id;
+
+                    return (
+                      <div
+                        key={b.id}
+                        className={cn(
+                          "flex items-center justify-between gap-2.5 rounded-lg border p-2 text-xs transition-colors",
+                          isSelected ? "border-primary/40 bg-primary/5" : "border-border/60 hover:bg-muted/30"
+                        )}
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              let newIds: string[];
+                              if (checked) {
+                                newIds = [...inviteBranchIds, b.id];
+                              } else {
+                                newIds = inviteBranchIds.filter((id) => id !== b.id);
+                              }
+                              setInviteBranchIds(newIds);
+                              setInviteBranchId(newIds[0] || "");
+                              if (checked && (!invitePrimaryBranchId || !newIds.includes(invitePrimaryBranchId))) {
+                                setInvitePrimaryBranchId(b.id);
+                              } else if (!checked && invitePrimaryBranchId === b.id) {
+                                setInvitePrimaryBranchId(newIds[0] || "");
+                              }
+                            }}
+                            className="rounded border-input text-primary focus:ring-primary cursor-pointer shrink-0"
+                          />
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
                               <Building2 className="size-3.5 text-primary shrink-0" />
-                              {displayName}
+                              <span className="truncate">{displayName}</span>
                             </span>
                             {addressDisplay && (
-                              <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
                                 <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
                                 <span className="truncate">{addressDisplay}</span>
                               </span>
                             )}
                           </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                        </label>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isSelected && (
+                            isPrimary ? (
+                              <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Check className="size-2.5" /> Primary
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInvitePrimaryBranchId(b.id);
+                                }}
+                                className="text-[10px] font-medium text-muted-foreground hover:text-primary hover:underline px-1 py-0.5"
+                              >
+                                Make Primary
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1938,48 +2048,85 @@ export function UsersWorkspace() {
               )}
 
               {roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? (
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Branch access for this role</Label>
-                  <p className="text-xs text-muted-foreground">Enable any number of branches. Disabling a branch removes access through this role; other roles may still grant access.</p>
-                  {uniqueBranches.map((branch) => {
-                    const displayName = getBranchDisplayName(branch);
-                    const addressDisplay = getBranchAddressDisplay(branch);
-                    return (
-                      <label
-                        key={branch.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-xs hover:bg-muted/30 transition-colors cursor-pointer"
-                      >
-                        <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground flex items-center gap-1.5">
-                            <Building2 className="size-3.5 text-primary shrink-0" />
-                            {displayName}
-                          </span>
-                          {addressDisplay && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
-                              <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
-                              <span className="truncate">{addressDisplay}</span>
-                            </span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Branch Access & Primary Studio</Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      {Object.values(editBranchAccess).filter(Boolean).length} authorized
+                    </span>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto space-y-1.5 border border-border rounded-xl p-2 bg-muted/10">
+                    {uniqueBranches.map((branch) => {
+                      const displayName = getBranchDisplayName(branch);
+                      const addressDisplay = getBranchAddressDisplay(branch);
+                      const isEnabled = editBranchAccess[branch.id] === true;
+                      const isPrimary = editPrimaryBranchId === branch.id;
+
+                      return (
+                        <div
+                          key={branch.id}
+                          className={cn(
+                            "flex items-center justify-between gap-2.5 rounded-lg border p-2 text-xs transition-colors",
+                            isEnabled ? "border-primary/40 bg-primary/5" : "border-border/60 hover:bg-muted/30"
                           )}
+                        >
+                          <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              aria-label={`Enable access to ${displayName}`}
+                              checked={isEnabled}
+                              disabled={editSubmitting}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setEditBranchAccess((current) => ({ ...current, [branch.id]: checked }));
+                                if (checked && !editPrimaryBranchId) {
+                                  setEditPrimaryBranchId(branch.id);
+                                } else if (!checked && editPrimaryBranchId === branch.id) {
+                                  const remaining = uniqueBranches.find((b) => b.id !== branch.id && editBranchAccess[b.id]);
+                                  setEditPrimaryBranchId(remaining ? remaining.id : "");
+                                }
+                              }}
+                              className="rounded border-input text-primary focus:ring-primary cursor-pointer shrink-0"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Building2 className="size-3.5 text-primary shrink-0" />
+                                <span className="truncate">{displayName}</span>
+                              </span>
+                              {addressDisplay && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
+                                  <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
+                                  <span className="truncate">{addressDisplay}</span>
+                                </span>
+                              )}
+                            </div>
+                          </label>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isEnabled && (
+                              isPrimary ? (
+                                <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Check className="size-2.5" /> Primary
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditPrimaryBranchId(branch.id)}
+                                  className="text-[10px] font-medium text-muted-foreground hover:text-primary hover:underline px-1 py-0.5"
+                                >
+                                  Make Primary
+                                </button>
+                              )
+                            )}
+                            <span className={cn("text-[11px] font-medium", isEnabled ? "text-primary" : "text-muted-foreground")}>
+                              {isEnabled ? "Enabled" : "Disabled"}
+                            </span>
+                          </div>
                         </div>
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] font-medium text-muted-foreground">
-                            {editBranchAccess[branch.id] ? "Enabled" : "Disabled"}
-                          </span>
-                          <input
-                            type="checkbox"
-                            aria-label={`Enable access to ${displayName}`}
-                            checked={editBranchAccess[branch.id] === true}
-                            disabled={editSubmitting}
-                            onChange={(event) =>
-                              setEditBranchAccess((current) => ({ ...current, [branch.id]: event.target.checked }))
-                            }
-                            className="rounded border-input text-primary focus:ring-primary cursor-pointer"
-                          />
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
+                      );
+                    })}
+                    {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">Organization-scoped roles apply to all branches. Choose a branch-scoped role to manage individual branch access.</p>

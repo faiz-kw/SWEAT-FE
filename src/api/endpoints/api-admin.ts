@@ -9,6 +9,7 @@ import { type Row } from '@/services/store';
 
 export interface AdminUserRow extends Row {
   branch_access?: { role_id: string; branch_id: string; branch_name: string; enabled: boolean }[];
+  assigned_branches?: { id: string; name: string; code?: string; is_primary?: boolean }[];
   username?: string;
   email: string;
   first_name: string;
@@ -384,6 +385,8 @@ export async function inviteUserApi(payload: {
   department_id?: string;
   password?: string;
   location_ids?: string[];
+  branch_ids?: string[];
+  primary_branch_id?: string;
   tenant_id?: string;
   reports_to_id?: string;
 }): Promise<any> {
@@ -399,7 +402,8 @@ export async function inviteUserApi(payload: {
   } catch {}
 
   if (isTenant || !payload.tenant_id) {
-    const locId = payload.location_ids?.[0];
+    const branchIds = payload.branch_ids || payload.location_ids || [];
+    const primaryId = payload.primary_branch_id || branchIds[0] || undefined;
     return await createUserApi({
       email: payload.email,
       username: payload.username?.trim().toLowerCase() || undefined,
@@ -410,9 +414,11 @@ export async function inviteUserApi(payload: {
       role_id: payload.role_id,
       department_id: payload.department_id,
       reports_to_id: payload.reports_to_id,
-      branch: locId,
-      branch_id: locId,
-      home_branch: locId,
+      branch: primaryId,
+      branch_id: primaryId,
+      home_branch: primaryId,
+      primary_branch_id: primaryId,
+      branch_ids: branchIds,
       password: payload.password || "",
       status: payload.password ? "ACTIVE" : "INVITED",
     });
