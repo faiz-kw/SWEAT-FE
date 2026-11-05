@@ -18,7 +18,7 @@ export default defineConfig({
       port: 5173,
       proxy: {
         "^/api/v1/tenant/crm/telephony/events": {
-          target: env["VITE_TELEPHONY_ASGI_URL"] || "http://localhost:8001",
+          target: env["VITE_TELEPHONY_ASGI_URL"] || backendUrl,
           changeOrigin: true,
         },
         "/api": {
