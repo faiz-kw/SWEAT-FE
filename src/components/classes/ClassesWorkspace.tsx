@@ -4373,7 +4373,7 @@ export const ClassesWorkspace: React.FC = () => {
                     setOccurrenceForm((prev) => ({
                       ...prev,
                       start_time: val,
-                      end_time: (!prev.end_time || prev.end_time <= val) ? autoEnd : prev.end_time,
+                      end_time: autoEnd,
                     }));
                   }}
                   minTime={occurrenceSchedule.minTime}
