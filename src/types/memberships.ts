@@ -160,6 +160,7 @@ export interface MembershipPolicyConfig {
   freeze_min_days: number;
   freeze_max_days: number;
   freeze_max_count_per_cycle: number;
+  upgrade_allowed_window_days?: number;
   updated_by_user?: string | null;
   updated_by_name?: string | null;
   created_at?: string;

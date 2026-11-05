@@ -37,6 +37,9 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
+  Save,
+  Trash2,
+  Upload,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
@@ -132,12 +135,114 @@ export const ClassesWorkspace: React.FC = () => {
   const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
   const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
-  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('all');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('today');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
-  const [selectedVideoOccurrence, setSelectedVideoOccurrence] = useState<ClassOccurrence | null>(null);
-  const [isAssignVideoOpen, setIsAssignVideoOpen] = useState(false);
+const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
+  const [editOccurrence, setEditOccurrence] = useState<ClassOccurrence | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editCapacity, setEditCapacity] = useState('20');
+  const [editStatus, setEditStatus] = useState('SCHEDULED');
+  const [editTrainerId, setEditTrainerId] = useState('');
+  const [initialTrainerId, setInitialTrainerId] = useState('');
+  const [editVideoUrl, setEditVideoUrl] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const handleOpenEditSlot = (occ: ClassOccurrence) => {
+    setEditOccurrence(occ);
+    setEditDate(occ.occurrence_date || '');
+
+    let sTime = occ.start_time || '';
+    if (!sTime && occ.start_at) {
+      const d = new Date(occ.start_at);
+      sTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : '';
+    } else if (sTime.length > 5) {
+      sTime = sTime.substring(0, 5);
+    }
+    setEditStartTime(sTime);
+
+    let eTime = occ.end_time || '';
+    if (!eTime && occ.end_at) {
+      const d = new Date(occ.end_at);
+      eTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : '';
+    } else if (eTime.length > 5) {
+      eTime = eTime.substring(0, 5);
+    }
+    setEditEndTime(eTime);
+
+    setEditCapacity(String(occ.capacity || 20));
+    setEditStatus(occ.status || 'SCHEDULED');
+    setEditVideoUrl(occ.online_join_url || '');
+
+    const currentTrainer = (occ.trainers && occ.trainers[0]) || (occ.assigned_trainers && occ.assigned_trainers[0]);
+    const currentTrId = currentTrainer?.trainer_profile || currentTrainer?.trainer_profile_id || '';
+    setEditTrainerId(currentTrId);
+    setInitialTrainerId(currentTrId);
+  };
+
+  const handleSaveSlotEdit = async () => {
+    if (!editOccurrence?.id) return;
+    try {
+      setIsSavingEdit(true);
+      await classesApi.updateOccurrence(editOccurrence.id, {
+        occurrence_date: editDate,
+        start_time: editStartTime.length === 5 ? `${editStartTime}:00` : editStartTime,
+        end_time: editEndTime.length === 5 ? `${editEndTime}:00` : editEndTime,
+        capacity: Number(editCapacity) || 20,
+        status: editStatus as any,
+        online_join_url: editVideoUrl.trim(),
+      });
+
+      if (editVideoUrl.trim() !== (editOccurrence.online_join_url || '')) {
+        await classesApi.updateOccurrenceVideo(editOccurrence.id, editVideoUrl.trim());
+      }
+
+      // Only reassign trainer if trainer was genuinely changed by user
+      if (editTrainerId && editTrainerId !== initialTrainerId) {
+        try {
+          await classesApi.assignTrainer(editOccurrence.id, editTrainerId, 'LEAD');
+        } catch (trainerErr: any) {
+          console.warn('Trainer assignment warning:', trainerErr);
+          toast.warning(trainerErr?.response?.data?.error || 'Class slot updated, but trainer could not be assigned.');
+        }
+      }
+
+      toast.success('Class slot updated successfully!');
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      refetchOccurrences();
+      setEditOccurrence(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Failed to update class slot');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+  const isAdminUser = isOrgAdmin || canDelete;
+
+  const handleDeleteOccurrenceSlot = async (occ: ClassOccurrence) => {
+    if (!occ?.id) return;
+    const booked = occ.total_booked || 0;
+    const msg = booked > 0
+      ? `Warning: This class slot has ${booked} active booking(s). Deleting it will permanently remove the slot and cancel bookings. Proceed?`
+      : `Are you sure you want to permanently delete this slot (${occ.class_template_name || 'Class'} on ${occ.occurrence_date} at ${occ.start_time})?`;
+    if (!window.confirm(msg)) return;
+    try {
+      setDeletingOccId(occ.id);
+      await classesApi.deleteOccurrence(occ.id);
+      toast.success('Class slot deleted successfully.');
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      refetchOccurrences();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || 'Failed to delete class slot.');
+    } finally {
+      setDeletingOccId(null);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -245,6 +350,11 @@ export const ClassesWorkspace: React.FC = () => {
     return `${year}-${month}-${day}`;
   }, []);
 
+  const todayLabel = React.useMemo(() => {
+    const d = new Date();
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }, []);
+
   const weekEndStr = React.useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
@@ -316,6 +426,7 @@ export const ClassesWorkspace: React.FC = () => {
     allow_trial: false,
     allow_waitlist: false,
     allow_reschedule: true,
+    image_url: '',
     status: 'ACTIVE' as ClassTemplateStatus,
     branch_capacities: [] as Array<{
       branch_id: string;
@@ -946,6 +1057,7 @@ export const ClassesWorkspace: React.FC = () => {
         allow_trial: data.allow_trial,
         allow_waitlist: data.allow_waitlist,
         allow_reschedule: data.allow_reschedule,
+        image_url: data.image_url || null,
         status: (data.status as ClassTemplateStatus) || 'ACTIVE',
         branch_capacities: (data.branch_capacities || []).map((bc: any) => ({
           branch_id: bc.branch_id,
@@ -1001,6 +1113,7 @@ export const ClassesWorkspace: React.FC = () => {
       allow_trial: false,
       allow_waitlist: false,
       allow_reschedule: true,
+      image_url: '',
       status: 'ACTIVE',
       branch_capacities: buildInitialBranchCapacities(),
     });
@@ -1858,8 +1971,17 @@ export const ClassesWorkspace: React.FC = () => {
                 ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredTemplates.map((tpl) => (
-                  <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
+                  <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs overflow-hidden">
                     <div>
+                      {tpl.image_url && (
+                        <div className="-mx-4 -mt-4 sm:-mx-5 sm:-mt-5 mb-3.5 h-36 w-[calc(100%+2rem)] sm:w-[calc(100%+2.5rem)] overflow-hidden bg-muted/30 border-b border-border">
+                          <img
+                            src={tpl.image_url}
+                            alt={tpl.name}
+                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                          />
+                        </div>
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         {tpl.category_name ? (
                           <Badge
@@ -1969,6 +2091,7 @@ export const ClassesWorkspace: React.FC = () => {
                                 allow_trial: tpl.allow_trial,
                                 allow_waitlist: tpl.allow_waitlist,
                                 allow_reschedule: tpl.allow_reschedule,
+                                image_url: tpl.image_url || '',
                                 status: tpl.status,
                                 branch_capacities: buildInitialBranchCapacities(tpl.branch_availabilities),
                               });
@@ -2473,7 +2596,7 @@ export const ClassesWorkspace: React.FC = () => {
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    Today (Nov 3)
+                    Today ({todayLabel})
                   </button>
                   <button
                     type="button"
@@ -2523,7 +2646,7 @@ export const ClassesWorkspace: React.FC = () => {
 
                 {dateFilterMode === 'today' && (
                   <span className="text-[11px] text-muted-foreground hidden lg:inline-flex items-center gap-1 bg-muted/60 px-2.5 py-1 rounded-md border border-border/50">
-                    Showing today's schedule (Nov 3). Click <strong>All Dates</strong> to view the entire month.
+                    Showing today's schedule ({todayLabel}). Click <strong>All Dates</strong> to view all occurrences.
                   </span>
                 )}
 
@@ -2671,6 +2794,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
+                        <th className="py-3 px-3 text-center w-20">Actions</th>
                         <th className="py-3 px-4">Class Session</th>
                         <th className="py-3 px-4">Class Type</th>
                         <th className="py-3 px-4">Branch</th>
@@ -2680,7 +2804,7 @@ export const ClassesWorkspace: React.FC = () => {
                         <th className="py-3 px-4">Bookings</th>
                         <th className="py-3 px-4">Waitlist</th>
                         <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
+                        <th className="py-3 px-4 text-right">Details</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
@@ -2717,7 +2841,46 @@ export const ClassesWorkspace: React.FC = () => {
                         const waitlistCount = occ.waitlist_count ?? 0;
 
                         return (
-                          <tr key={occ.id} className="hover:bg-muted/30 transition-colors">
+                          <tr
+                            key={occ.id}
+                            onClick={() => setAttendanceModalOccurrence(occ)}
+                            className="hover:bg-muted/60 transition-colors cursor-pointer group"
+                            title="Click row to view class details, workout video, and roster"
+                          >
+                            {/* Column 1: Upfront Edit & Admin Delete Actions */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1">
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditSlot(occ);
+                                    }}
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    title="Edit slot details, time, or video"
+                                  >
+                                    <Pencil className="size-3.5" />
+                                  </Button>
+                                )}
+                                {isAdminUser && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={deletingOccId === occ.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteOccurrenceSlot(occ);
+                                    }}
+                                    className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                                    title="Delete slot (Admin only)"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
                             {/* Class Session Info */}
                             <td className="py-3 px-4">
                               <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
@@ -2885,7 +3048,10 @@ export const ClassesWorkspace: React.FC = () => {
                               <div className="flex items-center justify-end gap-1.5">
                                 <Button
                                   size="sm"
-                                  onClick={() => setAttendanceModalOccurrence(occ)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAttendanceModalOccurrence(occ);
+                                  }}
                                   className="h-7 px-2.5 text-xs font-semibold gap-1 shadow-2xs bg-primary text-primary-foreground hover:bg-primary/90"
                                   title="View class details, assigned trainer, workout format, video, and roster"
                                 >
@@ -3367,23 +3533,32 @@ export const ClassesWorkspace: React.FC = () => {
             {/* BASIC SECTION */}
             <div className="border-b border-border pb-3">
               <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">Basic Information</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <Label className="mb-1 block">Select Class Name *</Label>
+                  <Label className="mb-1 block">Template Name *</Label>
+                  <Input
+                    value={templateForm.name}
+                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                    placeholder="e.g. Sweat Mobility, Sweat Total"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block">Class Category *</Label>
                   <select
                     value={templateForm.category}
                     onChange={(e) => {
                       const catId = e.target.value;
                       const cat = categories.find((c) => c.id === catId);
-                      setTemplateForm({
-                        ...templateForm,
+                      setTemplateForm((prev) => ({
+                        ...prev,
                         category: catId,
-                        name: cat ? cat.name : '',
-                      });
+                        name: prev.name.trim() ? prev.name : (cat ? cat.name : ''),
+                      }));
                     }}
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="">Select Class Name...</option>
+                    <option value="">Select Category...</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
@@ -3394,7 +3569,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <select
                     value={templateForm.program}
                     onChange={(e) => setTemplateForm({ ...templateForm, program: e.target.value })}
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">No Program Bound</option>
                     {programs.map((p) => (
@@ -3411,6 +3586,84 @@ export const ClassesWorkspace: React.FC = () => {
                   placeholder="Template description..."
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-h-[50px]"
                 />
+              </div>
+
+              {/* Cover Image Upload */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="block text-xs font-semibold">Cover Image</Label>
+                  {templateForm.image_url && (
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm((prev) => ({ ...prev, image_url: '' }))}
+                      className="text-[11px] text-rose-500 hover:text-rose-600 font-medium transition-colors"
+                    >
+                      Remove Image
+                    </button>
+                  )}
+                </div>
+
+                {templateForm.image_url ? (
+                  <div className="relative rounded-xl border border-border overflow-hidden bg-muted/20 group h-36">
+                    <img
+                      src={templateForm.image_url}
+                      alt="Template Cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer gap-2 text-white text-xs font-semibold">
+                      <Upload className="size-4" />
+                      <span>Change Image</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                image_url: String(event.target?.result || ''),
+                              }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer text-muted-foreground hover:text-foreground">
+                    <div className="p-2.5 rounded-full bg-background border border-border text-primary shadow-2xs">
+                      <Upload className="size-4" />
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs font-semibold text-primary">Click to upload cover image</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">PNG, JPG, or WEBP from your device</p>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/jpg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            setTemplateForm((prev) => ({
+                              ...prev,
+                              image_url: String(event.target?.result || ''),
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
 
@@ -3648,7 +3901,7 @@ export const ClassesWorkspace: React.FC = () => {
             <Button variant="outline" onClick={() => setIsCreateTemplateOpen(false)}>Cancel</Button>
             <Button
               onClick={() => saveTemplateMutation.mutate(templateForm)}
-              disabled={!templateForm.category || saveTemplateMutation.isPending}
+              disabled={!templateForm.category || !templateForm.name.trim() || saveTemplateMutation.isPending}
             >
               {saveTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
             </Button>
@@ -4919,18 +5172,141 @@ export const ClassesWorkspace: React.FC = () => {
         }}
       />
 
-      {/* Assign Workout Video Modal */}
-      <AssignWorkoutVideoModal
-        occurrence={selectedVideoOccurrence}
-        isOpen={isAssignVideoOpen && !!selectedVideoOccurrence}
-        onClose={() => {
-          setIsAssignVideoOpen(false);
-          setSelectedVideoOccurrence(null);
-        }}
-        onAssigned={() => {
-          refetchOccurrences();
-        }}
-      />
+{/* Edit Class Slot Modal */}
+      <Dialog open={Boolean(editOccurrence)} onOpenChange={(open) => !open && setEditOccurrence(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-4 text-primary" />
+              <span>Edit Class Slot</span>
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Update schedule time, assigned trainer, capacity, and workout video URL for{' '}
+              <strong className="text-foreground">{editOccurrence?.template_name || editOccurrence?.class_name || 'Class'}</strong>.
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-2 text-xs">
+            {/* Date & Times */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold">Date</Label>
+                <Input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="h-8 text-xs font-medium"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold">Start Time</Label>
+                <Input
+                  type="time"
+                  value={editStartTime}
+                  onChange={(e) => setEditStartTime(e.target.value)}
+                  className="h-8 text-xs font-medium"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold">End Time</Label>
+                <Input
+                  type="time"
+                  value={editEndTime}
+                  onChange={(e) => setEditEndTime(e.target.value)}
+                  className="h-8 text-xs font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Assigned Trainer */}
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold">Assigned Trainer</Label>
+              <select
+                value={editTrainerId}
+                onChange={(e) => setEditTrainerId(e.target.value)}
+                className="w-full h-8 px-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                <option value="">-- No Trainer Assigned --</option>
+                {trainers.map((tr: any) => {
+                  const trId = tr.id || tr.trainer_profile_id;
+                  const trName = tr.full_name || tr.name || tr.employee_name || 'Trainer';
+                  const trCode = tr.trainer_number || tr.employee_code || '';
+                  return (
+                    <option key={trId} value={trId}>
+                      {trName} {trCode ? `(${trCode})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Capacity & Status */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold">Capacity (Max Bookings)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={editCapacity}
+                  onChange={(e) => setEditCapacity(e.target.value)}
+                  className="h-8 text-xs font-medium"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold">Slot Status</Label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full h-8 px-2 text-xs rounded-md border border-input bg-background font-medium"
+                >
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="OPEN">Open for Booking</option>
+                  <option value="FULL">Capacity Reached / Full</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Workout Video URL */}
+            <div className="space-y-1.5 p-3 rounded-xl border border-primary/20 bg-primary/5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-semibold flex items-center gap-1.5 text-foreground">
+                  <Video className="size-3.5 text-primary" />
+                  <span>Workout Video URL</span>
+                </Label>
+                <span className="text-[10px] text-muted-foreground">YouTube, Vimeo, MP4</span>
+              </div>
+              <Input
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=... or direct video link"
+                value={editVideoUrl}
+                onChange={(e) => setEditVideoUrl(e.target.value)}
+                className="h-8 text-xs bg-background"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Embedded directly into the in-app player for trainers and members to stream.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => setEditOccurrence(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={isSavingEdit}
+              onClick={handleSaveSlotEdit}
+              className="gap-1.5 text-xs font-semibold"
+            >
+              {isSavingEdit ? <RefreshCw className="size-3 animate-spin" /> : <Save className="size-3" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Attendance & Bookings Modal */}
       <ClassAttendanceModal

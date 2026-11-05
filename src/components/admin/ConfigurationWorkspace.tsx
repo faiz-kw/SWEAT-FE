@@ -1154,6 +1154,7 @@ export function ConfigurationWorkspace() {
                                   freeze_min_days: policyConfig.freeze_min_days,
                                   freeze_max_days: policyConfig.freeze_max_days,
                                   freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                                  upgrade_allowed_window_days: policyConfig.upgrade_allowed_window_days ?? 15,
                                 });
                               }
                             }}
@@ -1193,6 +1194,7 @@ export function ConfigurationWorkspace() {
                                 freeze_min_days: policyConfig.freeze_min_days,
                                 freeze_max_days: policyConfig.freeze_max_days,
                                 freeze_max_count_per_cycle: policyConfig.freeze_max_count_per_cycle,
+                                upgrade_allowed_window_days: policyConfig.upgrade_allowed_window_days ?? 15,
                               });
                             }
                             setIsEditingPolicy(true);
@@ -1412,6 +1414,26 @@ export function ConfigurationWorkspace() {
                           )}
                           <span className="text-[10px] text-muted-foreground block mt-0.5">
                             Days after package expiry before turnstile access is automatically locked.
+                          </span>
+                        </div>
+
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Package Upgrade Allowed Window (Days from 1st Purchase)</Label>
+                          {isEditingPolicy ? (
+                            <Input
+                              type="number"
+                              min="1"
+                              value={policyForm.upgrade_allowed_window_days ?? policyConfig?.upgrade_allowed_window_days ?? 15}
+                              onChange={(e) => setPolicyForm({ ...policyForm, upgrade_allowed_window_days: parseInt(e.target.value) || 15 })}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div className="font-semibold text-indigo-600 dark:text-indigo-400 text-sm mt-0.5">
+                              {policyConfig?.upgrade_allowed_window_days || 15} Days
+                            </div>
+                          )}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            Allowed window from 1st package purchase during which upgrading by paying only difference is permitted.
                           </span>
                         </div>
 

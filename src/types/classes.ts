@@ -37,6 +37,7 @@ export interface ClassTemplate {
   allow_trial: boolean;
   allow_waitlist: boolean;
   allow_reschedule: boolean;
+  image_url?: string;
   status: ClassTemplateStatus;
   branch_availabilities?: ClassBranchAvailability[];
   branch_capacities?: any[];

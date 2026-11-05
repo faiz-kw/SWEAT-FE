@@ -414,6 +414,14 @@ export const UpgradeModal: React.FC<{
     enabled: isOpen,
   });
 
+  const { data: upgradeOptionsData, isLoading: loadingUpgradeOptions } = useQuery({
+    queryKey: ['member-upgrade-options', member?.id, selectedContractId],
+    queryFn: () => membersApi.getUpgradeOptions(member.id, selectedContractId),
+    enabled: isOpen && Boolean(member?.id),
+  });
+
+  const isWithinWindow = upgradeOptionsData ? Boolean(upgradeOptionsData.is_within_window) : true;
+
   // Parse current session count from snapshot or package name (e.g., "144 Sessions" -> 144)
   const currentSessions = useMemo(() => {
     const snap = selectedContract?.contract_snapshot;
@@ -448,6 +456,16 @@ export const UpgradeModal: React.FC<{
 
   // Real Active Packages matching the member's current program, filtered for strictly HIGHER session tiers
   const candidateUpgradePlans = useMemo(() => {
+    // If backend upgrade API returned response, strictly honor its packages & window check
+    if (upgradeOptionsData) {
+      if (!upgradeOptionsData.is_within_window) {
+        return [];
+      }
+      if (Array.isArray(upgradeOptionsData.packages)) {
+        return upgradeOptionsData.packages;
+      }
+    }
+
     const plansList = Array.isArray(rawPlans) ? rawPlans : (rawPlans as any)?.results || (rawPlans as any)?.data || [];
     if (!Array.isArray(plansList) || plansList.length === 0) {
       return [];
@@ -485,16 +503,15 @@ export const UpgradeModal: React.FC<{
         } else if (p.session_count && Number(p.session_count) > 0) {
           sCount = Number(p.session_count);
         } else {
-          // Extract session number from package name: "Performance 36" -> 36, "Transform 72" -> 72, "Bootcamp - 500" -> 500
-          const matchSession = (p.name || '').match(/(\d+)\s*(?:sessions?|sess)?/i);
+          // Strictly extract session number from package name without multipliers:
+          // e.g. "Performance 36" -> 36, "Transform 72" -> 72, "Transform + 144" -> 144, "Bootcamp - 384 sessions" -> 384
+          const matchSession = (p.name || '').match(/(\d+)/);
           if (matchSession) {
             sCount = parseInt(matchSession[1], 10);
-          } else if (p.duration_months && p.duration_months <= 12) {
-            sCount = p.duration_months * 24;
           }
         }
 
-        const validityDays = p.validity_days || p.total_days || (p.duration_months && p.duration_months <= 12 ? p.duration_months * 30 : (p.duration_months || 90));
+        const validityDays = p.validity_days || p.total_days || (p.duration_months ? p.duration_months * 30 : 90);
 
         return {
           id: p.id || p.package_id,
@@ -508,7 +525,7 @@ export const UpgradeModal: React.FC<{
       // Strictly higher tier: only packages having MORE sessions than member currently holds AND higher price
       .filter((p: any) => p.sessions > currentSessions && p.price > currentPlanPrice)
       .sort((a: any, b: any) => a.sessions - b.sessions || a.price - b.price);
-  }, [rawPlans, currentSessions, currentPlanPrice, selectedContract, member]);
+  }, [rawPlans, upgradeOptionsData, currentSessions, currentPlanPrice, selectedContract, member]);
 
   // Default select first higher package
   React.useEffect(() => {
@@ -649,6 +666,26 @@ export const UpgradeModal: React.FC<{
             </div>
           )}
 
+          {/* Upgrade Window Banner */}
+          {upgradeOptionsData && !isWithinWindow && (
+            <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>Upgrade Window Expired</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {upgradeOptionsData.message || `Upgrades by paying only difference are strictly allowed within ${upgradeOptionsData.window_days || 15} days of the 1st package purchase.`}
+              </p>
+            </div>
+          )}
+
+          {upgradeOptionsData && isWithinWindow && (
+            <div className="flex items-center justify-between text-[11px] px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/20 font-medium">
+              <span>✓ Upgrade Window Active ({upgradeOptionsData.window_days || 15} Days Policy)</span>
+              <span>{upgradeOptionsData.days_remaining ?? 0} Days Remaining</span>
+            </div>
+          )}
+
           {/* Currently Enrolled Package Banner */}
           <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1.5 text-xs">
             <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Current Enrolled Package</Label>
@@ -680,7 +717,9 @@ export const UpgradeModal: React.FC<{
               </div>
             ) : candidateUpgradePlans.length === 0 ? (
               <div className="p-3 bg-muted/30 border border-dashed rounded-lg text-xs text-muted-foreground text-center">
-                No higher session package tiers available for {selectedContract?.program_name || member?.program_name || 'this program'}. Member is on the maximum tier.
+                {!isWithinWindow
+                  ? `No upgrade packages available. The ${upgradeOptionsData?.window_days || 15}-day upgrade window for this member has expired.`
+                  : `No higher session package tiers available for ${selectedContract?.program_name || member?.program_name || 'this program'}. Member is on the maximum tier.`}
               </div>
             ) : (
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -775,7 +814,7 @@ export const UpgradeModal: React.FC<{
           </Button>
           <Button
             onClick={handleExecuteUpgrade}
-            disabled={mutation.isPending || !selectedTargetPlan}
+            disabled={mutation.isPending || !selectedTargetPlan || !isWithinWindow}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
@@ -1034,79 +1073,79 @@ export const ExtendModal: React.FC<{
             </div>
           )}
 
-          {/* Extension Duration Selector: Tiers vs Custom Date */}
-          <div className="space-y-2">
+          {/* Extension Duration Selector: Preset Days + Direct Calendar Date Picker */}
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Extension Duration Method</Label>
-              <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setExtendMode('TIER')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                    extendMode === 'TIER'
-                      ? 'bg-background text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Quick Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExtendMode('CUSTOM_DATE')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                    extendMode === 'CUSTOM_DATE'
-                      ? 'bg-background text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Select Date 📅
-                </button>
-              </div>
+              <Label className="text-xs font-semibold">Select Extension Duration</Label>
+              <span className="text-[11px] text-muted-foreground">Base Fee: ₹{per30} / 30 days</span>
             </div>
 
-            {extendMode === 'TIER' ? (
-              <div className="grid grid-cols-2 gap-2">
-                {extensionTiers.map((tier: any) => {
-                  const isSelected = days === tier.days;
-                  return (
-                    <button
-                      key={tier.days}
-                      type="button"
-                      disabled={!canExtend}
-                      onClick={() => setDays(tier.days)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        isSelected
-                          ? 'border-amber-500 bg-amber-500/10 shadow-sm'
-                          : 'border-border hover:bg-muted/40 disabled:opacity-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
-                        <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground block mt-1">
-                        Preserves {pendingSessions} sessions
-                      </span>
-                    </button>
-                  );
-                })}
+            {/* Quick preset duration buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              {extensionTiers.map((tier: any) => {
+                const isSelected = extendMode === 'TIER' && days === tier.days;
+                return (
+                  <button
+                    key={tier.days}
+                    type="button"
+                    disabled={!canExtend}
+                    onClick={() => {
+                      setExtendMode('TIER');
+                      setDays(tier.days);
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-500/10 shadow-sm ring-1 ring-amber-500/30'
+                        : 'border-border hover:bg-muted/40 disabled:opacity-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
+                      <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block mt-1">
+                      Preserves {pendingSessions} sessions
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Direct Specific Calendar Expiry Date Selector */}
+            <div className={`p-3 rounded-xl border transition-all ${
+              extendMode === 'CUSTOM_DATE'
+                ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+                : 'border-border bg-muted/20'
+            }`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Or Pick Specific Custom Expiry Date</span>
+                </Label>
+                {extendMode === 'CUSTOM_DATE' && (
+                  <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600 dark:text-amber-400">
+                    Custom Date Active
+                  </Badge>
+                )}
               </div>
-            ) : (
-              <div className="p-3 bg-muted/20 border border-border/80 rounded-xl space-y-2">
-                <Label className="text-xs font-medium text-foreground">Select Target Expiry Date</Label>
-                <Input
-                  type="date"
-                  min={minSelectableDate}
-                  value={customDate}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                  className="bg-background text-sm font-medium"
-                />
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+              <Input
+                type="date"
+                min={minSelectableDate}
+                value={customDate}
+                disabled={!canExtend}
+                onChange={(e) => {
+                  setCustomDate(e.target.value);
+                  setExtendMode('CUSTOM_DATE');
+                }}
+                className="bg-background text-sm font-medium"
+              />
+              {extendMode === 'CUSTOM_DATE' && (
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1.5">
                   <span>Calculated Extension: <strong className="text-foreground">+{effectiveDays} Days</strong></span>
                   <span>Rate: <strong className="text-foreground">₹{perDayRate} / day</strong></span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* New Validity Preview */}

@@ -259,6 +259,18 @@ export const classesApi = {
     return res.data;
   },
 
+  async deleteOccurrence(id: string): Promise<void> {
+    await api.delete(`/tenant/class-occurrences/${id}/`);
+  },
+
+  async updateOccurrenceVideo(occurrenceId: string, videoUrl: string, description?: string): Promise<any> {
+    const res = await api.post(`/tenant/class-occurrences/${occurrenceId}/update-video/`, {
+      video_url: videoUrl,
+      description,
+    });
+    return res.data;
+  },
+
   async assignTrainer(occurrenceId: string, trainerProfileId: string, trainerRole: string = 'LEAD'): Promise<any> {
     const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/assign-trainer/`, {
       trainer_profile_id: trainerProfileId,

@@ -33,6 +33,12 @@ import { SecureWorkoutPlayer } from './SecureWorkoutPlayer';
 import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
 import { formatOccurrenceDate, formatTime12h } from '@/utils/dateTimeUtils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Pencil, Link as LinkIcon, Save, Eye } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
+import { useAuth } from '@/api/auth/AuthProvider';
+import { isOrganizationAdmin } from '@/lib/nav';
+import { usePermissions } from '../../lib/permissions';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -66,6 +72,33 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   onClose,
 }) => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { can } = usePermissions();
+  const isAdmin = isOrganizationAdmin(user) || can('ops.classes.delete');
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const handleDeleteOccurrence = async () => {
+    if (!occurrence?.id) return;
+    const bookedCount = occurrence.total_booked || 0;
+    const confirmMessage = bookedCount > 0
+      ? `Warning: This class slot has ${bookedCount} booked member(s). Deleting it will permanently remove the slot and cancel bookings. Are you sure you want to delete it?`
+      : `Are you sure you want to permanently delete this class slot (${occurrence.class_template_name || 'Class'} on ${formatOccurrenceDate(occurrence.occurrence_date)} at ${formatTime12h(occurrence.start_time)})?`;
+    
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setIsDeleting(true);
+      await classesApi.deleteOccurrence(occurrence.id);
+      toast.success('Class slot deleted successfully.');
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || 'Failed to delete class slot.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Biometric Modal Target
   const [biometricTarget, setBiometricTarget] = React.useState<{
@@ -84,6 +117,25 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   // Video Streaming State
   const [showVideoPlayer, setShowVideoPlayer] = React.useState(false);
   const [isAssignVideoModalOpen, setIsAssignVideoModalOpen] = React.useState(false);
+  const [isEditingVideo, setIsEditingVideo] = React.useState(false);
+  const [videoInputUrl, setVideoInputUrl] = React.useState('');
+  const [isSavingVideo, setIsSavingVideo] = React.useState(false);
+
+  const handleSaveVideoUrl = async () => {
+    if (!occurrence?.id) return;
+    try {
+      setIsSavingVideo(true);
+      await classesApi.updateOccurrenceVideo(occurrence.id, videoInputUrl.trim());
+      toast.success('Workout video URL updated successfully!');
+      queryClient.invalidateQueries({ queryKey: ['class-occurrence-video-stream', occurrence.id] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      setIsEditingVideo(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to update video URL');
+    } finally {
+      setIsSavingVideo(false);
+    }
+  };
   const [rosterTab, setRosterTab] = React.useState<'ALL' | 'MEMBER' | 'TRIAL' | 'WAITLIST'>('ALL');
 
   const { data: classVideoData, refetch: refetchVideo } = useQuery({
@@ -91,6 +143,15 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     queryFn: () => (occurrence?.id ? classesApi.getTrainerClassVideo(occurrence.id) : null),
     enabled: isOpen && !!occurrence?.id,
   });
+
+  React.useEffect(() => {
+    if (classVideoData?.external_url || classVideoData?.embed_player_url || occurrence?.online_join_url) {
+      setVideoInputUrl(classVideoData?.external_url || occurrence?.online_join_url || '');
+    } else {
+      setVideoInputUrl('');
+    }
+    setIsEditingVideo(false);
+  }, [classVideoData, occurrence]);
 
   React.useEffect(() => {
     setShowVideoPlayer(false);
@@ -476,7 +537,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
             </div>
           )}
 
-          {/* SECTION 3: Class Workout Video Stream Banner */}
+          {/* SECTION 3: Class Workout Video Stream & URL Attachment */}
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
@@ -491,20 +552,20 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                         In-App Stream Ready
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[9px] bg-muted text-muted-foreground border-border font-medium">
-                        Not Assigned
+                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/30 font-semibold">
+                        No Video Attached
                       </Badge>
                     )}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
                     {classVideoData?.embed_player_url
                       ? (classVideoData.movement_title || 'Watch the complete exercise session video with instructions')
-                      : 'Assign a workout video from the WOD library for in-studio playback'}
+                      : 'Attach or assign a workout video for trainers and members to stream'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                 {classVideoData?.embed_player_url && (
                   <Button
                     variant="outline"
@@ -517,18 +578,51 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                     {showVideoPlayer ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAssignVideoModalOpen(true)}
-                  className="h-7 text-xs gap-1 border-border bg-background hover:bg-muted text-foreground font-medium"
-                >
-                  <Sparkles className="size-3 text-primary" />
-                  <span>{classVideoData?.embed_player_url ? 'Change Video' : 'Assign Workout Video'}</span>
-                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditingVideo(!isEditingVideo)}
+                    className="h-7 text-xs gap-1 font-semibold"
+                    title="Upload or update video URL"
+                  >
+                    <Pencil className="size-3" />
+                    <span>{isEditingVideo ? 'Cancel' : (classVideoData?.embed_player_url ? 'Update Video' : 'Attach Video')}</span>
+                  </Button>
+                )}
               </div>
             </div>
 
+            {/* Inline Video URL Update Form */}
+            {isEditingVideo && (
+              <div className="p-3 rounded-lg border border-border bg-background/80 space-y-2 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                  <span className="flex items-center gap-1">
+                    <LinkIcon className="size-3 text-primary" />
+                    Attach / Update Video Link
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Supports YouTube, Vimeo, MP4 direct stream</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="url"
+                    placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
+                    value={videoInputUrl}
+                    onChange={(e) => setVideoInputUrl(e.target.value)}
+                    className="h-8 text-xs bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={isSavingVideo}
+                    onClick={handleSaveVideoUrl}
+                    className="h-8 px-3 text-xs gap-1 font-semibold"
+                  >
+                    {isSavingVideo ? <RefreshCw className="size-3 animate-spin" /> : <Save className="size-3" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            )}
             {showVideoPlayer && classVideoData?.embed_player_url && (
               <div className="space-y-2 pt-1 animate-in fade-in duration-200">
                 <SecureWorkoutPlayer embedUrl={classVideoData.embed_player_url} title={occurrence?.template_name || "Class Workout Stream"} />
@@ -889,14 +983,39 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
           )}
         </div>
 
-        <DialogFooter className="p-4 border-t border-border bg-card/60 flex items-center justify-between sm:justify-between">
-          <div className="text-2xs text-muted-foreground flex items-center gap-1.5">
-            <AlertCircle className="size-3.5 text-primary" />
-            <span>Attendance directly updates member check-in history and completed credits.</span>
+        <DialogFooter className="p-4 border-t border-border bg-card/60 flex items-center justify-between sm:justify-between gap-2">
+          {isAdmin ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeleting}
+              onClick={handleDeleteOccurrence}
+              className="gap-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white"
+              title="Delete this incorrect class slot (Admin only)"
+            >
+              {isDeleting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="size-3.5" />
+              )}
+              Delete Slot
+            </Button>
+          ) : (
+            <div className="text-2xs text-muted-foreground flex items-center gap-1.5">
+              <AlertCircle className="size-3.5 text-primary" />
+              <span>Attendance directly updates member check-in history and completed credits.</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                Admin: Remove slot if scheduled in error.
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Close
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Close
-          </Button>
         </DialogFooter>
       </DialogContent>
 

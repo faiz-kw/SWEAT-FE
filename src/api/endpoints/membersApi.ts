@@ -235,5 +235,21 @@ export const membersApi = {
     const res = await api.get<any[]>('/tenant/members/plans/');
     return res.data || [];
   },
+
+  async getUpgradeOptions(memberId: string, membershipId?: string): Promise<{
+    is_within_window: boolean;
+    window_days: number;
+    days_elapsed: number;
+    days_remaining?: number;
+    initial_purchase_date?: string;
+    message?: string;
+    current_sessions?: number;
+    current_price?: number;
+    packages: any[];
+  }> {
+    const query = membershipId ? '?membership_id=' + encodeURIComponent(membershipId) : '';
+    const res = await api.get<any>('/tenant/members/' + memberId + '/upgrade-options/' + query);
+    return res.data;
+  },
 };
 
