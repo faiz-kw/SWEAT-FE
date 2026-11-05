@@ -38,6 +38,8 @@ export interface ClassTemplate {
   allow_waitlist: boolean;
   allow_reschedule: boolean;
   status: ClassTemplateStatus;
+  branch_availabilities?: ClassBranchAvailability[];
+  branch_capacities?: any[];
   created_at?: string;
   updated_at?: string;
 }

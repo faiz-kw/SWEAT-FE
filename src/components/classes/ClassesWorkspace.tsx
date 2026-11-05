@@ -317,6 +317,14 @@ export const ClassesWorkspace: React.FC = () => {
     allow_waitlist: false,
     allow_reschedule: true,
     status: 'ACTIVE' as ClassTemplateStatus,
+    branch_capacities: [] as Array<{
+      branch_id: string;
+      branch_name: string;
+      is_enabled: boolean;
+      capacity_override: number | string;
+      trial_capacity_override: number | string;
+      waitlist_capacity_override: number | string;
+    }>,
   });
 
   const [ruleForm, setRuleForm] = useState({
@@ -585,6 +593,21 @@ export const ClassesWorkspace: React.FC = () => {
     queryFn: () => classesApi.getBranchWorkingHours(occurrenceForm.branch),
     enabled: !!occurrenceForm.branch,
   });
+
+  const buildInitialBranchCapacities = (availabilities?: ClassBranchAvailability[]) => {
+    const list = availabilities || [];
+    return branches.map((b) => {
+      const match = list.find((a: any) => (a.branch === b.id || a.branch_id === b.id));
+      return {
+        branch_id: b.id,
+        branch_name: b.name,
+        is_enabled: match ? match.status === 'ENABLED' : true,
+        capacity_override: match?.capacity_override != null ? match.capacity_override : '',
+        trial_capacity_override: match?.trial_capacity_override != null ? match.trial_capacity_override : '',
+        waitlist_capacity_override: match?.waitlist_capacity_override != null ? match.waitlist_capacity_override : '',
+      };
+    });
+  };
 
   const { data: occurrenceBranchExceptions = [] } = useQuery({
     queryKey: ['branch-operating-exceptions', occurrenceForm.branch],
@@ -924,6 +947,14 @@ export const ClassesWorkspace: React.FC = () => {
         allow_waitlist: data.allow_waitlist,
         allow_reschedule: data.allow_reschedule,
         status: (data.status as ClassTemplateStatus) || 'ACTIVE',
+        branch_capacities: (data.branch_capacities || []).map((bc: any) => ({
+          branch_id: bc.branch_id,
+          is_enabled: bc.is_enabled !== false,
+          status: bc.is_enabled === false ? 'DISABLED' : 'ENABLED',
+          capacity_override: bc.capacity_override !== '' && bc.capacity_override != null ? Number(bc.capacity_override) : null,
+          trial_capacity_override: bc.trial_capacity_override !== '' && bc.trial_capacity_override != null ? Number(bc.trial_capacity_override) : null,
+          waitlist_capacity_override: bc.waitlist_capacity_override !== '' && bc.waitlist_capacity_override != null ? Number(bc.waitlist_capacity_override) : null,
+        })),
       };
       if (editingTemplate) {
         return classesApi.updateTemplate(editingTemplate.id, payload);
@@ -971,9 +1002,9 @@ export const ClassesWorkspace: React.FC = () => {
       allow_waitlist: false,
       allow_reschedule: true,
       status: 'ACTIVE',
+      branch_capacities: buildInitialBranchCapacities(),
     });
   };
-
   const saveRuleMutation = useMutation({
     mutationFn: (data: typeof ruleForm) => {
       const payload: any = {
@@ -1875,6 +1906,21 @@ export const ClassesWorkspace: React.FC = () => {
                           </span>
                         </div>
                       </div>
+
+                      {tpl.branch_availabilities && tpl.branch_availabilities.filter((a: any) => a.capacity_override != null).length > 0 && (
+                        <div className="mt-2.5 p-2 bg-primary/5 rounded-lg border border-primary/15 text-[11px]">
+                          <span className="text-muted-foreground font-medium block mb-1">Branch Capacities (Beds):</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {tpl.branch_availabilities
+                              .filter((a: any) => a.capacity_override != null)
+                              .map((a: any) => (
+                                <span key={a.id || a.branch} className="bg-background/80 border border-border px-1.5 py-0.5 rounded text-[10px] font-medium text-foreground">
+                                  {a.branch_name || 'Branch'}: <strong className="text-primary">{a.capacity_override} beds</strong>
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-1.5 text-xs">
@@ -1924,6 +1970,7 @@ export const ClassesWorkspace: React.FC = () => {
                                 allow_waitlist: tpl.allow_waitlist,
                                 allow_reschedule: tpl.allow_reschedule,
                                 status: tpl.status,
+                                branch_capacities: buildInitialBranchCapacities(tpl.branch_availabilities),
                               });
                               setIsCreateTemplateOpen(true);
                             }}
@@ -3408,6 +3455,118 @@ export const ClassesWorkspace: React.FC = () => {
                   />
                 </div>
               </div>
+
+            {/* BRANCH-WISE CAPACITY CONFIGURATION */}
+            <div className="border-b border-border pb-3.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider text-primary">
+                    Branch-wise Studio Capacity Setup
+                  </h4>
+                  <span className="text-[10px] font-medium px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
+                    Reformer Beds & Space per Branch
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Different studio branches have different reformer beds and room setups. Configure branch-specific booking capacities below. If left blank, the branch uses the general default capacity ({templateForm.default_capacity || 20}) set above.
+              </p>
+
+              <div className="space-y-2">
+                {branches.map((b) => {
+                  const bItem = templateForm.branch_capacities?.find((bc) => bc.branch_id === b.id) || {
+                    branch_id: b.id,
+                    branch_name: b.name,
+                    is_enabled: true,
+                    capacity_override: '',
+                    trial_capacity_override: '',
+                    waitlist_capacity_override: '',
+                  };
+
+                  const updateBranchItem = (patch: Partial<typeof bItem>) => {
+                    const existingIdx = (templateForm.branch_capacities || []).findIndex((bc) => bc.branch_id === b.id);
+                    let updated = [...(templateForm.branch_capacities || [])];
+                    if (existingIdx >= 0) {
+                      updated[existingIdx] = { ...updated[existingIdx], ...patch };
+                    } else {
+                      updated.push({ ...bItem, ...patch });
+                    }
+                    setTemplateForm({ ...templateForm, branch_capacities: updated });
+                  };
+
+                  return (
+                    <div
+                      key={b.id}
+                      className={`p-2.5 rounded-lg border transition-all ${
+                        bItem.is_enabled
+                          ? 'bg-muted/30 border-border'
+                          : 'bg-muted/10 border-border/40 opacity-60'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`branch-avail-${b.id}`}
+                            checked={bItem.is_enabled}
+                            onChange={(e) => updateBranchItem({ is_enabled: e.target.checked })}
+                            className="rounded border-border text-primary focus:ring-primary size-3.5"
+                          />
+                          <label
+                            htmlFor={`branch-avail-${b.id}`}
+                            className="text-xs font-semibold text-foreground cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Building2 className="size-3 text-muted-foreground" />
+                            {b.name}
+                          </label>
+                        </div>
+
+                        {bItem.is_enabled && (
+                          <div className="grid grid-cols-3 gap-2 w-full sm:w-auto">
+                            <div>
+                              <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                Beds / Booking Cap
+                              </span>
+                              <Input
+                                type="number"
+                                className="h-7 text-xs w-full sm:w-28 bg-background"
+                                value={bItem.capacity_override}
+                                onChange={(e) => updateBranchItem({ capacity_override: e.target.value })}
+                                placeholder={`Default (${templateForm.default_capacity || 20})`}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                Trial Cap
+                              </span>
+                              <Input
+                                type="number"
+                                className="h-7 text-xs w-full sm:w-24 bg-background"
+                                value={bItem.trial_capacity_override}
+                                onChange={(e) => updateBranchItem({ trial_capacity_override: e.target.value })}
+                                placeholder={`Default (${templateForm.default_trial_capacity || 0})`}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                Waitlist
+                              </span>
+                              <Input
+                                type="number"
+                                className="h-7 text-xs w-full sm:w-24 bg-background"
+                                value={bItem.waitlist_capacity_override}
+                                onChange={(e) => updateBranchItem({ waitlist_capacity_override: e.target.value })}
+                                placeholder={`Default (${templateForm.default_waitlist_capacity || 0})`}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             </div>
 
             {/* BOOKING RULE FLAGS */}
@@ -3525,7 +3684,32 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1 block font-medium">Class Template *</Label>
                 <select
                   value={ruleForm.class_template}
-                  onChange={(e) => setRuleForm({ ...ruleForm, class_template: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const tpl = templates.find((t) => t.id === val);
+                    const dur = tpl?.default_duration_minutes || 60;
+                    setRuleForm((prev) => {
+                      const next = { ...prev, class_template: val };
+                      if (next.start_time) {
+                        const parts = next.start_time.split(':');
+                        const h = parseInt(parts[0], 10);
+                        const m = parseInt(parts[1], 10);
+                        const endM = h * 60 + m + dur;
+                        const eh = Math.floor(endM / 60) % 24;
+                        const em = endM % 60;
+                        next.end_time = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
+                      }
+                      if (next.branch && tpl) {
+                        const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === next.branch);
+                        if (bAvail?.capacity_override != null) {
+                          next.capacity_override = String(bAvail.capacity_override);
+                        } else if (tpl.default_capacity != null) {
+                          next.capacity_override = String(tpl.default_capacity);
+                        }
+                      }
+                      return next;
+                    });
+                  }}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Template</option>
@@ -3538,7 +3722,22 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1 block font-medium">Branch *</Label>
                 <select
                   value={ruleForm.branch}
-                  onChange={(e) => setRuleForm({ ...ruleForm, branch: e.target.value })}
+                  onChange={(e) => {
+                    const branchId = e.target.value;
+                    setRuleForm((prev) => {
+                      const next = { ...prev, branch: branchId };
+                      if (next.class_template) {
+                        const tpl = templates.find((t) => t.id === next.class_template);
+                        const bAvail = tpl?.branch_availabilities?.find((a: any) => a.branch === branchId);
+                        if (bAvail?.capacity_override != null) {
+                          next.capacity_override = String(bAvail.capacity_override);
+                        } else if (tpl?.default_capacity != null) {
+                          next.capacity_override = String(tpl.default_capacity);
+                        }
+                      }
+                      return next;
+                    });
+                  }}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Branch</option>
@@ -3548,6 +3747,35 @@ export const ClassesWorkspace: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {(() => {
+              const selRuleTpl = templates.find((t) => t.id === ruleForm.class_template);
+              const branchAvail = selRuleTpl?.branch_availabilities?.find((a: any) => a.branch === ruleForm.branch);
+              const effectiveCap = branchAvail?.capacity_override != null ? branchAvail.capacity_override : selRuleTpl?.default_capacity;
+              return selRuleTpl ? (
+                <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="size-3.5 text-primary" />
+                    <span className="font-semibold text-foreground">
+                      Duration: <span className="text-primary">{selRuleTpl.default_duration_minutes} mins</span>
+                    </span>
+                    <span className="text-muted-foreground text-[11px]">(Auto-fetched from {selRuleTpl.name})</span>
+                  </div>
+                  {ruleForm.branch && effectiveCap != null && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <Building2 className="size-3 text-primary" />
+                      <span className="text-muted-foreground">Studio Capacity:</span>
+                      <strong className="text-primary font-semibold">{effectiveCap} beds</strong>
+                      {branchAvail?.capacity_override != null ? (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">Branch Override</span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">Template Default</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null;
+            })()}
 
             {/* BRANCH OPERATING SCHEDULE BADGE */}
             {ruleForm.branch && (
@@ -3996,12 +4224,30 @@ export const ClassesWorkspace: React.FC = () => {
                         const em = endM % 60;
                         next.end_time = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
                       }
+                      if (next.branch && tpl) {
+                        const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === next.branch);
+                        if (bAvail?.capacity_override != null) {
+                          next.capacity = String(bAvail.capacity_override);
+                        } else if (tpl.default_capacity != null) {
+                          next.capacity = String(tpl.default_capacity);
+                        }
+                        if (bAvail?.trial_capacity_override != null) {
+                          next.trial_capacity = String(bAvail.trial_capacity_override);
+                        } else if (tpl.default_trial_capacity != null) {
+                          next.trial_capacity = String(tpl.default_trial_capacity);
+                        }
+                        if (bAvail?.waitlist_capacity_override != null) {
+                          next.waitlist_capacity = String(bAvail.waitlist_capacity_override);
+                        } else if (tpl.default_waitlist_capacity != null) {
+                          next.waitlist_capacity = String(tpl.default_waitlist_capacity);
+                        }
+                      }
                       return next;
                     });
                   }}
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">Select Template</option>
+>
+<option value="">Select Template</option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
@@ -4011,7 +4257,34 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1.5 block font-medium">Branch *</Label>
                 <select
                   value={occurrenceForm.branch}
-                  onChange={(e) => setOccurrenceForm({ ...occurrenceForm, branch: e.target.value })}
+                  onChange={(e) => {
+                    const branchId = e.target.value;
+                    setOccurrenceForm((prev) => {
+                      const next = { ...prev, branch: branchId };
+                      if (next.class_template) {
+                        const tpl = templates.find((t) => t.id === next.class_template);
+                        if (tpl) {
+                          const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === branchId);
+                          if (bAvail?.capacity_override != null) {
+                            next.capacity = String(bAvail.capacity_override);
+                          } else if (tpl.default_capacity != null) {
+                            next.capacity = String(tpl.default_capacity);
+                          }
+                          if (bAvail?.trial_capacity_override != null) {
+                            next.trial_capacity = String(bAvail.trial_capacity_override);
+                          } else if (tpl.default_trial_capacity != null) {
+                            next.trial_capacity = String(tpl.default_trial_capacity);
+                          }
+                          if (bAvail?.waitlist_capacity_override != null) {
+                            next.waitlist_capacity = String(bAvail.waitlist_capacity_override);
+                          } else if (tpl.default_waitlist_capacity != null) {
+                            next.waitlist_capacity = String(tpl.default_waitlist_capacity);
+                          }
+                        }
+                      }
+                      return next;
+                    });
+                  }}
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Branch</option>
@@ -4022,8 +4295,37 @@ export const ClassesWorkspace: React.FC = () => {
               </div>
             </div>
 
+            {(() => {
+              const selectedTpl = templates.find((t) => t.id === occurrenceForm.class_template);
+              const branchAvail = selectedTpl?.branch_availabilities?.find((a: any) => a.branch === occurrenceForm.branch);
+              const effectiveCap = branchAvail?.capacity_override != null ? branchAvail.capacity_override : selectedTpl?.default_capacity;
+              return selectedTpl ? (
+                <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="size-3.5 text-primary" />
+                    <span className="font-semibold text-foreground">
+                      Duration: <span className="text-primary">{selectedTpl.default_duration_minutes} mins</span>
+                    </span>
+                    <span className="text-muted-foreground text-[11px]">(Auto-fetched from {selectedTpl.name})</span>
+                  </div>
+                  {occurrenceForm.branch && effectiveCap != null && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <Building2 className="size-3 text-primary" />
+                      <span className="text-muted-foreground">Studio Capacity:</span>
+                      <strong className="text-primary font-semibold">{effectiveCap} beds</strong>
+                      {branchAvail?.capacity_override != null ? (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">Branch Override</span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">Template Default</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null;
+            })()}
+
             <div>
-              <Label className="mb-1.5 block font-medium">Session Date *</Label>
+<Label className="mb-1.5 block font-medium">Session Date *</Label>
               <Input
                 type="date"
                 value={occurrenceForm.occurrence_date}
