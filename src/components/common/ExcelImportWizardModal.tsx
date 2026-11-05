@@ -27,6 +27,10 @@ import {
   SlidersHorizontal,
   Tag,
   Dumbbell,
+  Play,
+  Film,
+  Target,
+  Video,
   Users,
   UserCheck,
   Briefcase,
@@ -35,6 +39,7 @@ import { toast } from 'sonner';
 import { api } from '@/api/client';
 import { useQuery } from '@tanstack/react-query';
 import { classesApi } from '@/api/endpoints/classesApi';
+import { SecureWorkoutPlayer } from '../classes/SecureWorkoutPlayer';
 import {
   Dialog,
   DialogContent,
@@ -200,6 +205,18 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   const [editingOcc, setEditingOcc] = useState<SimulatedOccurrence | null>(null);
   const [selectedShiftIds, setSelectedShiftIds] = useState<Set<string>>(new Set());
   const [editingShift, setEditingShift] = useState<SimulatedTrainerShift | null>(null);
+
+  // Workout Video CRM Simulation Preview States
+  const [simulatedVideos, setSimulatedVideos] = useState<any[]>([]);
+  const [videosSummary, setVideosSummary] = useState<any>(null);
+  const [isSimulatingVideos, setIsSimulatingVideos] = useState(false);
+  const [crmVideoCategoryFilter, setCrmVideoCategoryFilter] = useState('ALL');
+  const [crmVideoDateFilter, setCrmVideoDateFilter] = useState('ALL');
+  const [crmVideoSearchQuery, setCrmVideoSearchQuery] = useState('');
+  const [crmVideoViewMode, setCrmVideoViewMode] = useState<'cards' | 'table'>('cards');
+  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
+  const [editingVideo, setEditingVideo] = useState<any | null>(null);
+  const [previewingVideoId, setPreviewingVideoId] = useState<string | null>(null);
   // CRM Direct queries for Branches, Categories, and Templates
   const { data: crmBranches = [] } = useQuery({
     queryKey: ['tenant-branches'],
@@ -426,6 +443,57 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [crmTrainers, simulatedShifts]);
 
+  const distinctVideoDates = React.useMemo(() => {
+    const map = new Map<string, { date: string; label: string; count: number }>();
+    simulatedVideos.forEach((v) => {
+      if (v.status === 'DELETED') return;
+      const key = v.date || 'General';
+      const label = v.date_label || key;
+      if (!map.has(key)) {
+        map.set(key, { date: key, label, count: 0 });
+      }
+      map.get(key)!.count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [simulatedVideos]);
+
+  const distinctVideoCategories = React.useMemo(() => {
+    const set = new Set<string>();
+    simulatedVideos.forEach((v) => {
+      if (v.status === 'DELETED') return;
+      if (v.program_name) set.add(v.program_name);
+      else if (v.category_code) set.add(v.category_code);
+    });
+    return Array.from(set).sort();
+  }, [simulatedVideos]);
+
+  const isVideoMatchFilter = (v: any) => {
+    if (v.status === 'DELETED') return false;
+
+    // Date filter
+    if (crmVideoDateFilter !== 'ALL') {
+      if (v.date !== crmVideoDateFilter && v.date_label !== crmVideoDateFilter) return false;
+    }
+
+    // Category filter
+    if (crmVideoCategoryFilter !== 'ALL') {
+      if (v.program_name !== crmVideoCategoryFilter && v.category_code !== crmVideoCategoryFilter) return false;
+    }
+
+    // Search query
+    if (crmVideoSearchQuery.trim()) {
+      const q = crmVideoSearchQuery.toLowerCase();
+      const matchTitle = (v.title || '').toLowerCase().includes(q);
+      const matchMuscles = (v.targeted_muscles || '').toLowerCase().includes(q);
+      const matchEquip = (v.equipment_required || '').toLowerCase().includes(q);
+      const matchCat = (v.program_name || v.category_code || '').toLowerCase().includes(q);
+      const matchDate = (v.date_label || v.date || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchMuscles && !matchEquip && !matchCat && !matchDate) return false;
+    }
+
+    return true;
+  };
+
   const isShiftMatchFilter = (s: SimulatedTrainerShift) => {
     if (s.status === 'DELETED') return false;
 
@@ -515,6 +583,16 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     setCrmShiftFilter('ALL');
     setSelectedShiftIds(new Set());
     setEditingShift(null);
+    setSimulatedVideos([]);
+    setVideosSummary(null);
+    setIsSimulatingVideos(false);
+    setCrmVideoCategoryFilter('ALL');
+    setCrmVideoDateFilter('ALL');
+    setCrmVideoSearchQuery('');
+    setCrmVideoViewMode('cards');
+    setSelectedVideoIds(new Set());
+    setEditingVideo(null);
+    setPreviewingVideoId(null);
     setImportResult(null);
     setIsDetecting(false);
     setIsSimulating(false);
@@ -822,6 +900,76 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
     }
   };
 
+  // Workout Videos Handlers
+  const handleProceedToWorkoutVideoPreview = async () => {
+    setIsSimulatingVideos(true);
+    try {
+      const targetRows = (selectedSheetFilter && selectedSheetFilter !== 'ALL')
+        ? rows.filter((r) => r.sheet === selectedSheetFilter)
+        : rows;
+      const validRules = targetRows.filter((r) => r.status !== 'ERROR');
+
+      const res = await api.post<any>('/tenant/excel-imports/simulate-workout-videos/', {
+        curated_rows: JSON.stringify(validRules),
+        target_month: selectedMonth || summary?.selected_month,
+      });
+
+      setSimulatedVideos(res.data.videos || []);
+      setVideosSummary(res.data.summary || null);
+      setStep(3);
+      toast.success(`Generated CRM preview: ${res.data.videos?.length || 0} workout videos ready for review.`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to simulate workout videos.');
+    } finally {
+      setIsSimulatingVideos(false);
+    }
+  };
+
+  const handleConfirmWorkoutVideosPublish = async () => {
+    setIsCommitting(true);
+    try {
+      const validVideos = simulatedVideos.filter((v) => v.status !== 'DELETED');
+      const res = await api.post<any>('/tenant/excel-imports/confirm/', {
+        curated_workout_videos: JSON.stringify(validVideos),
+        entity_type: 'WOD_VIDEO',
+        target_month: selectedMonth || summary?.selected_month,
+      });
+
+      setImportResult(res.data);
+      setStep(4);
+      toast.success(`Successfully published ${res.data.created_count || validVideos.length} workout videos to CRM library!`);
+      if (onImportComplete) {
+        onImportComplete(res.data);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to publish workout videos to CRM.');
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
+  const handleDeleteVideo = (id: string) => {
+    const updated = simulatedVideos.filter((v) => v.id !== id);
+    setSimulatedVideos(updated);
+    toast.info('Workout video removed from import list.');
+  };
+
+  const handleSaveVideoEdit = (updatedVideo: any) => {
+    // Recompute embed_url if video_url changed
+    let embedUrl = updatedVideo.embed_url;
+    if (updatedVideo.video_url) {
+      const m = updatedVideo.video_url.match(/(?:v=|\/embed\/|\/shorts\/|youtu\.be\/|\/v\/)([a-zA-Z0-9_-]{11})/);
+      if (m && m[1]) {
+        embedUrl = `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&modestbranding=1`;
+      }
+    }
+    setSimulatedVideos((prev) =>
+      prev.map((v) => (v.id === updatedVideo.id ? { ...v, ...updatedVideo, embed_url: embedUrl } : v))
+    );
+    setEditingVideo(null);
+    toast.success('Workout video updated successfully.');
+  };
+
   const handleDeleteShift = (id: string) => {
     const updated = simulatedShifts.filter((s) => s.id !== id);
     setSimulatedShifts(updated);
@@ -911,8 +1059,10 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                     ? 'Step 3 of 4: CRM Classes Preview & Confirmation'
                     : entityType === 'TRAINER_ROSTER'
                     ? 'Step 3 of 4: CRM Trainer Shifts Preview & Confirmation'
-                    : 'Step 3 of 3'
-                  : `Step ${step} of ${entityType === 'CLASS_SCHEDULE' || entityType === 'TRAINER_ROSTER' ? 4 : 3}`}
+                    : entityType === 'WOD_VIDEO'
+                    ? 'Step 3 of 4: CRM Workout Videos Preview & Confirmation'
+                    : 'Step 3 of 4'
+                  : `Step ${step} of 4`}
               </Badge>
             </div>
           </div>
@@ -1418,6 +1568,23 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                     ) : (
                       <>
                         <span>Next: Preview Generated Trainer Shifts</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </Button>
+                ) : entityType === 'WOD_VIDEO' ? (
+                  <Button
+                    onClick={handleProceedToWorkoutVideoPreview}
+                    disabled={isSimulatingVideos || (selectedSheetFilter !== 'ALL' ? rows.filter((r) => r.sheet === selectedSheetFilter && r.status !== 'ERROR').length === 0 : summary.valid_rows === 0)}
+                    className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-5"
+                  >
+                    {isSimulatingVideos ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" /> Generating CRM Video Preview...
+                      </>
+                    ) : (
+                      <>
+                        <span>Next: Preview Generated Workout Videos</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -2302,6 +2469,360 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
           </div>
         )}
 
+        {/* Step 3: Intermediate Detailed CRM Workout Videos Preview & Confirmation */}
+        {step === 3 && entityType === 'WOD_VIDEO' && (
+          <div className="space-y-4 py-2 flex flex-col flex-1 overflow-hidden">
+            {/* Overview & Smart Auto-Link Banner */}
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+                    <Film className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      CRM Class Workout Videos Preview
+                      <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px]">
+                        {simulatedVideos.filter((v) => v.status !== 'DELETED').length} Curated Videos
+                      </Badge>
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Target Period: <strong className="text-foreground">{videosSummary?.target_month || selectedMonth}</strong> &bull; Showing videos ready for in-studio streaming and daily class linking.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-background text-[11px] font-medium py-1 px-2.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Auto-Linking to Calendar Active</span>
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-background/60 p-2 rounded-lg border border-border/50">
+                <Info className="w-4 h-4 text-primary shrink-0" />
+                <span>
+                  <strong>Dynamic Metadata Resolution:</strong> Targeted muscle groups, equipment requirements, and YouTube embed URLs have been automatically resolved. Published videos will automatically link with scheduled class sessions matching the video date and category.
+                </span>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 p-2.5 rounded-lg border border-border">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Filter by title, muscles, equipment, category..."
+                    value={crmVideoSearchQuery}
+                    onChange={(e) => setCrmVideoSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  {crmVideoSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setCrmVideoSearchQuery('')}
+                      className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Filter */}
+                <select
+                  value={crmVideoCategoryFilter}
+                  onChange={(e) => setCrmVideoCategoryFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-background border border-border rounded-md text-foreground font-medium"
+                >
+                  <option value="ALL">All Categories</option>
+                  {distinctVideoCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Date Filter */}
+                <select
+                  value={crmVideoDateFilter}
+                  onChange={(e) => setCrmVideoDateFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs bg-background border border-border rounded-md text-foreground font-medium"
+                >
+                  <option value="ALL">All Dates ({distinctVideoDates.length} days)</option>
+                  {distinctVideoDates.map((d) => (
+                    <option key={d.date} value={d.date}>
+                      {d.label} ({d.count} videos)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 border border-border rounded-md p-0.5 bg-background">
+                <button
+                  type="button"
+                  onClick={() => setCrmVideoViewMode('cards')}
+                  className={`p-1.5 rounded text-xs flex items-center gap-1 ${
+                    crmVideoViewMode === 'cards'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Cards View"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-2xs">Cards</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCrmVideoViewMode('table')}
+                  className={`p-1.5 rounded text-xs flex items-center gap-1 ${
+                    crmVideoViewMode === 'table'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Table View"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-2xs">Table</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Video Cards / Table View */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {crmVideoViewMode === 'cards' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {simulatedVideos.filter(isVideoMatchFilter).map((v) => {
+                    const isPreviewing = previewingVideoId === v.id;
+                    const hasMuscles = !!v.targeted_muscles;
+                    const hasEquip = !!v.equipment_required;
+
+                    return (
+                      <div
+                        key={v.id}
+                        className="border rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all relative bg-card border-border hover:border-primary/40 shadow-xs"
+                      >
+                        <div className="space-y-2">
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-0.5 min-w-0">
+                              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider block truncate">
+                                {v.program_name || v.category_code || 'Workout Video'}
+                              </span>
+                              <h4 className="text-xs font-bold text-foreground line-clamp-1" title={v.title}>
+                                {v.title}
+                              </h4>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] shrink-0 font-medium bg-muted/50 border-border">
+                              <Calendar className="w-2.5 h-2.5 mr-1 text-muted-foreground" />
+                              {v.date_label || v.date || 'Anytime'}
+                            </Badge>
+                          </div>
+
+                          {/* Auto-linking with Calendar occurrences badge */}
+                          <div>
+                            {v.auto_link_classes_count > 0 ? (
+                              <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-semibold">
+                                <Sparkles className="w-3 h-3 text-emerald-500" />
+                                <span>Auto-links with {v.auto_link_classes_count} calendar class sessions</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-muted-foreground text-[10px] gap-1 font-normal">
+                                <Clock className="w-3 h-3" />
+                                <span>0 scheduled sessions found on date</span>
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Targeted Muscles */}
+                          {hasMuscles && (
+                            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                              <Target className="w-3 h-3 text-primary shrink-0" />
+                              <span className="truncate text-foreground font-medium">{v.targeted_muscles}</span>
+                            </div>
+                          )}
+
+                          {/* Equipment */}
+                          {hasEquip && (
+                            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                              <Dumbbell className="w-3 h-3 text-amber-500 shrink-0" />
+                              <span className="truncate">{v.equipment_required}</span>
+                            </div>
+                          )}
+
+                          {/* Video Player Preview if opened */}
+                          {isPreviewing && v.embed_url && (
+                            <div className="pt-1.5 animate-in fade-in duration-200">
+                              <SecureWorkoutPlayer embedUrl={v.embed_url} title={v.title} />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card Actions Footer */}
+                        <div className="pt-2 border-t border-border flex items-center justify-between gap-1 text-xs">
+                          {v.embed_url ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewingVideoId(isPreviewing ? null : v.id)}
+                              className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                            >
+                              <Play className="w-3 h-3" />
+                              <span>{isPreviewing ? 'Hide Player' : 'Preview Video'}</span>
+                            </button>
+                          ) : (
+                            <span />
+                          )}
+
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingVideo(v)}
+                              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteVideo(v.id)}
+                              className="h-7 px-2 text-xs gap-1 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                            >
+                              <Trash2 className="w-3 h-3" /> Remove
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Table View */
+                <div className="border border-border rounded-lg overflow-x-auto bg-card">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
+                      <tr>
+                        <th className="p-2.5">Date</th>
+                        <th className="p-2.5">Title / Movement</th>
+                        <th className="p-2.5">Category</th>
+                        <th className="p-2.5">Targeted Muscles</th>
+                        <th className="p-2.5">Equipment</th>
+                        <th className="p-2.5">Calendar Auto-Sync</th>
+                        <th className="p-2.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {simulatedVideos
+                        .filter(isVideoMatchFilter)
+                        .map((v) => (
+                          <tr key={v.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="p-2.5 font-medium whitespace-nowrap">
+                              {v.date_label || v.date || 'Anytime'}
+                            </td>
+                            <td className="p-2.5">
+                              <div className="font-semibold text-foreground line-clamp-1">{v.title}</div>
+                              {v.embed_url && (
+                                <a
+                                  href={v.video_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-primary hover:underline truncate block max-w-xs"
+                                >
+                                  {v.video_url}
+                                </a>
+                              )}
+                            </td>
+                            <td className="p-2.5">
+                              <Badge variant="outline" className="text-[10px] font-medium">
+                                {v.program_name || v.category_code || 'Workout'}
+                              </Badge>
+                            </td>
+                            <td className="p-2.5 text-muted-foreground max-w-xs truncate">
+                              {v.targeted_muscles || '—'}
+                            </td>
+                            <td className="p-2.5 text-muted-foreground max-w-xs truncate">
+                              {v.equipment_required || '—'}
+                            </td>
+                            <td className="p-2.5">
+                              {v.auto_link_classes_count > 0 ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] gap-1 font-semibold">
+                                  <Sparkles className="w-2.5 h-2.5" /> {v.auto_link_classes_count} classes
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">0 classes</span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingVideo(v)}
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                  title="Edit Video Details"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteVideo(v.id)}
+                                  className="h-6 w-6 p-0 text-rose-500 hover:text-rose-600"
+                                  title="Remove Video"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-3 bg-card mt-auto">
+              <Button
+                variant="outline"
+                onClick={() => setStep(2)}
+                className="gap-2 text-xs"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back to Video Rules
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => handleDialogClose(false)}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmWorkoutVideosPublish}
+                  disabled={isCommitting || simulatedVideos.filter((v) => v.status !== 'DELETED').length === 0}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 shadow-sm"
+                >
+                  {isCommitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Publishing Workout Videos...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" /> Confirm & Publish to CRM Library ({simulatedVideos.filter((v) => v.status !== 'DELETED').length} Videos)
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Step 4: Success Confirmation */}
         {step === 4 && importResult && (
           <div className="space-y-6 py-6 text-center">
@@ -2310,18 +2831,24 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-foreground">
-                {entityType === 'TRAINER_ROSTER' ? 'Trainer Rosters Published Successfully!' : 'Upload Finished Successfully!'}
+                {entityType === 'TRAINER_ROSTER'
+                  ? 'Trainer Rosters Published Successfully!'
+                  : entityType === 'WOD_VIDEO'
+                  ? 'Workout Videos Published Successfully!'
+                  : 'Upload Finished Successfully!'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
                 {entityType === 'TRAINER_ROSTER'
                   ? 'All trainer shift allocations have been saved and assigned to CRM schedules.'
+                  : entityType === 'WOD_VIDEO'
+                  ? 'All workout videos have been added to the WOD Library and auto-linked to class sessions.'
                   : 'All class occurrences have been generated and published to your CRM calendar.'}
               </p>
             </div>
             <div className="flex justify-center gap-4 text-left max-w-sm mx-auto">
               <div className="bg-muted/50 p-4 rounded-xl flex-1 text-center">
                 <p className="text-xs text-muted-foreground">
-                  {entityType === 'TRAINER_ROSTER' ? 'Shifts Assigned' : 'Classes Created'}
+                  {entityType === 'TRAINER_ROSTER' ? 'Shifts Assigned' : entityType === 'WOD_VIDEO' ? 'Videos Published' : 'Classes Created'}
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 mt-1">{importResult.created_count}</p>
               </div>
@@ -2332,11 +2859,102 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
             </div>
 
             <Button onClick={() => handleDialogClose(false)} className="px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
-              {entityType === 'TRAINER_ROSTER' ? 'Done & View Trainer Rosters' : 'Done & View Classes'}
+              {entityType === 'TRAINER_ROSTER' ? 'Done & View Trainer Rosters' : entityType === 'WOD_VIDEO' ? 'Done & View Workout Videos' : 'Done & View Classes'}
             </Button>
           </div>
         )}
       </DialogContent>
+      {/* Edit Workout Video Modal Dialog for Step 3 */}
+      <Dialog open={editingVideo !== null} onOpenChange={(open) => !open && setEditingVideo(null)}>
+        <DialogContent className="sm:max-w-md p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" /> Edit Workout Video
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Update title, category, date, video link, muscles, and equipment before saving to CRM library.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingVideo && (
+            <div className="space-y-3 py-2 text-xs">
+              <div>
+                <label className="font-semibold text-foreground">Video / Movement Title:</label>
+                <input
+                  type="text"
+                  value={editingVideo.title || ''}
+                  onChange={(e) => setEditingVideo({ ...editingVideo, title: e.target.value })}
+                  className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-foreground">Category / Program:</label>
+                  <input
+                    type="text"
+                    value={editingVideo.program_name || editingVideo.category_code || ''}
+                    onChange={(e) => setEditingVideo({ ...editingVideo, program_name: e.target.value })}
+                    className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-foreground">Scheduled Date:</label>
+                  <input
+                    type="date"
+                    value={editingVideo.date || ''}
+                    onChange={(e) => setEditingVideo({ ...editingVideo, date: e.target.value })}
+                    className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground">YouTube Video URL:</label>
+                <input
+                  type="text"
+                  value={editingVideo.video_url || ''}
+                  onChange={(e) => setEditingVideo({ ...editingVideo, video_url: e.target.value })}
+                  className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground">Targeted Muscles:</label>
+                <input
+                  type="text"
+                  value={editingVideo.targeted_muscles || ''}
+                  onChange={(e) => setEditingVideo({ ...editingVideo, targeted_muscles: e.target.value })}
+                  className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                  placeholder="e.g. Core, Glutes, Hamstrings"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground">Equipment Required:</label>
+                <input
+                  type="text"
+                  value={editingVideo.equipment_required || ''}
+                  onChange={(e) => setEditingVideo({ ...editingVideo, equipment_required: e.target.value })}
+                  className="w-full mt-1 px-2.5 py-1.5 border border-border rounded bg-background text-foreground text-xs"
+                  placeholder="e.g. Mat, Reformer, Dumbbells"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-border mt-3">
+                <Button variant="outline" size="sm" onClick={() => setEditingVideo(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={() => handleSaveVideoEdit(editingVideo)} className="bg-primary text-primary-foreground font-semibold">
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Trainer Shift Modal Dialog for Step 3 */}
       <Dialog open={editingShift !== null} onOpenChange={(open) => !open && setEditingShift(null)}>
         <DialogContent className="sm:max-w-md p-5">

@@ -1060,7 +1060,7 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   const createOccurrenceMutation = useMutation({
-    mutationFn: (data: typeof occurrenceForm) => {
+    mutationFn: async (data: typeof occurrenceForm) => {
       const payload: any = {
         class_template: data.class_template,
         branch: data.branch,
@@ -4108,6 +4108,7 @@ export const ClassesWorkspace: React.FC = () => {
             {(() => {
               const selectedTpl = templates.find((t) => t.id === occurrenceForm.class_template);
               return (
+                <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <Label className="mb-1.5 block font-medium">Capacity</Label>
@@ -4177,6 +4178,7 @@ export const ClassesWorkspace: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                </>
               );
             })()}
           </div>
