@@ -253,6 +253,10 @@ export function UsersWorkspace() {
 
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<AdminUserRow | null>(null);
+  const [editFirstName, setEditFirstName] = React.useState("");
+  const [editLastName, setEditLastName] = React.useState("");
+  const [editEmail, setEditEmail] = React.useState("");
+  const [editPhone, setEditPhone] = React.useState("");
   const [editRole, setEditRole] = React.useState("");
   const [editUsername, setEditUsername] = React.useState("");
   const [editDepartmentId, setEditDepartmentId] = React.useState("");
@@ -556,8 +560,15 @@ export function UsersWorkspace() {
   // Open Edit User Modal
   const handleOpenEdit = (user: AdminUserRow) => {
     setEditingUser(user);
+    setEditFirstName(user.first_name || "");
+    setEditLastName(user.last_name || "");
+    setEditEmail(user.email || "");
+    setEditPhone(user.phone || "");
     setEditUsername(user.username || "");
-    const roleId = roles.find((role) => role.name === user.role || role.code === user.role)?.id || user.branch_access?.[0]?.role_id || "";
+    const roleId =
+      roles.find((role) => role.name === user.role || role.code === user.role)?.id ||
+      user.branch_access?.[0]?.role_id ||
+      "";
     setEditRole(roleId);
     setEditReportsToId(user.reports_to_id || "");
     const access = branchAccessForRole(user, roleId);
@@ -579,7 +590,13 @@ export function UsersWorkspace() {
     setEditPrimaryBranchId(primaryId);
     const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
     setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
-    setEditDepartmentId("");
+    
+    // Pre-populate user's current department if found
+    const userDeptVal = (user as any)["department"];
+    const currentDept = departments.find(
+      (d) => d.name === userDeptVal || d.id === (user as any)["department_id"]
+    );
+    setEditDepartmentId(currentDept?.id || "");
     setEditError(null);
     setEditModalOpen(true);
   };
@@ -607,7 +624,23 @@ export function UsersWorkspace() {
       const originalUsername = (editingUser.username || "").trim();
       const usernameChanged = trimmedUsername !== originalUsername;
 
+      const trimmedFirstName = editFirstName.trim();
+      const firstNameChanged = trimmedFirstName !== (editingUser.first_name || "").trim();
+
+      const trimmedLastName = editLastName.trim();
+      const lastNameChanged = trimmedLastName !== (editingUser.last_name || "").trim();
+
+      const trimmedEmail = editEmail.trim();
+      const emailChanged = trimmedEmail !== (editingUser.email || "").trim();
+
+      const trimmedPhone = editPhone.trim();
+      const phoneChanged = trimmedPhone !== (editingUser.phone || "").trim();
+
       await updateUserApi(editingUser.id, {
+        ...(firstNameChanged ? { first_name: trimmedFirstName } : {}),
+        ...(lastNameChanged ? { last_name: trimmedLastName } : {}),
+        ...(emailChanged ? { email: trimmedEmail } : {}),
+        ...(phoneChanged ? { phone: trimmedPhone } : {}),
         ...(editRole ? { role_id: editRole } : {}),
         ...(usernameChanged ? { username: trimmedUsername } : {}),
         ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
@@ -622,7 +655,7 @@ export function UsersWorkspace() {
           })),
         } : {}),
       });
-      toast.success(`Updated profile for ${editingUser.full_name || editingUser.email}`);
+      toast.success(`Updated profile for ${trimmedFirstName || editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
       setEditingUser(null);
       setEditError(null);
@@ -990,6 +1023,7 @@ export function UsersWorkspace() {
               </SelectTrigger>
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="STAFF">Staff (General)</SelectItem>
                 {uniqueRoles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
@@ -1008,6 +1042,7 @@ export function UsersWorkspace() {
                 <SelectItem value="Active">Active</SelectItem>
                 <SelectItem value="Inactive">Inactive</SelectItem>
                 <SelectItem value="Invited">Invited</SelectItem>
+                <SelectItem value="Deactivated">Deactivated</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1977,6 +2012,62 @@ export function UsersWorkspace() {
                 </div>
                 <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                   {editingUser.email}
+                </div>
+              </div>
+
+              {/* Basic Profile Details */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <Label htmlFor="staff-first-name" className="text-xs font-semibold">
+                    First Name
+                  </Label>
+                  <Input
+                    id="staff-first-name"
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    placeholder="First name"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="staff-last-name" className="text-xs font-semibold">
+                    Last Name
+                  </Label>
+                  <Input
+                    id="staff-last-name"
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    placeholder="Last name"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <Label htmlFor="staff-email" className="text-xs font-semibold">
+                    Email Address
+                  </Label>
+                  <Input
+                    id="staff-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="staff@example.com"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="staff-phone" className="text-xs font-semibold">
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="staff-phone"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+91..."
+                    className="h-8 text-xs bg-background"
+                  />
                 </div>
               </div>
 
