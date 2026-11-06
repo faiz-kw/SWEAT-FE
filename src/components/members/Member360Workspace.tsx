@@ -417,6 +417,8 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       ? (memberships as any).active_list
       : (memberships.active ? [memberships.active] : []);
 
+  const hasActiveContracts = activeContracts.some((c: any) => c.status === 'ACTIVE' || c.status === 'FROZEN');
+
   const handleViewTransaction = (txn: any) => {
     if (!txn) return;
     const orderNumber = txn.order_number || (txn.rawOrder && txn.rawOrder.order_number);
@@ -1905,7 +1907,9 @@ const MemberMembershipsSection: React.FC<{
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-base text-foreground">
-                {activeContracts.length > 1 ? `Current Active Contracts (${activeContracts.length})` : 'Current Active Contract'}
+                {hasActiveContracts
+                  ? (activeContracts.length > 1 ? `Current Active Contracts (${activeContracts.length})` : 'Current Active Contract')
+                  : (activeContracts.length > 0 ? 'Previous Contract (Expired)' : 'Membership Contract')}
               </h3>
               {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
                 <Badge className="bg-purple-500/15 text-purple-400 border-purple-500/30 text-[10px]">
@@ -1941,6 +1945,20 @@ const MemberMembershipsSection: React.FC<{
             </Button>
           </div>
         </div>
+
+        {!hasActiveContracts && activeContracts.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">Notice:</span>
+              <span>This member currently has no active contract. The contract displayed below expired on {activeContracts[0]?.end_date || 'past date'}.</span>
+            </div>
+            {onPurchasePackage && (
+              <Button size="sm" onClick={onPurchasePackage} className="h-7 text-xs bg-amber-600 hover:bg-amber-500 text-white shrink-0">
+                Purchase / Activate Plan
+              </Button>
+            )}
+          </div>
+        )}
 
         {activeContracts.length > 0 ? (
           <div className="space-y-4">
