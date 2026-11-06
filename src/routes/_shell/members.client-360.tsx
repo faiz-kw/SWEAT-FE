@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Member360Workspace } from "@/components/members/Member360Workspace";
+import { Member360Workspace } from "../../components/members/Member360Workspace";
 
 type Member360Search = {
   memberId?: string | undefined;
