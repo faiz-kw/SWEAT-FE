@@ -18,6 +18,7 @@ import { Route as ShellLifecycleRouteImport } from './routes/_shell/lifecycle'
 import { Route as ShellMembersRouteImport } from './routes/_shell/members'
 import { Route as ShellAdminApiRouteImport } from './routes/_shell/admin.api'
 import { Route as ShellAdminAuditLogsRouteImport } from './routes/_shell/admin.audit-logs'
+import { Route as ShellAdminCmsRouteImport } from './routes/_shell/admin.cms'
 import { Route as ShellAdminConfigurationRouteImport } from './routes/_shell/admin.configuration'
 import { Route as ShellAdminFormsRouteImport } from './routes/_shell/admin.forms'
 import { Route as ShellAdminIntegrationsRouteImport } from './routes/_shell/admin.integrations'
@@ -164,6 +165,11 @@ const ShellAdminApiRoute = ShellAdminApiRouteImport.update({
 const ShellAdminAuditLogsRoute = ShellAdminAuditLogsRouteImport.update({
   id: '/admin/audit-logs',
   path: '/admin/audit-logs',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAdminCmsRoute = ShellAdminCmsRouteImport.update({
+  id: '/admin/cms',
+  path: '/admin/cms',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellAdminConfigurationRoute = ShellAdminConfigurationRouteImport.update({
@@ -709,6 +715,7 @@ export interface FileRoutesByFullPath {
   '/members': typeof ShellMembersRouteWithChildren
   '/admin/api': typeof ShellAdminApiRoute
   '/admin/audit-logs': typeof ShellAdminAuditLogsRoute
+  '/admin/cms': typeof ShellAdminCmsRoute
   '/admin/configuration': typeof ShellAdminConfigurationRoute
   '/admin/forms': typeof ShellAdminFormsRoute
   '/admin/integrations': typeof ShellAdminIntegrationsRoute
@@ -822,6 +829,7 @@ export interface FileRoutesByTo {
   '/': typeof ShellIndexRoute
   '/admin/api': typeof ShellAdminApiRoute
   '/admin/audit-logs': typeof ShellAdminAuditLogsRoute
+  '/admin/cms': typeof ShellAdminCmsRoute
   '/admin/configuration': typeof ShellAdminConfigurationRoute
   '/admin/forms': typeof ShellAdminFormsRoute
   '/admin/integrations': typeof ShellAdminIntegrationsRoute
@@ -937,6 +945,7 @@ export interface FileRoutesById {
   '/_shell/': typeof ShellIndexRoute
   '/_shell/admin/api': typeof ShellAdminApiRoute
   '/_shell/admin/audit-logs': typeof ShellAdminAuditLogsRoute
+  '/_shell/admin/cms': typeof ShellAdminCmsRoute
   '/_shell/admin/configuration': typeof ShellAdminConfigurationRoute
   '/_shell/admin/forms': typeof ShellAdminFormsRoute
   '/_shell/admin/integrations': typeof ShellAdminIntegrationsRoute
@@ -1052,6 +1061,7 @@ export interface FileRouteTypes {
     | '/members'
     | '/admin/api'
     | '/admin/audit-logs'
+    | '/admin/cms'
     | '/admin/configuration'
     | '/admin/forms'
     | '/admin/integrations'
@@ -1165,6 +1175,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/api'
     | '/admin/audit-logs'
+    | '/admin/cms'
     | '/admin/configuration'
     | '/admin/forms'
     | '/admin/integrations'
@@ -1279,6 +1290,7 @@ export interface FileRouteTypes {
     | '/_shell/'
     | '/_shell/admin/api'
     | '/_shell/admin/audit-logs'
+    | '/_shell/admin/cms'
     | '/_shell/admin/configuration'
     | '/_shell/admin/forms'
     | '/_shell/admin/integrations'
@@ -1453,6 +1465,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/audit-logs'
       fullPath: '/admin/audit-logs'
       preLoaderRoute: typeof ShellAdminAuditLogsRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/admin/cms': {
+      id: '/_shell/admin/cms'
+      path: '/admin/cms'
+      fullPath: '/admin/cms'
+      preLoaderRoute: typeof ShellAdminCmsRouteImport
       parentRoute: typeof ShellRoute
     }
     '/_shell/admin/configuration': {
@@ -2219,6 +2238,7 @@ interface ShellRouteChildren {
   ShellIndexRoute: typeof ShellIndexRoute
   ShellAdminApiRoute: typeof ShellAdminApiRoute
   ShellAdminAuditLogsRoute: typeof ShellAdminAuditLogsRoute
+  ShellAdminCmsRoute: typeof ShellAdminCmsRoute
   ShellAdminConfigurationRoute: typeof ShellAdminConfigurationRoute
   ShellAdminFormsRoute: typeof ShellAdminFormsRoute
   ShellAdminIntegrationsRoute: typeof ShellAdminIntegrationsRoute
@@ -2324,6 +2344,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellIndexRoute: ShellIndexRoute,
   ShellAdminApiRoute: ShellAdminApiRoute,
   ShellAdminAuditLogsRoute: ShellAdminAuditLogsRoute,
+  ShellAdminCmsRoute: ShellAdminCmsRoute,
   ShellAdminConfigurationRoute: ShellAdminConfigurationRoute,
   ShellAdminFormsRoute: ShellAdminFormsRoute,
   ShellAdminIntegrationsRoute: ShellAdminIntegrationsRoute,

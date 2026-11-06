@@ -16,3 +16,4 @@ export * from "./endpoints/discountsApi";
 export * from "./endpoints/membershipsApi";
 export * from "./endpoints/rewardsApi";
 export * from "./endpoints/workforceApi";
+export * from "./endpoints/cmsApi";

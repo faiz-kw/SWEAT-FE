@@ -219,6 +219,15 @@ export const FEATURE_MODULES_CATALOG: ModuleDefinition[] = [
       { id: "/community", label: "Community Command Center", to: "/community", description: "Feed moderation, transformation post approvals, and member suggestions." },
     ],
   },
+  {
+    id: "cms",
+    label: "Content Management (CMS)",
+    description: "Mobile app home banners, program category visuals, and audio/video media library.",
+    icon: "Image",
+    submodules: [
+      { id: "/admin/cms", label: "CMS Workspace", to: "/admin/cms", description: "Manage banners, program category assets, and media." },
+    ],
+  },
 ];
 
 /** Set of all module IDs in the catalog for fast lookup */
