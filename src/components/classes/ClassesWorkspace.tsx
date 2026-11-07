@@ -87,6 +87,7 @@ import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { cn } from '@/lib/utils';
 import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
+import { AssignTrainerModal } from './AssignTrainerModal';
 
 export function normalizeDaysOfWeek(days: any): number[] {
   if (!days) return [];
@@ -3029,25 +3030,10 @@ export const ClassesWorkspace: React.FC = () => {
                             }`}
                             title="Click row to view class details, workout video, and roster"
                           >
-                            {/* Column 1: Upfront Edit, Cancel/Reactivate, and Admin Delete Actions */}
+                            {/* Column 1: Upfront Cancel/Reactivate Toggle, Edit, and Admin Delete Actions */}
                             <td className="py-3 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-center gap-1">
-                                {canEdit && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenEditSlot(occ);
-                                    }}
-                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-                                    title="Edit slot details, time, or video"
-                                  >
-                                    <Pencil className="size-3.5" />
-                                  </Button>
-                                )}
-
-                                {/* Class Active / Cancel Toggle Switch */}
+                              <div className="flex items-center justify-center gap-1.5">
+                                {/* Class Active / Cancel Toggle Switch - Placed upfront on the far left before Edit */}
                                 {canCancel && (
                                   <div
                                     className="inline-flex items-center px-1"
@@ -3077,6 +3063,21 @@ export const ClassesWorkspace: React.FC = () => {
                                       aria-label={isCancelled ? 'Cancelled class - toggle to reactivate' : 'Active class - toggle to cancel'}
                                     />
                                   </div>
+                                )}
+
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditSlot(occ);
+                                    }}
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    title="Edit slot details, time, or video"
+                                  >
+                                    <Pencil className="size-3.5" />
+                                  </Button>
                                 )}
 
                                 {isAdminUser && (
@@ -3166,9 +3167,6 @@ export const ClassesWorkspace: React.FC = () => {
                                         <span className="font-semibold text-foreground truncate max-w-[130px]" title={displayName}>
                                           {displayName}
                                         </span>
-                                        {t.trainer_code && displayName !== t.trainer_code && (
-                                          <span className="text-[10px] text-muted-foreground font-mono">({t.trainer_code})</span>
-                                        )}
                                         <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
                                           {t.trainer_role || 'Lead'}
                                         </Badge>
@@ -3267,8 +3265,8 @@ export const ClassesWorkspace: React.FC = () => {
                             </td>
 
                             {/* Actions */}
-                            <td className="py-3 px-4 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1.5">
+                            <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   size="sm"
                                   onClick={(e) => {
@@ -3286,7 +3284,8 @@ export const ClassesWorkspace: React.FC = () => {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setSelectedOccurrence(occ);
                                       setTrainerError(null);
                                       setIsAssignTrainerOpen(true);
@@ -3300,7 +3299,8 @@ export const ClassesWorkspace: React.FC = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     setSelectedVideoOccurrence(occ);
                                     setIsAssignVideoOpen(true);
                                   }}
@@ -3487,7 +3487,8 @@ export const ClassesWorkspace: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedOccurrence(occ);
                               setTrainerError(null);
                               setIsAssignTrainerOpen(true);
@@ -3500,7 +3501,8 @@ export const ClassesWorkspace: React.FC = () => {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedVideoOccurrence(occ);
                             setIsAssignVideoOpen(true);
                           }}
@@ -3513,7 +3515,10 @@ export const ClassesWorkspace: React.FC = () => {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => assignContentMutation.mutate(occ.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            assignContentMutation.mutate(occ.id);
+                          }}
                           disabled={assignContentMutation.isPending}
                           className="text-xs"
                         >
@@ -5142,82 +5147,17 @@ export const ClassesWorkspace: React.FC = () => {
       </Dialog>
 
       {/* ASSIGN TRAINER MODAL */}
-      <Dialog open={isAssignTrainerOpen && !!selectedOccurrence} onOpenChange={setIsAssignTrainerOpen}>
-        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Assign Qualified Trainer</DialogTitle>
-          </DialogHeader>
-          {selectedOccurrence && (
-            <div className="space-y-4 py-2 text-xs sm:text-sm">
-              <div className="p-3 bg-muted/40 rounded-lg border border-border text-xs space-y-1">
-                <p>Class: <strong className="text-foreground">{selectedOccurrence.template_name || selectedOccurrence.class_name}</strong></p>
-                <p>Date: <strong className="text-foreground">{selectedOccurrence.occurrence_date}</strong></p>
-                <p>Branch: <strong className="text-foreground">{selectedOccurrence.branch_name}</strong></p>
-              </div>
-
-              {trainerError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs flex items-start gap-2">
-                  <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                  <span>{trainerError}</span>
-                </div>
-              )}
-
-              <div>
-                <Label className="mb-1 block">Select Trainer Profile *</Label>
-                <select
-                  value={trainerProfileIdInput}
-                  onChange={(e) => setTrainerProfileIdInput(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">Choose qualified trainer...</option>
-                  {trainers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.trainer_name || 'Trainer'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label className="mb-1 block">Role</Label>
-                <select
-                  value={trainerRoleInput}
-                  onChange={(e) => setTrainerRoleInput(e.target.value as any)}
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {(metadata?.trainer_roles || []).map((r: ClassesMetadataOption<TrainerOccurrenceRole>) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAssignTrainerOpen(false);
-                setSelectedOccurrence(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() =>
-                selectedOccurrence &&
-                assignTrainerMutation.mutate({
-                  occurrenceId: selectedOccurrence.id,
-                  trainerId: trainerProfileIdInput,
-                  role: trainerRoleInput,
-                })
-              }
-              disabled={!trainerProfileIdInput || assignTrainerMutation.isPending}
-            >
-              {assignTrainerMutation.isPending ? 'Verifying Qualifications...' : 'Confirm Assignment'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AssignTrainerModal
+        occurrence={selectedOccurrence}
+        isOpen={isAssignTrainerOpen && !!selectedOccurrence}
+        onClose={() => {
+          setIsAssignTrainerOpen(false);
+          setSelectedOccurrence(null);
+        }}
+        onSuccess={() => {
+          refetchOccurrences();
+        }}
+      />
 
       {/* BRANCH AVAILABILITY MODAL */}
       <Dialog open={isBranchAvailOpen && !!selectedTemplateForAvail} onOpenChange={setIsBranchAvailOpen}>
@@ -5609,11 +5549,10 @@ export const ClassesWorkspace: React.FC = () => {
                 <option value="">-- No Trainer Assigned --</option>
                 {trainers.map((tr: any) => {
                   const trId = tr.id || tr.trainer_profile_id;
-                  const trName = tr.full_name || tr.name || tr.employee_name || 'Trainer';
-                  const trCode = tr.trainer_number || tr.employee_code || '';
+                  const trName = tr.trainer_name || tr.full_name || tr.name || tr.employee_name || 'Trainer';
                   return (
                     <option key={trId} value={trId}>
-                      {trName} {trCode ? `(${trCode})` : ''}
+                      {trName}
                     </option>
                   );
                 })}

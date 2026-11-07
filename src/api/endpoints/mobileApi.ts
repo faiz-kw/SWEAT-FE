@@ -65,6 +65,8 @@ export interface MobileScheduleOccurrence {
     specialties: string[];
     experience_years?: number;
   };
+  program_id?: string;
+  program_name?: string;
   is_included_in_plan?: boolean;
   ineligible_reason?: string | null;
   allowed_package_name?: string | null;
@@ -352,8 +354,8 @@ export const mobileApi = {
   getCategories: () => api.get<MobileClassCategory[]>('/mobile/categories/'),
 
   // Class Schedule & Booking
-  getSchedule: (params?: { date?: string; branch_id?: string; category?: string }) =>
-    api.get<MobileScheduleOccurrence[]>('/mobile/schedule/', params ? { params } : undefined),
+  getSchedule: (params?: { date?: string; branch_id?: string; category?: string; program_id?: string }) =>
+    api.get<any>('/mobile/schedule/', params ? { params } : undefined),
 
   bookClass: (occurrenceId: string) =>
     api.post<{ detail: string; booking_id: string; remaining_credits: number }>(

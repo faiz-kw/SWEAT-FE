@@ -25,12 +25,14 @@ import {
   ChevronDown,
   ChevronUp,
   Award,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
 import { ClassOccurrence } from '../../types/classes';
 import { SecureWorkoutPlayer } from './SecureWorkoutPlayer';
 import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
+import { AssignTrainerModal } from './AssignTrainerModal';
 import { formatOccurrenceDate, formatTime12h } from '@/utils/dateTimeUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -128,8 +130,15 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
       const trimmed = videoInputUrl.trim();
       await classesApi.updateOccurrenceVideo(occurrence.id, trimmed);
       toast.success(trimmed ? 'Workout video updated successfully!' : 'Workout video removed successfully!');
+      if (!trimmed) {
+        queryClient.setQueryData(['class-occurrence-video-stream', occurrence.id], null);
+        setShowVideoPlayer(false);
+      }
       await queryClient.invalidateQueries({ queryKey: ['class-occurrence-video-stream', occurrence.id] });
+      await queryClient.invalidateQueries({ queryKey: ['class-occurrence-detail', occurrence.id] });
       await queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      await queryClient.invalidateQueries({ queryKey: ['class-occurrences-today'] });
+      await queryClient.invalidateQueries({ queryKey: ['class-occurrences-paginated'] });
       await refetchVideo();
       if (trimmed) {
         setShowVideoPlayer(true);
@@ -142,6 +151,15 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     }
   };
   const [rosterTab, setRosterTab] = React.useState<'ALL' | 'MEMBER' | 'TRIAL' | 'WAITLIST'>('ALL');
+  const [isAssignTrainerModalOpen, setIsAssignTrainerModalOpen] = React.useState(false);
+
+  const { data: liveOccurrenceData, refetch: refetchOccurrence } = useQuery({
+    queryKey: ['class-occurrence-detail', occurrence?.id],
+    queryFn: () => (occurrence?.id ? classesApi.getOccurrence(occurrence.id) : null),
+    enabled: isOpen && !!occurrence?.id,
+  });
+
+  const currentOccurrence = liveOccurrenceData || occurrence;
 
   const { data: classVideoData, refetch: refetchVideo } = useQuery({
     queryKey: ['class-occurrence-video-stream', occurrence?.id],
@@ -150,9 +168,9 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   });
 
   React.useEffect(() => {
-    const activeUrl = classVideoData?.video_url || classVideoData?.external_url || occurrence?.online_join_url || '';
+    const activeUrl = classVideoData?.video_url || classVideoData?.external_url || currentOccurrence?.online_join_url || '';
     setVideoInputUrl(activeUrl);
-  }, [classVideoData, occurrence]);
+  }, [classVideoData, currentOccurrence]);
 
   React.useEffect(() => {
     setShowVideoPlayer(false);
@@ -438,7 +456,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                     Assigned Trainer
                   </div>
                   {(() => {
-                    const trainersList = occurrence?.trainers || occurrence?.assigned_trainers || [];
+                    const trainersList = currentOccurrence?.trainers || currentOccurrence?.assigned_trainers || [];
                     if (trainersList.length === 0) {
                       return (
                         <div className="flex items-center gap-2 mt-0.5">
@@ -456,12 +474,16 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                             <span className="text-sm font-bold text-foreground">
                               {t.trainer_name && t.trainer_name.toLowerCase() !== 'sweat' ? t.trainer_name : (t.trainer_code || 'Trainer')}
                             </span>
-                            {t.trainer_code && (
-                              <Badge variant="outline" className="text-[10px] font-mono bg-background text-foreground/80 border-border">
-                                {t.trainer_code}
-                              </Badge>
-                            )}
-                            <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-semibold ${
+                                t.trainer_role === 'LEAD'
+                                  ? 'bg-primary/10 text-primary border-primary/30'
+                                  : t.trainer_role === 'ASSISTANT'
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              }`}
+                            >
                               {t.trainer_role || 'LEAD'}
                             </Badge>
                           </div>
@@ -472,9 +494,22 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 </div>
               </div>
 
-              {/* Trainer Live Check-in Status Badge */}
-              <div className="flex items-center gap-2">
-                {occurrence?.trainer_checked_in || occurrence?.trainer_check_in_details?.checked_in ? (
+              {/* 1-Click Trainer Assignment Button & Trainer Live Check-in Status Badge */}
+              <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsAssignTrainerModalOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-semibold border-primary/40 text-primary hover:bg-primary/10 hover:border-primary shadow-xs"
+                >
+                  <UserPlus className="size-3.5" />
+                  <span>
+                    {(currentOccurrence?.trainers?.length || 0) > 0 ? 'Manage Trainers' : 'Assign Trainer'}
+                  </span>
+                </Button>
+
+                {currentOccurrence?.trainer_checked_in || currentOccurrence?.trainer_check_in_details?.checked_in ? (
                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-bold gap-1 px-2.5 py-1 inline-flex items-center">
                     <CheckCircle2 className="size-3.5 text-emerald-500" />
                     <span>Trainer Checked In</span>
@@ -574,7 +609,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
                 {classVideoData?.embed_player_url && (
                   <Button
                     variant="outline"
@@ -588,16 +623,28 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                   </Button>
                 )}
                 {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditingVideo(!isEditingVideo)}
-                    className="h-7 text-xs gap-1 font-semibold"
-                    title="Upload or update video URL"
-                  >
-                    <Pencil className="size-3" />
-                    <span>{isEditingVideo ? 'Cancel' : (classVideoData?.embed_player_url ? 'Update Video' : 'Attach Video')}</span>
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsAssignVideoModalOpen(true)}
+                      className="h-7 text-xs gap-1.5 font-semibold border-primary/40 text-primary hover:bg-primary/10 hover:border-primary shadow-xs"
+                      title="Open WOD Workout Video Library to select or assign a video"
+                    >
+                      <Film className="size-3 text-primary" />
+                      <span>{classVideoData?.embed_player_url ? 'Change Video (WOD)' : 'Assign Video'}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingVideo(!isEditingVideo)}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground font-medium px-2"
+                      title="Paste a custom YouTube, Vimeo, or MP4 link"
+                    >
+                      <LinkIcon className="size-3" />
+                      <span>{isEditingVideo ? 'Close Link' : 'Custom Link'}</span>
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -1085,11 +1132,23 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
       )}
           {/* Video Assignment Modal */}
       <AssignWorkoutVideoModal
-        occurrence={occurrence}
+        occurrence={currentOccurrence || occurrence}
         isOpen={isAssignVideoModalOpen}
         onClose={() => setIsAssignVideoModalOpen(false)}
         onAssigned={() => {
           refetchVideo();
+          refetchOccurrence();
+          setShowVideoPlayer(true);
+        }}
+      />
+
+      {/* Direct 1-Click Trainer Assignment Modal */}
+      <AssignTrainerModal
+        occurrence={currentOccurrence}
+        isOpen={isAssignTrainerModalOpen}
+        onClose={() => setIsAssignTrainerModalOpen(false)}
+        onSuccess={() => {
+          refetchOccurrence();
         }}
       />
     </Dialog>

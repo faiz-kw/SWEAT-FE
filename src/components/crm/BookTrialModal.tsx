@@ -54,6 +54,14 @@ export function BookTrialModal({
   const queryClient = useQueryClient();
   const isReschedule = mode === 'reschedule' && !!existingTrial;
 
+  const getLocalTodayDate = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [selectedLeadId, setSelectedLeadId] = React.useState<string>(
     initialLead?.id || existingTrial?.lead || ''
   );
@@ -66,8 +74,7 @@ export function BookTrialModal({
   );
   const [selectedDate, setSelectedDate] = React.useState<string>(() => {
     if (existingTrial?.booking_date) return existingTrial.booking_date;
-    const today = new Date();
-    return today.toISOString().split('T')[0] ?? '';
+    return getLocalTodayDate();
   });
   const [selectedSlot, setSelectedSlot] = React.useState<TrialSlot | null>(null);
   const [notes, setNotes] = React.useState('');
@@ -124,11 +131,16 @@ export function BookTrialModal({
     }
   }, [open, selectedBranchId, branches, activeLead?.branch]);
 
-  // Fetch programs for branch (canonical endpoint enforces branch availability & trial policy)
-  const { data: programs = [] } = useQuery({
-    queryKey: ['active-programs', selectedBranchId],
-    queryFn: () => crmApi.getPrograms(selectedBranchId || undefined),
-    enabled: open && !!selectedBranchId,
+  // Fetch trial-eligible programs for branch & date (strictly backend-driven, dynamic capacity check)
+  const { data: eligiblePrograms = [], isLoading: isProgramsLoading } = useQuery({
+    queryKey: ['eligible-trial-programs', selectedBranchId, selectedDate, selectedLeadId],
+    queryFn: () =>
+      crmApi.getEligibleTrialPrograms({
+        branch_id: selectedBranchId,
+        date: selectedDate,
+        lead_id: selectedLeadId || undefined,
+      }),
+    enabled: open && !!selectedBranchId && !isConverted,
   });
 
   // Defensive deduplication by canonical entity ID
@@ -143,12 +155,19 @@ export function BookTrialModal({
 
   const uniquePrograms = React.useMemo(() => {
     const seen = new Set<string>();
-    return programs.filter((p) => {
+    return eligiblePrograms.filter((p) => {
       if (!p?.id || seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
-  }, [programs]);
+  }, [eligiblePrograms]);
+
+  // Auto-select if exactly 1 eligible program exists; clear if current program is no longer eligible on new date
+  React.useEffect(() => {
+    if (uniquePrograms.length === 1 && uniquePrograms[0] && !selectedProgramId) {
+      setSelectedProgramId(uniquePrograms[0].id);
+    }
+  }, [uniquePrograms, selectedProgramId]);
 
   React.useEffect(() => {
     if (selectedProgramId && uniquePrograms.length > 0 && !uniquePrograms.some((p) => p.id === selectedProgramId)) {
@@ -200,10 +219,21 @@ export function BookTrialModal({
     queryClient.invalidateQueries({ queryKey: ['lead-trials'] });
     queryClient.invalidateQueries({ queryKey: ['lead-timeline'] });
     queryClient.invalidateQueries({ queryKey: ['available-trial-slots'] });
+    queryClient.invalidateQueries({ queryKey: ['eligible-trial-programs'] });
     queryClient.invalidateQueries({ queryKey: ['bookings'] });
     queryClient.invalidateQueries({ queryKey: ['crm-dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['scheduled-occurrences'] });
   };
+
+  const bookableSlots = React.useMemo(() => {
+    return slots.filter(
+      (slot) =>
+        slot.is_available &&
+        slot.policy_allowed &&
+        slot.remaining_trial_capacity > 0 &&
+        slot.remaining_capacity > 0
+    );
+  }, [slots]);
 
   // Booking mutation
   const bookMutation = useMutation({
@@ -501,7 +531,7 @@ export function BookTrialModal({
                 </select>
               </div>
 
-              {/* 2. PROGRAM SELECTOR (LOADED FOR SELECTED BRANCH) */}
+              {/* 2. PROGRAM SELECTOR (LOADED FOR SELECTED BRANCH & DATE) */}
               <div className="space-y-1">
                 <Label className="text-xs font-semibold flex items-center gap-1">
                   <Dumbbell className="w-3 h-3 text-primary" />
@@ -513,15 +543,23 @@ export function BookTrialModal({
                     setSelectedProgramId(e.target.value);
                     setSelectedSlot(null);
                   }}
-                  disabled={isConverted || !selectedBranchId}
+                  disabled={isConverted || !selectedBranchId || isProgramsLoading || uniquePrograms.length === 0}
                   className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs font-medium focus:ring-1 focus:ring-primary"
                 >
-                  <option value="">All Programs for Branch</option>
-                  {uniquePrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  {uniquePrograms.length === 0 ? (
+                    <option value="">{isProgramsLoading ? 'Checking available programs...' : 'No trial programs for this date'}</option>
+                  ) : (
+                    <>
+                      {uniquePrograms.length > 1 && (
+                        <option value="">All Trial Programs ({uniquePrograms.length})</option>
+                      )}
+                      {uniquePrograms.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -534,7 +572,7 @@ export function BookTrialModal({
                 <Input
                   type="date"
                   value={selectedDate}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={getLocalTodayDate()}
                   onChange={(e) => {
                     setSelectedDate(e.target.value);
                     setSelectedSlot(null);
@@ -553,7 +591,7 @@ export function BookTrialModal({
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-primary" />
-                  Available Class Sessions ({slots.length})
+                  Available Class Sessions ({bookableSlots.length})
                 </Label>
                 {isSlotsLoading && (
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -572,24 +610,20 @@ export function BookTrialModal({
                 <div className="py-8 text-center text-xs text-muted-foreground border border-dashed rounded-lg border-border">
                   Please select a branch to view available scheduled occurrences.
                 </div>
-              ) : slots.length === 0 && !isSlotsLoading ? (
+              ) : bookableSlots.length === 0 && !isSlotsLoading ? (
                 <div className="py-8 px-4 text-center text-xs text-muted-foreground border border-dashed rounded-lg border-border bg-muted/10 space-y-1">
                   <div className="font-medium text-foreground">
-                    No trial-enabled class sessions with remaining capacity on this date.
+                    No trial slots available for the selected program and date.
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Full trial sessions are authoritatively excluded. Try selecting another date or choosing &quot;All Trial Programs&quot; above.
+                    Sessions that are full or do not allow trials are excluded. Try selecting another date.
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto pr-1">
-                  {slots.map((slot) => {
+                  {bookableSlots.map((slot) => {
                     const isSelected = selectedSlot?.occurrence_id === slot.occurrence_id;
-                    const isAvailable =
-                      slot.is_available &&
-                      slot.policy_allowed &&
-                      slot.remaining_trial_capacity > 0 &&
-                      slot.remaining_capacity > 0;
+                    const isAvailable = true;
 
                     return (
                       <div

@@ -190,6 +190,11 @@ export const classesApi = {
     };
   },
 
+  async getOccurrence(occurrenceId: string): Promise<ClassOccurrence> {
+    const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/`);
+    return res.data;
+  },
+
   async getBookingsForOccurrence(occurrenceId: string): Promise<any[]> {
     const res = await api.get<any>('/tenant/bookings/', { params: { occurrence_id: occurrenceId } });
     return res.data?.results || res.data || [];
@@ -295,6 +300,14 @@ export const classesApi = {
     const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/assign-trainer/`, {
       trainer_profile_id: trainerProfileId,
       trainer_role: trainerRole,
+    });
+    return res.data;
+  },
+
+  async unassignTrainer(occurrenceId: string, trainerProfileId?: string, assignmentId?: string): Promise<any> {
+    const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/unassign-trainer/`, {
+      trainer_profile_id: trainerProfileId,
+      assignment_id: assignmentId,
     });
     return res.data;
   },

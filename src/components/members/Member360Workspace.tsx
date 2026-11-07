@@ -1814,6 +1814,10 @@ const MemberMembershipsSection: React.FC<{
     return memberships.active ? [memberships.active] : [];
   }, [memberships]);
 
+  const hasActiveContracts = useMemo(() => {
+    return activeContracts.some((c: any) => c.status === 'ACTIVE' || c.status === 'FROZEN');
+  }, [activeContracts]);
+
   const filteredPurchaseLedger = purchaseLedgerEntries.filter((entry) => {
     if (ledgerFilter === 'PURCHASES') return entry.type === 'PURCHASE' || entry.type === 'RENEWAL';
     if (ledgerFilter === 'EXTENSIONS') return entry.type === 'EXTENSION';
