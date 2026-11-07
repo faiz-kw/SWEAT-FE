@@ -64,8 +64,10 @@ interface ClassAttendanceModalProps {
 const getInitials = (name?: string) => {
   if (!name || !name.trim()) return 'M';
   const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  if (parts.length === 1) return parts[0]?.substring(0, 2).toUpperCase() || 'M';
+  const firstChar = parts[0]?.[0] || '';
+  const lastChar = parts[parts.length - 1]?.[0] || '';
+  return (firstChar + lastChar).toUpperCase() || 'M';
 };
 
 export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
@@ -207,25 +209,25 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   }, [rosterTab, bookings, memberBookings, trialBookings, waitlistBookings]);
 
   const targetedMuscles = React.useMemo(() => {
-    const raw = classVideoData?.targeted_muscles;
+    const raw: any = classVideoData?.targeted_muscles;
     if (!raw) return [];
     if (Array.isArray(raw)) {
-      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(',').map((s) => s.trim()) : [String(m)])).filter(Boolean);
+      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(',').map((s: string) => s.trim()) : [String(m)])).filter(Boolean);
     }
     if (typeof raw === 'string') {
-      return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
     }
     return [];
   }, [classVideoData?.targeted_muscles]);
 
   const equipmentRequired = React.useMemo(() => {
-    const raw = classVideoData?.equipment_required;
+    const raw: any = classVideoData?.equipment_required;
     if (!raw) return [];
     if (Array.isArray(raw)) {
-      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(/[,+/&|]/).map((s) => s.trim()) : [String(m)])).filter(Boolean);
+      return raw.flatMap((m: any) => (typeof m === 'string' ? m.split(/[,+/&|]/).map((s: string) => s.trim()) : [String(m)])).filter(Boolean);
     }
     if (typeof raw === 'string') {
-      return raw.split(/[,+/&|]/).map((s) => s.trim()).filter(Boolean);
+      return raw.split(/[,+/&|]/).map((s: string) => s.trim()).filter(Boolean);
     }
     return [];
   }, [classVideoData?.equipment_required]);

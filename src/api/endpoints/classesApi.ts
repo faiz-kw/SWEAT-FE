@@ -345,11 +345,13 @@ export const classesApi = {
     trainer_name?: string;
     video_url?: string;
     embed_player_url?: string;
+    external_url?: string;
+    raw_equipment?: string;
     is_assigned_trainer: boolean;
     description?: string;
     instructions?: string;
-    targeted_muscles?: string[];
-    equipment_required?: string[];
+    targeted_muscles?: string[] | string;
+    equipment_required?: string[] | string;
   }> {
     const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/trainer-video/`);
     return res.data;
