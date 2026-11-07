@@ -60,6 +60,8 @@ import {
   ShieldCheck,
   PenTool,
   Edit3,
+  Edit2,
+  Send,
   Globe,
   Utensils,
   Droplets,
@@ -256,6 +258,28 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
   }
 
   const member = data360.member || ({} as any);
+  const rawSummaryList = Array.isArray(data360?.overview?.entitlement_summary)
+    ? data360.overview.entitlement_summary
+    : (Array.isArray(data360?.passbook?.balances) ? data360.passbook.balances : []);
+
+  const dedupedRawMap = (() => {
+    const m = new Map<string, any>();
+    for (const ent of rawSummaryList) {
+      const typeLower = (ent.entitlement_type || '').toLowerCase();
+      let normKey = 'OTHER';
+      if (typeLower.includes('cross') || typeLower.includes('passport')) {
+        normKey = 'PASSPORT';
+      } else if (typeLower.includes('credit') || typeLower.includes('wallet')) {
+        normKey = 'CREDITS';
+      } else if (typeLower.includes('home') || typeLower.includes('session') || typeLower.includes('class')) {
+        normKey = 'HOME';
+      }
+      if (!m.has(normKey) || Number(ent.consumed || 0) > Number(m.get(normKey).consumed || 0)) {
+        m.set(normKey, ent);
+      }
+    }
+    return m;
+  })();
   const header = {
     name: data360.header?.name || member.name || 'Member',
     member_number: data360.header?.member_number || (member as any).membership_number || member.member_number || '—',
@@ -266,9 +290,51 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     current_package: data360.header?.current_package || member.package_name || 'None',
     current_package_version: data360.header?.current_package_version || member.package_version_name || 'v1',
     expiry_date: data360.header?.expiry_date || member.expiry_date,
-    home_sessions_remaining: data360.header?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0,
-    cross_branch_sessions_remaining: data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0,
+    home_sessions_remaining: (() => {
+      const activeMem = data360.memberships?.active as any;
+      const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes(
+        (data360.header?.status || member.membership_status || member.status || '').toUpperCase()
+      );
+      if (!isMemberActiveOrFrozen) return 0;
+      const homeEnt = dedupedRawMap.get('HOME');
+      if (homeEnt && homeEnt.remaining != null) return Math.round(Number(homeEnt.remaining));
+      if (activeMem) {
+        if (typeof activeMem.sessions_left === 'number') return activeMem.sessions_left;
+        if (typeof activeMem.home_sessions_remaining === 'number') return activeMem.home_sessions_remaining;
+      }
+      return data360.header?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0;
+    })(),
+    cross_branch_sessions_remaining: (() => {
+      const activeMem = data360.memberships?.active as any;
+      const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes(
+        (data360.header?.status || member.membership_status || member.status || '').toUpperCase()
+      );
+      if (!isMemberActiveOrFrozen) return 0;
+      const passEnt = dedupedRawMap.get('PASSPORT');
+      if (passEnt && passEnt.remaining != null) return Math.round(Number(passEnt.remaining));
+      if (activeMem) {
+        if (typeof activeMem.passport_sessions_left === 'number') return activeMem.passport_sessions_left;
+        if (typeof activeMem.cross_branch_sessions_remaining === 'number') return activeMem.cross_branch_sessions_remaining;
+      }
+      return data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0;
+    })(),
     outstanding_balance: Number(data360.header?.outstanding_balance ?? member.outstanding_balance ?? 0),
+    credits_remaining: (() => {
+      const creditEnt = dedupedRawMap.get('CREDITS');
+      if (creditEnt && creditEnt.remaining != null) return Math.round(Number(creditEnt.remaining));
+      return Number((data360.header as any)?.credits_remaining ?? 0);
+    })(),
+    credits_consumed: (() => {
+      const creditEnt = dedupedRawMap.get('CREDITS');
+      if (creditEnt && creditEnt.consumed != null) return Math.round(Number(creditEnt.consumed));
+      return Number((data360.header as any)?.credits_consumed ?? 0);
+    })(),
+    credits_allocated: (() => {
+      const creditEnt = dedupedRawMap.get('CREDITS');
+      if (creditEnt && creditEnt.allocated != null) return Math.round(Number(creditEnt.allocated));
+      return Number((data360.header as any)?.credits_allocated ?? 0);
+    })(),
+    available_reward_coins: Number(data360.rewards?.points_balance ?? (data360.header as any)?.available_reward_coins ?? 0),
     assigned_trainer: data360.header?.assigned_trainer || member.assigned_trainer || 'Unassigned',
     avatar_url: data360.header?.avatar_url || (member as any)?.avatar_url || '',
     alerts: Array.isArray(data360.header?.alerts) ? data360.header.alerts : [],
@@ -308,6 +374,50 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       ? data360.overview.recent_activities
       : (Array.isArray(data360.timeline) ? data360.timeline.slice(0, 5) : []),
   };
+
+  // Deduplicate and sanitize entitlement cards so repeated duplicate widgets are eliminated
+  const sanitizedEntitlements = (() => {
+    const rawList = Array.isArray(overview.entitlement_summary) ? overview.entitlement_summary : [];
+    const grouped = new Map<string, any>();
+
+    for (const ent of rawList) {
+      const typeLower = (ent.entitlement_type || '').toLowerCase();
+      let normKey = 'OTHER';
+      let displayLabel = ent.entitlement_type.replace(/_/g, ' ');
+      let isPassport = false;
+
+      if (typeLower.includes('cross') || typeLower.includes('passport')) {
+        normKey = 'PASSPORT';
+        displayLabel = 'Passport / Cross-Branch';
+        isPassport = true;
+      } else if (typeLower.includes('credit') || typeLower.includes('wallet')) {
+        normKey = 'CREDITS';
+        displayLabel = 'Elite Credits';
+      } else if (typeLower.includes('home') || typeLower.includes('session') || typeLower.includes('class')) {
+        normKey = 'HOME_SESSION';
+        displayLabel = 'Home Studio Sessions';
+      } else if (typeLower.includes('personal') || typeLower.includes('pt')) {
+        normKey = 'PERSONAL_TRAINING';
+        displayLabel = 'Personal Training Sessions';
+      }
+
+      if (!grouped.has(normKey)) {
+        grouped.set(normKey, { ...ent, normKey, displayLabel, isPassport });
+      } else {
+        const existing = grouped.get(normKey);
+        if (Number(ent.consumed || 0) > Number(existing.consumed || 0)) {
+          grouped.set(normKey, { ...ent, normKey, displayLabel, isPassport });
+        }
+      }
+    }
+
+    return Array.from(grouped.values());
+  })();
+
+  const creditEntitlement = sanitizedEntitlements.find((e) => e.normKey === 'CREDITS');
+  const displayCreditsRemaining = creditEntitlement != null
+    ? Math.round(Number(creditEntitlement.remaining ?? 0))
+    : Number((header as any).credits_remaining ?? 0);
 
   const timeline = Array.isArray(data360.timeline) ? data360.timeline : [];
   const memberships = {
@@ -349,6 +459,36 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       }];
     }
     return [];
+  })();
+  const resolvedPassport = (() => {
+    const raw = data360?.passport;
+    const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes((header.status || '').toUpperCase());
+    const activeMem = memberships.active;
+    if (!isMemberActiveOrFrozen || !activeMem) {
+      return {
+        ...raw,
+        passport_allowed: 0,
+        passport_consumed: 0,
+        passport_remaining: 0,
+      };
+    }
+    const hasExplicitActivePassport = typeof activeMem.passport_sessions_left === 'number' || typeof activeMem.cross_branch_sessions_remaining === 'number';
+    const passAlloc = typeof activeMem.passport_sessions_total === 'number'
+      ? activeMem.passport_sessions_total
+      : (typeof activeMem.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_allowed ?? 0));
+    const passUsed = typeof activeMem.passport_sessions_used === 'number'
+      ? activeMem.passport_sessions_used
+      : (raw?.passport_consumed ?? 0);
+    const passLeft = typeof activeMem.passport_sessions_left === 'number'
+      ? activeMem.passport_sessions_left
+      : (typeof activeMem.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_remaining ?? 0));
+
+    return {
+      ...raw,
+      passport_allowed: hasExplicitActivePassport ? passAlloc : (raw?.passport_allowed ?? 0),
+      passport_consumed: hasExplicitActivePassport ? passUsed : (raw?.passport_consumed ?? 0),
+      passport_remaining: hasExplicitActivePassport ? passLeft : (raw?.passport_remaining ?? 0),
+    };
   })();
   const passbook = {
     balances: Array.isArray(data360.passbook?.balances) ? data360.passbook.balances : [],
@@ -617,27 +757,43 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
               </div>
             </div>
 
-            {/* Header Key Metrics - Spacious, Uncluttered, and Readable */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:border-l lg:border-border/80 lg:pl-6 shrink-0 w-full lg:w-auto">
-              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm">
-                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Home Sessions</div>
-                <div className="text-xl font-bold text-foreground mt-0.5">
+                        {/* Header Key Metrics - 2 Rows x 3 Columns Compact Grid (Never Overflows) */}
+            <div className="grid grid-cols-3 gap-2 lg:border-l lg:border-border/80 lg:pl-5 shrink-0 w-full sm:w-[330px]">
+              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Home Sessions</div>
+                <div className="text-base font-bold text-foreground mt-0.5">
                   {header.home_sessions_remaining}
                 </div>
-                <div className="text-[10px] text-muted-foreground">remaining</div>
+                <div className="text-[9px] text-muted-foreground">remaining</div>
               </div>
 
-              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm">
-                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Cross-Branch</div>
-                <div className="text-xl font-bold text-foreground mt-0.5">
+              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Cross-Branch</div>
+                <div className="text-base font-bold text-foreground mt-0.5">
                   {header.cross_branch_sessions_remaining}
                 </div>
-                <div className="text-[10px] text-muted-foreground">remaining</div>
+                <div className="text-[9px] text-muted-foreground">remaining</div>
               </div>
 
-              <div className="bg-card/90 border border-border/70 rounded-xl px-3.5 py-2.5 text-center min-w-[125px] shadow-sm">
-                <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Expiry</div>
-                <div className="text-sm font-bold text-foreground mt-1 whitespace-nowrap">
+              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Credits</div>
+                <div className="text-base font-bold text-amber-500 mt-0.5">
+                  {displayCreditsRemaining}
+                </div>
+                <div className="text-[9px] text-muted-foreground">available</div>
+              </div>
+
+              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Reward Coins</div>
+                <div className="text-base font-bold text-amber-400 mt-0.5">
+                  {(header as any).available_reward_coins ?? data360?.rewards?.points_balance ?? 0}
+                </div>
+                <div className="text-[9px] text-muted-foreground">coins</div>
+              </div>
+
+              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Expiry</div>
+                <div className="text-xs font-bold text-foreground mt-0.5 whitespace-nowrap">
                   {header.expiry_date
                     ? new Date(header.expiry_date).toLocaleDateString('en-GB', {
                         day: '2-digit',
@@ -646,25 +802,25 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       })
                     : 'No Active Plan'}
                 </div>
-                <div className="text-[10px] text-muted-foreground">valid till</div>
+                <div className="text-[9px] text-muted-foreground">valid till</div>
               </div>
 
               <div
-                className={`rounded-xl px-3.5 py-2.5 text-center min-w-[110px] shadow-sm border ${
+                className={`rounded-xl px-2.5 py-1.5 text-center shadow-sm border ${
                   header.outstanding_balance > 0
                     ? 'bg-rose-500/10 border-rose-500/30'
                     : 'bg-card/90 border-border/70'
                 }`}
               >
-                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</div>
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</div>
                 <div
-                  className={`text-xl font-bold mt-0.5 ${
+                  className={`text-base font-bold mt-0.5 ${
                     header.outstanding_balance > 0 ? 'text-rose-500' : 'text-emerald-500'
                   }`}
                 >
                   ₹{Number(header.outstanding_balance).toLocaleString()}
                 </div>
-                <div className="text-[10px] text-muted-foreground">balance</div>
+                <div className="text-[9px] text-muted-foreground">balance</div>
               </div>
             </div>
           </div>
@@ -1031,29 +1187,118 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       </div>
                     </div>
 
-                    {/* Entitlements Cards */}
+                    {/* Entitlements & Wallet Cards - 4 Clear Coexisting Widgets */}
                     <div>
                       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        Session Passbook Summary
+                        Passbook & Credits Summary
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {overview.entitlement_summary.map((ent) => (
-                          <div key={ent.id} className="p-3 bg-muted/40 border border-border rounded-lg">
-                            <div className="text-xs text-muted-foreground capitalize">
-                              {ent.entitlement_type.replace(/_/g, ' ').toLowerCase()}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* 1. Home Studio Sessions */}
+                        {(() => {
+                          const homeEnt = sanitizedEntitlements.find((e) => e.normKey === 'HOME_SESSION');
+                          const consumed = homeEnt ? Math.round(Number(homeEnt.consumed || 0)) : (header.current_package?.includes('144') ? Math.max(0, 144 - header.home_sessions_remaining) : 0);
+                          const allocated = homeEnt?.allocated != null ? Math.round(Number(homeEnt.allocated)) : (header.current_package?.includes('144') ? 144 : null);
+                          const remaining = header.home_sessions_remaining;
+
+                          return (
+                            <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  Home Studio Sessions
+                                </span>
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">
+                                {remaining}
+                                <span className="text-xs font-normal text-muted-foreground ml-1.5">remaining</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-semibold text-foreground">{consumed}</span> / {allocated ?? '∞'} Consumed
+                              </div>
                             </div>
-                            <div className="text-xl font-bold text-foreground mt-1">
-                              {ent.is_unlimited ? (
-                                <span className="text-indigo-400 font-sans">Unlimited</span>
-                              ) : (
-                                ent.remaining
-                              )}
+                          );
+                        })()}
+
+                        {/* 2. Cross-Branch / Passport */}
+                        {(() => {
+                          const passEnt = sanitizedEntitlements.find((e) => e.normKey === 'PASSPORT');
+                          const consumed = passEnt ? Math.round(Number(passEnt.consumed || 0)) : Number(resolvedPassport?.passport_consumed ?? 0);
+                          const allocated = passEnt?.allocated != null ? Math.round(Number(passEnt.allocated)) : (Number(resolvedPassport?.passport_allowed ?? 28) || 28);
+                          const remaining = header.cross_branch_sessions_remaining;
+
+                          return (
+                            <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  Passport / Cross-Branch
+                                </span>
+                                <Badge variant="outline" className="text-[10px] text-indigo-400 border-indigo-500/30">
+                                  Within Pack
+                                </Badge>
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">
+                                {remaining}
+                                <span className="text-xs font-normal text-muted-foreground ml-1.5">remaining</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-semibold text-foreground">{consumed}</span> / {allocated} Consumed (Passport allowance)
+                              </div>
                             </div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">
-                              {ent.consumed} used of {ent.allocated ?? '∞'} allocated
+                          );
+                        })()}
+
+                        {/* 3. Elite Credits */}
+                        {(() => {
+                          const creditEnt = sanitizedEntitlements.find((e) => e.normKey === 'CREDITS');
+                          const consumed = creditEnt ? Math.round(Number(creditEnt.consumed || 0)) : (header as any).credits_consumed ?? 0;
+                          const allocated = creditEnt?.allocated != null ? Math.round(Number(creditEnt.allocated)) : (header as any).credits_allocated ?? 0;
+                          const remaining = creditEnt ? Math.round(Number(creditEnt.remaining || 0)) : (header as any).credits_remaining ?? 0;
+
+                          return (
+                            <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  Elite Credits / Wallet
+                                </span>
+                                <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                  Credits
+                                </Badge>
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">
+                                {remaining}
+                                <span className="text-xs font-normal text-muted-foreground ml-1.5">Credits</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-semibold text-foreground">{consumed}</span> / {allocated > 0 ? allocated : '0'} Credits Used
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })()}
+
+                        {/* 4. Reward Coins */}
+                        {(() => {
+                          const coins = (header as any).available_reward_coins ?? data360?.rewards?.points_balance ?? 0;
+                          const valueRupees = data360?.rewards?.credit_balance ?? coins;
+
+                          return (
+                            <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  Reward Coins / Points
+                                </span>
+                                <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-400/30">
+                                  Loyalty
+                                </Badge>
+                              </div>
+                              <div className="text-2xl font-bold text-amber-400">
+                                {coins}
+                                <span className="text-xs font-normal text-muted-foreground ml-1.5">Coins</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Available to redeem (≈ ₹{valueRupees})
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1131,7 +1376,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             passbook={passbook}
             finance={finance}
             rewards={data360?.rewards}
-            passport={data360?.passport}
+            passport={resolvedPassport}
             isTrialMember={isTrialMember}
             onAdjustSessions={() => setActiveModal('ADJUST_ENTITLEMENT')}
             onBuyPassport={() => setActiveModal('BUY_PASSPORT')}
@@ -1610,6 +1855,28 @@ const MemberMembershipsSection: React.FC<{
   onViewTransaction: (txn: any) => void;
 }> = ({ memberships, passbook, finance, rewards, passport, isTrialMember, onAdjustSessions, onBuyPassport, onPurchasePackage, onRenew, onUpgrade, onViewTransaction }) => {
   const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PURCHASES' | 'EXTENSIONS' | 'COUPONS' | 'CANCELLATIONS'>('ALL');
+  const [planSubTab, setPlanSubTab] = useState<'active' | 'upcoming' | 'expired'>('active');
+
+  const activePlans: any[] = useMemo(() => {
+    if (Array.isArray((memberships as any)?.active_list) && (memberships as any).active_list.length > 0) {
+      return (memberships as any).active_list;
+    }
+    return memberships.active ? [memberships.active] : [];
+  }, [memberships]);
+
+  const upcomingPlans: any[] = useMemo(() => {
+    return Array.isArray(memberships.upcoming) ? memberships.upcoming : [];
+  }, [memberships]);
+
+  const expiredPlans: any[] = useMemo(() => {
+    return Array.isArray(memberships.history) ? memberships.history : [];
+  }, [memberships]);
+
+  const currentDisplayPlans = useMemo(() => {
+    if (planSubTab === 'active') return activePlans;
+    if (planSubTab === 'upcoming') return upcomingPlans;
+    return expiredPlans;
+  }, [planSubTab, activePlans, upcomingPlans, expiredPlans]);
 
   // Calculate total savings from coupons & discounts
   const totalDiscountSaved = React.useMemo(() => {
@@ -1623,13 +1890,24 @@ const MemberMembershipsSection: React.FC<{
     return sum;
   }, [finance?.orders, memberships.active]);
 
-  // Total sessions remaining across active balance buckets
+  const activeContracts: any[] = useMemo(() => {
+    if (Array.isArray((memberships as any)?.active_list) && (memberships as any).active_list.length > 0) {
+      return (memberships as any).active_list;
+    }
+    return memberships.active ? [memberships.active] : [];
+  }, [memberships]);
+
+  // Active membership sessions remaining (strictly active package only)
   const totalSessionsRemaining = React.useMemo(() => {
-    return (passbook?.balances || []).reduce((acc, b) => {
-      if (b.is_unlimited) return acc;
-      return acc + (b.remaining || 0);
-    }, 0);
-  }, [passbook?.balances]);
+    if (activeContracts.length > 0) {
+      return activeContracts.reduce((acc: number, c: any) => {
+        const anyC = c as any;
+        return acc + Number(anyC.home_sessions_remaining ?? anyC.sessions_left ?? 0);
+      }, 0);
+    }
+    const anyActive = memberships.active as any;
+    return Number(anyActive?.home_sessions_remaining ?? anyActive?.sessions_left ?? 0);
+  }, [activeContracts, memberships.active]);
 
   // Assemble unified commercial passbook ledger for laymen
   const purchaseLedgerEntries = React.useMemo(() => {
@@ -1807,12 +2085,7 @@ const MemberMembershipsSection: React.FC<{
     return snap?.end_date || memberships.active.end_date;
   }, [memberships.active, purchaseLedgerEntries]);
 
-  const activeContracts: any[] = useMemo(() => {
-    if (Array.isArray((memberships as any)?.active_list) && (memberships as any).active_list.length > 0) {
-      return (memberships as any).active_list;
-    }
-    return memberships.active ? [memberships.active] : [];
-  }, [memberships]);
+// activeContracts defined above
 
   const filteredPurchaseLedger = purchaseLedgerEntries.filter((entry) => {
     if (ledgerFilter === 'PURCHASES') return entry.type === 'PURCHASE' || entry.type === 'RENEWAL';
@@ -1869,7 +2142,7 @@ const MemberMembershipsSection: React.FC<{
             <Sparkles className="w-3 h-3 text-amber-400" />
           </div>
           <div className="text-lg font-bold text-amber-400 mt-1">
-            {rewards?.points_balance ?? 0} Pts
+            {rewards?.points_balance ?? 0} Coins
           </div>
           <span className="text-[10px] text-muted-foreground">
             ≈ ₹{rewards?.credit_balance ?? rewards?.points_balance ?? 0} value
@@ -1901,26 +2174,64 @@ const MemberMembershipsSection: React.FC<{
         </div>
       </div>
 
-      {/* 2. Current Active Membership & Contract Snapshot */}
+      {/* 2. Membership Plans (Active / Upcoming / Expired) */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-base text-foreground">
-                {hasActiveContracts
-                  ? (activeContracts.length > 1 ? `Current Active Contracts (${activeContracts.length})` : 'Current Active Contract')
-                  : (activeContracts.length > 0 ? 'Previous Contract (Expired)' : 'Membership Contract')}
-              </h3>
-              {purchaseLedgerEntries.some((e) => e.type === 'EXTENSION') && (
-                <Badge className="bg-purple-500/15 text-purple-400 border-purple-500/30 text-[10px]">
-                  VALIDITY EXTENSION PURCHASED
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Official membership contract snapshot with original plan pricing, validity, and coupon details.
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+          {/* Sub Tabs: Active Plans | Upcoming Plans | Expired Plans */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPlanSubTab('active')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                planSubTab === 'active'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Active Plans
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                planSubTab === 'active' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+              }`}>
+                {activePlans.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPlanSubTab('upcoming')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                planSubTab === 'upcoming'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Upcoming Plans
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                planSubTab === 'upcoming' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+              }`}>
+                {upcomingPlans.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPlanSubTab('expired')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                planSubTab === 'expired'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Expired Plans
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                planSubTab === 'expired' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+              }`}>
+                {expiredPlans.length}
+              </span>
+            </button>
           </div>
+
+          {/* Top Actions */}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={onRenew} className="h-8 text-xs">
               Renew Plan
@@ -1946,198 +2257,133 @@ const MemberMembershipsSection: React.FC<{
           </div>
         </div>
 
-        {!hasActiveContracts && activeContracts.length > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Notice:</span>
-              <span>This member currently has no active contract. The contract displayed below expired on {activeContracts[0]?.end_date || 'past date'}.</span>
-            </div>
-            {onPurchasePackage && (
-              <Button size="sm" onClick={onPurchasePackage} className="h-7 text-xs bg-amber-600 hover:bg-amber-500 text-white shrink-0">
-                Purchase / Activate Plan
-              </Button>
-            )}
-          </div>
-        )}
-
-        {activeContracts.length > 0 ? (
+        {/* Plan Cards matching Old System Screenshots */}
+        {currentDisplayPlans.length > 0 ? (
           <div className="space-y-4">
-            {activeContracts.map((contract: any, idx: number) => {
-              const hasExtension = purchaseLedgerEntries.some((e) => e.type === 'EXTENSION');
+            {currentDisplayPlans.map((plan: any, idx: number) => {
+              const snap = plan.contract_snapshot;
+              const cost = Number(plan.total_cost || plan.purchase_price || snap?.purchase_price || snap?.final_amount || 0);
+              const sessionsUsed = plan.sessions_used ?? snap?.consumed_units ?? 0;
+              const sessionsTotal = plan.sessions_total ?? snap?.allocated_units ?? (plan.home_sessions_remaining != null ? plan.home_sessions_remaining + sessionsUsed : 0);
+              const sessionsLeft = plan.sessions_left ?? (sessionsTotal > sessionsUsed ? sessionsTotal - sessionsUsed : (plan.home_sessions_remaining ?? 0));
+
+              const passUsed = plan.passport_sessions_used ?? 0;
+              const passTotal = plan.passport_sessions_total ?? (plan.cross_branch_sessions_remaining != null ? plan.cross_branch_sessions_remaining + passUsed : 0);
+              const passLeft = plan.passport_sessions_left ?? (passTotal > passUsed ? passTotal - passUsed : (plan.cross_branch_sessions_remaining ?? 0));
+
               return (
-                <div key={contract.id || idx} className="p-4 rounded-xl bg-muted/20 border border-border space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
-                    <div className="space-y-0.5">
-                      <div className="text-lg font-bold text-foreground flex items-center gap-2">
-                        {contract.package_name}
-                        {hasExtension && (
-                          <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40">
-                            Extension Active
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Program: {contract.program_name} · Version: {contract.package_version_name || 'v1'}
-                      </div>
-                    </div>
-                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
-                      {contract.status}
-                    </Badge>
-                  </div>
-
-                  <div className={`grid gap-4 text-xs ${
-                    hasExtension
-                      ? 'grid-cols-2 sm:grid-cols-5'
-                      : 'grid-cols-2 sm:grid-cols-4'
-                  }`}>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Membership #</span>
-                      <span className="font-mono font-medium text-foreground text-sm">
-                        {contract.membership_number}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Start Date</span>
-                      <span className="font-medium text-foreground text-sm">
-                        {contract.start_date ? new Date(contract.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                      </span>
-                    </div>
-                    {hasExtension && (
-                      <div>
-                        <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
-                          Original Validity
-                        </span>
-                        <span className="font-medium text-foreground text-sm block mt-0.5">
-                          {originalPlanEndDate
-                            ? new Date(originalPlanEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : '—'}
-                        </span>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                        {hasExtension ? 'Extended Validity' : 'Current Validity Till'}
-                        {hasExtension && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-purple-500/50 text-purple-600 dark:text-purple-400 bg-purple-500/10 font-bold">
-                            EXTENDED
-                          </Badge>
-                        )}
-                      </span>
-                      <span className={`font-bold text-sm block mt-0.5 ${
-                        hasExtension
-                          ? 'text-purple-600 dark:text-purple-400'
-                          : 'text-foreground'
-                      }`}>
-                        {contract.end_date ? new Date(contract.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">Home Branch</span>
-                      <span className="font-medium text-foreground text-sm">
-                        {contract.home_branch || 'Branch'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {hasExtension && (
-                    <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+                <div key={plan.id || idx} className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-3">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* Details Column */}
+                    <div className="space-y-1.5 flex-1">
+                      {/* Line 1: Plan Name & Branch Name */}
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
                         <div>
-                          <span className="font-semibold text-purple-600 dark:text-purple-400">Validity Extension Active:</span>{' '}
+                          <span className="font-semibold text-foreground">Plan Name:</span>{' '}
+                          <span className="text-muted-foreground">{plan.package_name || plan.plan_name || 'Sweat Pilates'}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-foreground">Branch Name:</span>{' '}
+                          <span className="text-muted-foreground">{plan.branch_name || plan.home_branch || 'Sweat Pilates Malad West'}</span>
+                        </div>
+                      </div>
+
+                      {/* Line 2: Total cost & Paid */}
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-foreground">Total cost:</span>{' '}
+                        <span className="font-semibold text-foreground">₹{cost.toLocaleString()}</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-600 text-white">
+                          Paid
+                        </span>
+                      </div>
+
+                      {/* Line 3: Start Date & End Date */}
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
+                        <div>
+                          <span className="font-semibold text-foreground">Start Date:</span>{' '}
                           <span className="text-muted-foreground">
-                            Member purchased validity extension to preserve remaining sessions. Plan is valid till{' '}
-                            <strong className="text-foreground">
-                              {contract.end_date ? new Date(contract.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                            </strong>.
+                            {plan.start_date ? new Date(plan.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-foreground">End Date:</span>{' '}
+                          <span className="text-muted-foreground">
+                            {plan.end_date ? new Date(plan.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                           </span>
                         </div>
                       </div>
-                      <Badge className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 text-[10px]">
-                        Unused Sessions Protected
-                      </Badge>
-                    </div>
-                  )}
 
-                  {/* Contract Financial Breakdown & Applied Coupons */}
-                  {(() => {
-                    const snap = contract.contract_snapshot;
-                    const catPrice = Number(contract.catalog_price || snap?.catalog_price || contract.purchase_price || 0);
-                    const paidPrice = Number(contract.purchase_price || snap?.purchase_price || snap?.final_amount || 0);
-                    const discAmt = Number(contract.discount_amount || snap?.discount_amount || (catPrice > paidPrice ? catPrice - paidPrice : 0));
-                    const coupon = contract.coupon_code || snap?.coupon_code || contract.campaign_name || snap?.campaign_name;
-                    const taxAmt = Number(snap?.tax_amount || 0);
-
-                    if (!catPrice && !paidPrice) return null;
-
-                    return (
-                      <div className="pt-3 border-t border-border/80">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 flex-wrap">
-                            <span>Financial Breakdown & Pricing</span>
-                            {coupon ? (
-                              <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                                🎟️ Coupon Applied: {coupon}
-                              </Badge>
-                            ) : discAmt > 0 ? (
-                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-blue-500/40 text-blue-400 bg-blue-500/10">
-                                🛡️ {contract.discount_label || 'Offline Branch Authorized Special Rate'}
-                              </Badge>
-                            ) : null}
-                            {contract.sold_by && (
-                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-purple-500/30 text-purple-400 bg-purple-500/10">
-                                👤 Sold by: {contract.sold_by}
-                              </Badge>
-                            )}
-                          </div>
-                          {discAmt > 0 && (
-                            <span className="text-xs text-emerald-500 font-medium">
-                              Total Savings: ₹{discAmt.toLocaleString()}
-                            </span>
-                          )}
+                      {/* Line 4: Sessions Used & Left */}
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
+                        <div>
+                          <span className="font-semibold text-foreground">Sessions Used:</span>{' '}
+                          <span className="text-muted-foreground">{sessionsUsed}/{sessionsTotal}</span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-lg border border-border text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Standard Catalog MRP</span>
-                            <div className="font-semibold text-foreground text-sm">
-                              ₹{catPrice.toLocaleString()}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Discount / Attribution</span>
-                            <div className="font-semibold text-emerald-400 flex items-center gap-1 text-sm">
-                              <Tag className="w-3 h-3" />
-                              {discAmt > 0 ? `-₹${discAmt.toLocaleString()}` : '—'}
-                            </div>
-                            {discAmt > 0 && (
-                              <div className="text-[10px] text-muted-foreground mt-0.5">
-                                {coupon ? `Code: ${coupon}` : (contract.sold_by ? `By ${contract.sold_by}` : 'Branch Authorized Rate')}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Tax</span>
-                            <div className="font-medium text-foreground text-sm">
-                              {taxAmt > 0 ? `+₹${taxAmt.toLocaleString()}` : 'Included / ₹0'}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground font-semibold">Final Purchase Price</span>
-                            <div className="font-bold text-foreground text-sm">
-                              ₹{paidPrice.toLocaleString()}
-                            </div>
-                          </div>
+                        <div>
+                          <span className="font-semibold text-foreground">Sessions Left:</span>{' '}
+                          <span className="text-muted-foreground">{sessionsLeft}</span>
                         </div>
                       </div>
-                    );
-                  })()}
+
+                      {/* Line 5: Passport Sessions Used & Left */}
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
+                        <div>
+                          <span className="font-semibold text-foreground">Passport Sessions Used:</span>{' '}
+                          <span className="text-muted-foreground">{passUsed}/{passTotal}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-foreground">Passport Sessions Left:</span>{' '}
+                          <span className="text-muted-foreground">{passLeft}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons Column */}
+                    <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-border"
+                        onClick={() => toast.info(`WhatsApp template triggered for ${plan.package_name || 'plan'}`)}
+                      >
+                        <Send className="w-3 h-3" /> Send WhatsApp Template
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
+                        onClick={() => onViewTransaction(plan.source_order || plan)}
+                      >
+                        <Receipt className="w-3 h-3" /> Transaction Details
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onUpgrade}>
+                        <ArrowUpRight className="w-3 h-3" /> Upgrade
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10"
+                        onClick={onRenew}
+                      >
+                        <RefreshCw className="w-3 h-3" /> Extend
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                        onClick={onRenew}
+                      >
+                        <Edit2 className="w-3 h-3" /> Edit Plan
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="p-6 text-center text-sm text-muted-foreground bg-muted/20 rounded-xl">
-            No active membership currently found.
+          <div className="p-8 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl">
+            No {planSubTab} membership plans recorded for this member.
           </div>
         )}
       </div>

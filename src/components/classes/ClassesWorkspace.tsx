@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
@@ -42,6 +42,7 @@ import {
   Upload,
   Ban,
   RotateCcw,
+  X,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
@@ -118,6 +119,156 @@ export function normalizeDaysOfWeek(days: any): number[] {
   return [];
 }
 
+interface TagAutocompleteInputProps {
+  label: string;
+  placeholder: string;
+  selectedTags: string[];
+  onChange: (tags: string[]) => void;
+  suggestions: string[];
+  badgeColorClass?: string;
+}
+
+const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
+  label,
+  placeholder,
+  selectedTags,
+  onChange,
+  suggestions,
+  badgeColorClass = "bg-primary/10 text-primary border-primary/20",
+}) => {
+  const [inputVal, setInputVal] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const query = inputVal.trim().toLowerCase();
+
+  // Filter suggestions case-insensitively, excluding already selected
+  const filteredSuggestions = query
+    ? suggestions.filter(
+        (s) =>
+          s.toLowerCase().includes(query) &&
+          !selectedTags.some((st) => st.toLowerCase() === s.toLowerCase())
+      )
+    : [];
+
+  const handleAddTag = (tagToAdd: string) => {
+    const trimmed = tagToAdd.trim();
+    if (!trimmed) return;
+    if (selectedTags.some((st) => st.toLowerCase() === trimmed.toLowerCase())) {
+      setInputVal('');
+      setIsOpen(false);
+      return;
+    }
+    // Match against suggestions to preserve canonical casing from WOD tags
+    const existingMatch = suggestions.find(
+      (s) => s.toLowerCase() === trimmed.toLowerCase()
+    );
+    const finalTag = existingMatch || trimmed;
+
+    onChange([...selectedTags, finalTag]);
+    setInputVal('');
+    setIsOpen(false);
+  };
+
+  const handleRemoveTag = (indexToRemove: number) => {
+    onChange(selectedTags.filter((_, i) => i !== indexToRemove));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (filteredSuggestions.length > 0) {
+        handleAddTag(filteredSuggestions[0]);
+      } else if (inputVal.trim()) {
+        handleAddTag(inputVal.replace(/,/g, ''));
+      }
+    } else if (e.key === 'Backspace' && !inputVal && selectedTags.length > 0) {
+      handleRemoveTag(selectedTags.length - 1);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <Label className="text-[10px] font-semibold block mb-1 text-foreground">
+        {label}
+      </Label>
+      <div
+        className="min-h-[34px] w-full rounded-md border border-input bg-background p-1.5 text-xs focus-within:ring-1 focus-within:ring-primary flex flex-wrap items-center gap-1.5 cursor-text transition-colors"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {selectedTags.map((tag, idx) => (
+          <span
+            key={idx}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${badgeColorClass}`}
+          >
+            <span>{tag}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemoveTag(idx);
+              }}
+              className="hover:opacity-70 focus:outline-none ml-0.5"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputVal}
+          onChange={(e) => {
+            setInputVal(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            if (inputVal.trim()) setIsOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={selectedTags.length === 0 ? placeholder : '+ add tag...'}
+          className="flex-1 min-w-[100px] bg-transparent border-0 p-0 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+        />
+      </div>
+
+      {isOpen && filteredSuggestions.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1 text-xs">
+          <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/50">
+            WOD Tag Suggestions ({filteredSuggestions.length})
+          </div>
+          {filteredSuggestions.slice(0, 15).map((sug, i) => (
+            <div
+              key={i}
+              className="px-2.5 py-1.5 hover:bg-accent cursor-pointer flex items-center justify-between text-popover-foreground transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleAddTag(sug);
+              }}
+            >
+              <span className="font-medium">{sug}</span>
+              <span className="text-[10px] text-muted-foreground">Select</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ClassesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -162,6 +313,8 @@ export const ClassesWorkspace: React.FC = () => {
   const [editTrainerId, setEditTrainerId] = useState('');
   const [initialTrainerId, setInitialTrainerId] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
+  const [editMuscles, setEditMuscles] = useState<string[]>([]);
+  const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const handleOpenEditSlot = (occ: ClassOccurrence) => {
@@ -189,6 +342,38 @@ export const ClassesWorkspace: React.FC = () => {
     setEditCapacity(String(occ.capacity || 20));
     setEditStatus(occ.status || 'SCHEDULED');
     setEditVideoUrl(occ.online_join_url || '');
+    const curVideoUrl = occ.online_join_url || '';
+    if (curVideoUrl) {
+      const normYt = (url: string) => {
+        const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+        return m ? m[1] : url.trim().toLowerCase();
+      };
+      const searchKey = normYt(curVideoUrl);
+      const matched = (availableVideosForCreate?.results || []).find((v: any) => {
+        if (!v.video_url) return false;
+        return normYt(v.video_url) === searchKey || v.video_url.toLowerCase().includes(searchKey);
+      });
+      if (matched) {
+        const mList = Array.isArray(matched.targeted_muscles)
+          ? matched.targeted_muscles
+          : typeof matched.targeted_muscles === 'string'
+          ? matched.targeted_muscles.split(/[,|&/]/).map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        const eList = Array.isArray(matched.equipment_required)
+          ? matched.equipment_required
+          : typeof matched.equipment_required === 'string'
+          ? matched.equipment_required.split(/[,+/&|]/).map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        setEditMuscles(mList);
+        setEditEquipment(eList);
+      } else {
+        setEditMuscles([]);
+        setEditEquipment([]);
+      }
+    } else {
+      setEditMuscles([]);
+      setEditEquipment([]);
+    }
 
     const currentTrainer = (occ.trainers && occ.trainers[0]) || (occ.assigned_trainers && occ.assigned_trainers[0]);
     const currentTrId = currentTrainer?.trainer_profile || currentTrainer?.trainer_profile_id || '';
@@ -209,8 +394,11 @@ export const ClassesWorkspace: React.FC = () => {
         online_join_url: editVideoUrl.trim(),
       });
 
-      if (editVideoUrl.trim() !== (editOccurrence.online_join_url || '')) {
-        await classesApi.updateOccurrenceVideo(editOccurrence.id, editVideoUrl.trim());
+      if (editVideoUrl.trim() || editVideoUrl.trim() !== (editOccurrence.online_join_url || '')) {
+        await classesApi.updateOccurrenceVideo(editOccurrence.id, editVideoUrl.trim(), undefined, {
+          targeted_muscles: editMuscles,
+          equipment_required: editEquipment,
+        });
       }
 
       // Only reassign trainer if trainer was genuinely changed by user
@@ -1043,8 +1231,25 @@ export const ClassesWorkspace: React.FC = () => {
   const openEditRuleModal = (rule: ClassScheduleRule) => {
     setRuleError(null);
     setEditingRule(rule);
+    const resolvedTemplateId = (() => {
+      const raw = rule.class_template as any;
+      if (typeof raw === 'object' && raw !== null) return raw.id || '';
+      if (typeof raw === 'string' && raw) {
+        if (templates.some((t) => t.id === raw)) return raw;
+        const matchByName = templates.find((t) => t.name?.trim().toLowerCase() === raw.trim().toLowerCase());
+        if (matchByName) return matchByName.id;
+        return raw;
+      }
+      if ((rule as any).class_template_id) return (rule as any).class_template_id;
+      if (rule.class_name || (rule as any).template_name) {
+        const nameToFind = (rule.class_name || (rule as any).template_name || '').trim().toLowerCase();
+        const match = templates.find((t) => t.name?.trim().toLowerCase() === nameToFind);
+        if (match) return match.id;
+      }
+      return '';
+    })();
     setRuleForm({
-      class_template: rule.class_template || '',
+      class_template: resolvedTemplateId,
       branch: rule.branch || '',
       branches: rule.branch ? [rule.branch] : [],
       recurrence_type: (rule as any).recurrence_type || 'WEEKLY',
@@ -1370,6 +1575,12 @@ export const ClassesWorkspace: React.FC = () => {
   const { data: availableVideosForCreate } = useQuery({
     queryKey: ['available-workout-videos', 'FOR_CREATE'],
     queryFn: () => classesApi.getAvailableWorkoutVideos({ limit: 100 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: availableTagsData } = useQuery({
+    queryKey: ['available-wod-tags'],
+    queryFn: () => classesApi.getAvailableTags(),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -5649,25 +5860,111 @@ export const ClassesWorkspace: React.FC = () => {
               </div>
             </div>
 
-            {/* Workout Video URL */}
-            <div className="space-y-1.5 p-3 rounded-xl border border-primary/20 bg-primary/5">
+            {/* Workout Video & Content Studio Integration */}
+            <div className="space-y-3 p-3.5 rounded-xl border border-primary/25 bg-primary/5">
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] font-semibold flex items-center gap-1.5 text-foreground">
                   <Video className="size-3.5 text-primary" />
                   <span>Workout Video URL</span>
                 </Label>
-                <span className="text-[10px] text-muted-foreground">YouTube, Vimeo, MP4</span>
+                <span className="text-[10px] text-muted-foreground font-mono">YouTube, Vimeo, MP4</span>
               </div>
               <Input
                 type="url"
                 placeholder="https://www.youtube.com/watch?v=... or direct video link"
                 value={editVideoUrl}
-                onChange={(e) => setEditVideoUrl(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditVideoUrl(val);
+
+                  // Auto-detect if this video exists in Content Studio (WOD Library)
+                  if (val.trim()) {
+                    const normYt = (url: string) => {
+                      const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                      return m ? m[1] : url.trim().toLowerCase();
+                    };
+                    const searchKey = normYt(val);
+                    const matchedVid = (availableVideosForCreate?.results || []).find((v: any) => {
+                      if (!v.video_url) return false;
+                      return normYt(v.video_url) === searchKey || v.video_url.toLowerCase().includes(searchKey);
+                    });
+
+                    if (matchedVid) {
+                      if (matchedVid.targeted_muscles && editMuscles.length === 0) {
+                        const mList = Array.isArray(matchedVid.targeted_muscles)
+                          ? matchedVid.targeted_muscles
+                          : typeof matchedVid.targeted_muscles === 'string'
+                          ? matchedVid.targeted_muscles.split(/[,|&/]/).map((s: string) => s.trim()).filter(Boolean)
+                          : [];
+                        setEditMuscles(mList);
+                      }
+                      if (matchedVid.equipment_required && editEquipment.length === 0) {
+                        const eList = Array.isArray(matchedVid.equipment_required)
+                          ? matchedVid.equipment_required
+                          : typeof matchedVid.equipment_required === 'string'
+                          ? matchedVid.equipment_required.split(/[,+/&|]/).map((s: string) => s.trim()).filter(Boolean)
+                          : [];
+                        setEditEquipment(eList);
+                      }
+                    }
+                  }
+                }}
                 className="h-8 text-xs bg-background"
               />
-              <p className="text-[10px] text-muted-foreground">
-                Embedded directly into the in-app player for trainers and members to stream.
-              </p>
+
+              {/* Match detection banner */}
+              {(() => {
+                if (!editVideoUrl.trim()) return null;
+                const normYt = (url: string) => {
+                  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                  return m ? m[1] : url.trim().toLowerCase();
+                };
+                const searchKey = normYt(editVideoUrl);
+                const matchedVid = (availableVideosForCreate?.results || []).find((v: any) => {
+                  if (!v.video_url) return false;
+                  return normYt(v.video_url) === searchKey || v.video_url.toLowerCase().includes(searchKey);
+                });
+
+                if (matchedVid) {
+                  return (
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <Sparkles className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Matched in Content Studio: {matchedVid.title}</span>
+                      </div>
+                      <div className="text-[10px] opacity-90 flex flex-wrap gap-x-3 gap-y-1">
+                        <span><strong>Muscles:</strong> {matchedVid.targeted_muscles || 'None'}</span>
+                        <span><strong>Equipment:</strong> {matchedVid.equipment_required || 'None (Bodyweight)'}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <p className="text-[10px] text-muted-foreground">
+                    Video not yet in Content Studio. It will be <strong>auto-registered</strong> with the muscle and equipment tags specified below.
+                  </p>
+                );
+              })()}
+
+              {/* Multi-Tag Autocomplete Inputs with WOD Suggestions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <TagAutocompleteInput
+                  label="Targeted Muscles / Working"
+                  placeholder="e.g. Core, Glutes, Abs"
+                  selectedTags={editMuscles}
+                  onChange={setEditMuscles}
+                  suggestions={availableTagsData?.muscles || []}
+                  badgeColorClass="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20"
+                />
+                <TagAutocompleteInput
+                  label="Equipment Needed (or blank for Bodyweight)"
+                  placeholder="e.g. Reformer, Box, Dumbbells"
+                  selectedTags={editEquipment}
+                  onChange={setEditEquipment}
+                  suggestions={availableTagsData?.equipment || []}
+                  badgeColorClass="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
+                />
+              </div>
             </div>
           </div>
 

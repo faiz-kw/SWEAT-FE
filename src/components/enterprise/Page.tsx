@@ -107,7 +107,11 @@ export function KpiTile({
         </div>
         {icon && (
           <div className="shrink-0 p-1.5 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground flex items-center justify-center">
-            {icon}
+            {React.isValidElement(icon)
+              ? icon
+              : typeof icon === "function" || (typeof icon === "object" && icon !== null && (icon as any).$$typeof)
+              ? React.createElement(icon as any, { className: "w-4 h-4" })
+              : icon}
           </div>
         )}
       </div>

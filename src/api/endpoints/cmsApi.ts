@@ -27,6 +27,16 @@ export const cmsApi = {
     return res.data;
   },
 
+  async uploadBannerMedia(file: File, mediaType?: 'VIDEO' | 'IMAGE'): Promise<{ url: string; file_name: string; media_type: 'VIDEO' | 'IMAGE'; file_size: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (mediaType) {
+      formData.append('media_type', mediaType);
+    }
+    const res = await api.post<any>('/cms/banners/upload-media/', formData);
+    return res.data;
+  },
+
   // --- Category Media ---
   async getCategories(params?: { is_active?: boolean }): Promise<ProgramCategoryMedia[]> {
     const res = await api.get<any>('/cms/categories/', { params });
