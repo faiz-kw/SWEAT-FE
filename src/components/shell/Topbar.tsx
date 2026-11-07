@@ -87,7 +87,7 @@ export function Topbar() {
   const validLocations = React.useMemo(() => {
     if (rawLocations && rawLocations.length > 0) {
       return rawLocations
-        .filter((l) => l && (l.id || l.name))
+        .filter((l) => l && (l.id || l.name) && l.is_active !== false && l.status !== 'INACTIVE')
         .map((l, idx) => ({
           id: l.id || `LOC-00${idx + 1}`,
           name: l.name || `Studio Branch ${idx + 1}`,

@@ -124,10 +124,10 @@ export const AssignWorkoutVideoModal: React.FC<AssignWorkoutVideoModalProps> = (
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {occurrence.class_template?.name || occurrence.template_name || 'Class Session'} &bull;{' '}
+                {occurrence.template_name || occurrence.class_name || 'Class Session'} &bull;{' '}
                 {occurrence.occurrence_date ? formatOccurrenceDate(occurrence.occurrence_date) : ''} (
                 {occurrence.start_at ? formatTime12h(occurrence.start_at.substring(11, 16)) : ''}) &bull;{' '}
-                {occurrence.branch?.name || occurrence.branch_name || 'Studio'}
+                {occurrence.branch_name || 'Studio'}
               </DialogDescription>
             </div>
           </div>

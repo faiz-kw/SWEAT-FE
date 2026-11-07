@@ -50,6 +50,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@tanstack/react-router';
 import { getWeekInfo, shiftWeek, getMonday, formatToDateStr } from '@/lib/roster-date-utils';
 
+export interface RosterShiftSlot {
+  id?: string;
+  startTime: string;
+  endTime: string;
+  isTemporary?: boolean;
+  branchId?: string;
+  branchName?: string;
+}
+
 export function WorkforceRostersWorkspace() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -57,6 +66,7 @@ export function WorkforceRostersWorkspace() {
   const [roleFilter, setRoleFilter] = React.useState<string>('ALL');
   const [viewMode, setViewMode] = React.useState<'BRANCH_GROUPED' | 'FLAT'>('BRANCH_GROUPED');
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
+  const [targetBranchForModal, setTargetBranchForModal] = React.useState<string | undefined>(undefined);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
   const [isLeaveApplyOpen, setIsLeaveApplyOpen] = React.useState(false);
 
@@ -66,16 +76,17 @@ export function WorkforceRostersWorkspace() {
   });
   const weekInfo = React.useMemo(() => getWeekInfo(selectedWeekStart), [selectedWeekStart]);
 
-  // Fetch branches
-  const { data: branches = [] } = useQuery<{ id: string; name: string; city?: string }[]>({
+  // Fetch branches (strictly active and operational branches only)
+  const { data: branches = [] } = useQuery<{ id: string; name: string; city?: string; status?: string; is_active?: boolean }[]>({
     queryKey: ['admin-branches-for-roster'],
     queryFn: async () => {
-      const res = await api.get<any>('/tenant/branches/');
-      return Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      const res = await api.get<any>('/tenant/branches/?status=ACTIVE');
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      return list.filter((b: any) => b.is_active !== false && String(b.status || 'ACTIVE').toUpperCase() === 'ACTIVE');
     },
   });
 
-  // Fetch all staff / trainers
+  // Fetch all staff / trainers (only operational ACTIVE staff)
   const {
     data: trainers = [],
     isLoading: isLoadingTrainers,
@@ -89,6 +100,7 @@ export function WorkforceRostersWorkspace() {
       workforceApi.getTrainers({
         search: searchQuery || undefined,
         branch_id: selectedBranchId === 'ALL' ? undefined : selectedBranchId,
+        trainer_status: 'ACTIVE',
       }),
   });
 
@@ -125,29 +137,76 @@ export function WorkforceRostersWorkspace() {
   const [isManualRefreshing, setIsManualRefreshing] = React.useState(false);
   const isRefreshing = isFetchingTrainers || isFetchingSchedules || isFetchingLeaves || isManualRefreshing;
 
-  // Map employee_profile to schedules map { [dayOfWeek]: { startTime, endTime } }
-  // Prioritizes week-specific TEMPORARY shifts over recurring templates
-  const schedulesByEmpId = React.useMemo(() => {
-    const map = new Map<string, Record<number, { startTime: string; endTime: string; isTemporary?: boolean }>>();
+  // Map employee_profile to schedules supporting split shifts & branch partitioning
+  // 1. byEmpAndBranch: `${employee_profile}:${branch_id}` -> Record<number, RosterShiftSlot[]>
+  // 2. byEmp: `${employee_profile}` -> Record<number, RosterShiftSlot[]>
+  const schedulesMap = React.useMemo(() => {
+    const byEmpAndBranch = new Map<string, Record<number, RosterShiftSlot[]>>();
+    const byEmp = new Map<string, Record<number, RosterShiftSlot[]>>();
+
     allWorkSchedules.forEach((s) => {
       if (!s.employee_profile || s.status !== 'ACTIVE') return;
-      if (!map.has(s.employee_profile)) {
-        map.set(s.employee_profile, {});
+
+      const branchIdStr = s.branch
+        ? String(typeof s.branch === 'object' ? (s.branch as any).id : s.branch)
+        : '';
+      const branchNameStr = s.branch_name || (typeof s.branch === 'object' ? (s.branch as any).name : '');
+
+      const slot: RosterShiftSlot = {
+        id: s.id,
+        startTime: s.start_time.slice(0, 5),
+        endTime: s.end_time.slice(0, 5),
+        isTemporary: s.schedule_type === 'TEMPORARY',
+        branchId: branchIdStr,
+        branchName: branchNameStr,
+      };
+
+      // Add to overall employee schedule map
+      if (!byEmp.has(s.employee_profile)) {
+        byEmp.set(s.employee_profile, {});
       }
-      const existing = map.get(s.employee_profile)![s.day_of_week];
-      if (!existing || s.schedule_type === 'TEMPORARY') {
-        map.get(s.employee_profile)![s.day_of_week] = {
-          startTime: s.start_time.slice(0, 5),
-          endTime: s.end_time.slice(0, 5),
-          isTemporary: s.schedule_type === 'TEMPORARY',
-        };
+      const empDays = byEmp.get(s.employee_profile)!;
+      if (!empDays[s.day_of_week]) {
+        empDays[s.day_of_week] = [];
+      }
+      empDays[s.day_of_week].push(slot);
+
+      // Add to branch-specific employee schedule map
+      if (branchIdStr) {
+        const key = `${s.employee_profile}:${branchIdStr}`;
+        if (!byEmpAndBranch.has(key)) {
+          byEmpAndBranch.set(key, {});
+        }
+        const branchDays = byEmpAndBranch.get(key)!;
+        if (!branchDays[s.day_of_week]) {
+          branchDays[s.day_of_week] = [];
+        }
+        branchDays[s.day_of_week].push(slot);
       }
     });
-    return map;
+
+    // Sort shift slots by startTime so Shift 1 appears before Shift 2
+    const sortSlots = (slotsMap: Map<string, Record<number, RosterShiftSlot[]>>) => {
+      slotsMap.forEach((days) => {
+        Object.keys(days).forEach((d) => {
+          const numDay = Number(d);
+          days[numDay].sort((a, b) => a.startTime.localeCompare(b.startTime));
+        });
+      });
+    };
+    sortSlots(byEmp);
+    sortSlots(byEmpAndBranch);
+
+    return { byEmp, byEmpAndBranch };
   }, [allWorkSchedules]);
 
   const filteredTrainers = React.useMemo(() => {
     return trainers.filter((t) => {
+      // Strictly exclude inactive, terminated, or deactivated accounts from staff roster
+      const statusUpper = String(t.trainer_status || '').toUpperCase();
+      if (statusUpper === 'INACTIVE' || statusUpper === 'TERMINATED' || statusUpper === 'DEACTIVATED') {
+        return false;
+      }
       if (roleFilter !== 'ALL') {
         const desig = (t.designation || '').toLowerCase();
         if (roleFilter === 'TRAINER' && !desig.includes('trainer') && !desig.includes('coach') && desig) {
@@ -188,12 +247,12 @@ export function WorkforceRostersWorkspace() {
       return;
     }
 
-    const dayHeaders = weekInfo.days.map((d) => `"${d.dayName} (${d.dateStr})"`);
+    const dayHeaders = weekInfo.days.map((d) => `"${d.name.toUpperCase()} (${d.formattedDate})"`);
     const headers = ['"Branch"', '"Staff Name"', '"Staff Code"', '"Role / Designation"', ...dayHeaders, '"Total Shifts"'];
 
     const rows = filteredTrainers.map((t) => {
       const empId = t.employee_profile || '';
-      const sched = schedulesByEmpId.get(empId) || {};
+      const sched = schedulesMap.byEmp.get(empId) || {};
       const branchName = (t.branch_names && t.branch_names.length > 0) ? t.branch_names.join('; ') : 'All Branches';
       const staffName = t.trainer_name || t.trainer_code || 'Staff Member';
       const staffCode = t.trainer_code || '';
@@ -201,10 +260,10 @@ export function WorkforceRostersWorkspace() {
 
       let shiftCount = 0;
       const dayValues = weekInfo.days.map((d) => {
-        const daySched = sched[d.dayOfWeek];
-        if (daySched) {
-          shiftCount++;
-          return `"${daySched.startTime} - ${daySched.endTime}${daySched.isTemporary ? ' (Temp)' : ''}"`;
+        const dayShifts = sched[d.id] || [];
+        if (dayShifts.length > 0) {
+          shiftCount += dayShifts.length;
+          return `"${dayShifts.map((s) => `${s.startTime}-${s.endTime}${s.isTemporary ? ' (Temp)' : ''}`).join(' & ')}"`;
         }
         return '"Week Off"';
       });
@@ -236,7 +295,7 @@ export function WorkforceRostersWorkspace() {
   // KPI calculations
   const totalStaffCount = filteredTrainers.length;
   const staffWithSchedulesCount = filteredTrainers.filter(
-    (t) => t.employee_profile && schedulesByEmpId.has(t.employee_profile)
+    (t) => t.employee_profile && schedulesMap.byEmp.has(t.employee_profile)
   ).length;
   const totalActiveShifts = allWorkSchedules.filter((s) => s.status === 'ACTIVE').length;
 
@@ -610,10 +669,12 @@ export function WorkforceRostersWorkspace() {
                     ) : (
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                         {branchStaff.map((trainer) => {
-                          const empSchedules = trainer.employee_profile
-                            ? schedulesByEmpId.get(trainer.employee_profile)
-                            : null;
-                          const activeDaysCount = empSchedules ? Object.keys(empSchedules).length : 0;
+                          const empBranchKey = `${trainer.employee_profile}:${branch.id}`;
+                          const branchSpecificDays = schedulesMap.byEmpAndBranch.get(empBranchKey);
+                          const overallDays = schedulesMap.byEmp.get(trainer.employee_profile || '');
+                          const activeSchedules = branchSpecificDays || overallDays || {};
+                          const activeDaysCount = Object.values(activeSchedules).filter((s) => s && s.length > 0).length;
+                          const hasSplit = Object.values(activeSchedules).some((s) => s && s.length > 1);
 
                           return (
                             <div
@@ -629,8 +690,8 @@ export function WorkforceRostersWorkspace() {
                                         .toUpperCase()}
                                     </div>
                                     <div>
-                                      <div className="font-semibold text-foreground text-sm sm:text-base flex items-center gap-2">
-                                        {trainer.trainer_name || 'Staff Member'}
+                                      <div className="font-semibold text-foreground text-sm sm:text-base flex items-center gap-2 flex-wrap">
+                                        <span>{trainer.trainer_name || 'Staff Member'}</span>
                                         <Badge
                                           variant="outline"
                                           className={
@@ -641,6 +702,23 @@ export function WorkforceRostersWorkspace() {
                                         >
                                           {trainer.trainer_status}
                                         </Badge>
+                                        {trainer.branch_ids && trainer.branch_ids.length > 1 && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] bg-primary/10 text-primary border-primary/20"
+                                            title={`Active across ${trainer.branch_ids.length} branches: ${trainer.branch_names?.join(', ')}`}
+                                          >
+                                            Multi-Branch ({trainer.branch_ids.length})
+                                          </Badge>
+                                        )}
+                                        {hasSplit && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/20"
+                                          >
+                                            Split Shifts
+                                          </Badge>
+                                        )}
                                       </div>
                                       <div className="text-xs text-muted-foreground font-mono">
                                         {trainer.trainer_code} • {trainer.designation || 'Staff / Coach'}
@@ -658,8 +736,10 @@ export function WorkforceRostersWorkspace() {
                                 {/* 7-Day Weekly Schedule Strip */}
                                 <div className="grid grid-cols-7 gap-1.5 text-center bg-muted/40 p-2.5 rounded-lg border border-border/40">
                                   {weekInfo.days.map((day) => {
-                                    const shift = empSchedules ? empSchedules[day.id] : null;
-                                    const isOnDuty = shift !== undefined && shift !== null;
+                                    const shifts = activeSchedules[day.id] || [];
+                                    const isOnDuty = shifts.length > 0;
+                                    const isSplit = shifts.length > 1;
+
                                     return (
                                       <div
                                         key={day.id}
@@ -676,10 +756,20 @@ export function WorkforceRostersWorkspace() {
                                           </span>
                                         </span>
                                         {isOnDuty ? (
-                                          <div className="mt-1 leading-tight">
-                                            <span className="block font-mono text-[10px]">{shift.startTime}</span>
-                                            <span className="block font-mono text-[9px] opacity-75">{shift.endTime}</span>
-                                          </div>
+                                          isSplit ? (
+                                            <div className="mt-0.5 leading-tight flex flex-col items-center">
+                                              <span className="px-1 py-0.2 bg-purple-500/15 text-purple-600 dark:text-purple-400 rounded text-[8px] font-bold uppercase tracking-wider mb-0.5">
+                                                Split
+                                              </span>
+                                              <span className="block font-mono text-[9px] font-semibold">{shifts[0].startTime}-{shifts[0].endTime}</span>
+                                              <span className="block font-mono text-[9px] font-semibold opacity-80">{shifts[1].startTime}-{shifts[1].endTime}</span>
+                                            </div>
+                                          ) : (
+                                            <div className="mt-1 leading-tight">
+                                              <span className="block font-mono text-[10px] font-semibold">{shifts[0].startTime}</span>
+                                              <span className="block font-mono text-[9px] opacity-75">{shifts[0].endTime}</span>
+                                            </div>
+                                          )
                                         ) : (
                                           <span className="mt-2 text-[10px] font-medium opacity-60">Off</span>
                                         )}
@@ -696,6 +786,7 @@ export function WorkforceRostersWorkspace() {
                                     size="sm"
                                     onClick={() => {
                                       setSelectedTrainer(trainer);
+                                      setTargetBranchForModal(branch.id);
                                       setIsScheduleModalOpen(true);
                                     }}
                                     className="h-8 px-3 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
@@ -734,9 +825,10 @@ export function WorkforceRostersWorkspace() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {filteredTrainers.map((trainer) => {
               const empSchedules = trainer.employee_profile
-                ? schedulesByEmpId.get(trainer.employee_profile)
+                ? schedulesMap.byEmp.get(trainer.employee_profile)
                 : null;
-              const activeDaysCount = empSchedules ? Object.keys(empSchedules).length : 0;
+              const activeDaysCount = empSchedules ? Object.values(empSchedules).filter((s) => s && s.length > 0).length : 0;
+              const hasSplit = empSchedules ? Object.values(empSchedules).some((s) => s && s.length > 1) : false;
 
               return (
                 <div
@@ -752,8 +844,8 @@ export function WorkforceRostersWorkspace() {
                             .toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-semibold text-foreground text-sm sm:text-base flex items-center gap-2">
-                            {trainer.trainer_name || 'Staff Member'}
+                          <div className="font-semibold text-foreground text-sm sm:text-base flex items-center gap-2 flex-wrap">
+                            <span>{trainer.trainer_name || 'Staff Member'}</span>
                             <Badge
                               variant="outline"
                               className={
@@ -764,6 +856,23 @@ export function WorkforceRostersWorkspace() {
                             >
                               {trainer.trainer_status}
                             </Badge>
+                            {trainer.branch_ids && trainer.branch_ids.length > 1 && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-primary/10 text-primary border-primary/20"
+                                title={`Active across ${trainer.branch_ids.length} branches: ${trainer.branch_names?.join(', ')}`}
+                              >
+                                Multi-Branch ({trainer.branch_ids.length})
+                              </Badge>
+                            )}
+                            {hasSplit && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/20"
+                              >
+                                Split Shifts
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground font-mono">
                             {trainer.trainer_code} • {trainer.designation || 'Staff'}
@@ -792,8 +901,10 @@ export function WorkforceRostersWorkspace() {
                     {/* 7-Day Weekly Schedule Strip */}
                     <div className="grid grid-cols-7 gap-1.5 text-center bg-muted/40 p-2.5 rounded-lg border border-border/40">
                       {weekInfo.days.map((day) => {
-                        const shift = empSchedules ? empSchedules[day.id] : null;
-                        const isOnDuty = shift !== undefined && shift !== null;
+                        const shifts = empSchedules ? empSchedules[day.id] || [] : [];
+                        const isOnDuty = shifts.length > 0;
+                        const isSplit = shifts.length > 1;
+
                         return (
                           <div
                             key={day.id}
@@ -810,10 +921,20 @@ export function WorkforceRostersWorkspace() {
                               </span>
                             </span>
                             {isOnDuty ? (
-                              <div className="mt-1 leading-tight">
-                                <span className="block font-mono text-[10px]">{shift.startTime}</span>
-                                <span className="block font-mono text-[9px] opacity-75">{shift.endTime}</span>
-                              </div>
+                              isSplit ? (
+                                <div className="mt-0.5 leading-tight flex flex-col items-center">
+                                  <span className="px-1 py-0.2 bg-purple-500/15 text-purple-600 dark:text-purple-400 rounded text-[8px] font-bold uppercase tracking-wider mb-0.5">
+                                    Split
+                                  </span>
+                                  <span className="block font-mono text-[9px] font-semibold">{shifts[0].startTime}-{shifts[0].endTime}</span>
+                                  <span className="block font-mono text-[9px] font-semibold opacity-80">{shifts[1].startTime}-{shifts[1].endTime}</span>
+                                </div>
+                              ) : (
+                                <div className="mt-1 leading-tight">
+                                  <span className="block font-mono text-[10px] font-semibold">{shifts[0].startTime}</span>
+                                  <span className="block font-mono text-[9px] opacity-75">{shifts[0].endTime}</span>
+                                </div>
+                              )
                             ) : (
                               <span className="mt-2 text-[10px] font-medium opacity-60">Off</span>
                             )}
@@ -830,6 +951,7 @@ export function WorkforceRostersWorkspace() {
                         size="sm"
                         onClick={() => {
                           setSelectedTrainer(trainer);
+                          setTargetBranchForModal(trainer.branch_ids?.[0]);
                           setIsScheduleModalOpen(true);
                         }}
                         className="h-8 px-3 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
@@ -865,16 +987,18 @@ export function WorkforceRostersWorkspace() {
           isOpen={isScheduleModalOpen}
           onClose={() => {
             setIsScheduleModalOpen(false);
+            setTargetBranchForModal(undefined);
             refetchSchedules();
           }}
-          trainer={selectedTrainer || trainers[0] || null}
-          trainers={trainers}
+          trainer={selectedTrainer || filteredTrainers[0] || null}
+          trainers={filteredTrainers}
           onSelectTrainer={(t) => setSelectedTrainer(t)}
           branches={branches}
           initialBranchId={
-            selectedBranchId !== 'ALL'
+            targetBranchForModal ||
+            (selectedBranchId !== 'ALL'
               ? selectedBranchId
-              : selectedTrainer?.branch_ids?.[0] || branches[0]?.id
+              : selectedTrainer?.branch_ids?.[0] || branches[0]?.id)
           }
           initialWeekStart={selectedWeekStart}
         />

@@ -2338,6 +2338,24 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         onSuccess={() => refetch()}
+        onSelectExistingLead={async (leadId) => {
+          setIsCreateOpen(false);
+          const found = leads.find((l) => l.id === leadId);
+          if (found) {
+            setSelectedLead(found);
+            setIsDetailOpen(true);
+          } else {
+            try {
+              const fetched = await crmApi.getLead(leadId);
+              if (fetched) {
+                setSelectedLead(fetched);
+                setIsDetailOpen(true);
+              }
+            } catch {
+              toast.error('Unable to open the existing lead details.');
+            }
+          }
+        }}
       />
 
       {/* Lead Detail / Edit Modal */}

@@ -125,10 +125,15 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     if (!occurrence?.id) return;
     try {
       setIsSavingVideo(true);
-      await classesApi.updateOccurrenceVideo(occurrence.id, videoInputUrl.trim());
-      toast.success('Workout video URL updated successfully!');
-      queryClient.invalidateQueries({ queryKey: ['class-occurrence-video-stream', occurrence.id] });
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      const trimmed = videoInputUrl.trim();
+      await classesApi.updateOccurrenceVideo(occurrence.id, trimmed);
+      toast.success(trimmed ? 'Workout video updated successfully!' : 'Workout video removed successfully!');
+      await queryClient.invalidateQueries({ queryKey: ['class-occurrence-video-stream', occurrence.id] });
+      await queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      await refetchVideo();
+      if (trimmed) {
+        setShowVideoPlayer(true);
+      }
       setIsEditingVideo(false);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.message || 'Failed to update video URL');
@@ -145,12 +150,8 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   });
 
   React.useEffect(() => {
-    if (classVideoData?.external_url || classVideoData?.embed_player_url || occurrence?.online_join_url) {
-      setVideoInputUrl(classVideoData?.external_url || occurrence?.online_join_url || '');
-    } else {
-      setVideoInputUrl('');
-    }
-    setIsEditingVideo(false);
+    const activeUrl = classVideoData?.video_url || classVideoData?.external_url || occurrence?.online_join_url || '';
+    setVideoInputUrl(activeUrl);
   }, [classVideoData, occurrence]);
 
   React.useEffect(() => {
@@ -224,6 +225,10 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['class-occurrence-bookings', occurrence?.id] });
       queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['member-360'] });
       toast.success(`Marked member as ${variables.status}`);
     },
     onError: (err: any) => {
@@ -296,6 +301,10 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-occurrence-bookings', occurrence?.id] });
       queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['member-360'] });
       toast.success('Marked all confirmed members as Present');
     },
     onError: () => {

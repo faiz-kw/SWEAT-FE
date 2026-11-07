@@ -25,6 +25,7 @@ import {
   Bot,
   PhoneCall,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,6 +49,7 @@ interface NewLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onSelectExistingLead?: (leadId: string) => void;
   initialPhone?: string;
 }
 
@@ -65,7 +67,37 @@ interface LeadFormErrors {
   panNumber?: string;
 }
 
-export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: NewLeadModalProps) {
+const STATUS_FORMAT_MAP: Record<string, string> = {
+  NEW_LEAD: 'New Lead',
+  FOLLOW_UP_PENDING: 'Follow-up Pending',
+  INTERESTED: 'Interested',
+  TRIAL_BOOKED: 'Trial Booked',
+  TRIAL_CONFIRMED: 'Trial Confirmed',
+  TRIAL_ATTENDED: 'Trial Attended',
+  NO_SHOW: 'No Show',
+  HOT_LEAD: 'Hot Lead',
+  PAYMENT_PENDING: 'Payment Pending',
+  CONVERTED: 'Converted Member',
+  NOT_INTERESTED: 'Not Interested',
+  LOST: 'Lost',
+};
+
+function formatLeadStatus(raw?: string | null): string {
+  if (!raw) return 'Active Lead';
+  if (STATUS_FORMAT_MAP[raw]) return STATUS_FORMAT_MAP[raw];
+  return raw
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function NewLeadModal({
+  open,
+  onOpenChange,
+  onSuccess,
+  onSelectExistingLead,
+  initialPhone,
+}: NewLeadModalProps) {
   const queryClient = useQueryClient();
 
   // --- Form State ---
@@ -184,24 +216,17 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
   }, [uniqueBranches, selectedBranch]);
 
   const uniquePrograms = React.useMemo(() => {
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
     return programs.filter((p) => {
-      if (!p?.id || seen.has(p.id)) return false;
-      seen.add(p.id);
+      if (!p?.id || seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      const nameKey = (p.name || '').trim().toLowerCase();
+      if (nameKey && seenNames.has(nameKey)) return false;
+      if (nameKey) seenNames.add(nameKey);
       return true;
     });
   }, [programs]);
-
-  // Group programs by category / program type
-  const programsByCategory = React.useMemo(() => {
-    const groups: Record<string, typeof uniquePrograms> = {};
-    uniquePrograms.forEach((p: any) => {
-      const cat = p.category_name || p.program_type_name || 'General Fitness Programs';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(p);
-    });
-    return groups;
-  }, [uniquePrograms]);
 
   React.useEffect(() => {
     if (selectedProgram && uniquePrograms.length > 0 && !uniquePrograms.some((p) => p.id === selectedProgram)) {
@@ -477,6 +502,10 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (duplicateMatches.length > 0) {
+      toast.error('This lead is already registered in your system. Click "Open Existing Lead" above to view their profile.');
+      return;
+    }
     if (!validateForm()) {
       toast.error('Please resolve the errors highlighted below.');
       return;
@@ -556,22 +585,82 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
           <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
             {/* Duplicate Lead Detection Alert */}
             {duplicateMatches.length > 0 && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-start gap-3 text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <p className="font-semibold">Possible existing lead found with this phone or email:</p>
-                  <ul className="list-disc pl-4 space-y-0.5">
-                    {duplicateMatches.map((m) => (
-                      <li key={m.id}>
-                        <span className="font-medium">{m.full_name}</span> &bull; Status: {m.current_status}
-                        {m.phone && ` &bull; ${m.phone}`}
-                        {m.email && ` &bull; ${m.email}`}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80">
-                    You can still proceed if this is a repeat inquiry or secondary prospective contract.
-                  </p>
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 p-4 space-y-3 text-amber-900 dark:text-amber-200 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5 flex-1">
+                    <h4 className="text-sm font-bold text-foreground">
+                      A lead already exists with this phone or email
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      To prevent duplicate records, creating a new lead with this contact information is blocked. You can open and view the existing lead directly:
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  {duplicateMatches.map((m) => (
+                    <div
+                      key={m.id}
+                      className="bg-background/90 border border-border/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-primary/40 transition-colors shadow-2xs"
+                    >
+                      <div className="space-y-1.5 text-xs min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-foreground text-sm">
+                            {m.full_name || 'Unnamed Lead'}
+                          </span>
+                          <Badge variant="outline" className="text-[11px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                            {formatLeadStatus(m.current_status)}
+                          </Badge>
+                          {m.branch_name && (
+                            <span className="text-[11px] text-muted-foreground">
+                              • {m.branch_name}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-muted-foreground text-[11px] flex-wrap">
+                          {m.phone && (
+                            <span className="flex items-center gap-1 font-mono">
+                              <Phone className="w-3 h-3 text-muted-foreground/70" />
+                              {m.phone}
+                            </span>
+                          )}
+                          {m.email && (
+                            <span className="flex items-center gap-1">
+                              <Mail className="w-3 h-3 text-muted-foreground/70" />
+                              {m.email}
+                            </span>
+                          )}
+                          {m.assigned_sales_name && (
+                            <span className="flex items-center gap-1">
+                              <UserCheck className="w-3 h-3 text-muted-foreground/70" />
+                              Assigned to: {m.assigned_sales_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          if (onSelectExistingLead) {
+                            onSelectExistingLead(m.id);
+                          } else {
+                            window.location.href = `/crm/leads?lead_id=${m.id}`;
+                          }
+                          onOpenChange(false);
+                        }}
+                        className="h-8 px-3 text-xs gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold self-start sm:self-center cursor-pointer"
+                      >
+                        <span>Open Existing Lead</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -786,20 +875,16 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
                     disabled={isProgramsLoading}
                   >
                     {isProgramsLoading ? (
-                      <option value="">Loading programs & categories...</option>
+                      <option value="">Loading programs...</option>
                     ) : uniquePrograms.length === 0 ? (
                       <option value="">No active programs available</option>
                     ) : (
                       <>
                         <option value="">Select program interest</option>
-                        {Object.entries(programsByCategory).map(([catName, progs]) => (
-                          <optgroup key={catName} label={`📁 ${catName}`}>
-                            {progs.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} {p.code ? `(${p.code})` : ''}
-                              </option>
-                            ))}
-                          </optgroup>
+                        {uniquePrograms.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
                         ))}
                       </>
                     )}
@@ -1022,27 +1107,14 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
                         <>
                           <option value="">
                             {assignmentConfig?.assignment_mode_allowed !== 'MANUAL'
-                              ? '✨ Auto-Assign (Sequential Round-Robin)'
-                              : 'Select an available representative'}
+                              ? 'Auto-Assign (Sequential Round-Robin)'
+                              : 'Select an active representative'}
                           </option>
-                          {availableAgents.length > 0 && (
-                            <optgroup label="Available Representatives">
-                              {availableAgents.map((ag) => (
-                                <option key={ag.id} value={ag.id}>
-                                  {ag.name} ({ag.role_label || ag.role_name || ag.user_type || 'Representative'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {unavailableAgents.length > 0 && (
-                            <optgroup label="Unavailable / On Leave">
-                              {unavailableAgents.map((ag) => (
-                                <option key={ag.id} value={ag.id} disabled className="text-muted-foreground bg-muted/40">
-                                  {ag.name} ({ag.role_label || ag.role_name || 'Representative'} &mdash; {ag.availability_reason || ag.availability_status || 'Unavailable'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
+                          {availableAgents.map((ag) => (
+                            <option key={ag.id} value={ag.id}>
+                              {ag.name} ({ag.role_label || ag.role_name || ag.user_type || 'Representative'})
+                            </option>
+                          ))}
                         </>
                       )}
                     </select>
@@ -1393,14 +1465,20 @@ export function NewLeadModal({ open, onOpenChange, onSuccess, initialPhone }: Ne
             <Button
               type="submit"
               size="sm"
-              disabled={createMutation.isPending}
-              className="h-9 px-5 text-xs sm:text-sm bg-primary text-primary-foreground font-semibold shadow-xs"
+              disabled={createMutation.isPending || duplicateMatches.length > 0}
+              className={`h-9 px-5 text-xs sm:text-sm font-semibold shadow-xs ${
+                duplicateMatches.length > 0
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border opacity-70'
+                  : 'bg-primary text-primary-foreground'
+              }`}
             >
               {createMutation.isPending ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                   Creating Lead...
                 </>
+              ) : duplicateMatches.length > 0 ? (
+                'Lead Already Exists (Cannot Create)'
               ) : (
                 'Create Lead'
               )}

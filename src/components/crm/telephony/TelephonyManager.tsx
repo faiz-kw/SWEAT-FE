@@ -412,6 +412,10 @@ export function TelephonyManager() {
           setIsNewLeadOpen(false);
           queryClient.invalidateQueries({ queryKey: ["leads"] });
         }}
+        onSelectExistingLead={(leadId) => {
+          setIsNewLeadOpen(false);
+          setInspectLeadId(leadId);
+        }}
       />
     </>
   );

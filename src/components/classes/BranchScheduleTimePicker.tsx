@@ -5,13 +5,13 @@ import { Button } from '@/components/ui/button';
 interface BranchScheduleTimePickerProps {
   value: string; // "HH:MM" (24h format)
   onChange: (val: string) => void;
-  minTime?: string; // "HH:MM" e.g. "06:00"
-  maxTime?: string; // "HH:MM" e.g. "22:00"
+  minTime?: string | undefined; // "HH:MM" e.g. "06:00"
+  maxTime?: string | undefined; // "HH:MM" e.g. "22:00"
   label: string;
-  disabled?: boolean;
-  isEndTime?: boolean;
-  startTime?: string; // For calculating quick +45m, +60m duration shortcuts
-  operatingWindowText?: string;
+  disabled?: boolean | undefined;
+  isEndTime?: boolean | undefined;
+  startTime?: string | undefined; // For calculating quick +45m, +60m duration shortcuts
+  operatingWindowText?: string | undefined;
 }
 
 // Convert "HH:MM" to minutes from midnight
@@ -19,8 +19,8 @@ export function toMinutes(timeStr?: string): number | null {
   if (!timeStr) return null;
   const parts = timeStr.split(':');
   if (parts.length < 2) return null;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
+  const h = parseInt(parts[0] || '0', 10);
+  const m = parseInt(parts[1] || '0', 10);
   if (isNaN(h) || isNaN(m)) return null;
   return h * 60 + m;
 }
@@ -37,8 +37,8 @@ export function formatTime12h(timeStr?: string): string {
   if (!timeStr) return '--:--';
   const parts = timeStr.split(':');
   if (parts.length < 2) return timeStr;
-  let h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
+  let h = parseInt(parts[0] || '0', 10);
+  const m = parseInt(parts[1] || '0', 10);
   if (isNaN(h) || isNaN(m)) return timeStr;
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;

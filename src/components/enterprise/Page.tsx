@@ -79,9 +79,9 @@ export function KpiTile({
 }: {
   label?: string;
   title?: string;
-  value: string | number;
-  delta?: string;
-  change?: string;
+  value: React.ReactNode;
+  delta?: string | null | undefined;
+  change?: string | null | undefined;
   hint?: string;
   subtitle?: string;
   icon?: React.ReactNode;

@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 
 import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,7 @@ import {
   resendUserInviteApi,
   updateUserApi,
   deleteUserApi,
+  bulkDeactivateUsersApi,
   resetUserPasswordApi,
   fetchRolesApi,
   fetchBranchesApi,
@@ -170,7 +172,7 @@ export function UsersWorkspace() {
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [departmentFilter, setDepartmentFilter] = React.useState("all");
   const [branchFilter, setBranchFilter] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("Active");
   const [selectedTenantId, setSelectedTenantId] = React.useState<string>("all");
   const [scopeFilter, setScopeFilter] = React.useState<"all" | "platform" | "tenant">("all");
 
@@ -183,7 +185,7 @@ export function UsersWorkspace() {
     if (branchFilter !== "all") count++;
     if (departmentFilter !== "all") count++;
     if (roleFilter !== "all") count++;
-    if (statusFilter !== "all") count++;
+    if (statusFilter !== "Active") count++;
     if (isPlatformAdmin && selectedTenantId !== "all") count++;
     return count;
   }, [search, branchFilter, departmentFilter, roleFilter, statusFilter, isPlatformAdmin, selectedTenantId]);
@@ -193,12 +195,16 @@ export function UsersWorkspace() {
   const resetAllFilters = React.useCallback(() => {
     setSearch("");
     setDebouncedSearch("");
-    setBranchFilter("all");
+    if (currentUser?.isOrgWide === false && branches.length > 0) {
+      setBranchFilter(branches[0].id);
+    } else {
+      setBranchFilter("all");
+    }
     setDepartmentFilter("all");
     setRoleFilter("all");
-    setStatusFilter("all");
+    setStatusFilter("Active");
     if (isPlatformAdmin) setSelectedTenantId("all");
-  }, [isPlatformAdmin]);
+  }, [isPlatformAdmin, currentUser?.isOrgWide, branches]);
 
   const handleClearSearch = React.useCallback(() => {
     setSearch("");
@@ -304,11 +310,12 @@ export function UsersWorkspace() {
     }
   };
 
-  // Canonical deduplication helpers by entity ID
+  // Canonical deduplication helpers by entity ID (only active/operational branches)
   const uniqueBranches = React.useMemo(() => {
     const seen = new Set<string>();
     return branches.filter((b) => {
       if (!b?.id || seen.has(b.id)) return false;
+      if (b.is_active === false || (b.status && b.status !== 'ACTIVE')) return false;
       seen.add(b.id);
       return true;
     });
@@ -384,8 +391,21 @@ export function UsersWorkspace() {
     } catch {}
   }, [isPlatformAdmin, selectedTenantId]);
 
+  // Load dropdown metadata in parallel background without blocking user list
+  React.useEffect(() => {
+    loadMetadata();
+  }, [loadMetadata]);
+
   // Load Paginated Users Data
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const loadData = React.useCallback(async () => {
+    // Abort previous inflight request to prevent stale overwrite races
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     if (usersCountRef.current === 0) {
       setLoading(true);
     } else {
@@ -393,20 +413,18 @@ export function UsersWorkspace() {
     }
     setFetchError(null);
     try {
-      const [_, paginated] = await Promise.all([
-        loadMetadata(),
-        fetchUsersPaginatedApi({
-          page,
-          page_size: pageSize,
-          role: roleFilter === "all" ? undefined : roleFilter,
-          department: !isPlatformAdmin && departmentFilter !== "all" ? departmentFilter : undefined,
-          location: branchFilter === "all" ? undefined : branchFilter,
-          status: statusFilter === "all" ? undefined : statusFilter,
-          search: debouncedSearch || undefined,
-          tenantId: isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined,
-        }),
-      ]);
+      const paginated = await fetchUsersPaginatedApi({
+        page,
+        page_size: pageSize,
+        role: roleFilter === "all" ? undefined : roleFilter,
+        department: !isPlatformAdmin && departmentFilter !== "all" ? departmentFilter : undefined,
+        location: branchFilter === "all" ? undefined : branchFilter,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        search: debouncedSearch || undefined,
+        tenantId: isPlatformAdmin && selectedTenantId !== "all" ? selectedTenantId : undefined,
+      });
 
+      if (controller.signal.aborted) return;
       setUsers(paginated.results);
       setTotalCount(paginated.count);
       setTotalPages(paginated.total_pages);
@@ -414,15 +432,17 @@ export function UsersWorkspace() {
         setSummaryCounts(paginated.summary);
       }
     } catch (err: any) {
+      if (controller.signal.aborted) return;
       const msg = extractApiError(err, "Failed to load user records from database");
       setFetchError(msg);
       toast.error(msg);
     } finally {
-      setLoading(false);
-      setIsFetching(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setIsFetching(false);
+      }
     }
   }, [
-    loadMetadata,
     isPlatformAdmin,
     page,
     pageSize,
@@ -636,7 +656,11 @@ export function UsersWorkspace() {
       const trimmedPhone = editPhone.trim();
       const phoneChanged = trimmedPhone !== (editingUser.phone || "").trim();
 
-      await updateUserApi(editingUser.id, {
+      const selectedRoleScope = roles.find((role) => role.id === editRole || role.code === editRole || role.name === editRole)?.scope;
+      const isBranchScopedRole = selectedRoleScope === "BRANCH";
+
+      // 1. Prepare profile & home branch update payload (strictly WITHOUT branch_access to respect backend decoupling)
+      const basePayload: Record<string, any> = {
         ...(firstNameChanged ? { first_name: trimmedFirstName } : {}),
         ...(lastNameChanged ? { last_name: trimmedLastName } : {}),
         ...(emailChanged ? { email: trimmedEmail } : {}),
@@ -647,14 +671,28 @@ export function UsersWorkspace() {
         is_active: editStatus === "Active",
         department_id: editDepartmentId || undefined,
         reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null),
-        primary_branch_id: editPrimaryBranchId || undefined,
-        home_branch: editPrimaryBranchId || undefined,
-        ...(roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? {
+      };
+
+      if (editPrimaryBranchId) {
+        basePayload.primary_branch_id = editPrimaryBranchId;
+        basePayload.home_branch = editPrimaryBranchId;
+      }
+
+      // Step 1: Update demographics, role, and home branch
+      await updateUserApi(editingUser.id, basePayload);
+
+      // Step 2: If branch-scoped role, update branch access clearances separately (with role_id, WITHOUT home_branch)
+      if (isBranchScopedRole && branches.length > 0) {
+        const branchAccessPayload: Record<string, any> = {
+          role_id: editRole,
           branch_access: branches.map((branch) => ({
-            branch_id: branch.id, enabled: editBranchAccess[branch.id] === true,
+            branch_id: branch.id,
+            enabled: editBranchAccess[branch.id] === true || branch.id === editPrimaryBranchId,
           })),
-        } : {}),
-      });
+        };
+        await updateUserApi(editingUser.id, branchAccessPayload);
+      }
+
       toast.success(`Updated profile for ${trimmedFirstName || editingUser.full_name || editingUser.email}`);
       setEditModalOpen(false);
       setEditingUser(null);
@@ -666,6 +704,74 @@ export function UsersWorkspace() {
       toast.error(msg);
     } finally {
       setEditSubmitting(false);
+    }
+  };
+
+  // Selection State for Bulk Actions
+  const [selectedUserIds, setSelectedUserIds] = React.useState<Set<string>>(new Set());
+  const [selectAllAcrossPages, setSelectAllAcrossPages] = React.useState(false);
+  const [bulkDeactivateModalOpen, setBulkDeactivateModalOpen] = React.useState(false);
+  const [isBulkDeactivating, setIsBulkDeactivating] = React.useState(false);
+
+  // Clear selections when search or filters change
+  React.useEffect(() => {
+    setSelectedUserIds(new Set());
+    setSelectAllAcrossPages(false);
+  }, [debouncedSearch, roleFilter, departmentFilter, branchFilter, statusFilter, selectedTenantId]);
+
+  // When changing page without selectAllAcrossPages, clear selection
+  React.useEffect(() => {
+    if (!selectAllAcrossPages) {
+      setSelectedUserIds(new Set());
+    }
+  }, [page, selectAllAcrossPages]);
+
+  const handleSelectUser = (userId: string, selected: boolean) => {
+    if (selectAllAcrossPages) {
+      setSelectAllAcrossPages(false);
+    }
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllOnPage = (checked: boolean) => {
+    if (checked) {
+      // Select ALL non-root users on the current page (regardless of status)
+      const selectable = filteredUsers
+        .filter((u) => u.id !== "USR-ADMIN" && u.email !== "admin")
+        .map((u) => u.id);
+      setSelectedUserIds(new Set(selectable));
+    } else {
+      setSelectedUserIds(new Set());
+      setSelectAllAcrossPages(false);
+    }
+  };
+
+  const handleBulkDeactivateConfirm = async () => {
+    if (selectedUserIds.size === 0 && !selectAllAcrossPages) return;
+    setIsBulkDeactivating(true);
+    try {
+      const res = await bulkDeactivateUsersApi(
+        Array.from(selectedUserIds),
+        undefined,
+        { selectAllAcrossPages }
+      );
+      toast.success(res.message || `Successfully deactivated ${res.deactivated_count} staff accounts.`);
+      setBulkDeactivateModalOpen(false);
+      setSelectedUserIds(new Set());
+      setSelectAllAcrossPages(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(extractApiError(err, "Failed to bulk deactivate users."));
+    } finally {
+      setIsBulkDeactivating(false);
     }
   };
 
@@ -1103,10 +1209,80 @@ export function UsersWorkspace() {
           </div>
         ) : (
           <>
-            {/* Background fetching indicator */}
+            {/* Enhanced Background Fetching Progress Bar */}
             {isFetching && (
-              <div className="h-0.5 w-full bg-primary/20 overflow-hidden rounded-full -mt-1 mb-2">
-                <div className="h-full bg-primary w-2/5 animate-pulse" />
+              <div className="mb-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground pb-1 px-0.5">
+                  <span className="flex items-center gap-1.5 text-primary font-semibold">
+                    <RefreshCw className="size-3 animate-spin" />
+                    Updating staff directory...
+                  </span>
+                  <span>Fetching latest records</span>
+                </div>
+                <div className="h-1.5 w-full bg-primary/15 overflow-hidden rounded-full shadow-inner relative">
+                  <div className="h-full bg-gradient-to-r from-primary/60 via-primary to-primary/60 rounded-full animate-indeterminate shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
+                </div>
+              </div>
+            )}
+
+            {/* Bulk Actions Banner */}
+            {selectedUserIds.size > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-xl animate-in fade-in duration-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex size-6 items-center justify-center rounded-full bg-destructive text-white text-xs font-bold shrink-0">
+                    {selectAllAcrossPages
+                      ? (totalCount || summaryCounts?.total_count || selectedUserIds.size)
+                      : selectedUserIds.size}
+                  </span>
+                  <span className="text-xs font-semibold text-foreground">
+                    {selectAllAcrossPages
+                      ? `All ${totalCount || summaryCounts?.total_count || selectedUserIds.size} staff accounts selected across all pages`
+                      : `${selectedUserIds.size} staff account${selectedUserIds.size === 1 ? "" : "s"} on this page selected`}
+                  </span>
+                  {!selectAllAcrossPages && (totalCount || 0) > selectedUserIds.size && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectAllAcrossPages(true)}
+                      className="text-xs font-semibold text-primary underline hover:text-primary/80 cursor-pointer ml-1"
+                    >
+                      Select all {totalCount || summaryCounts?.total_count} staff accounts across all pages
+                    </button>
+                  )}
+                  {selectAllAcrossPages && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectAllAcrossPages(false)}
+                      className="text-xs font-semibold text-muted-foreground underline hover:text-foreground cursor-pointer ml-1"
+                    >
+                      Undo: select only this page
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUserIds(new Set());
+                      setSelectAllAcrossPages(false);
+                    }}
+                    className="h-8 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeactivateModalOpen(true)}
+                    className="h-8 text-xs font-semibold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="size-3.5" /> Bulk Deactivate (
+                    {selectAllAcrossPages
+                      ? totalCount || summaryCounts?.total_count || selectedUserIds.size
+                      : selectedUserIds.size}
+                    )
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -1116,6 +1292,18 @@ export function UsersWorkspace() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
+                      <th className="py-3 px-3 w-10 text-center">
+                        <Checkbox
+                          checked={
+                            filteredUsers.filter((u) => u.id !== "USR-ADMIN" && u.email !== "admin").length > 0 &&
+                            filteredUsers
+                              .filter((u) => u.id !== "USR-ADMIN" && u.email !== "admin")
+                              .every((u) => selectedUserIds.has(u.id))
+                          }
+                          onCheckedChange={(checked) => handleSelectAllOnPage(!!checked)}
+                          aria-label="Select all staff on page"
+                        />
+                      </th>
                       <th className="py-3 px-4">Staff Member</th>
                       <th className="py-3 px-4">Role & Scope</th>
                       {!isPlatformAdmin && departments.length > 0 && <th className="py-3 px-4">Department</th>}
@@ -1131,9 +1319,21 @@ export function UsersWorkspace() {
                       const isRoot = u.id === "USR-ADMIN" || u.email === "admin";
                       const isPlat = isPlatformAccount(u);
                       const initials = (u.full_name || u.email).slice(0, 2).toUpperCase();
+                      const isDeactivated = !u.is_active || u.status === "Inactive" || u.status === "DEACTIVATED" || u.status === "INACTIVE";
 
                       return (
-                        <tr key={u.id} className="hover:bg-muted/30 transition-colors">
+                        <tr key={u.id} className={cn("hover:bg-muted/30 transition-colors", selectedUserIds.has(u.id) && "bg-primary/5")}>
+                          {/* Row Selection Checkbox */}
+                          <td className="py-3 px-3 text-center">
+                            {!isRoot ? (
+                              <Checkbox
+                                checked={selectedUserIds.has(u.id)}
+                                onCheckedChange={(checked) => handleSelectUser(u.id, !!checked)}
+                                aria-label={`Select ${u.full_name || u.email}`}
+                              />
+                            ) : null}
+                          </td>
+
                           {/* User Identity */}
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2.5">
@@ -1346,10 +1546,21 @@ export function UsersWorkspace() {
                 return (
                   <div
                     key={u.id}
-                    className="p-3 bg-card rounded-xl border border-border space-y-2.5 shadow-2xs"
+                    className={cn(
+                      "p-3 bg-card rounded-xl border border-border space-y-2.5 shadow-2xs transition-colors",
+                      selectedUserIds.has(u.id) && "border-primary/50 bg-primary/5"
+                    )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
+                        {!isRoot && (
+                          <Checkbox
+                            checked={selectedUserIds.has(u.id)}
+                            onCheckedChange={(checked) => handleSelectUser(u.id, !!checked)}
+                            aria-label={`Select ${u.full_name || u.email}`}
+                            className="mr-1 shrink-0"
+                          />
+                        )}
                         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-500 font-bold text-white shadow-2xs text-xs">
                           {initials}
                         </div>
@@ -1502,51 +1713,113 @@ export function UsersWorkspace() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="h-7 px-2.5 text-xs gap-1"
-                >
-                  <ChevronLeft className="size-3.5" />
-                  Prev
-                </Button>
+              {/* Page navigation controls */}
+              {(() => {
+                const effectiveTotalPages = Math.max(totalPages, Math.ceil((totalCount || 0) / pageSize), 1);
+                const handlePageChange = (newPage: number) => {
+                  if (newPage === page || newPage < 1 || newPage > effectiveTotalPages || isFetching || loading) return;
+                  setPage(newPage);
+                  try {
+                    const tableEl = document.querySelector("table");
+                    if (tableEl) {
+                      tableEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  } catch {}
+                };
 
-                <div className="flex items-center gap-1 px-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
-                    const startPage = Math.max(1, Math.min(page - 2, totalPages - 4));
-                    const pageNum = startPage + idx;
-                    if (pageNum > totalPages) return null;
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        onClick={() => setPage(pageNum)}
-                        className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                          page === pageNum
-                            ? "bg-primary text-primary-foreground shadow-2xs"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
+                const getPaginationItems = () => {
+                  const items: (number | string)[] = [];
+                  if (effectiveTotalPages <= 7) {
+                    for (let i = 1; i <= effectiveTotalPages; i++) items.push(i);
+                  } else {
+                    items.push(1);
+                    if (page > 3) items.push("dots-left");
+                    const start = Math.max(2, page - 1);
+                    const end = Math.min(effectiveTotalPages - 1, page + 1);
+                    for (let i = start; i <= end; i++) {
+                      if (!items.includes(i)) items.push(i);
+                    }
+                    if (page < effectiveTotalPages - 2) items.push("dots-right");
+                    items.push(effectiveTotalPages);
+                  }
+                  return items;
+                };
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="h-7 px-2.5 text-xs gap-1"
-                >
-                  Next
-                  <ChevronRight className="size-3.5" />
-                </Button>
-              </div>
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || loading || isFetching}
+                      onClick={() => handlePageChange(1)}
+                      className="h-7 px-2 text-xs"
+                      title="First Page"
+                    >
+                      «
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || loading || isFetching}
+                      onClick={() => handlePageChange(page - 1)}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Prev
+                    </Button>
+
+                    <div className="flex items-center gap-1 px-1">
+                      {getPaginationItems().map((item, idx) => {
+                        if (typeof item === "string") {
+                          return (
+                            <span key={`dots-${idx}`} className="px-1 text-xs text-muted-foreground select-none">
+                              …
+                            </span>
+                          );
+                        }
+                        return (
+                          <button
+                            key={item}
+                            type="button"
+                            disabled={isFetching || loading}
+                            onClick={() => handlePageChange(item)}
+                            className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-semibold transition-colors ${
+                              isFetching || loading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                            } ${
+                              page === item
+                                ? "bg-primary text-primary-foreground shadow-2xs"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= effectiveTotalPages || loading || isFetching}
+                      onClick={() => handlePageChange(page + 1)}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      Next
+                      <ChevronRight className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= effectiveTotalPages || loading || isFetching}
+                      onClick={() => handlePageChange(effectiveTotalPages)}
+                      className="h-7 px-2 text-xs"
+                      title="Last Page"
+                    >
+                      »
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}
@@ -2483,6 +2756,83 @@ export function UsersWorkspace() {
               className="gap-1.5 text-xs font-semibold cursor-pointer"
             >
               <ArrowUpRight className="size-3.5" /> Open in New Tab
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Account Deactivation Confirmation Dialog */}
+      <Dialog open={bulkDeactivateModalOpen} onOpenChange={setBulkDeactivateModalOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-5" />
+              <DialogTitle className="text-base font-bold text-foreground">
+                Deactivate{" "}
+                {selectAllAcrossPages
+                  ? `All ${totalCount || summaryCounts?.total_count || selectedUserIds.size}`
+                  : selectedUserIds.size}{" "}
+                Staff Account{selectedUserIds.size === 1 && !selectAllAcrossPages ? "" : "s"}?
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Are you sure you want to deactivate{" "}
+              <strong className="text-foreground">
+                {selectAllAcrossPages
+                  ? `ALL ${totalCount || summaryCounts?.total_count || selectedUserIds.size}`
+                  : selectedUserIds.size}
+              </strong>{" "}
+              selected staff account{selectedUserIds.size === 1 && !selectAllAcrossPages ? "" : "s"}
+              {selectAllAcrossPages ? " across all pages" : ""}?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 text-destructive-foreground space-y-1.5">
+              <p className="font-semibold text-destructive flex items-center gap-1.5 text-xs">
+                <Lock className="size-3.5" /> Immediate Security Enforcement:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px]">
+                <li>All selected users will immediately lose access and be unable to log in.</li>
+                <li>Any active login sessions or authentication tokens will be revoked immediately.</li>
+                <li>User records and historical business data (audit logs, sales, bookings) are strictly preserved in the database with their status marked as Inactive/Disabled.</li>
+                <li>Root Super Admin accounts will automatically be protected from deactivation.</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkDeactivateModalOpen(false)}
+              disabled={isBulkDeactivating}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDeactivateConfirm}
+              disabled={isBulkDeactivating || (selectedUserIds.size === 0 && !selectAllAcrossPages)}
+              className="text-xs font-semibold"
+            >
+              {isBulkDeactivating ? (
+                <>
+                  <RefreshCw className="size-3.5 mr-1.5 animate-spin" /> Deactivating...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5 mr-1.5" /> Deactivate{" "}
+                  {selectAllAcrossPages
+                    ? `All ${totalCount || summaryCounts?.total_count || selectedUserIds.size}`
+                    : selectedUserIds.size}{" "}
+                  Account{selectedUserIds.size === 1 && !selectAllAcrossPages ? "" : "s"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

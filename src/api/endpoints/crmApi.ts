@@ -11,6 +11,8 @@ import type {
   TrialSlot,
   TrialSummaryCounts,
   TrialReminderSchedulePoint,
+  TrialFilterOptions,
+  PaginatedTrialsResult,
   BookTrialPayload,
   RescheduleTrialPayload,
   TrialConfirmationChannel,
@@ -257,7 +259,7 @@ export const crmApi = {
     return res.data;
   },
 
-  getBranches: async (): Promise<Array<{
+  getBranches: async (params?: { status?: string }): Promise<Array<{
     id: string;
     name: string;
     code?: string;
@@ -269,8 +271,25 @@ export const crmApi = {
     status?: string;
     is_active?: boolean;
   }>> => {
-    const res = await api.get<any>('/tenant/branches/');
-    return res.data?.results || res.data || [];
+    const statusQuery = params?.status ? `?status=${params.status}` : '?status=ACTIVE';
+    const res = await api.get<any>(`/tenant/branches/${statusQuery}`);
+    const list = res.data?.results || res.data || [];
+    return Array.isArray(list)
+      ? list
+          .map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            code: b.code || '',
+            city: b.city || b.location_name || '',
+            location_name: b.location_name || b.city || '',
+            address: b.address || '',
+            address_line_1: b.address_line_1,
+            address_line_2: b.address_line_2,
+            status: b.status || (b.is_active ? 'ACTIVE' : 'INACTIVE'),
+            is_active: b.is_active ?? (b.status === 'ACTIVE'),
+          }))
+          .filter((b: any) => (params?.status === 'all' ? true : (b.is_active !== false && b.status !== 'INACTIVE')))
+      : [];
   },
 
   getPrograms: async (branchId?: string): Promise<Array<{ id: string; name: string; code?: string; category_name?: string; program_type_name?: string }>> => {
@@ -587,6 +606,11 @@ export const crmApi = {
   // ==========================================
   // PHASE 4: TRIAL MANAGEMENT API
   // ==========================================
+  getTrialFilterOptions: async (): Promise<TrialFilterOptions> => {
+    const res = await api.get<TrialFilterOptions>('/tenant/trial-bookings/filter_options/');
+    return res.data;
+  },
+
   getTrialBookings: async (params?: {
     status?: string;
     confirmation_status?: string;
@@ -596,22 +620,32 @@ export const crmApi = {
     end_date?: string;
     search?: string;
     ordering?: string;
-  }): Promise<TrialBooking[]> => {
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedTrialsResult> => {
     const sp = new URLSearchParams();
-    if (params?.status) sp.append('status', params.status);
-    if (params?.confirmation_status) sp.append('confirmation_status', params.confirmation_status);
-    if (params?.branch_id) sp.append('branch_id', params.branch_id);
+    if (params?.status && params.status !== 'ALL') sp.append('status', params.status);
+    if (params?.confirmation_status && params.confirmation_status !== 'ALL') sp.append('confirmation_status', params.confirmation_status);
+    if (params?.branch_id && params.branch_id !== 'ALL') sp.append('branch_id', params.branch_id);
     if (params?.lead_id) sp.append('lead_id', params.lead_id);
     if (params?.start_date) sp.append('start_date', params.start_date);
     if (params?.end_date) sp.append('end_date', params.end_date);
     if (params?.search) sp.append('search', params.search);
     if (params?.ordering) sp.append('ordering', params.ordering);
+    if (params?.page) sp.append('page', String(params.page));
+    if (params?.page_size) sp.append('page_size', String(params.page_size));
     const qStr = sp.toString() ? `?${sp.toString()}` : '';
     const res = await api.get<PaginatedResponse<TrialBooking> | TrialBooking[]>(`/tenant/trial-bookings/${qStr}`);
     if (Array.isArray(res.data)) {
-      return res.data;
+      return { results: res.data, count: res.data.length, total_pages: 1 };
     }
-    return res.data.results ?? [];
+    const count = typeof res.data?.count === 'number' ? res.data.count : (res.data?.results?.length ?? 0);
+    const pageSize = params?.page_size || 20;
+    return {
+      results: res.data?.results ?? [],
+      count,
+      total_pages: Math.max(1, Math.ceil(count / pageSize)),
+    };
   },
 
   getTrialSummaryCounts: async (params?: { branch_id?: string }): Promise<TrialSummaryCounts> => {

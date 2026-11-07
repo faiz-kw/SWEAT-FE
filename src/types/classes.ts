@@ -4,8 +4,39 @@
 
 export type DeliveryMode = 'OFFLINE' | 'ONLINE' | 'HYBRID';
 export type ClassTemplateStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-export type ClassOccurrenceStatus = 'SCHEDULED' | 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type ClassOccurrenceStatus = 'SCHEDULED' | 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DEACTIVATED';
 export type TrainerOccurrenceRole = 'LEAD' | 'ASSISTANT' | 'SUBSTITUTE';
+
+export interface AffectedBooking {
+  id: string;
+  booking_number: string;
+  status: string;
+  member_id?: string;
+  member_name: string;
+  phone?: string;
+  email?: string;
+  membership_id?: string;
+  membership_name?: string;
+  booking_type?: string;
+  has_entitlement?: boolean;
+  entitlement_type?: string;
+  waitlist_position?: number | null;
+}
+
+export interface ClassCancellationPreview {
+  occurrence_id: string;
+  class_name: string;
+  branch_name: string;
+  occurrence_date: string;
+  start_time: string;
+  end_time: string;
+  current_status: string;
+  total_booked: number;
+  confirmed_count: number;
+  waitlist_count: number;
+  is_recurring: boolean;
+  affected_bookings: AffectedBooking[];
+}
 
 export interface ClassCategory {
   id: string;
@@ -73,6 +104,7 @@ export interface ClassScheduleRule {
 export interface ClassOccurrenceTrainerInfo {
   id: string;
   trainer_profile: string;
+  trainer_profile_id?: string;
   trainer_name: string;
   trainer_code: string;
   trainer_role: TrainerOccurrenceRole;
@@ -83,6 +115,7 @@ export interface ClassOccurrence {
   id: string;
   class_template: string;
   template_name?: string;
+  class_template_name?: string;
   class_name?: string;
   category?: string;
   category_name?: string;
@@ -107,6 +140,7 @@ export interface ClassOccurrence {
   waitlist_capacity: number;
   status: ClassOccurrenceStatus;
   description?: string;
+  online_join_url?: string;
   assigned_trainers?: ClassOccurrenceTrainerInfo[];
   trainers?: ClassOccurrenceTrainerInfo[];
   trainer_checked_in?: boolean;
@@ -116,6 +150,7 @@ export interface ClassOccurrence {
     status: 'CONFIRMED' | 'PENDING' | 'UNASSIGNED' | 'UNKNOWN';
   };
   booking_count?: number;
+  total_booked?: number;
   waitlist_count?: number;
   attendance_count?: number;
   is_eligible?: boolean;
@@ -251,6 +286,7 @@ export interface ClassesMetadata {
   trainer_roles: ClassesMetadataOption<TrainerOccurrenceRole>[];
   content_types: ClassesMetadataOption<string>[];
   branch_avail_statuses: ClassesMetadataOption<string>[];
+  occurrence_statuses?: ClassesMetadataOption<string>[];
 }
 
 

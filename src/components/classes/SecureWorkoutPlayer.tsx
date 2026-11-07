@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Film, Lock, ShieldCheck, Maximize2, Minimize2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface SecureWorkoutPlayerProps {
   embedUrl: string;
@@ -28,42 +27,93 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
     return embedUrl;
   }, [embedUrl]);
 
-  // Fullscreen change listener
+  // Fullscreen change listener & ESC key support
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const isDocFs = Boolean(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(isDocFs);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+          else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+        }
+        setIsFullscreen(false);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isFullscreen]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      if (containerRef.current.requestFullscreen) {
-        containerRef.current.requestFullscreen().catch((err) => {
-          console.warn('Fullscreen request failed:', err);
+    const elem = containerRef.current as any;
+
+    const isCurrentlyFullscreen = Boolean(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement ||
+      isFullscreen
+    );
+
+    if (!isCurrentlyFullscreen) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(() => {
+          // Graceful fallback to CSS fixed fullscreen if browser blocks API
+          setIsFullscreen(true);
         });
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      } else {
+        setIsFullscreen(true);
       }
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch((err) => {
-          console.warn('Exit fullscreen failed:', err);
-        });
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          (document as any).msExitFullscreen();
+        }
       }
+      setIsFullscreen(false);
     }
   };
 
   return (
     <div
       ref={containerRef}
-      className={`relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-lg select-none ${
-        isFullscreen ? 'rounded-none border-0 h-screen w-screen max-h-screen' : ''
+      className={`relative w-full overflow-hidden bg-black select-none transition-all duration-200 ${
+        isFullscreen
+          ? 'fixed inset-0 z-[999999] h-screen w-screen max-h-screen max-w-screen rounded-none border-0 shadow-none'
+          : 'aspect-video rounded-xl border border-border shadow-lg'
       } ${className}`}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -73,9 +123,9 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
           src={safeEmbedUrl}
           title={title}
           className="h-full w-full border-0 pointer-events-auto transform scale-[1.04] origin-center"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
-          sandbox="allow-scripts allow-same-origin allow-presentation"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
         />
       </div>
 
@@ -85,28 +135,33 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
         onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 text-white text-xs font-semibold select-none truncate max-w-[65%] sm:max-w-[75%]">
-          <Film className="size-3.5 text-primary shrink-0" />
+        <div className="flex items-center gap-2 text-white text-xs font-semibold select-none truncate max-w-[55%] sm:max-w-[70%]">
+          <Film className="size-4 text-cyan-400 shrink-0" />
           <span className="truncate">{title}</span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] bg-white/10 text-white/90 px-2 py-0.5 rounded border border-white/15 font-medium tracking-wide select-none hidden sm:flex items-center gap-1">
-            <Lock className="size-2.5 text-primary" /> Studio Player
+          <span className="text-[10px] bg-white/10 text-white/90 px-2.5 py-1 rounded-md border border-white/20 font-medium tracking-wide select-none hidden sm:flex items-center gap-1.5">
+            <Lock className="size-3 text-cyan-300" /> Studio Player
           </span>
 
-          {/* In-App Clean Fullscreen Button */}
-          <Button
+          {/* In-App Clean Prominent Full Screen Button */}
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={toggleFullscreen}
-            className="h-7 px-2 text-white/90 hover:text-white hover:bg-white/15 text-xs gap-1 font-semibold border border-white/10 bg-white/5"
-            title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen'}
+            className="h-8 px-3 rounded-md bg-white/15 hover:bg-white/25 active:bg-white/30 text-white border border-white/25 shadow-sm text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen'}
+            aria-label={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
           >
-            {isFullscreen ? <Minimize2 className="size-3.5 text-primary" /> : <Maximize2 className="size-3.5 text-primary" />}
-            <span className="hidden xs:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
-          </Button>
+            {isFullscreen ? (
+              <Minimize2 className="size-4 text-cyan-300 shrink-0" />
+            ) : (
+              <Maximize2 className="size-4 text-cyan-300 shrink-0" />
+            )}
+            <span className="text-white text-xs font-semibold whitespace-nowrap">
+              {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -120,7 +175,7 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
         onContextMenu={(e) => e.preventDefault()}
         title="Protected Stream"
       >
-        <Lock className="size-3.5 text-primary shrink-0" />
+        <Lock className="size-3.5 text-cyan-400 shrink-0" />
         <span className="text-xs text-white/90 font-medium tracking-wide">Protected</span>
       </div>
 
@@ -140,4 +195,5 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
     </div>
   );
 };
+
 export default SecureWorkoutPlayer;

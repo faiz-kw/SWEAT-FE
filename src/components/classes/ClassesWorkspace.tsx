@@ -40,9 +40,12 @@ import {
   Save,
   Trash2,
   Upload,
+  Ban,
+  RotateCcw,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
+import { CancelClassModal } from './CancelClassModal';
 import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
 import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
 import { toast } from 'sonner';
@@ -52,12 +55,15 @@ import {
   ClassTemplate,
   ClassScheduleRule,
   ClassOccurrence,
+  ClassOccurrenceTrainerInfo,
   ClassContentItem,
   ClassPrice,
   ClassBranchAvailability,
   DeliveryMode,
   ClassTemplateStatus,
   TrainerOccurrenceRole,
+  ClassesMetadata,
+  ClassesMetadataOption,
 } from '../../types/classes';
 import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
@@ -75,6 +81,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { usePermissions } from '../../lib/permissions';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { cn } from '@/lib/utils';
@@ -120,6 +127,7 @@ export const ClassesWorkspace: React.FC = () => {
   const canEdit = can('ops.classes.edit');
   const canDelete = can('ops.classes.delete');
   const isOrgAdmin = isOrganizationAdmin(user);
+  const canCancel = can('ops.classes.cancel') || isOrgAdmin || canEdit;
   const isTrainer = isTrainerUser(user);
   const isAuthorized = !isTrainer && (isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
   const isTrainerRole = !isAuthorized;
@@ -139,7 +147,12 @@ export const ClassesWorkspace: React.FC = () => {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
-const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
+  const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
+  const [cancellingOccurrence, setCancellingOccurrence] = useState<ClassOccurrence | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState<boolean>(false);
+  const [restoringOccId, setRestoringOccId] = useState<string | null>(null);
+  const [selectedVideoOccurrence, setSelectedVideoOccurrence] = useState<ClassOccurrence | null>(null);
+  const [isAssignVideoOpen, setIsAssignVideoOpen] = useState<boolean>(false);
   const [editOccurrence, setEditOccurrence] = useState<ClassOccurrence | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editStartTime, setEditStartTime] = useState('');
@@ -243,6 +256,25 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
       setDeletingOccId(null);
     }
   };
+
+  const handleRestoreOccurrenceSlot = async (occ: ClassOccurrence) => {
+    if (!occ?.id) return;
+    const msg = `Reactivate this class session (${occ.template_name || occ.class_name || 'Class'} on ${occ.occurrence_date})? It will be reopened for member bookings.`;
+    if (!window.confirm(msg)) return;
+    try {
+      setRestoringOccId(occ.id);
+      const res = await classesApi.restoreOccurrence(occ.id);
+      toast.success(res?.message || 'Class session reactivated successfully.');
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['mobile-schedule'] });
+      refetchOccurrences();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || 'Failed to reactivate class session.');
+    } finally {
+      setRestoringOccId(null);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -292,15 +324,72 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
 
+  const CATEGORY_COLOR_PALETTES = [
+    {
+      badge: 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30',
+      dot: 'bg-violet-500',
+      selected: 'bg-violet-600 text-white border-violet-600',
+      unselected: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/20',
+    },
+    {
+      badge: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30',
+      dot: 'bg-orange-500',
+      selected: 'bg-orange-600 text-white border-orange-600',
+      unselected: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/20',
+    },
+    {
+      badge: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+      dot: 'bg-emerald-500',
+      selected: 'bg-emerald-600 text-white border-emerald-600',
+      unselected: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20',
+    },
+    {
+      badge: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
+      dot: 'bg-blue-500',
+      selected: 'bg-blue-600 text-white border-blue-600',
+      unselected: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20',
+    },
+    {
+      badge: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+      dot: 'bg-rose-500',
+      selected: 'bg-rose-600 text-white border-rose-600',
+      unselected: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/20',
+    },
+    {
+      badge: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      dot: 'bg-amber-500',
+      selected: 'bg-amber-600 text-white border-amber-600',
+      unselected: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20',
+    },
+    {
+      badge: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+      dot: 'bg-cyan-500',
+      selected: 'bg-cyan-600 text-white border-cyan-600',
+      unselected: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20',
+    },
+    {
+      badge: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30',
+      dot: 'bg-fuchsia-500',
+      selected: 'bg-fuchsia-600 text-white border-fuchsia-600',
+      unselected: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/20',
+    },
+  ];
+
+  const getCategoryPalette = (categoryName?: string, categoryCode?: string): (typeof CATEGORY_COLOR_PALETTES)[number] => {
+    const token = `${categoryCode || ''} ${categoryName || ''}`.toUpperCase().trim();
+    if (token.includes('PILATES')) return CATEGORY_COLOR_PALETTES[0]!;
+    if (token.includes('BOOTCAMP')) return CATEGORY_COLOR_PALETTES[1]!;
+    let hash = 0;
+    for (let i = 0; i < token.length; i++) {
+      hash = (hash << 5) - hash + token.charCodeAt(i);
+      hash |= 0;
+    }
+    const idx = Math.abs(hash) % CATEGORY_COLOR_PALETTES.length;
+    return CATEGORY_COLOR_PALETTES[idx] || CATEGORY_COLOR_PALETTES[0]!;
+  };
+
   const getCategoryBadgeStyle = (categoryName?: string, categoryCode?: string) => {
-    const token = `${categoryCode || ''} ${categoryName || ''}`.toUpperCase();
-    if (token.includes('BOOTCAMP')) {
-      return 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 font-bold';
-    }
-    if (token.includes('PILATES')) {
-      return 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30 font-bold';
-    }
-    return 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30 font-semibold';
+    return `${getCategoryPalette(categoryName, categoryCode).badge} font-bold`;
   };
 
   // Debounce search term & reset pagination
@@ -383,7 +472,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const [genToDate, setGenToDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
+    return d.toISOString().split('T')[0] || '';
   });
 
   const [isCreateOccurrenceOpen, setIsCreateOccurrenceOpen] = useState(false);
@@ -682,7 +771,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   }, [rawRuleAuditEvents, auditRule?.id]);
 
   // Canonical Backend Metadata for zero hardcoded dropdown options
-  const { data: metadata, isLoading: loadingMetadata } = useQuery({
+  const { data: metadata, isLoading: loadingMetadata } = useQuery<ClassesMetadata>({
     queryKey: ['classes-metadata'],
     queryFn: () => classesApi.getClassesMetadata(),
   });
@@ -860,7 +949,10 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
     }
 
     // 2. Weekly schedule: Python isoweekday Mon=1, Sun=7 (Canonical ISO standard)
-    const [y, m, d] = occurrenceForm.occurrence_date.split('-').map(Number);
+    const dateParts = occurrenceForm.occurrence_date.split('-').map(Number);
+    const y = dateParts[0] || new Date().getFullYear();
+    const m = dateParts[1] || 1;
+    const d = dateParts[2] || 1;
     const dateObj = new Date(y, m - 1, d);
     const jsDay = dateObj.getDay();
     const dayOfWeek = jsDay === 0 ? 7 : jsDay;
@@ -975,8 +1067,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
 
   const openNewOccurrenceModal = () => {
     setOccurrenceError(null);
-    const defaultBranchId = selectedBranchFilter || (branches.length === 1 ? branches[0].id : '');
-    const defaultDate = selectedDate || new Date().toISOString().split('T')[0];
+    const defaultBranchId = selectedBranchFilter || (branches.length === 1 ? branches[0]?.id || '' : '');
+    const defaultDate = selectedDate || new Date().toISOString().split('T')[0] || '';
     setOccurrenceForm({
       class_template: '',
       branch: defaultBranchId,
@@ -1178,8 +1270,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
           };
           return Promise.all([updatePromise, classesApi.createScheduleRule(createPayload)]).then(([upd, crt]) => ({
             ...upd,
-            count: 1 + (crt?.count || additionalBranches.length),
-            occurrences_generated: crt?.occurrences_generated || 0,
+            count: 1 + ((crt as any)?.count || additionalBranches.length),
+            occurrences_generated: (crt as any)?.occurrences_generated || 0,
           }));
         }
 
@@ -1768,8 +1860,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 .filter((cat) => cat.status === 'ACTIVE')
                 .map((cat) => {
                   const isSelected = selectedCategoryFilter === cat.id;
-                  const isBootcamp = `${cat.code} ${cat.name}`.toUpperCase().includes('BOOTCAMP');
-                  const isPilates = `${cat.code} ${cat.name}`.toUpperCase().includes('PILATES');
+                  const palette = getCategoryPalette(cat.name, cat.code);
                   return (
                     <button
                       key={cat.id}
@@ -1777,27 +1868,15 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       onClick={() => setSelectedCategoryFilter(isSelected ? 'ALL' : cat.id)}
                       className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 ${
                         isSelected
-                          ? isBootcamp
-                            ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
-                            : isPilates
-                            ? 'bg-violet-600 text-white border-violet-600 shadow-2xs'
-                            : 'bg-primary text-primary-foreground border-primary shadow-2xs'
-                          : isBootcamp
-                          ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/20'
-                          : isPilates
-                          ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/20'
-                          : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted'
+                          ? `${palette.selected} shadow-2xs`
+                          : `${palette.unselected}`
                       }`}
                     >
                       <span
                         className={`size-2 rounded-full ${
                           isSelected
                             ? 'bg-white'
-                            : isBootcamp
-                            ? 'bg-orange-500'
-                            : isPilates
-                            ? 'bg-violet-500'
-                            : 'bg-sky-500'
+                            : palette.dot
                         }`}
                       />
                       <span>{cat.name}</span>
@@ -1901,8 +1980,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
+                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2020,8 +2100,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
+                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2358,8 +2439,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
+                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2811,11 +2893,17 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                 >
                   <option value="ALL">All Statuses</option>
-                  <option value="SCHEDULED">Scheduled</option>
-                  <option value="OPEN">Open</option>
-                  <option value="FULL">Full</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
+                  {(metadata?.occurrence_statuses || [
+                    { value: 'SCHEDULED', label: 'Scheduled' },
+                    { value: 'OPEN', label: 'Open' },
+                    { value: 'FULL', label: 'Full' },
+                    { value: 'IN_PROGRESS', label: 'In Progress' },
+                    { value: 'COMPLETED', label: 'Completed' },
+                    { value: 'CANCELLED', label: 'Cancelled' },
+                    { value: 'DEACTIVATED', label: 'Deactivated' },
+                  ]).map((s: ClassesMetadataOption<string>) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -2878,7 +2966,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
-                        <th className="py-3 px-3 text-center w-20">Actions</th>
+                        <th className="py-3 px-3 text-center w-28 whitespace-nowrap">Actions</th>
                         <th className="py-3 px-4">Class Session</th>
                         <th className="py-3 px-4">Class Type</th>
                         <th className="py-3 px-4">Branch</th>
@@ -2899,13 +2987,15 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                         const programName = occ.program_name || matchedTpl?.program_name;
                         const isCompleted = occ.status === 'COMPLETED';
                         const isCancelled = occ.status === 'CANCELLED';
+                        const isDeactivated = occ.status === 'DEACTIVATED';
+                        const isInProgress = occ.status === 'IN_PROGRESS';
                         const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
 
                         const isCheckedIn = Boolean(
                           occ.trainer_checked_in ||
                           occ.trainer_check_in_details?.checked_in ||
-                          (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
-                          (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
+                          (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
+                          (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
                         );
 
                         const allTrainers = [
@@ -2928,10 +3018,18 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                           <tr
                             key={occ.id}
                             onClick={() => setAttendanceModalOccurrence(occ)}
-                            className="hover:bg-muted/60 transition-colors cursor-pointer group"
+                            className={`transition-colors cursor-pointer group ${
+                              isCancelled
+                                ? 'bg-rose-500/[0.04] dark:bg-rose-950/20 hover:bg-rose-500/10 border-l-4 border-l-rose-500'
+                                : isDeactivated
+                                ? 'bg-amber-500/[0.04] dark:bg-amber-950/20 hover:bg-amber-500/10 border-l-4 border-l-amber-500'
+                                : isInProgress
+                                ? 'bg-blue-500/[0.04] dark:bg-blue-950/20 hover:bg-blue-500/10 border-l-4 border-l-blue-500'
+                                : 'hover:bg-muted/60'
+                            }`}
                             title="Click row to view class details, workout video, and roster"
                           >
-                            {/* Column 1: Upfront Edit & Admin Delete Actions */}
+                            {/* Column 1: Upfront Edit, Cancel/Reactivate, and Admin Delete Actions */}
                             <td className="py-3 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-1">
                                 {canEdit && (
@@ -2948,6 +3046,39 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                                     <Pencil className="size-3.5" />
                                   </Button>
                                 )}
+
+                                {/* Class Active / Cancel Toggle Switch */}
+                                {canCancel && (
+                                  <div
+                                    className="inline-flex items-center px-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={
+                                      isCompleted
+                                        ? 'Class session completed'
+                                        : isCancelled
+                                        ? 'Class cancelled — Toggle to reactivate'
+                                        : isDeactivated
+                                        ? 'Class deactivated — Toggle to reactivate'
+                                        : 'Class active — Toggle to cancel'
+                                    }
+                                  >
+                                    <Switch
+                                      checked={!isCancelled && !isDeactivated}
+                                      disabled={isCompleted || restoringOccId === occ.id}
+                                      onCheckedChange={(checked) => {
+                                        if (!checked) {
+                                          setCancellingOccurrence(occ);
+                                          setIsCancelModalOpen(true);
+                                        } else {
+                                          handleRestoreOccurrenceSlot(occ);
+                                        }
+                                      }}
+                                      className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-rose-500/80 cursor-pointer h-4 w-7 sm:h-5 sm:w-9"
+                                      aria-label={isCancelled ? 'Cancelled class - toggle to reactivate' : 'Active class - toggle to cancel'}
+                                    />
+                                  </div>
+                                )}
+
                                 {isAdminUser && (
                                   <Button
                                     size="sm"
@@ -3113,17 +3244,25 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                             <td className="py-3 px-4 whitespace-nowrap">
                               <Badge
                                 variant="outline"
-                                className={`text-[10px] font-semibold px-2 py-0.5 ${
-                                  isCompleted
-                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                                    : isCancelled
-                                    ? 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                                className={`text-[10px] font-bold px-2 py-0.5 inline-flex items-center gap-1 ${
+                                  isCancelled
+                                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40'
+                                    : isDeactivated
+                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40'
+                                    : isInProgress
+                                    ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/40 animate-pulse'
+                                    : isCompleted
+                                    ? 'bg-muted text-muted-foreground border-border'
                                     : occ.status === 'OPEN'
                                     ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
                                     : 'bg-muted text-muted-foreground border-border'
                                 }`}
                               >
-                                {occ.status || 'SCHEDULED'}
+                                {isCancelled && <Ban className="size-2.5 text-rose-500 shrink-0" />}
+                                {isDeactivated && <XCircle className="size-2.5 text-amber-500 shrink-0" />}
+                                {isInProgress && <Clock className="size-2.5 text-blue-500 shrink-0" />}
+                                {isCompleted && <CheckCircle2 className="size-2.5 text-muted-foreground shrink-0" />}
+                                <span>{occ.status || 'SCHEDULED'}</span>
                               </Badge>
                             </td>
 
@@ -3171,6 +3310,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                                   <Film className="size-3" />
                                   <span>Video</span>
                                 </Button>
+
                               </div>
                             </td>
                           </tr>
@@ -3192,8 +3332,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   const isCheckedIn = Boolean(
                     occ.trainer_checked_in ||
                     occ.trainer_check_in_details?.checked_in ||
-                    (occ.trainers && occ.trainers.some(t => t.status === 'CONFIRMED')) ||
-                    (occ.assigned_trainers && occ.assigned_trainers.some(t => t.status === 'CONFIRMED'))
+                    (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
+                    (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
                   );
 
                   const allTrainers = [
@@ -3212,10 +3352,23 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;
 
+                  const isCompleted = occ.status === 'COMPLETED';
+                  const isCancelled = occ.status === 'CANCELLED';
+                  const isDeactivated = occ.status === 'DEACTIVATED';
+                  const isInProgress = occ.status === 'IN_PROGRESS';
+
                   return (
                     <div
                       key={occ.id}
-                      className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
+                      className={`bg-card border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition-all shadow-xs ${
+                        isCancelled
+                          ? 'border-rose-500/40 bg-rose-500/[0.03] dark:bg-rose-950/20'
+                          : isDeactivated
+                          ? 'border-amber-500/40 bg-amber-500/[0.03] dark:bg-amber-950/20'
+                          : isInProgress
+                          ? 'border-blue-500/40 bg-blue-500/[0.03] dark:bg-blue-950/20'
+                          : 'border-border hover:border-primary/40'
+                      }`}
                     >
                       <div>
                         {/* Header */}
@@ -3247,14 +3400,21 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <span
-                              className={`text-xs px-2 py-0.5 rounded font-medium ${
-                                occ.status === 'OPEN' || occ.status === 'SCHEDULED'
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                  : occ.status === 'CANCELLED'
-                                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                              className={`text-xs px-2 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
+                                isCancelled
+                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                  : isDeactivated
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                  : isInProgress
+                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 animate-pulse'
+                                  : isCompleted
+                                  ? 'bg-muted text-muted-foreground border border-border'
+                                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                               }`}
                             >
+                              {isCancelled && <Ban className="size-2.5 text-rose-500" />}
+                              {isDeactivated && <XCircle className="size-2.5 text-amber-500" />}
+                              {isInProgress && <Clock className="size-2.5 text-blue-500" />}
                               {occ.status}
                             </span>
                             {isCheckedIn ? (
@@ -3359,6 +3519,48 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                         >
                           Rotate
                         </Button>
+                        {canCancel && (
+                          <div
+                            className="flex items-center gap-1.5 ml-auto"
+                            onClick={(e) => e.stopPropagation()}
+                            title={
+                              isCompleted
+                                ? 'Class session completed'
+                                : isCancelled || isDeactivated
+                                ? 'Class is Cancelled — Toggle to reactivate'
+                                : 'Class is Active — Toggle to cancel'
+                            }
+                          >
+                            <span
+                              className={cn(
+                                'text-[11px] font-semibold',
+                                isCancelled
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : isDeactivated
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : isCompleted
+                                  ? 'text-muted-foreground'
+                                  : 'text-emerald-600 dark:text-emerald-400'
+                              )}
+                            >
+                              {isCancelled ? 'Cancelled' : isDeactivated ? 'Deactivated' : isCompleted ? 'Completed' : 'Active'}
+                            </span>
+                            <Switch
+                              checked={!isCancelled && !isDeactivated}
+                              disabled={isCompleted || restoringOccId === occ.id}
+                              onCheckedChange={(checked) => {
+                                if (!checked) {
+                                  setCancellingOccurrence(occ);
+                                  setIsCancelModalOpen(true);
+                                } else {
+                                  handleRestoreOccurrenceSlot(occ);
+                                }
+                              }}
+                              className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-rose-500/80 cursor-pointer"
+                              aria-label="Toggle class status"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -3588,7 +3790,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Status...</option>
-                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
@@ -3824,9 +4026,9 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     const existingIdx = (templateForm.branch_capacities || []).findIndex((bc) => bc.branch_id === b.id);
                     let updated = [...(templateForm.branch_capacities || [])];
                     if (existingIdx >= 0) {
-                      updated[existingIdx] = { ...updated[existingIdx], ...patch };
+                      updated[existingIdx] = { ...updated[existingIdx], ...patch } as any;
                     } else {
-                      updated.push({ ...bItem, ...patch });
+                      updated.push({ ...bItem, ...patch } as any);
                     }
                     setTemplateForm({ ...templateForm, branch_capacities: updated });
                   };
@@ -3960,7 +4162,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Delivery Mode...</option>
-                    {(metadata?.delivery_modes || []).map((m) => (
+                    {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
                       <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>
@@ -3973,7 +4175,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Status...</option>
-                    {(metadata?.statuses || []).map((s) => (
+                    {(metadata?.statuses || []).map((s: ClassesMetadataOption<string>) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
                   </select>
@@ -4029,8 +4231,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       const next = { ...prev, class_template: val };
                       if (next.start_time) {
                         const parts = next.start_time.split(':');
-                        const h = parseInt(parts[0], 10);
-                        const m = parseInt(parts[1], 10);
+                        const h = parseInt(parts[0] || '0', 10);
+                        const m = parseInt(parts[1] || '0', 10);
                         const endM = h * 60 + m + dur;
                         const eh = Math.floor(endM / 60) % 24;
                         const em = endM % 60;
@@ -4242,8 +4444,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     // Auto-bump end time if needed
                     if (ruleForm.end_time && val >= ruleForm.end_time) {
                       const sParts = val.split(':');
-                      const h = parseInt(sParts[0], 10);
-                      const m = parseInt(sParts[1], 10);
+                      const h = parseInt(sParts[0] || '0', 10);
+                      const m = parseInt(sParts[1] || '0', 10);
                       const bumpMins = Math.min(1320, h * 60 + m + 60);
                       const bh = Math.floor(bumpMins / 60) % 24;
                       const bm = bumpMins % 60;
@@ -4351,7 +4553,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   onChange={(e) => setRuleForm({ ...ruleForm, delivery_mode: e.target.value as any })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.delivery_modes || []).map((m) => (
+                  {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
@@ -4363,7 +4565,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   onChange={(e) => setRuleForm({ ...ruleForm, status: e.target.value })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
@@ -4648,8 +4850,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       };
                       if (next.start_time && tpl?.default_duration_minutes) {
                         const parts = next.start_time.split(':');
-                        const h = parseInt(parts[0], 10);
-                        const m = parseInt(parts[1], 10);
+                        const h = parseInt(parts[0] || '0', 10);
+                        const m = parseInt(parts[1] || '0', 10);
                         const endM = h * 60 + m + tpl.default_duration_minutes;
                         const eh = Math.floor(endM / 60) % 24;
                         const em = endM % 60;
@@ -4794,8 +4996,8 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                     const selTpl = templates.find((t) => t.id === occurrenceForm.class_template);
                     const dur = selTpl?.default_duration_minutes || 60;
                     const parts = val.split(':');
-                    const h = parseInt(parts[0], 10);
-                    const m = parseInt(parts[1], 10);
+                    const h = parseInt(parts[0] || '0', 10);
+                    const m = parseInt(parts[1] || '0', 10);
                     const endM = h * 60 + m + dur;
                     const eh = Math.floor(endM / 60) % 24;
                     const em = endM % 60;
@@ -4880,7 +5082,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       onChange={(e) => setOccurrenceForm({ ...occurrenceForm, delivery_mode: e.target.value as any })}
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                     >
-                      {(metadata?.delivery_modes || []).map((m) => (
+                      {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
                         <option key={m.value} value={m.value}>{m.label}</option>
                       ))}
                     </select>
@@ -4983,7 +5185,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   onChange={(e) => setTrainerRoleInput(e.target.value as any)}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.trainer_roles || []).map((r) => (
+                  {(metadata?.trainer_roles || []).map((r: ClassesMetadataOption<TrainerOccurrenceRole>) => (
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
@@ -5077,7 +5279,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                       onChange={(e) => setBranchAvailForm({ ...branchAvailForm, status: e.target.value as any })}
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      {(metadata?.branch_avail_statuses || []).map((s) => (
+                      {(metadata?.branch_avail_statuses || []).map((s: ClassesMetadataOption<string>) => (
                         <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
@@ -5205,7 +5407,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 onChange={(e) => setContentForm({ ...contentForm, content_type: e.target.value as any })}
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                {(metadata?.content_types || []).map((c) => (
+                {(metadata?.content_types || []).map((c: ClassesMetadataOption<string>) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
@@ -5244,7 +5446,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                   onChange={(e) => setContentForm({ ...contentForm, status: e.target.value as any })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.statuses || []).filter((s) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s) => (
+                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
@@ -5317,7 +5519,7 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="">All Modes</option>
-                {(metadata?.delivery_modes || []).map((m) => (
+                {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
               </select>
@@ -5493,6 +5695,29 @@ const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
         onClose={() => {
           setAttendanceModalOccurrence(null);
           refetchOccurrences();
+        }}
+      />
+
+      {/* Class Cancellation & Deactivation Modal */}
+      <CancelClassModal
+        occurrence={cancellingOccurrence}
+        isOpen={isCancelModalOpen}
+        onClose={() => {
+          setIsCancelModalOpen(false);
+          setCancellingOccurrence(null);
+        }}
+        onSuccess={() => {
+          refetchOccurrences();
+        }}
+      />
+
+      {/* Assign Workout Video Modal */}
+      <AssignWorkoutVideoModal
+        occurrence={selectedVideoOccurrence}
+        isOpen={isAssignVideoOpen}
+        onClose={() => {
+          setIsAssignVideoOpen(false);
+          setSelectedVideoOccurrence(null);
         }}
       />
     </div>

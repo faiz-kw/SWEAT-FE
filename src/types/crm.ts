@@ -310,6 +310,8 @@ export interface DuplicateCheckResult {
     email?: string | null;
     current_status: LeadStatus;
     created_at?: string | null;
+    branch_name?: string | null;
+    assigned_sales_name?: string | null;
   }>;
 }
 
@@ -674,6 +676,37 @@ export interface TrialSummaryCounts {
   reschedule_requested: number;
   today: number;
   upcoming: number;
+}
+
+export interface TrialFilterOptionItem {
+  value: string;
+  label: string;
+  count?: number;
+}
+
+export interface TrialBranchOption {
+  id: string;
+  name: string;
+  code: string;
+  city?: string;
+  location_name?: string;
+  address?: string;
+  trial_count?: number;
+}
+
+export interface TrialFilterOptions {
+  branches: TrialBranchOption[];
+  lifecycle_statuses: TrialFilterOptionItem[];
+  confirmation_statuses: TrialFilterOptionItem[];
+  confirmation_channels: TrialFilterOptionItem[];
+  cancellation_reasons: TrialFilterOptionItem[];
+  total_trials?: number;
+}
+
+export interface PaginatedTrialsResult {
+  results: TrialBooking[];
+  count: number;
+  total_pages?: number;
 }
 
 export interface TrialReminderSchedulePoint {

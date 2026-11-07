@@ -28,6 +28,10 @@ import {
   UserCheck,
   UserX,
   HelpCircle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -86,6 +90,8 @@ export function TrialManagementWorkspace() {
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const { handleSearchChange } = useGlobalSearchSync(searchQuery, setSearchQuery);
   const [dateFilter, setDateFilter] = React.useState<string>('');
+  const [currentPage, setCurrentPage] = React.useState<number>(1);
+  const [pageSize, setPageSize] = React.useState<number>(20);
 
   // Sorting State: Default to current date / newest first (Descending)
   type TrialSortField = 'date' | 'lead' | 'branch' | 'status' | 'confirmation';
@@ -127,11 +133,71 @@ export function TrialManagementWorkspace() {
 
   const [viewingScheduleTrial, setViewingScheduleTrial] = React.useState<TrialBooking | null>(null);
 
-  // Branches
-  const { data: branches = [] } = useQuery({
+  // Dynamic filter options query (Branches, Statuses, Confirmations from backend)
+  const { data: filterOptions, isLoading: isFilterOptionsLoading } = useQuery({
+    queryKey: ['trial-filter-options'],
+    queryFn: () => crmApi.getTrialFilterOptions(),
+  });
+
+  // Active branches fallback query
+  const { data: fallbackBranches = [] } = useQuery({
     queryKey: ['active-branches'],
     queryFn: () => crmApi.getBranches(),
   });
+
+  // Authoritative default lifecycle statuses
+  const defaultLifecycleStatuses = React.useMemo(() => [
+    { value: 'BOOKED', label: 'Booked / Upcoming' },
+    { value: 'CONFIRMED', label: 'Confirmed' },
+    { value: 'ATTENDED', label: 'Attended / Completed' },
+    { value: 'NO_SHOW', label: 'No Show' },
+    { value: 'RESCHEDULED', label: 'Rescheduled' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+  ], []);
+
+  // Authoritative default confirmation statuses
+  const defaultConfirmationStatuses = React.useMemo(() => [
+    { value: 'CONFIRMED', label: 'Confirmed' },
+    { value: 'PENDING', label: 'Pending Confirmation' },
+    { value: 'RESCHEDULE_REQUESTED', label: 'Reschedule Requested' },
+    { value: 'DECLINED', label: 'Declined' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+  ], []);
+
+  // Resolved branch options
+  const branchOptions = React.useMemo(() => {
+    if (filterOptions?.branches && filterOptions.branches.length > 0) {
+      return filterOptions.branches;
+    }
+    return fallbackBranches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      code: b.code,
+      trial_count: undefined,
+    }));
+  }, [filterOptions?.branches, fallbackBranches]);
+
+  // Resolved lifecycle options with backend counts
+  const lifecycleOptions = React.useMemo(() => {
+    if (filterOptions?.lifecycle_statuses && filterOptions.lifecycle_statuses.length > 0) {
+      return filterOptions.lifecycle_statuses;
+    }
+    return defaultLifecycleStatuses.map((s) => ({
+      ...s,
+      count: undefined,
+    }));
+  }, [filterOptions?.lifecycle_statuses, defaultLifecycleStatuses]);
+
+  // Resolved confirmation options with backend counts
+  const confirmationOptions = React.useMemo(() => {
+    if (filterOptions?.confirmation_statuses && filterOptions.confirmation_statuses.length > 0) {
+      return filterOptions.confirmation_statuses;
+    }
+    return defaultConfirmationStatuses.map((s) => ({
+      ...s,
+      count: undefined,
+    }));
+  }, [filterOptions?.confirmation_statuses, defaultConfirmationStatuses]);
 
   // Summary counts query
   const { data: counts, isLoading: isCountsLoading } = useQuery({
@@ -142,17 +208,20 @@ export function TrialManagementWorkspace() {
       ),
   });
 
-  // Trial bookings list query
+  // Trial bookings list query with backend pagination
   const {
-    data: trials = [],
+    data: trialsData,
     isLoading: isTrialsLoading,
     isError: isTrialsError,
     refetch: refetchTrials,
     isFetching: isTrialsFetching,
   } = useQuery({
-    queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery, sortDirection],
+    queryKey: ['trial-bookings', selectedBranch, selectedStatus, selectedConfStatus, dateFilter, searchQuery, sortDirection, currentPage, pageSize],
     queryFn: () => {
-      const params: Parameters<typeof crmApi.getTrialBookings>[0] = {};
+      const params: Parameters<typeof crmApi.getTrialBookings>[0] = {
+        page: currentPage,
+        page_size: pageSize,
+      };
       if (selectedBranch) params.branch_id = selectedBranch;
       if (selectedStatus !== 'ALL') params.status = selectedStatus;
       if (selectedConfStatus !== 'ALL') params.confirmation_status = selectedConfStatus;
@@ -165,6 +234,10 @@ export function TrialManagementWorkspace() {
       return crmApi.getTrialBookings(params);
     },
   });
+
+  const trials = React.useMemo(() => trialsData?.results || [], [trialsData]);
+  const totalCount = trialsData?.count || 0;
+  const totalPages = trialsData?.total_pages || Math.max(1, Math.ceil(totalCount / pageSize));
 
   // Sorted trials memo (Ensures top dated / current date comes first)
   const sortedTrials = React.useMemo(() => {
@@ -483,7 +556,10 @@ export function TrialManagementWorkspace() {
               <Input
                 placeholder="Search lead, class, phone..."
                 value={searchQuery}
-                onChange={handleSearchChange}
+                onChange={(e) => {
+                  handleSearchChange(e);
+                  setCurrentPage(1);
+                }}
                 className="pl-8 text-xs h-9"
               />
             </div>
@@ -492,13 +568,16 @@ export function TrialManagementWorkspace() {
             <div>
               <select
                 value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
+                onChange={(e) => {
+                  setSelectedBranch(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full h-9 px-2.5 rounded-md border border-input bg-background text-xs"
               >
-                <option value="">All Branches</option>
-                {branches.map((b) => (
+                <option value="">All Branches {filterOptions?.total_trials ? `(${filterOptions.total_trials})` : ''}</option>
+                {branchOptions.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {formatBranchOptionLabel(b)}
+                    {b.name}{b.trial_count !== undefined ? ` (${b.trial_count})` : ''}
                   </option>
                 ))}
               </select>
@@ -508,16 +587,18 @@ export function TrialManagementWorkspace() {
             <div>
               <select
                 value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full h-9 px-2.5 rounded-md border border-input bg-background text-xs"
               >
                 <option value="ALL">All Lifecycle Statuses</option>
-                <option value="BOOKED">Booked</option>
-                <option value="CONFIRMED">Confirmed</option>
-                <option value="ATTENDED">Attended</option>
-                <option value="NO_SHOW">No Show</option>
-                <option value="RESCHEDULED">Rescheduled</option>
-                <option value="CANCELLED">Cancelled</option>
+                {lifecycleOptions.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}{s.count !== undefined ? ` (${s.count})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -525,15 +606,18 @@ export function TrialManagementWorkspace() {
             <div>
               <select
                 value={selectedConfStatus}
-                onChange={(e) => setSelectedConfStatus(e.target.value)}
+                onChange={(e) => {
+                  setSelectedConfStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full h-9 px-2.5 rounded-md border border-input bg-background text-xs"
               >
                 <option value="ALL">All Confirmations</option>
-                <option value="PENDING">Pending</option>
-                <option value="CONFIRMED">Confirmed</option>
-                <option value="RESCHEDULE_REQUESTED">Reschedule Requested</option>
-                <option value="DECLINED">Declined</option>
-                <option value="CANCELLED">Cancelled</option>
+                {confirmationOptions.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}{s.count !== undefined ? ` (${s.count})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -542,7 +626,10 @@ export function TrialManagementWorkspace() {
               <Input
                 type="date"
                 value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
+                onChange={(e) => {
+                  setDateFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="text-xs h-9"
               />
             </div>
@@ -550,7 +637,10 @@ export function TrialManagementWorkspace() {
 
         {(searchQuery || selectedBranch || selectedStatus !== 'ALL' || selectedConfStatus !== 'ALL' || dateFilter) && (
           <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-            <span>Filters active: showing {trials.length} trials</span>
+            <span>
+              Filters active: showing {totalCount > 0 ? ((currentPage - 1) * pageSize) + 1 : 0} to{' '}
+              {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()} trials
+            </span>
             <Button
               variant="ghost"
               size="sm"
@@ -560,6 +650,7 @@ export function TrialManagementWorkspace() {
                 setSelectedStatus('ALL');
                 setSelectedConfStatus('ALL');
                 setDateFilter('');
+                setCurrentPage(1);
               }}
               className="h-6 text-xs text-primary hover:text-primary"
             >
@@ -1057,6 +1148,84 @@ export function TrialManagementWorkspace() {
                 </div>
               ))}
             </div>
+
+            {/* Pagination Controls */}
+            {totalCount > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3.5 border-t border-border bg-card/60 text-xs">
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span>
+                    Showing <span className="font-semibold text-foreground">{((currentPage - 1) * pageSize) + 1}</span> to{' '}
+                    <span className="font-semibold text-foreground">{Math.min(currentPage * pageSize, totalCount)}</span> of{' '}
+                    <span className="font-semibold text-foreground">{totalCount.toLocaleString()}</span> trials
+                  </span>
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
+                    <span className="hidden md:inline">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="h-7.5 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                    >
+                      <option value={20}>20 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage <= 1 || isTrialsLoading}
+                    className="h-8 w-8 p-0"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1 || isTrialsLoading}
+                    className="h-8 px-2.5 gap-1"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline">Previous</span>
+                  </Button>
+
+                  <span className="px-2 text-xs font-medium text-foreground">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages || isTrialsLoading}
+                    className="h-8 px-2.5 gap-1"
+                    title="Next Page"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage >= totalPages || isTrialsLoading}
+                    className="h-8 w-8 p-0"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1084,12 +1253,20 @@ export function TrialManagementWorkspace() {
                   onChange={(e) => setConfirmChannel(e.target.value as TrialConfirmationChannel)}
                   className="w-full h-9 px-2.5 rounded-md border border-input bg-background text-xs"
                 >
-                  <option value="PHONE">Phone Call (Staff Outreach)</option>
-                  <option value="IN_PERSON">In Person / Walk-in Staff</option>
-                  <option value="WHATSAPP">WhatsApp 1-Click / Chat</option>
-                  <option value="MANUAL">Manual Staff Confirmation</option>
-                  <option value="EMAIL">Email Response</option>
-                  <option value="SMS">SMS Reply</option>
+                  {filterOptions?.confirmation_channels?.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  )) ?? (
+                    <>
+                      <option value="PHONE">Phone Call (Staff Outreach)</option>
+                      <option value="IN_PERSON">In Person / Walk-in Staff</option>
+                      <option value="WHATSAPP">WhatsApp 1-Click / Chat</option>
+                      <option value="MANUAL">Manual Staff Confirmation</option>
+                      <option value="EMAIL">Email Response</option>
+                      <option value="SMS">SMS Reply</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -1286,12 +1463,20 @@ export function TrialManagementWorkspace() {
                   required
                 >
                   <option value="" disabled>Select Reason</option>
-                  <option value="CUSTOMER_CANCELLED">Customer cancelled directly</option>
-                  <option value="SCHEDULE_CONFLICT">Schedule conflict</option>
-                  <option value="NOT_INTERESTED">No longer interested in trial</option>
-                  <option value="UNABLE_TO_REACH">Unable to reach / contact</option>
-                  <option value="HEALTH_ISSUE">Health or injury concern</option>
-                  <option value="OTHER">Other / Custom</option>
+                  {filterOptions?.cancellation_reasons?.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  )) ?? (
+                    <>
+                      <option value="CUSTOMER_CANCELLED">Customer cancelled directly</option>
+                      <option value="SCHEDULE_CONFLICT">Schedule conflict</option>
+                      <option value="NOT_INTERESTED">No longer interested in trial</option>
+                      <option value="UNABLE_TO_REACH">Unable to reach / contact</option>
+                      <option value="HEALTH_ISSUE">Health or injury concern</option>
+                      <option value="OTHER">Other / Custom</option>
+                    </>
+                  )}
                 </select>
               </div>
 

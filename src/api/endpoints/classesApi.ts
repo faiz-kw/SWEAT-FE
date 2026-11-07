@@ -20,7 +20,7 @@ import {
   ProgramOption,
   ClassesMetadata,
   ClassCancellationPreview,
-} from '../types/classes';
+} from '@/types/classes';
 
 export const classesApi = {
   // --- Class Categories ---
@@ -312,12 +312,15 @@ export const classesApi = {
   async getTrainerClassVideo(occurrenceId: string): Promise<{
     occurrence_id: string;
     class_name: string;
+    movement_title?: string;
     trainer_name?: string;
     video_url?: string;
     embed_player_url?: string;
     is_assigned_trainer: boolean;
     description?: string;
     instructions?: string;
+    targeted_muscles?: string[];
+    equipment_required?: string[];
   }> {
     const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/trainer-video/`);
     return res.data;
@@ -375,7 +378,7 @@ export const classesApi = {
     return all;
   },
 
-  async createBranchAvailability(data: Partial<ClassBranchAvailability>): Promise<ClassBranchAvailability> {
+  async createBranchAvailability(data: any): Promise<ClassBranchAvailability> {
     const res = await api.post<ClassBranchAvailability>('/tenant/class-branch-availabilities/', data);
     return res.data;
   },
@@ -389,7 +392,7 @@ export const classesApi = {
     return all;
   },
 
-  async createClassPrice(data: Partial<ClassPrice>): Promise<ClassPrice> {
+  async createClassPrice(data: any): Promise<ClassPrice> {
     const res = await api.post<ClassPrice>('/tenant/class-prices/', data);
     return res.data;
   },
@@ -431,7 +434,7 @@ export const classesApi = {
     return res.data?.results || res.data || [];
   },
 
-  async createContentItem(data: Partial<ClassContentItem>): Promise<ClassContentItem> {
+  async createContentItem(data: any): Promise<ClassContentItem> {
     const res = await api.post<ClassContentItem>('/tenant/class-content-items/', data);
     return res.data;
   },
@@ -450,7 +453,7 @@ export const classesApi = {
     return res.data?.results || res.data || [];
   },
 
-  async createContentMapping(data: Partial<ClassContentMapping>): Promise<ClassContentMapping> {
+  async createContentMapping(data: any): Promise<ClassContentMapping> {
     const res = await api.post<ClassContentMapping>('/tenant/class-content-mappings/', data);
     return res.data;
   },

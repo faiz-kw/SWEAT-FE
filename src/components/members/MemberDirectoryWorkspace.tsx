@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useApp } from '@/contexts/app-context';
 import {
@@ -143,6 +143,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   } = useQuery({
     queryKey: ['members', queryParams],
     queryFn: () => membersApi.getMembers(queryParams),
+    placeholderData: keepPreviousData,
     staleTime: 30000,
   });
 
@@ -159,9 +160,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
 
   const handleQuickViewChange = (tabId: QuickViewTab) => {
     setQuickView(tabId);
-    if (tabId !== 'all') {
-      setSelectedStatus('all');
-    }
+    setSelectedStatus('all');
     setPage(1);
   };
 
@@ -474,7 +473,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                 ? 'No member records matched your active search or filter criteria.'
                 : 'There are no member accounts in this tenant yet. You can add one or convert a lead.'}
             </p>
-            {(debouncedSearch || quickView !== 'all' || selectedStatus !== 'all' || (locationId && locationId !== 'all')) && (
+            {(debouncedSearch || quickView !== 'all' || selectedStatus !== 'all' || selectedBranch !== 'all' || selectedProgram !== 'all' || selectedPackage !== 'all' || (locationId && locationId !== 'all')) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -483,6 +482,9 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                   setDebouncedSearch('');
                   setQuickView('all');
                   setSelectedStatus('all');
+                  setSelectedBranch('all');
+                  setSelectedProgram('all');
+                  setSelectedPackage('all');
                   setPage(1);
                 }}
                 className="mt-4"

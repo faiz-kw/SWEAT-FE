@@ -67,6 +67,9 @@ interface DayRosterState {
   isOnDuty: boolean;
   startTime: string;
   endTime: string;
+  hasSplitShift?: boolean;
+  splitStartTime?: string;
+  splitEndTime?: string;
 }
 
 interface TrainerScheduleModalProps {
@@ -191,13 +194,29 @@ export function TrainerScheduleModal({
     };
 
     if (existingSchedulesData.length > 0) {
+      // Group shifts by day_of_week to support split shifts
+      const shiftsByDay = new Map<number, typeof existingSchedulesData>();
       existingSchedulesData.forEach((shift) => {
+        if (shift.status !== 'ACTIVE') return;
         const dow = shift.day_of_week;
-        if (dow >= 1 && dow <= 7) {
+        if (!shiftsByDay.has(dow)) shiftsByDay.set(dow, []);
+        shiftsByDay.get(dow)!.push(shift);
+      });
+
+      shiftsByDay.forEach((shifts, dow) => {
+        if (dow >= 1 && dow <= 7 && shifts.length > 0) {
+          // Sort shifts by start_time
+          shifts.sort((a, b) => a.start_time.localeCompare(b.start_time));
+          const first = shifts[0];
+          const second = shifts.length > 1 ? shifts[1] : null;
+
           newState[dow] = {
-            isOnDuty: shift.status === 'ACTIVE',
-            startTime: shift.start_time.slice(0, 5),
-            endTime: shift.end_time.slice(0, 5),
+            isOnDuty: true,
+            startTime: first.start_time.slice(0, 5),
+            endTime: first.end_time.slice(0, 5),
+            hasSplitShift: !!second,
+            splitStartTime: second ? second.start_time.slice(0, 5) : '17:00',
+            splitEndTime: second ? second.end_time.slice(0, 5) : '21:00',
           };
         }
       });
@@ -255,11 +274,20 @@ export function TrainerScheduleModal({
     DAYS_OF_WEEK.forEach((d) => {
       const day = weeklyState[d.id];
       if (day && day.isOnDuty) {
+        // Shift 1
         payloadSchedules.push({
           day_of_week: d.id,
           start_time: `${day.startTime}:00`,
           end_time: `${day.endTime}:00`,
         });
+        // Shift 2 (Split Shift)
+        if (day.hasSplitShift && day.splitStartTime && day.splitEndTime) {
+          payloadSchedules.push({
+            day_of_week: d.id,
+            start_time: `${day.splitStartTime}:00`,
+            end_time: `${day.splitEndTime}:00`,
+          });
+        }
       }
     });
 
@@ -426,11 +454,16 @@ export function TrainerScheduleModal({
                     }}
                     className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
                   >
-                    {trainers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.trainer_name || t.trainer_code} ({t.trainer_code})
-                      </option>
-                    ))}
+                    {trainers
+                      .filter((t) => {
+                        const s = String(t.trainer_status || '').toUpperCase();
+                        return s !== 'INACTIVE' && s !== 'TERMINATED' && s !== 'DEACTIVATED';
+                      })
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.trainer_name || t.trainer_code} ({t.trainer_code})
+                        </option>
+                      ))}
                   </select>
                 </div>
               )}
@@ -442,11 +475,13 @@ export function TrainerScheduleModal({
                   onChange={(e) => setSelectedBranchId(e.target.value)}
                   className="w-full sm:w-52 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} {b.city ? `(${b.city})` : ''}
-                    </option>
-                  ))}
+                  {branches
+                    .filter((b) => b.is_active !== false && String((b as any).status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+                    .map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} {b.city ? `(${b.city})` : ''}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -460,7 +495,7 @@ export function TrainerScheduleModal({
               >
                 <option value="">Replicate from branch...</option>
                 {branches
-                  .filter((b) => b.id !== selectedBranchId)
+                  .filter((b) => b.id !== selectedBranchId && b.is_active !== false && String((b as any).status || 'ACTIVE').toUpperCase() === 'ACTIVE')
                   .map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
@@ -728,37 +763,124 @@ export function TrainerScheduleModal({
                         </div>
 
                         {day.isOnDuty ? (
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                            <Input
-                              type="time"
-                              value={day.startTime}
-                              onChange={(e) =>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+                            {/* Shift 1 */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase shrink-0">
+                                Shift 1:
+                              </span>
+                              <Input
+                                type="time"
+                                value={day.startTime}
+                                onChange={(e) =>
+                                  setWeeklyState((prev) => ({
+                                    ...prev,
+                                    [dayInfo.id]: {
+                                      ...prev[dayInfo.id],
+                                      startTime: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="h-8 w-24 text-xs font-mono"
+                              />
+                              <span className="text-xs text-muted-foreground">to</span>
+                              <Input
+                                type="time"
+                                value={day.endTime}
+                                onChange={(e) =>
+                                  setWeeklyState((prev) => ({
+                                    ...prev,
+                                    [dayInfo.id]: {
+                                      ...prev[dayInfo.id],
+                                      endTime: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="h-8 w-24 text-xs font-mono"
+                              />
+                            </div>
+
+                            {/* Split Shift Toggle */}
+                            <Button
+                              type="button"
+                              variant={day.hasSplitShift ? 'secondary' : 'outline'}
+                              size="sm"
+                              onClick={() =>
                                 setWeeklyState((prev) => ({
                                   ...prev,
                                   [dayInfo.id]: {
                                     ...prev[dayInfo.id],
-                                    startTime: e.target.value,
+                                    hasSplitShift: !prev[dayInfo.id]?.hasSplitShift,
+                                    splitStartTime: prev[dayInfo.id]?.splitStartTime || '17:00',
+                                    splitEndTime: prev[dayInfo.id]?.splitEndTime || '21:00',
                                   },
                                 }))
                               }
-                              className="h-8 w-24 text-xs font-mono"
-                            />
-                            <span className="text-xs text-muted-foreground">to</span>
-                            <Input
-                              type="time"
-                              value={day.endTime}
-                              onChange={(e) =>
-                                setWeeklyState((prev) => ({
-                                  ...prev,
-                                  [dayInfo.id]: {
-                                    ...prev[dayInfo.id],
-                                    endTime: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="h-8 w-24 text-xs font-mono"
-                            />
+                              className={`h-7 px-2 text-[11px] gap-1 cursor-pointer ${
+                                day.hasSplitShift
+                                  ? 'bg-primary/10 text-primary border border-primary/30 font-semibold'
+                                  : 'text-muted-foreground border-dashed'
+                              }`}
+                            >
+                              <Plus className="size-3" />
+                              {day.hasSplitShift ? 'Split Shift' : '+ Split Shift'}
+                            </Button>
+
+                            {/* Shift 2 (Split Shift Input) */}
+                            {day.hasSplitShift && (
+                              <div className="flex items-center gap-1.5 pl-2 sm:border-l border-border/60">
+                                <span className="text-[10px] font-semibold text-primary uppercase shrink-0">
+                                  Shift 2:
+                                </span>
+                                <Input
+                                  type="time"
+                                  value={day.splitStartTime || '17:00'}
+                                  onChange={(e) =>
+                                    setWeeklyState((prev) => ({
+                                      ...prev,
+                                      [dayInfo.id]: {
+                                        ...prev[dayInfo.id],
+                                        splitStartTime: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="h-8 w-24 text-xs font-mono"
+                                />
+                                <span className="text-xs text-muted-foreground">to</span>
+                                <Input
+                                  type="time"
+                                  value={day.splitEndTime || '21:00'}
+                                  onChange={(e) =>
+                                    setWeeklyState((prev) => ({
+                                      ...prev,
+                                      [dayInfo.id]: {
+                                        ...prev[dayInfo.id],
+                                        splitEndTime: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="h-8 w-24 text-xs font-mono"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    setWeeklyState((prev) => ({
+                                      ...prev,
+                                      [dayInfo.id]: {
+                                        ...prev[dayInfo.id],
+                                        hasSplitShift: false,
+                                      },
+                                    }))
+                                  }
+                                  className="size-7 text-muted-foreground hover:text-destructive cursor-pointer"
+                                  title="Remove split shift"
+                                >
+                                  <Trash2 className="size-3" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-xs italic text-muted-foreground">

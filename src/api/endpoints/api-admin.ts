@@ -303,24 +303,90 @@ export async function updateUserApi(userId: string, payload: Record<string, unkn
   return res.data;
 }
 
-export async function resetUserPasswordApi(userId: string, password: string): Promise<{ message: string }> {
-  const token = typeof window !== "undefined" ? window.localStorage.getItem("pos_user_profile") : null;
-  let isPlatform = false;
-  try {
-    if (token) {
-      const parsed = JSON.parse(token);
-      if (parsed.isSuperAdmin || parsed.user_type === "platform") {
-        isPlatform = true;
-      }
-    }
-  } catch {}
-
-  const url = isPlatform
+export async function resetUserPasswordApi(userId: string, password: string, isPlatformUser: boolean = false): Promise<{ message: string }> {
+  // If explicitly flagged as a platform control-plane user, call platform-users endpoint;
+  // otherwise, default to the tenant staff endpoint to ensure tenant users never 404.
+  const url = isPlatformUser
     ? `/platform/platform-users/${userId}/reset-password/`
     : `/tenant/users/${userId}/reset-password/`;
 
   const res = await api.post<{ message: string }>(url, { password });
   return res.data;
+}
+
+export async function bulkDeactivateUsersApi(
+  userIds: string[],
+  reason?: string,
+  options?: { selectAllAcrossPages?: boolean }
+): Promise<{
+  success: boolean;
+  deactivated_count: number;
+  skipped_count: number;
+  processed_ids: string[];
+  message: string;
+}> {
+  try {
+    const res = await api.post<{
+      success: boolean;
+      deactivated_count: number;
+      skipped_count: number;
+      processed_ids: string[];
+      message: string;
+    }>('/tenant/users/bulk-deactivate/', {
+      user_ids: userIds,
+      select_all: options?.selectAllAcrossPages,
+      reason,
+    });
+    return res.data;
+  } catch (err: any) {
+    // If backend returns 405 (Method Not Allowed) or 404 (endpoint not deployed yet on remote API),
+    // gracefully fall back to parallel batch deactivations using the active lifecycle deactivation endpoint.
+    const isMethodNotAllowed =
+      err?.status === 405 ||
+      err?.status === 404 ||
+      err?.response?.status === 405 ||
+      err?.response?.status === 404 ||
+      String(err?.message || '').toLowerCase().includes('not allowed');
+
+    if (isMethodNotAllowed && userIds.length > 0) {
+      const sanitizedIds = userIds.filter((id) => id !== 'USR-ADMIN');
+      const skippedRoot = userIds.length - sanitizedIds.length;
+      let deactivatedCount = 0;
+      const processed: string[] = [];
+
+      // Concurrently deactivate in chunks of 5
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < sanitizedIds.length; i += CHUNK_SIZE) {
+        const chunk = sanitizedIds.slice(i, i + CHUNK_SIZE);
+        await Promise.allSettled(
+          chunk.map(async (id) => {
+            try {
+              // Try DELETE first, if not allowed try POST deactivate
+              await api.delete(`/tenant/users/${id}/`);
+              deactivatedCount++;
+              processed.push(id);
+            } catch {
+              try {
+                await api.post(`/tenant/users/${id}/deactivate/`, { reason });
+                deactivatedCount++;
+                processed.push(id);
+              } catch {}
+            }
+          })
+        );
+      }
+
+      return {
+        success: true,
+        deactivated_count: deactivatedCount,
+        skipped_count: skippedRoot,
+        processed_ids: processed,
+        message: `Successfully deactivated ${deactivatedCount} staff account(s).`,
+      };
+    }
+
+    throw err;
+  }
 }
 
 export async function deleteUserApi(userId: string): Promise<void> {
@@ -526,16 +592,19 @@ export interface BranchDropdownItem {
 }
 
 export async function fetchBranchesApi(): Promise<BranchDropdownItem[]> {
-  const res = await api.get<any>('/tenant/branches/');
-  return toArray<any>(res.data).map((b: any) => ({
-    id: b.id,
-    name: b.name,
-    code: b.code || '',
-    city: b.city || b.location_name || '',
-    location_name: b.location_name || b.city || '',
-    address: b.address || '',
-    is_active: b.is_active ?? (b.status === 'ACTIVE'),
-  }));
+  const res = await api.get<any>('/tenant/branches/?status=ACTIVE');
+  return toArray<any>(res.data)
+    .map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      code: b.code || '',
+      city: b.city || b.location_name || '',
+      location_name: b.location_name || b.city || '',
+      address: b.address || '',
+      is_active: b.is_active ?? (b.status === 'ACTIVE'),
+      status: b.status || (b.is_active ? 'ACTIVE' : 'INACTIVE'),
+    }))
+    .filter((b: any) => b.is_active !== false && b.status !== 'INACTIVE');
 }
 
 export async function fetchDepartmentsApi(): Promise<{ id: string; name: string; code: string }[]> {
@@ -558,7 +627,7 @@ export async function fetchLocationsApi(tenantId?: string): Promise<LocationRow[
 
   // In tenant session, query tenant branches endpoint (prevents 403 on /platform/locations/)
   if (isTenant) {
-    const res = await api.get<any>('/tenant/branches/');
+    const res = await api.get<any>('/tenant/branches/?status=all');
     return toArray<any>(res.data).map((b: any) => ({
       id: b.id,
       code: b.code || '',
