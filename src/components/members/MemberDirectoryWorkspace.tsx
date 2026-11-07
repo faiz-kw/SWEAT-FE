@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Sparkles,
   Inbox,
+  Database,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi, type MemberFilterParams } from '@/api/endpoints/membersApi';
@@ -53,6 +54,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { CollectPaymentModal } from './modals/MemberActionModals';
+import { LegacyLiveSearchModal } from './modals/LegacyLiveSearchModal';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
 type QuickViewTab = 'all' | 'active' | 'expiring_soon' | 'expired' | 'frozen' | 'outstanding';
@@ -119,6 +121,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
 
   // Quick Collect Payment Modal State
   const [paymentMember, setPaymentMember] = useState<Member | null>(null);
+  const [isLegacySearchOpen, setIsLegacySearchOpen] = useState(false);
 
   // Backend authoritative query parameters
   const queryParams: MemberFilterParams = {
@@ -286,6 +289,15 @@ export const MemberDirectoryWorkspace: React.FC = () => {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsLegacySearchOpen(true)}
+              className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Old Portal Search</span>
             </Button>
             <Button
               size="sm"
@@ -473,6 +485,25 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                 ? 'No member records matched your active search or filter criteria.'
                 : 'There are no member accounts in this tenant yet. You can add one or convert a lead.'}
             </p>
+{debouncedSearch && (
+              <div className="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 max-w-md mx-auto text-left">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-semibold text-sm">
+                  <Database className="w-4 h-4 shrink-0" />
+                  <span>Looking for "{debouncedSearch}" in the old database?</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                  Search the live old database to instantly fetch their profile, active packages, remaining sessions, and merge duplicated accounts.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-3 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm text-xs"
+                  onClick={() => setIsLegacySearchOpen(true)}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  Search Old Database for "{debouncedSearch}"
+                </Button>
+              </div>
+            )}
             {(debouncedSearch || quickView !== 'all' || selectedStatus !== 'all' || selectedBranch !== 'all' || selectedProgram !== 'all' || selectedPackage !== 'all' || (locationId && locationId !== 'all')) && (
               <Button
                 variant="outline"
@@ -866,6 +897,12 @@ export const MemberDirectoryWorkspace: React.FC = () => {
       </Dialog>
 
       {/* Collect Payment Modal from Directory */}
+      <LegacyLiveSearchModal
+        isOpen={isLegacySearchOpen}
+        onClose={() => setIsLegacySearchOpen(false)}
+        initialQuery={debouncedSearch || searchTerm}
+      />
+
       {paymentMember && (
         <CollectPaymentModal
           isOpen={Boolean(paymentMember)}

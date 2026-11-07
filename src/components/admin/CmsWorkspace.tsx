@@ -41,6 +41,9 @@ export function CmsWorkspace() {
   // Modals
   const [bannerModalOpen, setBannerModalOpen] = React.useState(false);
   const [editingBanner, setEditingBanner] = React.useState<CMSBanner | null>(null);
+  const [mediaSourceMode, setMediaSourceMode] = React.useState<'upload' | 'url'>('upload');
+  const [isUploadingBannerMedia, setIsUploadingBannerMedia] = React.useState(false);
+  const bannerFileInputRef = React.useRef<HTMLInputElement>(null);
   const [categoryModalOpen, setCategoryModalOpen] = React.useState(false);
   const [editingCategory, setEditingCategory] = React.useState<ProgramCategoryMedia | null>(null);
   const [mediaModalOpen, setMediaModalOpen] = React.useState(false);
@@ -94,17 +97,49 @@ export function CmsWorkspace() {
   }, [loadData]);
 
   // --- Banner Actions ---
+  const handleBannerFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error("File is too large. Maximum size is 150MB.");
+      return;
+    }
+
+    try {
+      setIsUploadingBannerMedia(true);
+      const res = await cmsApi.uploadBannerMedia(file);
+      setBannerForm(prev => ({
+        ...prev,
+        media_url: res.url,
+        media_type: res.media_type || (file.type.startsWith('video') ? 'VIDEO' : 'IMAGE'),
+      }));
+      toast.success(`Uploaded ${file.name} successfully!`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to upload media file");
+    } finally {
+      setIsUploadingBannerMedia(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleOpenBannerModal = (banner?: CMSBanner) => {
     if (banner) {
       setEditingBanner(banner);
       setBannerForm({ ...banner });
+      if (banner.media_url && (banner.media_url.startsWith('http://') || banner.media_url.startsWith('https://'))) {
+        setMediaSourceMode('url');
+      } else {
+        setMediaSourceMode('upload');
+      }
     } else {
       setEditingBanner(null);
+      setMediaSourceMode('upload');
       setBannerForm({
         title: "",
         subtitle: "",
         placement: "HOME_HERO",
-        media_type: "IMAGE",
+        media_type: "VIDEO",
         media_url: "",
         thumbnail_url: "",
         link_type: "NONE",
@@ -275,25 +310,25 @@ export function CmsWorkspace() {
             title="Active Home Banners"
             value={banners.filter(b => b.is_active).length.toString()}
             subtext={`${banners.length} total banners configured`}
-            icon={Image}
+            icon={<Image className="w-4 h-4 text-primary" />}
           />
           <KpiTile
             title="Program Categories"
             value={categories.length.toString()}
             subtext="Pilates, Bootcamp & Core Disciplines"
-            icon={Layers}
+            icon={<Layers className="w-4 h-4 text-emerald-500" />}
           />
           <KpiTile
             title="Video Clips & Teasers"
             value={mediaAssets.filter(m => m.media_type === "VIDEO").length.toString()}
             subtext="Trailers & Exercise form guides"
-            icon={Film}
+            icon={<Film className="w-4 h-4 text-purple-500" />}
           />
           <KpiTile
             title="Audio Tracks"
             value={mediaAssets.filter(m => m.media_type === "AUDIO").length.toString()}
             subtext="Workout beats & guided meditation"
-            icon={Music}
+            icon={<Music className="w-4 h-4 text-amber-500" />}
           />
         </div>
 
@@ -711,14 +746,134 @@ export function CmsWorkspace() {
               </div>
             </div>
 
-            <div>
-              <Label className="text-xs">Media Stream / CDN URL *</Label>
-              <Input
-                placeholder="https://... image or video mp4/m3u8"
-                value={bannerForm.media_url || ""}
-                onChange={e => setBannerForm({ ...bannerForm, media_url: e.target.value })}
-                className="mt-1 font-mono text-xs"
-              />
+            {/* Media Source & File / URL Input */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Banner Media (Video or Image) *</Label>
+                <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md border border-border text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setMediaSourceMode('upload')}
+                    className={cn(
+                      "px-2.5 py-1 rounded transition-colors flex items-center gap-1",
+                      mediaSourceMode === 'upload' ? "bg-background font-semibold text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <UploadCloud className="size-3" />
+                    <span>Upload File</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaSourceMode('url')}
+                    className={cn(
+                      "px-2.5 py-1 rounded transition-colors flex items-center gap-1",
+                      mediaSourceMode === 'url' ? "bg-background font-semibold text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <ExternalLink className="size-3" />
+                    <span>Direct Link</span>
+                  </button>
+                </div>
+              </div>
+
+              {mediaSourceMode === 'upload' ? (
+                <div>
+                  <input
+                    type="file"
+                    ref={bannerFileInputRef}
+                    accept="video/mp4,video/quicktime,video/webm,video/m4v,image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleBannerFileSelect}
+                    className="hidden"
+                  />
+
+                  {isUploadingBannerMedia ? (
+                    <div className="h-32 border border-dashed border-primary rounded-lg flex flex-col items-center justify-center gap-2 bg-primary/5 text-primary text-xs">
+                      <RefreshCw className="size-5 animate-spin" />
+                      <span className="font-semibold">Uploading video to media storage...</span>
+                      <span className="text-[10px] text-muted-foreground">Please wait a moment</span>
+                    </div>
+                  ) : bannerForm.media_url ? (
+                    <div className="space-y-2 border border-border rounded-lg p-2.5 bg-muted/20">
+                      {bannerForm.media_type === 'VIDEO' || bannerForm.media_url.match(/\.(mp4|mov|webm|m4v)(\?.*)?$/i) ? (
+                        <div className="relative rounded overflow-hidden bg-black max-h-48 flex items-center justify-center">
+                          <video
+                            src={bannerForm.media_url}
+                            controls
+                            className="w-full max-h-48 object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="relative rounded overflow-hidden bg-muted max-h-48 flex items-center justify-center">
+                          <img
+                            src={bannerForm.media_url}
+                            alt="Banner Preview"
+                            className="w-full max-h-48 object-cover rounded"
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]">
+                          {bannerForm.media_url}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => bannerFileInputRef.current?.click()}
+                          >
+                            <UploadCloud className="size-3 mr-1" />
+                            Change File
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                            onClick={() => setBannerForm({ ...bannerForm, media_url: "" })}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => bannerFileInputRef.current?.click()}
+                      className="border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/40 transition-colors rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
+                    >
+                      <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                        <UploadCloud className="size-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Click to upload video or image</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Supports MP4, MOV, WebM, PNG, JPG (up to 150MB)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="https://... image or video mp4/m3u8"
+                    value={bannerForm.media_url || ""}
+                    onChange={e => setBannerForm({ ...bannerForm, media_url: e.target.value })}
+                    className="font-mono text-xs"
+                  />
+                  {bannerForm.media_url && (
+                    <div className="rounded overflow-hidden border border-border p-1 bg-muted/20">
+                      {bannerForm.media_type === 'VIDEO' ? (
+                        <video src={bannerForm.media_url} controls className="w-full max-h-36 bg-black rounded object-contain" />
+                      ) : (
+                        <img src={bannerForm.media_url} alt="Preview" className="w-full max-h-36 rounded object-cover" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {bannerForm.media_type === "VIDEO" && (

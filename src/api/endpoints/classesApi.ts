@@ -288,12 +288,28 @@ export const classesApi = {
     await api.delete(`/tenant/class-occurrences/${id}/`);
   },
 
-  async updateOccurrenceVideo(occurrenceId: string, videoUrl: string, description?: string): Promise<any> {
+  async updateOccurrenceVideo(
+    occurrenceId: string,
+    videoUrl: string,
+    description?: string,
+    extra?: { targeted_muscles?: string[]; equipment_required?: string[] }
+  ): Promise<any> {
     const res = await api.post(`/tenant/class-occurrences/${occurrenceId}/update-video/`, {
       video_url: videoUrl,
       description,
+      targeted_muscles: extra?.targeted_muscles,
+      equipment_required: extra?.equipment_required,
     });
     return res.data;
+  },
+
+  async getAvailableTags(): Promise<{ muscles: string[]; equipment: string[]; all_tags?: any[] }> {
+    try {
+      const res = await api.get<any>('/tenant/class-occurrences/available-tags/');
+      return res.data || { muscles: [], equipment: [] };
+    } catch (err) {
+      return { muscles: [], equipment: [] };
+    }
   },
 
   async assignTrainer(occurrenceId: string, trainerProfileId: string, trainerRole: string = 'LEAD'): Promise<any> {

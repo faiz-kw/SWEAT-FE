@@ -251,5 +251,22 @@ export const membersApi = {
     const res = await api.get<any>('/tenant/members/' + memberId + '/upgrade-options/' + query);
     return res.data;
   },
+  /**
+   * Search original legacy MySQL database live by phone, email, or name.
+   */
+  async legacySearch(query: string): Promise<{ results: any[]; count: number }> {
+    const res = await api.get<any>('/tenant/members/legacy-search/', {
+      params: { query },
+    });
+    return res.data;
+  },
+
+  /**
+   * On-demand live sync from legacy MySQL database into platform PostgreSQL.
+   */
+  async legacySync(params: { primary_uid?: number; query?: string }): Promise<{ message: string; member: any }> {
+    const res = await api.post<any>('/tenant/members/legacy-sync/', params);
+    return res.data;
+  },
 };
 
