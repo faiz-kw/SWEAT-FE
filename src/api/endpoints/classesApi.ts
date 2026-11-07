@@ -19,6 +19,7 @@ import {
   BranchOption,
   ProgramOption,
   ClassesMetadata,
+  ClassCancellationPreview,
 } from '../types/classes';
 
 export const classesApi = {
@@ -73,17 +74,17 @@ export const classesApi = {
   },
 
   async getScheduleRulesPaginated(params?: {
-    branch_id?: string;
-    category_id?: string;
-    category_code?: string;
-    status?: string;
-    date?: string;
-    from_date?: string;
-    to_date?: string;
-    day_of_week?: string | number;
-    search?: string;
-    page?: number;
-    page_size?: number;
+    branch_id?: string | undefined;
+    category_id?: string | undefined;
+    category_code?: string | undefined;
+    status?: string | undefined;
+    date?: string | undefined;
+    from_date?: string | undefined;
+    to_date?: string | undefined;
+    day_of_week?: string | number | undefined;
+    search?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<{
     results: ClassScheduleRule[];
     count: number;
@@ -132,40 +133,41 @@ export const classesApi = {
 
   // --- Class Occurrences ---
   async getOccurrences(filters?: {
-    branch_id?: string;
-    category_id?: string;
-    category_code?: string;
-    occurrence_date?: string;
-    status?: string;
-    trainer_id?: string;
-    from_date?: string;
-    to_date?: string;
-    membership_id?: string;
-    user_profile_id?: string;
-    search?: string;
-    check_in_status?: string;
-    page?: number;
-    page_size?: number;
+    branch_id?: string | undefined;
+    category_id?: string | undefined;
+    category_code?: string | undefined;
+    occurrence_date?: string | undefined;
+    status?: string | undefined;
+    trainer_id?: string | undefined;
+    from_date?: string | undefined;
+    to_date?: string | undefined;
+    membership_id?: string | undefined;
+    user_profile_id?: string | undefined;
+    search?: string | undefined;
+    check_in_status?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
+    ordering?: string | undefined;
   }): Promise<ClassOccurrence[]> {
-    const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
+    const res = await api.get<any>('/tenant/class-occurrences/', { params: (filters || {}) as any });
     return res.data?.results || res.data || [];
   },
 
   async getOccurrencesPaginated(filters?: {
-    branch_id?: string;
-    category_id?: string;
-    category_code?: string;
-    occurrence_date?: string;
-    status?: string;
-    trainer_id?: string;
-    from_date?: string;
-    to_date?: string;
-    membership_id?: string;
-    user_profile_id?: string;
-    search?: string;
-    check_in_status?: string;
-    page?: number;
-    page_size?: number;
+    branch_id?: string | undefined;
+    category_id?: string | undefined;
+    category_code?: string | undefined;
+    occurrence_date?: string | undefined;
+    status?: string | undefined;
+    trainer_id?: string | undefined;
+    from_date?: string | undefined;
+    to_date?: string | undefined;
+    membership_id?: string | undefined;
+    user_profile_id?: string | undefined;
+    search?: string | undefined;
+    check_in_status?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<{
     results: ClassOccurrence[];
     count: number;
@@ -173,7 +175,7 @@ export const classesApi = {
     current_page: number;
     page_size: number;
   }> {
-    const res = await api.get<any>('/tenant/class-occurrences/', { params: filters });
+    const res = await api.get<any>('/tenant/class-occurrences/', { params: (filters || {}) as any });
     const data = res.data;
     const results: ClassOccurrence[] = Array.isArray(data) ? data : (data?.results || []);
     const pageSize = filters?.page_size || data?.page_size || 20;
@@ -254,8 +256,26 @@ export const classesApi = {
     return res.data;
   },
 
-  async cancelOccurrence(id: string): Promise<ClassOccurrence> {
-    const res = await api.patch<ClassOccurrence>(`/tenant/class-occurrences/${id}/`, { status: 'CANCELLED' });
+  async getCancellationPreview(id: string): Promise<ClassCancellationPreview> {
+    const res = await api.get<ClassCancellationPreview>(`/tenant/class-occurrences/${id}/cancellation-preview/`);
+    return res.data;
+  },
+
+  async cancelOccurrence(
+    id: string,
+    payload?: {
+      reason?: string;
+      notify_members?: boolean;
+      restore_credits?: boolean;
+      mode?: 'CANCELLED' | 'DEACTIVATED';
+    }
+  ): Promise<any> {
+    const res = await api.post(`/tenant/class-occurrences/${id}/cancel/`, payload || {});
+    return res.data;
+  },
+
+  async restoreOccurrence(id: string): Promise<any> {
+    const res = await api.post(`/tenant/class-occurrences/${id}/restore/`, {});
     return res.data;
   },
 
@@ -311,9 +331,9 @@ export const classesApi = {
   },
 
   async getAvailableWorkoutVideos(params?: {
-    category?: string;
-    search?: string;
-    limit?: number;
+    category?: string | undefined;
+    search?: string | undefined;
+    limit?: number | undefined;
   }): Promise<{
     count: number;
     results: Array<{
@@ -331,7 +351,7 @@ export const classesApi = {
       classification_status: string;
     }>;
   }> {
-    const res = await api.get<any>('/tenant/class-occurrences/available-videos/', { params });
+    const res = await api.get<any>('/tenant/class-occurrences/available-videos/', { params: (params || {}) as any });
     return res.data;
   },
 
@@ -376,8 +396,11 @@ export const classesApi = {
 
   // --- External Dependencies (Real Backend Endpoints) ---
   async getBranches(): Promise<BranchOption[]> {
-    const res = await api.get<any>('/tenant/branches/');
-    return res.data?.results || res.data || [];
+    const res = await api.get<any>('/tenant/branches/?status=ACTIVE');
+    const list = res.data?.results || res.data || [];
+    return Array.isArray(list)
+      ? list.filter((b: any) => b.is_active !== false && b.status !== 'INACTIVE')
+      : [];
   },
 
   async getBranchWorkingHours(branchId: string): Promise<any[]> {
@@ -452,8 +475,8 @@ export const classesApi = {
   },
 
   // --- Audit Events ---
-  async getAuditEvents(params?: { entity_type?: string; entity_id?: string; action?: string }): Promise<any[]> {
-    const res = await api.get<any>('/tenant/business-audit-events/', { params });
+  async getAuditEvents(params?: { entity_type?: string | undefined; entity_id?: string | undefined; action?: string | undefined }): Promise<any[]> {
+    const res = await api.get<any>('/tenant/business-audit-events/', { params: (params || {}) as any });
     const data = res.data;
     return Array.isArray(data) ? data : data?.results || [];
   },

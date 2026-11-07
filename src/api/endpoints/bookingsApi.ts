@@ -73,10 +73,10 @@ export const bookingsApi = {
   },
 
   getBookableMembers: async (search?: string): Promise<any[]> => {
-    const params: any = { bookable_only: true };
-    if (search) params.search = search;
-    const res = await api.get('/tenant/user-profiles/', { params });
-    return res.data.results || res.data;
+    const params: any = { status: 'ACTIVE', compact: true, page_size: 50 };
+    if (search && search.trim()) params.search = search.trim();
+    const res = await api.get('/tenant/members/', { params });
+    return res.data?.results || (Array.isArray(res.data) ? res.data : []);
   },
 
   getBooking: async (id: string): Promise<Booking> => {
