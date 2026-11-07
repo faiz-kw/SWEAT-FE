@@ -15,10 +15,12 @@ export type BookingType =
   | 'PAY_PER_USE';
 
 export type BookingSource =
-  | 'WEB'
-  | 'MOBILE_APP'
   | 'FRONT_DESK'
   | 'ADMIN'
+  | 'SALES_REP'
+  | 'TRAINER'
+  | 'WEB'
+  | 'MOBILE_APP'
   | 'KIOSK'
   | 'QR'
   | 'API'

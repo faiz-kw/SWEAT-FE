@@ -309,8 +309,12 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
     };
     if (occurrenceDateFilter) {
       filters.occurrence_date = occurrenceDateFilter;
+      if (occurrenceDateFilter === todayIso && occurrenceScope === 'UPCOMING') {
+        filters.upcoming_only = 'true';
+      }
     } else if (occurrenceScope === 'UPCOMING') {
       filters.from_date = todayIso;
+      filters.upcoming_only = 'true';
     } else if (occurrenceScope === 'PREVIOUS') {
       filters.to_date = todayIso;
       filters.ordering = '-start_at';
@@ -1828,6 +1832,19 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                       <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
                         {selectedOccurrence.status || 'SCHEDULED'}
                       </span>
+                      {(() => {
+                        const nowMs = Date.now();
+                        const sMs = selectedOccurrence.start_at ? new Date(selectedOccurrence.start_at).getTime() : 0;
+                        const eMs = selectedOccurrence.end_at ? new Date(selectedOccurrence.end_at).getTime() : 0;
+                        if (sMs > 0 && eMs > 0 && sMs <= nowMs && eMs >= nowMs) {
+                          return (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold flex items-center gap-1">
+                              ● Current / In Progress
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       {selectedOccurrence.occurrence_date && selectedOccurrence.occurrence_date < todayIso && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-medium">
                           Past Session
@@ -1879,7 +1896,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        Upcoming Classes
+                        Current & Upcoming Classes
                       </button>
                       <button
                         type="button"
@@ -1954,7 +1971,11 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                         const totalCapacity = occ.capacity_snapshot || occ.capacity || 20;
                         const bookedCount = occ.booked_count ?? 0;
                         const availableSeats = Math.max(0, totalCapacity - bookedCount);
-                        const isPast = occ.end_at ? new Date(occ.end_at).getTime() < Date.now() : (occ.occurrence_date < todayIso);
+                        const nowMs = Date.now();
+                        const startMs = occ.start_at ? new Date(occ.start_at).getTime() : 0;
+                        const endMs = occ.end_at ? new Date(occ.end_at).getTime() : 0;
+                        const isCurrent = startMs > 0 && endMs > 0 && startMs <= nowMs && endMs >= nowMs;
+                        const isPast = endMs > 0 ? endMs < nowMs : (occ.occurrence_date < todayIso);
 
                         if (isCancelled || !isEligible) {
                           return (
@@ -2018,7 +2039,12 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                                 }`}>
                                   {occ.status || 'SCHEDULED'}
                                 </span>
-                                {isPast && (
+                                {isCurrent && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold flex items-center gap-1">
+                                    ● Current / In Progress
+                                  </span>
+                                )}
+                                {!isCurrent && isPast && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-medium">
                                     Past Session
                                   </span>
@@ -2087,6 +2113,8 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 >
                   <option value="FRONT_DESK">Front Desk</option>
                   <option value="ADMIN">Admin Console</option>
+                  <option value="SALES_REP">Sales Person / Representative</option>
+                  <option value="TRAINER">Trainer / Coach</option>
                   <option value="WEB">Web Portal</option>
                   <option value="MOBILE_APP">Mobile App</option>
                   <option value="KIOSK">Self-Service Kiosk</option>
