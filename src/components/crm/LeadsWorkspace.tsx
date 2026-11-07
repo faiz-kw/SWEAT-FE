@@ -1880,19 +1880,24 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                           </td>
 
                           {/* 5. Source & Campaign */}
-                          <td className="px-4 py-3.5 min-w-[160px] text-xs">
-                            <div className="text-foreground font-semibold truncate max-w-[150px]" title={lead.source_name || lead.first_touch_source || 'Direct / Walk In'}>
+                          <td className="px-4 py-3.5 min-w-[170px] text-xs">
+                            <div className="text-foreground font-semibold truncate max-w-[160px]" title={lead.source_name || lead.first_touch_source || 'Direct / Walk In'}>
                               {lead.source_name || lead.first_touch_source || 'Direct / Walk In'}
                             </div>
-                            {lead.campaign_reference ? (
-                              <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[150px]" title={lead.campaign_reference}>
-                                📢 {lead.campaign_reference}
+                            {(lead.campaign_reference || lead.latest_attribution?.campaign_name) ? (
+                              <div className="text-primary text-[11px] font-mono mt-0.5 truncate max-w-[160px]" title={lead.campaign_reference || lead.latest_attribution?.campaign_name || ''}>
+                                📢 {lead.campaign_reference || lead.latest_attribution?.campaign_name}
                               </div>
                             ) : lead.latest_touch_source && lead.latest_touch_source !== lead.first_touch_source ? (
-                              <div className="text-muted-foreground text-[11px] mt-0.5 truncate max-w-[150px]" title={lead.latest_touch_source}>
+                              <div className="text-muted-foreground text-[11px] mt-0.5 truncate max-w-[160px]" title={lead.latest_touch_source}>
                                 {lead.latest_touch_source}
                               </div>
                             ) : null}
+                            {lead.latest_attribution?.form_name && (
+                              <div className="text-muted-foreground text-[10px] mt-0.5 truncate max-w-[160px]" title={`Form: ${lead.latest_attribution.form_name}`}>
+                                📋 {lead.latest_attribution.form_name}
+                              </div>
+                            )}
                           </td>
 
                           {/* 5. Stage & SLA Status */}

@@ -2033,7 +2033,7 @@ export function LeadDetailModal({
 
                   {/* Latest Attribution Snapshot */}
                   {currentLead.latest_attribution && (
-                    <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
+                    <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
                           <Share2 className="w-3.5 h-3.5" />
@@ -2048,23 +2048,54 @@ export function LeadDetailModal({
                           View All Touches &rarr;
                         </Button>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <div>
-                          <span className="text-muted-foreground block text-[11px]">Touch Type</span>
-                          <span className="font-semibold text-foreground">{currentLead.latest_attribution.touch_type}</span>
+
+                      {/* 1-4: Campaign, Ad Set, Ad, Form */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-2 rounded-lg bg-background/50 border border-border/40">
+                          <span className="text-muted-foreground block text-[10px] uppercase font-semibold">1. Campaign Name</span>
+                          <span className="font-semibold text-foreground truncate block mt-0.5" title={currentLead.latest_attribution.campaign_name || currentLead.campaign_reference || '—'}>
+                            {currentLead.latest_attribution.campaign_name || currentLead.campaign_reference || '—'}
+                          </span>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground block text-[11px]">Platform</span>
+                        <div className="p-2 rounded-lg bg-background/50 border border-border/40">
+                          <span className="text-muted-foreground block text-[10px] uppercase font-semibold">2. Adset Name</span>
+                          <span className="font-semibold text-foreground truncate block mt-0.5" title={currentLead.latest_attribution.ad_set_name || '—'}>
+                            {currentLead.latest_attribution.ad_set_name || '—'}
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-background/50 border border-border/40">
+                          <span className="text-muted-foreground block text-[10px] uppercase font-semibold">3. Ad Name</span>
+                          <span className="font-semibold text-foreground truncate block mt-0.5" title={currentLead.latest_attribution.ad_name || '—'}>
+                            {currentLead.latest_attribution.ad_name || '—'}
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-background/50 border border-border/40">
+                          <span className="text-muted-foreground block text-[10px] uppercase font-semibold">4. Form Name</span>
+                          <span className="font-semibold text-foreground truncate block mt-0.5" title={currentLead.latest_attribution.form_name || '—'}>
+                            {currentLead.latest_attribution.form_name || '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 5: Platform & UTM Parameters Strip */}
+                      <div className="flex items-center gap-3 flex-wrap text-xs pt-1 border-t border-primary/10">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground text-[11px]">Platform:</span>
                           <span className="font-semibold text-foreground">{currentLead.latest_attribution.platform || 'Direct'}</span>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground block text-[11px]">Campaign</span>
-                          <span className="font-semibold text-foreground">{currentLead.latest_attribution.campaign_name || '—'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground text-[11px]">Touch:</span>
+                          <span className="font-semibold text-foreground">{currentLead.latest_attribution.touch_type.replace('_', ' ')}</span>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground block text-[11px]">UTM Source</span>
-                          <span className="font-semibold text-foreground font-mono">{currentLead.latest_attribution.utm_source || '—'}</span>
-                        </div>
+                        {(currentLead.latest_attribution.utm_source || currentLead.latest_attribution.utm_medium || currentLead.latest_attribution.utm_campaign || currentLead.latest_attribution.utm_content) && (
+                          <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono text-foreground bg-background/60 px-2 py-0.5 rounded border border-border/40">
+                            <span className="text-muted-foreground font-sans font-semibold text-[10px] uppercase">UTM:</span>
+                            {currentLead.latest_attribution.utm_source && <span>src=<strong>{currentLead.latest_attribution.utm_source}</strong></span>}
+                            {currentLead.latest_attribution.utm_medium && <span>med=<strong>{currentLead.latest_attribution.utm_medium}</strong></span>}
+                            {currentLead.latest_attribution.utm_campaign && <span>camp=<strong>{currentLead.latest_attribution.utm_campaign}</strong></span>}
+                            {currentLead.latest_attribution.utm_content && <span>cnt=<strong>{currentLead.latest_attribution.utm_content}</strong></span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2978,43 +3009,52 @@ export function LeadDetailModal({
                         </div>
 
                         {/* Marketing Hierarchy */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                           <div>
-                            <span className="text-muted-foreground block text-[11px]">Campaign</span>
+                            <span className="text-muted-foreground block text-[11px]">1. Campaign Name</span>
                             <span className="font-semibold text-foreground">{touch.campaign_name || '—'}</span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground block text-[11px]">Ad Set</span>
+                            <span className="text-muted-foreground block text-[11px]">2. Ad Set Name</span>
                             <span className="font-semibold text-foreground">{touch.ad_set_name || '—'}</span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground block text-[11px]">Ad / Creative</span>
+                            <span className="text-muted-foreground block text-[11px]">3. Ad / Creative</span>
                             <span className="font-semibold text-foreground">{touch.ad_name || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block text-[11px]">4. Form Name</span>
+                            <span className="font-semibold text-foreground">{touch.form_name || '—'}</span>
                           </div>
                         </div>
 
                         {/* UTM & URLs */}
-                        {(touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.landing_page_url) && (
+                        {(touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.utm_content || touch.utm_term || touch.landing_page_url) && (
                           <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 space-y-1.5 text-xs">
                             <div className="flex items-center gap-4 flex-wrap text-[11px]">
                               {touch.utm_source && (
                                 <span>
-                                  Source: <strong className="font-mono text-foreground">{touch.utm_source}</strong>
+                                  utm_source: <strong className="font-mono text-foreground">{touch.utm_source}</strong>
                                 </span>
                               )}
                               {touch.utm_medium && (
                                 <span>
-                                  Medium: <strong className="font-mono text-foreground">{touch.utm_medium}</strong>
+                                  utm_medium: <strong className="font-mono text-foreground">{touch.utm_medium}</strong>
                                 </span>
                               )}
                               {touch.utm_campaign && (
                                 <span>
-                                  Campaign: <strong className="font-mono text-foreground">{touch.utm_campaign}</strong>
+                                  utm_campaign: <strong className="font-mono text-foreground">{touch.utm_campaign}</strong>
+                                </span>
+                              )}
+                              {touch.utm_content && (
+                                <span>
+                                  utm_content: <strong className="font-mono text-foreground">{touch.utm_content}</strong>
                                 </span>
                               )}
                               {touch.utm_term && (
                                 <span>
-                                  Term: <strong className="font-mono text-foreground">{touch.utm_term}</strong>
+                                  utm_term: <strong className="font-mono text-foreground">{touch.utm_term}</strong>
                                 </span>
                               )}
                             </div>
