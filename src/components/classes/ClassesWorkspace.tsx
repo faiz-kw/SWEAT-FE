@@ -379,6 +379,23 @@ export const ClassesWorkspace: React.FC = () => {
     const currentTrId = currentTrainer?.trainer_profile || currentTrainer?.trainer_profile_id || '';
     setEditTrainerId(currentTrId);
     setInitialTrainerId(currentTrId);
+
+    // Auto-fetch workout video, targeted muscles, and equipment from Content Studio / trainer-video if available
+    if (occ.id) {
+      classesApi.getTrainerClassVideo(occ.id).then((vInfo) => {
+        if (vInfo) {
+          if (vInfo.video_url) {
+            setEditVideoUrl((prev) => prev || vInfo.video_url || '');
+          }
+          if (Array.isArray(vInfo.targeted_muscles) && vInfo.targeted_muscles.length > 0) {
+            setEditMuscles((prev) => prev.length > 0 ? prev : vInfo.targeted_muscles!);
+          }
+          if (Array.isArray(vInfo.equipment_required) && vInfo.equipment_required.length > 0) {
+            setEditEquipment((prev) => prev.length > 0 ? prev : vInfo.equipment_required!);
+          }
+        }
+      }).catch(() => {});
+    }
   };
 
   const handleSaveSlotEdit = async () => {

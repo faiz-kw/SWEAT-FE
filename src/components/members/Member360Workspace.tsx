@@ -538,7 +538,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     age: member.age || overview.contact?.age || 0,
     home_branch: header.home_branch,
     home_branch_id: header.home_branch_id,
-    program_name: header.current_program || (memberships.active as any)?.program_name || 'Bootcamp',
+    program_name: header.current_program || (memberships.active as any)?.program_name || 'Sweat Pilates',
     program_id: (memberships.active as any)?.program_id || (member as any)?.program_id || '',
     package_name: header.current_package || (memberships.active as any)?.package_name || 'Standard Package',
     package_id: member.package_id || (memberships.active as any)?.package_id || '',
