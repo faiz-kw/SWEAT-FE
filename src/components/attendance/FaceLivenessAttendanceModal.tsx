@@ -46,11 +46,11 @@ interface FaceLivenessAttendanceModalProps {
   onVerified: (payload: BiometricVerificationPayload) => void;
   role: 'TRAINER' | 'MEMBER' | 'STAFF' | string;
   targetName: string;
-  branchName?: string;
-  branchLatitude?: number | null;
-  branchLongitude?: number | null;
-  branchGeofenceRadiusMeters?: number;
-  branchGeofenceEnforcement?: 'STRICT' | 'FLAG_AUDIT';
+  branchName?: string | undefined;
+  branchLatitude?: number | null | undefined;
+  branchLongitude?: number | null | undefined;
+  branchGeofenceRadiusMeters?: number | undefined;
+  branchGeofenceEnforcement?: 'STRICT' | 'FLAG_AUDIT' | undefined;
 }
 
 function computeHaversineDistanceMeters(

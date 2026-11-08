@@ -190,6 +190,11 @@ export const classesApi = {
     };
   },
 
+  async getOccurrence(occurrenceId: string): Promise<ClassOccurrence> {
+    const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/`);
+    return res.data;
+  },
+
   async getBookingsForOccurrence(occurrenceId: string): Promise<any[]> {
     const res = await api.get<any>('/tenant/bookings/', { params: { occurrence_id: occurrenceId } });
     return res.data?.results || res.data || [];
@@ -315,6 +320,14 @@ export const classesApi = {
     return res.data;
   },
 
+  async unassignTrainer(occurrenceId: string, trainerProfileId?: string, assignmentId?: string): Promise<any> {
+    const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/unassign-trainer/`, {
+      trainer_profile_id: trainerProfileId,
+      assignment_id: assignmentId,
+    });
+    return res.data;
+  },
+
   async assignContent(occurrenceId: string): Promise<any> {
     const res = await api.post<any>(`/tenant/class-occurrences/${occurrenceId}/assign-content/`);
     return res.data;
@@ -332,11 +345,13 @@ export const classesApi = {
     trainer_name?: string;
     video_url?: string;
     embed_player_url?: string;
+    external_url?: string;
+    raw_equipment?: string;
     is_assigned_trainer: boolean;
     description?: string;
     instructions?: string;
-    targeted_muscles?: string[];
-    equipment_required?: string[];
+    targeted_muscles?: string[] | string;
+    equipment_required?: string[] | string;
   }> {
     const res = await api.get<any>(`/tenant/class-occurrences/${occurrenceId}/trainer-video/`);
     return res.data;

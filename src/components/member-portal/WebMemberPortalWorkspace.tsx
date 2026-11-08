@@ -3371,8 +3371,11 @@ function WebMemberPortalWorkspaceInner() {
   // 6.3 Schedule Filters & Debounce Refs
   // --------------------------------------------------------------------------
   const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
-  const [selectedBranchId, setSelectedBranchId] = React.useState<string>("all");
+  const [selectedBranchId, setSelectedBranchId] = React.useState<string>("");
+  const hasUserManuallySelectedBranchRef = React.useRef<boolean>(false);
   const [selectedCategory, setSelectedCategory] = React.useState<string>("all");
+  const [selectedProgramId, setSelectedProgramId] = React.useState<string>("all");
+  const [purchasedPrograms, setPurchasedPrograms] = React.useState<any[]>([]);
   const [categories, setCategories] = React.useState<any[]>([]);
   const [isScheduleLoading, setIsScheduleLoading] = React.useState<boolean>(false);
   const [scheduleError, setScheduleError] = React.useState<string | null>(null);
@@ -3458,6 +3461,25 @@ function WebMemberPortalWorkspaceInner() {
     );
     return valid.length > 0 ? valid : membershipActions.branches;
   }, [membershipActions?.branches]);
+
+  // Dynamically resolve authenticated member's registered home branch
+  const memberHomeBranchId = React.useMemo(() => {
+    return (
+      membershipActions?.active_membership?.branch_id ||
+      (profile?.home_branch as any)?.id ||
+      (typeof profile?.home_branch === "string" ? profile.home_branch : "") ||
+      ""
+    );
+  }, [membershipActions, profile]);
+
+  // Synchronize default Class Schedule selection to member's registered home branch
+  React.useEffect(() => {
+    if (!hasUserManuallySelectedBranchRef.current && memberHomeBranchId) {
+      if (!selectedBranchId) {
+        setSelectedBranchId(memberHomeBranchId);
+      }
+    }
+  }, [memberHomeBranchId, selectedBranchId]);
 
   const effectiveUpgradeBranchId = selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
   const effectiveUpgradeProgramId = selectedUpgradeProgramId || membershipActions?.active_membership?.program_id || membershipActions?.programs?.[0]?.id || "";
@@ -3758,7 +3780,44 @@ function WebMemberPortalWorkspaceInner() {
       }
 
       if (actionsRes.status === "fulfilled" && actionsRes.value?.data) {
-        setMembershipActions(actionsRes.value.data as MobileMembershipActionOptions);
+        const actData = actionsRes.value.data as any;
+        setMembershipActions(actData as MobileMembershipActionOptions);
+        const progs: any[] = [];
+        const seenProgIds = new Set<string>();
+        if (Array.isArray(actData.active_list) && actData.active_list.length > 0) {
+          actData.active_list.forEach((m: any) => {
+            if (m.program_id && !seenProgIds.has(m.program_id)) {
+              seenProgIds.add(m.program_id);
+              progs.push({
+                id: m.program_id,
+                name: m.program_name || "Program",
+                package_name: m.package_name || "",
+                package_id: m.package_id || "",
+              });
+            }
+          });
+        } else if (actData.active_membership?.program_id) {
+          seenProgIds.add(actData.active_membership.program_id);
+          progs.push({
+            id: actData.active_membership.program_id,
+            name: actData.active_membership.program_name || "Program",
+            package_name: actData.active_membership.package_name || "",
+            package_id: actData.active_membership.package_id || "",
+          });
+        }
+        if (progs.length > 0) {
+          setPurchasedPrograms(progs);
+          if (progs.length === 1) {
+            setSelectedProgramId(progs[0].id);
+          }
+        }
+        const resolvedHomeBranch =
+          actData.active_membership?.branch_id ||
+          actData.active_list?.[0]?.branch_id ||
+          "";
+        if (!hasUserManuallySelectedBranchRef.current && resolvedHomeBranch) {
+          setSelectedBranchId(resolvedHomeBranch);
+        }
       }
 
       if (showToast) {
@@ -4449,17 +4508,19 @@ function WebMemberPortalWorkspaceInner() {
     return list;
   }, []);
 
-  // Authoritative Class Categories for filter bar
+  // Authoritative Class Categories for filter bar (strictly deduplicated by name and derived from available schedule slots)
   const displayCategories = React.useMemo(() => {
-    if (categories.length > 0) return categories;
     const unique = new Map<string, { id: string; name: string }>();
     schedule.forEach((s) => {
-      if (s.category && !unique.has(s.category)) {
-        unique.set(s.category, { id: (s as any).category_id || s.category, name: s.category });
+      if (s.category) {
+        const norm = s.category.trim().toLowerCase();
+        if (!unique.has(norm)) {
+          unique.set(norm, { id: (s as any).category_id || s.category, name: s.category.trim() });
+        }
       }
     });
     return Array.from(unique.values());
-  }, [categories, schedule]);
+  }, [schedule]);
 
   // --------------------------------------------------------------------------
   // 6.13 Schedule Retrieval Engine (Debounced fetchSchedule & Date Filter)
@@ -4470,12 +4531,18 @@ function WebMemberPortalWorkspaceInner() {
     setScheduleError(null);
     try {
       const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const params: { date: string; branch_id?: string; category?: string } = { date: dateStr };
-      if (selectedBranchId !== "all") {
-        params.branch_id = selectedBranchId;
+      const effectiveBranch = selectedBranchId || memberHomeBranchId || "";
+      const params: { date: string; branch_id?: string; category?: string; program_id?: string } = { date: dateStr };
+      if (effectiveBranch && effectiveBranch !== "all") {
+        params.branch_id = effectiveBranch;
+      } else if (effectiveBranch === "all") {
+        params.branch_id = "all";
       }
       if (selectedCategory !== "all") {
         params.category = selectedCategory;
+      }
+      if (selectedProgramId !== "all") {
+        params.program_id = selectedProgramId;
       }
 
       const res = await mobileApi.getSchedule(params);
@@ -4485,6 +4552,15 @@ function WebMemberPortalWorkspaceInner() {
 
       if (res.data) {
         const raw = res.data as any;
+        if (raw.branch_id && !hasUserManuallySelectedBranchRef.current && (!selectedBranchId || selectedBranchId === "all")) {
+          setSelectedBranchId(raw.branch_id);
+        }
+        if (raw.purchased_programs && Array.isArray(raw.purchased_programs) && raw.purchased_programs.length > 0) {
+          setPurchasedPrograms(raw.purchased_programs);
+          if (raw.purchased_programs.length === 1 && selectedProgramId === "all") {
+            setSelectedProgramId(raw.purchased_programs[0].id);
+          }
+        }
         if (raw.categories && Array.isArray(raw.categories) && raw.categories.length > 0) {
           setCategories(raw.categories);
         }
@@ -4493,6 +4569,8 @@ function WebMemberPortalWorkspaceInner() {
           id: s.id,
           class_definition_id: s.class_id || s.class_definition_id || "",
           class_name: s.class_name,
+          program_id: s.program_id || "",
+          program_name: s.program_name || "",
           category: s.category || "Bootcamp",
           category_id: s.category_id || "",
           category_code: s.category_code || "",
@@ -4537,7 +4615,7 @@ function WebMemberPortalWorkspaceInner() {
         setIsScheduleLoading(false);
       }
     }
-  }, [selectedDate, selectedBranchId, selectedCategory]);
+  }, [selectedDate, selectedBranchId, memberHomeBranchId, selectedCategory, selectedProgramId]);
 
   React.useEffect(() => {
     void fetchSchedule();
@@ -4545,6 +4623,7 @@ function WebMemberPortalWorkspaceInner() {
 
   // Defensive client-side filtering guarantees zero format or branch leakage
   const filteredSchedule = React.useMemo(() => {
+    const activeFilterBranch = selectedBranchId || memberHomeBranchId || "all";
     return schedule.filter((occ) => {
       // Defensive check: Ensure slot matches the selected studio-local calendar date
       if (occ.start_time) {
@@ -4553,8 +4632,13 @@ function WebMemberPortalWorkspaceInner() {
           return false;
         }
       }
-      if (selectedBranchId !== "all") {
-        if (!occ.branch?.id || occ.branch.id !== selectedBranchId) {
+      if (activeFilterBranch !== "all") {
+        if (!occ.branch?.id || occ.branch.id !== activeFilterBranch) {
+          return false;
+        }
+      }
+      if (selectedProgramId !== "all") {
+        if ((occ as any).program_id && (occ as any).program_id !== selectedProgramId) {
           return false;
         }
       }
@@ -4572,7 +4656,7 @@ function WebMemberPortalWorkspaceInner() {
       }
       return true;
     });
-  }, [schedule, selectedDate, selectedBranchId, selectedCategory]);
+  }, [schedule, selectedDate, selectedBranchId, selectedCategory, selectedProgramId]);
 
   // --------------------------------------------------------------------------
   // 6.14 Computed KPI Metrics, Passbook Ledger Memos & Attendance History
@@ -5414,16 +5498,22 @@ function WebMemberPortalWorkspaceInner() {
                   <div className="flex items-center gap-2 bg-background/80 backdrop-blur-xs border border-border/80 rounded-xl px-3 py-1.5 shadow-2xs">
                     <Filter className="h-4 w-4 text-sky-500 shrink-0" />
                     <select
-                      value={selectedBranchId}
-                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      value={selectedBranchId || memberHomeBranchId || "all"}
+                      onChange={(e) => {
+                        hasUserManuallySelectedBranchRef.current = true;
+                        setSelectedBranchId(e.target.value);
+                      }}
                       className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
                     >
                       <option value="all">All Studio Branches</option>
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
-                          {b.name}{b.location_name ? ` (${b.location_name})` : ""}
-                        </option>
-                      ))}
+                      {branches.map((b) => {
+                        const isHome = b.id === memberHomeBranchId;
+                        return (
+                          <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
+                            {b.name}{isHome ? " (Home Studio)" : (b.location_name ? ` (${b.location_name})` : "")}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -5470,8 +5560,78 @@ function WebMemberPortalWorkspaceInner() {
               })}
             </div>
 
-            {/* Category Filter Pills */}
-            {displayCategories.length > 0 && (
+            {/* Purchased Program Filter Bar / Indicator */}
+            {purchasedPrograms.length > 1 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card/70 backdrop-blur-xs border border-border/80 rounded-2xl shadow-2xs">
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+                  <span className="text-xs font-bold text-foreground shrink-0 flex items-center gap-1.5 mr-1">
+                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                    Select Program:
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedProgramId("all");
+                      setSelectedCategory("all");
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-bold border transition-all whitespace-nowrap cursor-pointer",
+                      selectedProgramId === "all"
+                        ? "bg-foreground text-background border-foreground shadow-xs"
+                        : "bg-background border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    )}
+                  >
+                    All Purchased Programs ({purchasedPrograms.length})
+                  </button>
+                  {purchasedPrograms.map((prog) => {
+                    const isSelected = selectedProgramId === prog.id;
+                    return (
+                      <button
+                        key={prog.id}
+                        onClick={() => {
+                          setSelectedProgramId(prog.id);
+                          setSelectedCategory("all");
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer",
+                          isSelected
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-background border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                        )}
+                      >
+                        <span>{prog.name}</span>
+                        {prog.package_name && (
+                          <span className={cn("text-[10px] font-medium", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                            ({prog.package_name})
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted-foreground shrink-0 hidden md:block">
+                  Displaying classes included in your selected program package
+                </div>
+              </div>
+            ) : purchasedPrograms.length === 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 py-2.5 px-4 bg-primary/5 border border-primary/20 rounded-2xl shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-xs font-medium text-foreground">
+                    Purchased Program:
+                  </span>
+                  <Badge variant="outline" className="bg-primary/10 border-primary/30 text-primary text-xs font-bold py-0.5">
+                    {purchasedPrograms[0].name}
+                    {purchasedPrograms[0].package_name ? ` • ${purchasedPrograms[0].package_name}` : ""}
+                  </Badge>
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  Exclusively displaying classes included in your {purchasedPrograms[0].name} package
+                </span>
+              </div>
+            ) : null}
+
+            {/* Category Filter Pills: Only shown for open/guest exploration when no member package is active */}
+            {purchasedPrograms.length === 0 && displayCategories.length > 1 && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   onClick={() => setSelectedCategory("all")}
@@ -5544,22 +5704,26 @@ function WebMemberPortalWorkspaceInner() {
                 </div>
                 <h3 className="text-base font-semibold text-foreground">No Classes Scheduled for This Day</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  {selectedBranchId !== "all" || selectedCategory !== "all"
-                    ? "No sessions match your selected branch or format filters. Try resetting filters or choosing another date."
-                    : `There are no group sessions scheduled on ${format(selectedDate, "EEEE, MMMM d")}. Please choose another date above or switch to a different studio branch.`}
+                  {(selectedBranchId && selectedBranchId !== (memberHomeBranchId || "all")) || selectedCategory !== "all" || (purchasedPrograms.length > 1 && selectedProgramId !== "all")
+                    ? "No sessions match your selected branch, program, or format filters. Try resetting filters or choosing another date."
+                    : `There are no sessions scheduled on ${format(selectedDate, "EEEE, MMMM d")}. Please choose another date above or switch to a different studio branch.`}
                 </p>
-                {(selectedBranchId !== "all" || selectedCategory !== "all") && (
+                {((selectedBranchId && selectedBranchId !== (memberHomeBranchId || "all")) || selectedCategory !== "all" || (purchasedPrograms.length > 1 && selectedProgramId !== "all")) && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setSelectedBranchId("all");
+                      hasUserManuallySelectedBranchRef.current = false;
+                      setSelectedBranchId(memberHomeBranchId || "");
                       setSelectedCategory("all");
+                      if (purchasedPrograms.length > 1) {
+                        setSelectedProgramId("all");
+                      }
                     }}
                     className="text-xs gap-1.5"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Reset All Filters
+                    Reset to Home Studio
                   </Button>
                 )}
               </div>

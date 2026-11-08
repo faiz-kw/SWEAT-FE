@@ -60,7 +60,15 @@ export const AssignWorkoutVideoModal: React.FC<AssignWorkoutVideoModalProps> = (
     enabled: isOpen && !!occurrence?.id,
   });
 
-  // 2. Fetch available videos from library
+  // 2. Fetch live active class categories from tenant backend
+  const { data: tenantCategories = [] } = useQuery({
+    queryKey: ['tenant-class-categories-active'],
+    queryFn: () => classesApi.getCategories({ status: 'ACTIVE' }),
+    enabled: isOpen,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  // 3. Fetch available videos from library
   const { data: availableVideosResponse, isLoading: isLoadingVideos } = useQuery({
     queryKey: ['available-workout-videos', selectedCategory, searchQuery],
     queryFn: () =>
@@ -81,9 +89,15 @@ export const AssignWorkoutVideoModal: React.FC<AssignWorkoutVideoModalProps> = (
       return classesApi.assignOccurrenceVideo(occurrence.id, videoId);
     },
     onSuccess: (data, videoId) => {
+      if (!videoId) {
+        queryClient.setQueryData(['class-occurrence-video-stream', occurrence?.id], null);
+      }
       queryClient.invalidateQueries({ queryKey: ['class-occurrence-video-stream', occurrence?.id] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrence-detail', occurrence?.id] });
       queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences-today'] });
       queryClient.invalidateQueries({ queryKey: ['class-occurrences-paginated'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
       if (videoId) {
         toast.success(data?.message || 'Workout video successfully assigned to class session!');
       } else {
@@ -249,10 +263,11 @@ export const AssignWorkoutVideoModal: React.FC<AssignWorkoutVideoModalProps> = (
               className="text-xs bg-background border border-border rounded-md px-3 py-2 text-foreground font-medium h-9"
             >
               <option value="ALL">All Categories</option>
-              <option value="PILATES">Sweat Pilates</option>
-              <option value="BOOTCAMP">Sweat Bootcamp</option>
-              <option value="STRETCH">Sweat Stretch</option>
-              <option value="ATHLETIC">Sweat Athletic</option>
+              {tenantCategories.map((cat) => (
+                <option key={cat.id || cat.code} value={cat.code || cat.name}>
+                  {cat.name}
+                </option>
+              ))}
             </select>
           </div>
 

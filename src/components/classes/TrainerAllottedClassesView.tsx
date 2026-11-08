@@ -282,7 +282,7 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
                 <option value="ALL">All Trainers</option>
                 {trainers.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.trainer_name || t.trainer_code} ({t.trainer_code})
+                    {t.trainer_name || 'Trainer'}
                   </option>
                 ))}
               </select>
@@ -292,7 +292,7 @@ export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProp
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-semibold text-muted-foreground">Trainer:</span>
               <Badge variant="outline" className="text-xs px-2.5 py-1 font-semibold bg-primary/10 text-primary border-primary/20">
-                {currentTrainer.trainer_name || currentTrainer.trainer_code} ({currentTrainer.trainer_code})
+                {currentTrainer.trainer_name || 'Trainer'}
               </Badge>
             </div>
           )}

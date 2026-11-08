@@ -136,6 +136,7 @@ export interface ClassOccurrence {
   end_time?: string;
   delivery_mode: DeliveryMode;
   capacity: number;
+  capacity_override?: number;
   trial_capacity: number;
   waitlist_capacity: number;
   status: ClassOccurrenceStatus;

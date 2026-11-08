@@ -656,6 +656,22 @@ export const crmApi = {
     return res.data.counts;
   },
 
+  getEligibleTrialPrograms: async (params: {
+    branch_id: string;
+    date?: string;
+    lead_id?: string;
+  }): Promise<Array<{ id: string; name: string }>> => {
+    const sp = new URLSearchParams();
+    sp.append('branch_id', params.branch_id);
+    if (params.date) sp.append('date', params.date);
+    if (params.lead_id) sp.append('lead_id', params.lead_id);
+    const res = await api.get<{ programs: Array<{ id: string; name: string }> }>(
+      `/tenant/trial-bookings/eligible_programs/?${sp.toString()}`
+    );
+    const list = res.data?.programs || (res.data as any)?.results || [];
+    return Array.isArray(list) ? list : [];
+  },
+
   getAvailableTrialSlots: async (params: {
     branch_id: string;
     date?: string;
