@@ -65,6 +65,12 @@ const MODULE_FRIENDLY_NAMES: Record<string, string> = {
   automation: "Automation & Workflows",
   reports: "Business & Financial Reports",
   platform: "Platform Infrastructure",
+  wod: "Workouts & Digital Content (WOD)",
+  wellness: "Wellness, Assessments & Biometrics",
+  whatsapp: "WhatsApp & Omnichannel Messaging",
+  tickets: "Support Tickets & Helpdesk",
+  gamification: "Gamification & Leaderboards",
+  pos: "POS & Retail Sales",
 };
 
 const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
@@ -74,6 +80,7 @@ const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
   locations: "Locations & Facilities",
   branches: "Branches & Studios",
   leads: "Lead Management",
+  pipeline: "Sales Pipeline & Deals",
   telephony: "Telephony & Calling",
   calling: "Telephony & Calling",
   "ai-calling": "AI Voice Calling",
@@ -83,6 +90,9 @@ const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
   bookings: "Bookings & Check-ins",
   appointments: "Appointments & Trainers",
   memberships: "Memberships & Plans",
+  renewals: "Renewals & Expirations",
+  directory: "Member Directory",
+  "client-360": "Member 360 & Profiles",
   attendance: "Attendance & Access Events",
   invoices: "Invoices & Billing",
   payments: "Payments & Transactions",
@@ -92,6 +102,69 @@ const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
   security: "Security Policy & Audit",
   storage: "Files & Storage",
   privacy: "Privacy & Data Protection",
+  communications: "Communications & Messaging",
+  whatsapp: "WhatsApp Integration",
+  tags: "Content Tags & Categories",
+  content: "Video & Content Library",
+};
+
+export const EXPLICIT_PERMISSION_LABELS: Record<string, { label: string; description?: string }> = {
+  "crm.telephony.access": {
+    label: "Telephony & Outbound Calling (WebPhone)",
+    description: "Enables in-browser WebRTC WebPhone dialer, outbound calling to leads and members, and live call handling.",
+  },
+  "crm.calling.access": {
+    label: "Telephony & Outbound Calling",
+    description: "Allows placing and receiving VoIP telephony calls across member and CRM desks.",
+  },
+  "crm.ai-calling.view": {
+    label: "AI Voice Calling (Agent Desk)",
+    description: "Allows reviewing AI outbound voice call logs, transcripts, and sentiment analytics.",
+  },
+  "crm.communications.view": {
+    label: "View Omnichannel Communications",
+    description: "View incoming and outgoing SMS, WhatsApp, and email messages.",
+  },
+  "crm.communications.send": {
+    label: "Send Customer Communications",
+    description: "Send WhatsApp, SMS, and email messages to leads and members.",
+  },
+  "ops.classes.view": {
+    label: "View Class Schedules & Sessions",
+    description: "Full visibility of studio class calendars, time slots, waitlists, and attendee counts.",
+  },
+  "ops.classes.create": {
+    label: "Create Class Slots & Templates",
+    description: "Allows creating new class templates, timetables, and scheduling slots.",
+  },
+  "ops.classes.edit": {
+    label: "Edit Classes & Timings",
+    description: "Allows modifying class session timings, room capacities, and assigning trainers.",
+  },
+  "ops.classes.delete": {
+    label: "Delete Class Occurrences",
+    description: "Permanently deletes scheduled class slots from the calendar.",
+  },
+  "ops.classes.cancel": {
+    label: "Cancel Class Occurrences",
+    description: "Allows cancelling class sessions and triggering attendee notifications.",
+  },
+  "ops.bookings.view": {
+    label: "View Bookings & Check-ins",
+    description: "View class rosters, confirmed seats, and attendee check-in statuses.",
+  },
+  "ops.bookings.create": {
+    label: "Book Members & Trial Passes",
+    description: "Allows associating active members or booking trial leads into class slots.",
+  },
+  "ops.bookings.edit": {
+    label: "Manage Bookings & Attendance",
+    description: "Allows marking attendance, check-ins, late cancellations, and no-shows.",
+  },
+  "ops.bookings.delete": {
+    label: "Cancel Member Bookings",
+    description: "Allows removing booked members from class slots and returning session quotas.",
+  },
 };
 
 export const getFriendlyModuleName = (perm: PermissionDefRow): string => {
@@ -102,7 +175,13 @@ export const getFriendlyModuleName = (perm: PermissionDefRow): string => {
   if (perm.module && !isUuid(perm.module)) {
     return MODULE_FRIENDLY_NAMES[perm.module.toLowerCase()] || perm.module.toUpperCase();
   }
+  const code = perm.permission_code || perm.code || "";
+  const first = code.split(".")[0]?.toLowerCase();
+  if (first && MODULE_FRIENDLY_NAMES[first]) {
+    return MODULE_FRIENDLY_NAMES[first];
+  }
   if (perm.module_code) return perm.module_code.toUpperCase();
+  if (first) return first.toUpperCase();
   return "System Core";
 };
 
@@ -113,6 +192,13 @@ export const getFriendlySubmoduleName = (perm: PermissionDefRow): string => {
   }
   if (perm.submodule && !isUuid(perm.submodule)) {
     return SUBMODULE_FRIENDLY_NAMES[perm.submodule.toLowerCase()] || perm.submodule;
+  }
+  const code = perm.permission_code || perm.code || "";
+  const parts = code.split(".");
+  if (parts.length > 2) {
+    const sub = parts[1].toLowerCase();
+    if (SUBMODULE_FRIENDLY_NAMES[sub]) return SUBMODULE_FRIENDLY_NAMES[sub];
+    return sub.charAt(0).toUpperCase() + sub.slice(1);
   }
   if (perm.submodule_code) {
     return perm.submodule_code.charAt(0).toUpperCase() + perm.submodule_code.slice(1);
@@ -128,9 +214,12 @@ export const getFriendlyPermissionCode = (perm: PermissionDefRow): string => {
 };
 
 export const getFriendlyPermissionLabel = (perm: PermissionDefRow): string => {
+  const code = getFriendlyPermissionCode(perm).toLowerCase();
+  if (EXPLICIT_PERMISSION_LABELS[code]?.label) {
+    return EXPLICIT_PERMISSION_LABELS[code].label;
+  }
   if (perm.label && !isUuid(perm.label)) return perm.label;
   if (perm.name && !isUuid(perm.name)) return perm.name;
-  const code = getFriendlyPermissionCode(perm);
   const parts = code.split(".");
   if (parts.length >= 2) {
     const action = parts[parts.length - 1];
@@ -138,6 +227,15 @@ export const getFriendlyPermissionLabel = (perm: PermissionDefRow): string => {
     return `${action.charAt(0).toUpperCase() + action.slice(1)} ${resource.charAt(0).toUpperCase() + resource.slice(1)}`;
   }
   return code.charAt(0).toUpperCase() + code.slice(1);
+};
+
+export const getFriendlyPermissionDescription = (perm: PermissionDefRow): string => {
+  const code = getFriendlyPermissionCode(perm).toLowerCase();
+  if (EXPLICIT_PERMISSION_LABELS[code]?.description) {
+    return EXPLICIT_PERMISSION_LABELS[code].description;
+  }
+  if (perm.description) return perm.description;
+  return `Allows staff to execute ${getFriendlyPermissionLabel(perm).toLowerCase()} actions.`;
 };
 
 export function PermissionsWorkspace() {
@@ -693,7 +791,7 @@ export function PermissionsWorkspace() {
                                   )}
                                 </div>
                                 <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-normal">
-                                  {perm.description || `Allows staff to execute ${getFriendlyPermissionLabel(perm).toLowerCase()} actions.`}
+                                  {getFriendlyPermissionDescription(perm)}
                                 </p>
                               </div>
 

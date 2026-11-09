@@ -281,8 +281,9 @@ export const ClassesWorkspace: React.FC = () => {
   const isOrgAdmin = isOrganizationAdmin(user);
   const canCancel = can('ops.classes.cancel') || isOrgAdmin || canEdit;
   const isTrainer = isTrainerUser(user);
-  const isAuthorized = !isTrainer && (isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
-  const isTrainerRole = !isAuthorized;
+  const canViewClasses = can('ops.classes.view') || isOrgAdmin;
+  const isAuthorized = !isTrainer && (canViewClasses || isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
+  const isTrainerRole = isTrainer;
 
   // Global Branch Scope
   const globalBranchId = locationId && locationId !== 'all' ? locationId : undefined;
@@ -3505,7 +3506,7 @@ export const ClassesWorkspace: React.FC = () => {
                                   title="View class details, assigned trainer, workout format, video, and roster"
                                 >
                                   <Users className="size-3" />
-                                  <span>Details & Roster</span>
+                                  <span>Details</span>
                                 </Button>
 
                                 {canEdit && (
@@ -3709,7 +3710,7 @@ export const ClassesWorkspace: React.FC = () => {
                           title="View class details, assigned trainer, workout format, video, and roster"
                         >
                           <Users className="size-3.5" />
-                          <span>Details & Roster</span>
+                          <span>Details</span>
                         </Button>
                         {canEdit && (
                           <Button

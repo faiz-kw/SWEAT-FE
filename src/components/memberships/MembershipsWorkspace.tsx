@@ -36,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { usePermissions } from '../../lib/permissions';
+import { isOrganizationAdmin } from '@/lib/nav';
 import { useApp } from '@/contexts';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
@@ -49,6 +50,19 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
   const { can, user } = usePermissions();
   const { locationId } = useApp();
   const canEdit = can('members.memberships.edit');
+
+  const formatMemberPhone = (phone?: string) => {
+    if (!phone) return '';
+    if (phone.includes('X') || phone.includes('*')) return phone;
+    const isPrivileged = isOrganizationAdmin(user) || user?.isSuperAdmin || can('core.users.view_pii');
+    if (isPrivileged) return phone;
+    const clean = phone.replace(/[^\d]/g, '');
+    if (clean.length >= 4) {
+      const last4 = clean.slice(-4);
+      return `+91-XXXXX-${last4}`;
+    }
+    return '+91-XXXXX-XXXX';
+  };
 
   const [activeTab, setActiveTab] = useState<'memberships' | 'freezes'>(
     (initialTab as any) === 'freezes' ? 'freezes' : 'memberships'
@@ -448,7 +462,7 @@ export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ init
                                   </div>
                                   {(mem.member_phone || mem.member_email) && (
                                     <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                                      {mem.member_phone && <span>{mem.member_phone}</span>}
+                                      {mem.member_phone && <span>{formatMemberPhone(mem.member_phone)}</span>}
                                       {mem.member_phone && mem.member_email && <span>·</span>}
                                       {mem.member_email && <span className="truncate max-w-[140px]">{mem.member_email}</span>}
                                     </div>
