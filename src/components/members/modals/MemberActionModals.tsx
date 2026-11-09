@@ -1268,11 +1268,19 @@ export const FreezeModal: React.FC<{
     }
   }, [freezeFrom, freezeUntil]);
 
-  const configuredFreezeFee = pricingConfig?.freeze_fee ?? 500;
+  const perDayRate = Number(pricingConfig?.freeze_per_day_fee ?? 25);
+  const calculatedFreezeFee = useMemo(() => {
+    return Math.max(0, freezeDays * perDayRate);
+  }, [freezeDays, perDayRate]);
+
   const [chargeFee, setChargeFee] = useState(true);
-  const [feeAmount, setFeeAmount] = useState(String(configuredFreezeFee));
+  const [feeAmount, setFeeAmount] = useState<string>(() => String(Math.max(0, freezeDays * perDayRate)));
   const [paymentMethod, setPaymentMethod] = useState<'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+
+  useEffect(() => {
+    setFeeAmount(String(calculatedFreezeFee));
+  }, [calculatedFreezeFee]);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -1290,7 +1298,7 @@ export const FreezeModal: React.FC<{
         const payUrl = res.payment_url || `https://pay.sweatfitness.in/frz/${member?.id || 'pay'}`;
         setGeneratedLink({
           paymentUrl: payUrl,
-          amount: parseFloat(feeAmount || String(configuredFreezeFee)),
+          amount: parseFloat(feeAmount || String(calculatedFreezeFee)),
           orderNumber: res.order_number || `FRZ-${Date.now().toString().slice(-6)}`,
           memberName: member?.name,
           memberPhone: member?.phone,
@@ -1395,26 +1403,12 @@ export const FreezeModal: React.FC<{
             </div>
           </div>
 
-          <div className="p-3 bg-muted/40 rounded-xl border border-border/70 flex items-center justify-between text-xs">
-            <div>
-              <span className="text-muted-foreground block text-[11px]">Freeze Duration</span>
-              <span className="font-bold text-foreground text-sm">{freezeDays} Days</span>
-            </div>
-            <div className="text-right">
-              <span className="text-muted-foreground block text-[11px]">Automatic Validity Extension</span>
-              <span className="font-semibold text-sky-500">+{freezeDays} Days to Expiry</span>
-            </div>
-          </div>
-
           {/* Freeze Fee & Payment Section */}
           <div className="p-3.5 bg-sky-500/5 rounded-xl border border-sky-500/30 space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-sky-500" />
-                Configured Freeze Fee
-                <span className="text-[10px] text-muted-foreground font-mono font-normal">
-                  (Default: ₹{configuredFreezeFee})
-                </span>
+                Freeze Fee ({freezeDays} Days @ ₹{perDayRate}/day)
               </Label>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <input
@@ -1429,20 +1423,15 @@ export const FreezeModal: React.FC<{
 
             {chargeFee ? (
               <div className="space-y-2.5 pt-1">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-2 text-xs text-muted-foreground font-semibold">₹</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={feeAmount}
-                      onChange={(e) => setFeeAmount(e.target.value)}
-                      className="pl-7 h-8 text-xs font-bold"
-                    />
-                  </div>
-                  <Badge variant="outline" className="h-8 px-2 text-[10px] text-sky-600 dark:text-sky-400 border-sky-500/40">
-                    Policy Fee
-                  </Badge>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-xs text-muted-foreground font-semibold">₹</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={feeAmount}
+                    onChange={(e) => setFeeAmount(e.target.value)}
+                    className="pl-7 h-8 text-xs font-bold"
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -1483,7 +1472,7 @@ export const FreezeModal: React.FC<{
           </Button>
           <Button
             onClick={() => {
-              const feeVal = parseFloat(feeAmount || String(configuredFreezeFee)) || 0;
+              const feeVal = parseFloat(feeAmount || String(calculatedFreezeFee)) || 0;
               if (chargeFee && feeVal > 0 && (paymentMethod === 'ONLINE' || paymentMethod === 'CARD')) {
                 openRazorpayCheckout({
                   keyId: '',
@@ -1512,9 +1501,11 @@ export const FreezeModal: React.FC<{
             disabled={mutation.isPending || freezeDays <= 0}
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {chargeFee && Number(feeAmount) > 0 && paymentMethod === 'ONLINE'
+            {!chargeFee
+              ? 'Waive Fee & Freeze'
+              : Number(feeAmount) > 0 && paymentMethod === 'ONLINE'
               ? `Pay ₹${feeAmount} & Freeze`
-              : chargeFee && Number(feeAmount) > 0
+              : Number(feeAmount) > 0
               ? `Collect ₹${feeAmount} & Freeze`
               : 'Confirm Freeze'}
           </Button>
