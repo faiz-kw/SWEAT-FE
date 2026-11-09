@@ -183,6 +183,7 @@ export const membersApi = {
   },
 
   async adjustEntitlement(id: string, data: {
+    membership_id?: string;
     entitlement_type: string;
     units_delta: number;
     reason_code?: string;

@@ -1049,6 +1049,25 @@ export const ExtendModal: React.FC<{
             </div>
           )}
 
+          {/* Single Contract Card if only 1 exists */}
+          {contracts.length === 1 && (
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1 text-xs">
+              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Target Active Package</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm text-foreground">{contracts[0].package_name || member?.package_name || 'Active Membership'}</div>
+                  <div className="text-muted-foreground">
+                    Program: {contracts[0].program_name || member.program_name || 'General'}
+                    {contracts[0].end_date ? ` · Valid till ${new Date(contracts[0].end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {contracts[0].home_sessions_remaining ?? member.home_sessions_remaining ?? 0} sessions
+                </Badge>
+              </div>
+            </div>
+          )}
+
           {/* Eligibility Guard Alert */}
           {!canExtend ? (
             <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-xs space-y-1">
@@ -1345,6 +1364,25 @@ export const FreezeModal: React.FC<{
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Single Contract Card if only 1 exists */}
+          {contracts.length === 1 && (
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1 text-xs">
+              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Target Active Package</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm text-foreground">{contracts[0].package_name || member?.package_name || 'Active Membership'}</div>
+                  <div className="text-muted-foreground">
+                    Program: {contracts[0].program_name || member?.program_name || 'General'}
+                    {contracts[0].end_date ? ` · Valid till ${new Date(contracts[0].end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {contracts[0].home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} sessions
+                </Badge>
+              </div>
             </div>
           )}
 
@@ -1678,7 +1716,8 @@ export const AdjustEntitlementModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-}> = ({ isOpen, onClose, member }) => {
+  activeContracts?: any[];
+}> = ({ isOpen, onClose, member, activeContracts = [] }) => {
   const queryClient = useQueryClient();
   const [entitlementType, setEntitlementType] = useState<'HOME_BRANCH_SESSION' | 'CROSS_BRANCH_SESSION' | 'PERSONAL_TRAINING_SESSION' | 'ASSESSMENT'>('HOME_BRANCH_SESSION');
   const [adjustTarget, setAdjustTarget] = useState<'ALLOWANCE' | 'CONSUMPTION'>('ALLOWANCE');
@@ -1688,13 +1727,47 @@ export const AdjustEntitlementModal: React.FC<{
   const [reasonText, setReasonText] = useState('Admin session allowance grant');
   const idempotencyKey = useMemo(() => `adj-${member?.id || 'id'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, [member?.id]);
 
-  // Current session baseline
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({
+        ...c,
+        membership_id: c.membership_id || c.id,
+      }));
+    }
+    return [{
+      membership_id: member?.id,
+      membership_number: member?.membership_number,
+      package_id: member?.package_id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+      start_date: (member as any)?.start_date,
+      home_sessions_remaining: member?.home_sessions_remaining ?? member?.sessions_remaining,
+      cross_branch_sessions_remaining: member?.cross_branch_sessions_remaining,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => {
+    return contracts[0]?.membership_id || contracts[0]?.id || member?.id || '';
+  });
+
+  useEffect(() => {
+    if (contracts.length > 0 && !contracts.some((c: any) => (c.membership_id || c.id) === selectedContractId)) {
+      setSelectedContractId(contracts[0]?.membership_id || contracts[0]?.id || '');
+    }
+  }, [contracts, selectedContractId]);
+
+  const selectedContract = useMemo(() => {
+    return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
+  }, [contracts, selectedContractId]);
+
+  // Current session baseline based on selected active contract
   const currentBase = useMemo(() => {
     if (entitlementType === 'CROSS_BRANCH_SESSION') {
-      return Number(member?.cross_branch_sessions_remaining ?? 0);
+      return Number(selectedContract?.cross_branch_sessions_remaining ?? member?.cross_branch_sessions_remaining ?? 0);
     }
-    return Number(member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
-  }, [entitlementType, member]);
+    return Number(selectedContract?.home_sessions_remaining ?? member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
+  }, [entitlementType, selectedContract, member]);
 
   // Signed units delta:
   // - If adjusting allowance: + means grant more sessions, - means deduct allowance
@@ -1717,6 +1790,7 @@ export const AdjustEntitlementModal: React.FC<{
         throw new Error('A specific reason is required for session adjustment.');
       }
       return membersApi.adjustEntitlement(member?.id, {
+        membership_id: selectedContract?.membership_id || selectedContract?.id || undefined,
         entitlement_type: entitlementType,
         units_delta: effectiveDelta,
         reason_code: reasonCode,
@@ -1750,6 +1824,43 @@ export const AdjustEntitlementModal: React.FC<{
         </DialogHeader>
 
         <div className="space-y-4 py-3">
+          {/* Active Contract Selector if multiple exist */}
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Active Package to Adjust</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id || c.id} value={c.membership_id || c.id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — {c.home_sessions_remaining ?? 0} Home / {c.cross_branch_sessions_remaining ?? 0} Passport ({c.start_date ? new Date(c.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'N/A'} - {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Single Contract Card if only 1 exists */}
+          {contracts.length === 1 && (
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-1 text-xs">
+              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Target Active Package</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm text-foreground">{contracts[0].package_name || member?.package_name || 'Active Membership'}</div>
+                  <div className="text-muted-foreground">
+                    Program: {contracts[0].program_name || member?.program_name || 'General'}
+                    {contracts[0].end_date ? ` · Valid till ${new Date(contracts[0].end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {contracts[0].home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} Sessions Left
+                </Badge>
+              </div>
+            </div>
+          )}
+
           {/* 1. Target Entitlement Pool */}
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Session Pool / Category</Label>
@@ -1765,7 +1876,7 @@ export const AdjustEntitlementModal: React.FC<{
               >
                 <div className="font-semibold">Home Sessions</div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Current: {member?.home_sessions_remaining ?? 0} available
+                  Current: {selectedContract?.home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} available
                 </div>
               </button>
 
@@ -1782,7 +1893,7 @@ export const AdjustEntitlementModal: React.FC<{
                   <Globe className="w-3 h-3" /> Passport Sessions
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Current: {member?.cross_branch_sessions_remaining ?? 0} available
+                  Current: {selectedContract?.cross_branch_sessions_remaining ?? member?.cross_branch_sessions_remaining ?? 0} available
                 </div>
               </button>
             </div>

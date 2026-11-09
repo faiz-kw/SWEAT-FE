@@ -112,6 +112,7 @@ import {
 
 import { usePermissions } from '@/lib/permissions';
 import { useAuth } from '@/contexts';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '@/utils/dateTimeUtils';
 
 interface Member360WorkspaceProps {
   memberId: string;
@@ -870,6 +871,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
             <div className="flex flex-wrap items-center gap-2">
               {header.available_actions?.filter((act) => {
                 if (act.action === 'PURCHASE_PACKAGE') return false;
+                if (act.action === 'CHECK_IN') return false;
                 if (!canAdjustEntitlements && (act.action === 'ADJUST_ENTITLEMENT' || act.action === 'ADJUST_SESSIONS' || act.action === 'CANCEL')) return false;
                 if (!canViewFinance && act.action === 'COLLECT_PAYMENT') return false;
                 return true;
@@ -1045,6 +1047,12 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <span className="text-muted-foreground">Email</span>
                     <span className="font-medium text-foreground truncate max-w-[180px]">{overview.contact.email || '—'}</span>
                   </div>
+                  {(overview.contact as any)?.alternate_email && (
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-muted-foreground">Alternate Email</span>
+                      <span className="font-medium text-foreground truncate max-w-[180px]">{(overview.contact as any).alternate_email}</span>
+                    </div>
+                  )}
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Gender / Age</span>
                     <span className="font-medium text-foreground">
@@ -1055,7 +1063,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <div className="pt-2 flex justify-between">
                       <span className="text-muted-foreground">Date of Birth</span>
                       <span className="font-medium text-foreground font-mono">
-                        {(overview.contact as any).date_of_birth}
+                        {formatDateDDMMYYYY((overview.contact as any).date_of_birth)}
                       </span>
                     </div>
                   )}
@@ -1074,7 +1082,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Member Since</span>
                     <span className="font-medium text-foreground">
-                      {overview.contact.joined_at ? new Date(overview.contact.joined_at).toLocaleDateString() : '—'}
+                      {overview.contact.joined_at ? formatDateDDMMYYYY(overview.contact.joined_at) : '—'}
                     </span>
                   </div>
                 </div>
@@ -1099,7 +1107,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <div className="text-xs text-muted-foreground space-y-1">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
-                        <span>{new Date(overview.next_booking.date_time).toLocaleString()}</span>
+                        <span>{formatDateTimeDDMMYYYY(overview.next_booking.date_time)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-muted-foreground/70" />
@@ -1153,8 +1161,8 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       <div>
                         <div className="text-xs text-muted-foreground">Contract Term</div>
                         <div className="font-medium text-foreground text-sm mt-0.5">
-                          {new Date(overview.current_membership.start_date).toLocaleDateString()} —{' '}
-                          {new Date(overview.current_membership.end_date).toLocaleDateString()}
+                          {formatDateDDMMYYYY(overview.current_membership.start_date)} —{' '}
+                          {formatDateDDMMYYYY(overview.current_membership.end_date)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           Home Branch: {overview.current_membership.home_branch}
@@ -1344,7 +1352,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-foreground truncate">{act.title}</span>
                             <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                              {new Date(act.occurred_at).toLocaleDateString()}
+                              {formatDateDDMMYYYY(act.occurred_at)}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{act.description}</p>
@@ -1508,6 +1516,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           isOpen={true}
           onClose={() => setActiveModal(null)}
           member={modalMember}
+          activeContracts={activeContracts}
         />
       )}
 
@@ -1742,7 +1751,7 @@ const MemberTimelineSection: React.FC<{ timeline: TimelineEvent[] }> = ({ timeli
                           </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground flex items-center gap-2">
-                          <span>{new Date(evt.occurred_at).toLocaleString()}</span>
+                          <span>{formatDateTimeDDMMYYYY(evt.occurred_at)}</span>
                           {evt.actor && (
                             <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">
                               by {evt.actor}
@@ -2987,13 +2996,7 @@ const MemberBookingsSection: React.FC<{
   };
 
   const formatDateOnly = (iso?: string | null) => {
-    if (!iso) return '—';
-    try {
-      const d = new Date(iso);
-      return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
-    } catch {
-      return '—';
-    }
+    return formatDateDDMMYYYY(iso);
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -3440,7 +3443,7 @@ const MemberFinanceSection: React.FC<{
                     return (
                       <tr key={o.id} className="hover:bg-muted/30">
                         <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                          {new Date(o.created_at).toLocaleDateString()}
+                          {formatDateDDMMYYYY(o.created_at)}
                         </td>
                         <td className="py-2.5 px-3 font-mono font-medium text-foreground">
                           {inv?.invoice_number || o.order_number}
@@ -3511,7 +3514,7 @@ const MemberFinanceSection: React.FC<{
                   finance.invoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-muted/30">
                       <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                        {new Date(inv.issued_at).toLocaleDateString()}
+                        {formatDateDDMMYYYY(inv.issued_at)}
                       </td>
                       <td className="py-2.5 px-3 font-mono font-medium text-foreground">
                         {inv.invoice_number}
@@ -3647,7 +3650,7 @@ const MemberFinanceSection: React.FC<{
                   finance.refunds.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/30">
                       <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                        {new Date(r.created_at).toLocaleDateString()}
+                        {formatDateDDMMYYYY(r.created_at)}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-[11px] text-foreground font-medium">
                         {r.order_number}
@@ -3697,7 +3700,7 @@ const MemberFinanceSection: React.FC<{
                   finance.coupon_history.map((c) => (
                     <tr key={c.id} className="hover:bg-muted/30">
                       <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
-                        {new Date(c.redeemed_at).toLocaleDateString()}
+                        {formatDateDDMMYYYY(c.redeemed_at)}
                       </td>
                       <td className="py-2.5 px-3 font-mono font-bold text-purple-400">
                         🎟️ {c.coupon_code || c.code}
@@ -3871,7 +3874,7 @@ const MemberHealthFormsSection: React.FC<{
               </span>
             </div>
             <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-              Latest Edit: {submissions[0]?.submitted_at ? new Date(submissions[0].submitted_at).toLocaleDateString() : '—'}
+              Latest Edit: {submissions[0]?.submitted_at ? formatDateDDMMYYYY(submissions[0].submitted_at) : '—'}
             </span>
           </div>
         )}
@@ -3911,7 +3914,7 @@ const MemberHealthFormsSection: React.FC<{
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Submitted: {new Date(sub.submitted_at).toLocaleString()}
+                      Submitted: {formatDateTimeDDMMYYYY(sub.submitted_at)}
                     </div>
                   </div>
 
@@ -3966,7 +3969,7 @@ const MemberHealthFormsSection: React.FC<{
                         <p className="font-semibold text-foreground">Signer: {sub.signer_identity || sub.accepted_by_name || 'Member'}</p>
                         {sub.signature_date && (
                           <p className="text-muted-foreground text-[11px]">
-                            Signed: {new Date(sub.signature_date).toLocaleString()}
+                            Signed: {formatDateTimeDDMMYYYY(sub.signature_date)}
                           </p>
                         )}
                         <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
@@ -3989,7 +3992,7 @@ const MemberHealthFormsSection: React.FC<{
                         {sub.agreement_accepted ? (
                           <span className="text-emerald-500 font-medium">
                             Explicit Consent Accepted by {sub.accepted_by_name || 'Member'} on{' '}
-                            {sub.agreement_accepted_at ? new Date(sub.agreement_accepted_at).toLocaleString() : new Date(sub.submitted_at).toLocaleString()}
+                            {sub.agreement_accepted_at ? formatDateTimeDDMMYYYY(sub.agreement_accepted_at) : formatDateTimeDDMMYYYY(sub.submitted_at)}
                           </span>
                         ) : (
                           <span className="text-amber-500 font-medium">Agreement not accepted</span>
