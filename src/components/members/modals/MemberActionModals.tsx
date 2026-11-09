@@ -3,7 +3,7 @@
  * Supports: Renew, Upgrade, Extend, Freeze, Transfer, Cancel, Adjust Entitlements, and Collect Payment.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
