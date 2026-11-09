@@ -133,3 +133,50 @@ export function formatOccurrenceDateTime(occ?: {
 }): string {
   return getOccurrenceDateTimeParts(occ).full;
 }
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Formats any ISO string, Date object, or date string into DD/MM/YYYY.
+ * e.g., "2026-11-07" -> "07/11/2026", "2026-10-30T10:00:00Z" -> "30/10/2026"
+ */
+export function formatDateDDMMYYYY(val?: string | Date | null): string {
+  if (!val) return '—';
+  if (typeof val === 'string') {
+    const clean = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      const [y, m, d] = clean.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(clean)) {
+      const parts = clean.split('/');
+      return `${pad2(parseInt(parts[1], 10))}/${pad2(parseInt(parts[0], 10))}/${parts[2]}`;
+    }
+  }
+  const d = typeof val === 'string' ? new Date(val) : val;
+  if (isNaN(d.getTime())) return typeof val === 'string' ? val : '—';
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+/**
+ * Formats any ISO string or Date into DD/MM/YYYY, hh:mm:ss A
+ * e.g., "07/11/2026, 10:38:25 PM"
+ */
+export function formatDateTimeDDMMYYYY(val?: string | Date | null): string {
+  if (!val) return '—';
+  const d = typeof val === 'string' ? new Date(val) : val;
+  if (isNaN(d.getTime())) return typeof val === 'string' ? val : '—';
+
+  const day = pad2(d.getDate());
+  const month = pad2(d.getMonth() + 1);
+  const year = d.getFullYear();
+
+  let hours = d.getHours();
+  const minutes = pad2(d.getMinutes());
+  const seconds = pad2(d.getSeconds());
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+
+  return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds} ${ampm}`;
+}

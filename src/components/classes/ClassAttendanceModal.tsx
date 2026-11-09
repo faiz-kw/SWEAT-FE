@@ -39,7 +39,11 @@ import { Input } from '@/components/ui/input';
 import { Pencil, Link as LinkIcon, Save, Eye } from 'lucide-react';
 import { Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/api/auth/AuthProvider';
-import { isOrganizationAdmin } from '@/lib/nav';
+import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
+import { bookingsApi } from '@/api/endpoints/bookingsApi';
+import { membersApi } from '@/api/endpoints/membersApi';
+import { crmApi } from '@/api/endpoints/crmApi';
+import { Search, Phone, Mail, Plus } from 'lucide-react';
 import { usePermissions } from '../../lib/permissions';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -70,6 +74,17 @@ const getInitials = (name?: string) => {
   return (firstChar + lastChar).toUpperCase() || 'M';
 };
 
+
+const formatPhoneNumber = (phone?: string | null, unmasked: boolean = false): string => {
+  if (!phone) return '';
+  if (unmasked) return phone;
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length >= 4) {
+    return `+91-XXXXX-${digits.slice(-4)}`;
+  }
+  return '+91-XXXXX-XXXX';
+};
+
 export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   occurrence,
   isOpen,
@@ -78,8 +93,92 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { can } = usePermissions();
-  const isAdmin = isOrganizationAdmin(user) || can('ops.classes.delete');
+  const isUnmaskedAdmin = isOrganizationAdmin(user);
+  const isTrainer = isTrainerUser(user);
+  const canBookSlot = isUnmaskedAdmin || isTrainer || can('ops.bookings.create');
+  const isAdmin = isUnmaskedAdmin || can('ops.classes.delete');
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // In-class Slot Booking States (Member Booking)
+  const [isBookMemberOpen, setIsBookMemberOpen] = React.useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = React.useState('');
+  const [selectedMember, setSelectedMember] = React.useState<any>(null);
+
+  // In-class Slot Booking States (Trial Pass Booking)
+  const [isBookTrialOpen, setIsBookTrialOpen] = React.useState(false);
+  const [trialTab, setTrialTab] = React.useState<'existing' | 'new'>('existing');
+  const [leadSearchQuery, setLeadSearchQuery] = React.useState('');
+  const [selectedLead, setSelectedLead] = React.useState<any>(null);
+  const [newLeadFirst, setNewLeadFirst] = React.useState('');
+  const [newLeadLast, setNewLeadLast] = React.useState('');
+  const [newLeadPhone, setNewLeadPhone] = React.useState('');
+  const [newLeadEmail, setNewLeadEmail] = React.useState('');
+  const [isCreatingLead, setIsCreatingLead] = React.useState(false);
+
+  // Queries for Member Search
+  const { data: memberSearchResults, isLoading: isSearchingMembers } = useQuery({
+    queryKey: ['member-search-for-slot', memberSearchQuery],
+    queryFn: () => membersApi.getMembers({ search: memberSearchQuery, page_size: 10 }),
+    enabled: isBookMemberOpen && memberSearchQuery.trim().length >= 2,
+  });
+
+  // Queries for Lead Search
+  const { data: leadSearchResults, isLoading: isSearchingLeads } = useQuery({
+    queryKey: ['lead-search-for-slot', leadSearchQuery],
+    queryFn: () => crmApi.getLeadsPaginated({ search: leadSearchQuery, page_size: 10 }),
+    enabled: isBookTrialOpen && trialTab === 'existing' && leadSearchQuery.trim().length >= 2,
+  });
+
+  // Member Booking Mutation
+  const bookMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      return bookingsApi.createBooking({
+        user_profile: memberId,
+        occurrence: occurrence!.id,
+        booking_type: 'MEMBER',
+        booking_source: isTrainer ? 'TRAINER' : 'ADMIN',
+      });
+    },
+    onSuccess: () => {
+      toast.success('Member successfully booked into session!');
+      queryClient.invalidateQueries({ queryKey: ['class-bookings', occurrence?.id] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      setIsBookMemberOpen(false);
+      setSelectedMember(null);
+      setMemberSearchQuery('');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.detail || err.response?.data?.error || err.message || 'Failed to book member';
+      toast.error(msg);
+    },
+  });
+
+  // Trial Booking Mutation
+  const bookTrialMutation = useMutation({
+    mutationFn: async (payload: { lead_id: string }) => {
+      return crmApi.bookTrial({
+        lead_id: payload.lead_id,
+        class_occurrence_id: occurrence!.id,
+        branch_id: (occurrence as any)?.branch_id || occurrence?.branch?.id,
+        notes: 'Booked directly from class slot modal',
+      });
+    },
+    onSuccess: () => {
+      toast.success('Trial pass successfully booked into session!');
+      queryClient.invalidateQueries({ queryKey: ['class-bookings', occurrence?.id] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-leads'] });
+      setIsBookTrialOpen(false);
+      setSelectedLead(null);
+      setLeadSearchQuery('');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to book trial pass';
+      toast.error(msg);
+    },
+  });
 
   const handleDeleteOccurrence = async () => {
     if (!occurrence?.id) return;
@@ -366,7 +465,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                   {occurrence?.status || 'SCHEDULED'}
                 </Badge>
                 <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                  Session Details & Roster
+                  Details
                 </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-3">
@@ -698,10 +797,36 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 <Users className="size-3.5 text-primary" />
                 <span>Enrolled Member Roster ({bookings.length} Booked)</span>
               </h4>
-              <div className="text-2xs text-muted-foreground flex items-center gap-2">
-                <span>Total Bookings: <strong className="text-foreground">{bookings.length}</strong></span>
-                <span>•</span>
-                <span>Capacity: <strong className="text-foreground">{occurrence?.capacity || occurrence?.capacity_override || 0}</strong></span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-2xs text-muted-foreground flex items-center gap-2 mr-1">
+                  <span>Total: <strong className="text-foreground">{bookings.length}</strong></span>
+                  <span>•</span>
+                  <span>Cap: <strong className="text-foreground">{occurrence?.capacity || occurrence?.capacity_override || 0}</strong></span>
+                </div>
+                {canBookSlot && (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsBookMemberOpen(true)}
+                      className="h-7 text-xs px-2.5 font-semibold text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                      title="Add member booking into this class slot"
+                    >
+                      <UserPlus className="size-3 mr-1" />
+                      + Book Member
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsBookTrialOpen(true)}
+                      className="h-7 text-xs px-2.5 font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 border-amber-500/30"
+                      title="Book a prospective trial pass into this class slot"
+                    >
+                      <Sparkles className="size-3 mr-1" />
+                      + Book Trial
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -864,6 +989,18 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                           {displayMemberNumber && (
                             <span className="font-mono font-medium text-foreground/90 bg-muted/70 px-1.5 py-0.5 rounded border border-border/50">
                               {displayMemberNumber}
+                            </span>
+                          )}
+                          {displayPhone && (
+                            <span className="font-mono flex items-center gap-1 text-foreground/80">
+                              <Phone className="size-2.5 text-muted-foreground" />
+                              <span>{formatPhoneNumber(displayPhone, isUnmaskedAdmin)}</span>
+                            </span>
+                          )}
+                          {displayEmail && isUnmaskedAdmin && (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Mail className="size-2.5" />
+                              <span>{displayEmail}</span>
                             </span>
                           )}
                           <span>•</span>
@@ -1042,34 +1179,11 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
         </div>
 
         <DialogFooter className="p-4 border-t border-border bg-card/60 flex items-center justify-between sm:justify-between gap-2">
-          {isAdmin ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={isDeleting}
-              onClick={handleDeleteOccurrence}
-              className="gap-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white"
-              title="Delete this incorrect class slot (Admin only)"
-            >
-              {isDeleting ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="size-3.5" />
-              )}
-              Delete Slot
-            </Button>
-          ) : (
-            <div className="text-2xs text-muted-foreground flex items-center gap-1.5">
-              <AlertCircle className="size-3.5 text-primary" />
-              <span>Attendance directly updates member check-in history and completed credits.</span>
-            </div>
-          )}
+          <div className="text-2xs text-muted-foreground flex items-center gap-1.5">
+            <AlertCircle className="size-3.5 text-primary" />
+            <span>Attendance directly updates member check-in history and completed credits.</span>
+          </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
-              <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                Admin: Remove slot if scheduled in error.
-              </span>
-            )}
             <Button variant="outline" size="sm" onClick={onClose}>
               Close
             </Button>
@@ -1144,7 +1258,350 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
         }}
       />
 
-      {/* Direct 1-Click Trainer Assignment Modal */}
+
+      {/* DIALOG 1: Book Member into Slot */}
+      <Dialog open={isBookMemberOpen} onOpenChange={setIsBookMemberOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <UserPlus className="size-4 text-primary" />
+              Book Member into Session
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Select an active member to enroll them into {occurrence?.class_template_name || 'this class'} on {formatOccurrenceDate(occurrence?.occurrence_date)} at {formatTime12h(occurrence?.start_time)}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, member number, or phone..."
+                value={memberSearchQuery}
+                onChange={(e) => {
+                  setMemberSearchQuery(e.target.value);
+                  setSelectedMember(null);
+                }}
+                className="pl-9 text-xs h-9"
+                autoFocus
+              />
+              {isSearchingMembers && (
+                <Loader2 className="absolute right-2.5 top-2.5 size-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-1.5 border rounded-lg p-2 bg-muted/20">
+              {isSearchingMembers ? (
+                <div className="py-6 text-center text-xs text-muted-foreground">Searching members...</div>
+              ) : memberSearchResults?.results && memberSearchResults.results.length > 0 ? (
+                memberSearchResults.results.map((m: any) => {
+                  const isSelected = selectedMember?.id === m.id;
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => setSelectedMember(m)}
+                      className={`p-2.5 rounded-md border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? 'bg-primary/10 border-primary shadow-xs'
+                          : 'bg-card border-border/60 hover:border-primary/40 hover:bg-muted/30'
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-foreground flex items-center gap-2">
+                          <span>{m.name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Member'}</span>
+                          {m.membership && (
+                            <Badge variant="outline" className="text-3xs py-0 h-4">
+                              {m.membership}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-2xs text-muted-foreground flex items-center gap-2">
+                          <span className="font-mono">{m.member_number || m.membership_number || 'No ID'}</span>
+                          {m.phone && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono">{formatPhoneNumber(m.phone, isUnmaskedAdmin)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {isSelected && <Check className="size-4 text-primary shrink-0" />}
+                    </div>
+                  );
+                })
+              ) : memberSearchQuery.trim().length >= 2 ? (
+                <div className="py-6 text-center text-xs text-muted-foreground">
+                  No matching members found.
+                </div>
+              ) : (
+                <div className="py-6 text-center text-xs text-muted-foreground">
+                  Type at least 2 characters to search active members.
+                </div>
+              )}
+            </div>
+
+            {selectedMember && (
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-1 text-xs">
+                <div className="font-medium text-foreground">Selected Member:</div>
+                <div className="text-primary font-semibold text-sm">
+                  {selectedMember.name || `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`}
+                </div>
+                <div className="text-2xs text-muted-foreground">
+                  Enrolling into slot: {occurrence?.class_template_name} ({formatTime12h(occurrence?.start_time)})
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsBookMemberOpen(false);
+                setSelectedMember(null);
+                setMemberSearchQuery('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selectedMember || bookMemberMutation.isPending}
+              onClick={() => {
+                if (selectedMember) {
+                  bookMemberMutation.mutate(selectedMember.id);
+                }
+              }}
+              className="gap-1.5"
+            >
+              {bookMemberMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
+              Confirm Booking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG 2: Book Trial Pass into Slot */}
+      <Dialog open={isBookTrialOpen} onOpenChange={setIsBookTrialOpen}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-amber-600 dark:text-amber-400">
+              <Sparkles className="size-4 text-amber-500" />
+              Book Trial Pass into Session
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Reserve a trial session for a prospective member or walk-in guest for {occurrence?.class_template_name || 'this class'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex border-b border-border mb-3">
+            <button
+              type="button"
+              className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-all ${
+                trialTab === 'existing'
+                  ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setTrialTab('existing')}
+            >
+              Existing CRM Lead
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-all ${
+                trialTab === 'new'
+                  ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setTrialTab('new')}
+            >
+              + Quick Walk-In Guest
+            </button>
+          </div>
+
+          {trialTab === 'existing' ? (
+            <div className="space-y-4 py-1">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search leads by name, email, or phone..."
+                  value={leadSearchQuery}
+                  onChange={(e) => {
+                    setLeadSearchQuery(e.target.value);
+                    setSelectedLead(null);
+                  }}
+                  className="pl-9 text-xs h-9"
+                  autoFocus
+                />
+                {isSearchingLeads && (
+                  <Loader2 className="absolute right-2.5 top-2.5 size-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+
+              <div className="max-h-56 overflow-y-auto space-y-1.5 border rounded-lg p-2 bg-muted/20">
+                {isSearchingLeads ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground">Searching CRM leads...</div>
+                ) : leadSearchResults?.results && leadSearchResults.results.length > 0 ? (
+                  leadSearchResults.results.map((lead: any) => {
+                    const isSelected = selectedLead?.id === lead.id;
+                    const leadName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || lead.full_name || 'Prospect';
+                    return (
+                      <div
+                        key={lead.id}
+                        onClick={() => setSelectedLead(lead)}
+                        className={`p-2.5 rounded-md border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-amber-500/10 border-amber-500 shadow-xs'
+                            : 'bg-card border-border/60 hover:border-amber-500/40 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-foreground flex items-center gap-2">
+                            <span>{leadName}</span>
+                            <Badge variant="outline" className="text-3xs py-0 h-4 bg-muted">
+                              {lead.current_status || 'NEW'}
+                            </Badge>
+                          </div>
+                          <div className="text-2xs text-muted-foreground flex items-center gap-2">
+                            {lead.phone && (
+                              <span className="font-mono">{formatPhoneNumber(lead.phone, isUnmaskedAdmin)}</span>
+                            )}
+                            {lead.email && isUnmaskedAdmin && (
+                              <>
+                                <span>•</span>
+                                <span>{lead.email}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && <Check className="size-4 text-amber-600 shrink-0" />}
+                      </div>
+                    );
+                  })
+                ) : leadSearchQuery.trim().length >= 2 ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    No matching leads found.
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    Type at least 2 characters to search CRM leads.
+                  </div>
+                )}
+              </div>
+
+              {selectedLead && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-1 text-xs">
+                  <div className="font-medium text-foreground">Selected Lead for Trial:</div>
+                  <div className="text-amber-700 dark:text-amber-400 font-semibold text-sm">
+                    {`${selectedLead.first_name || ''} ${selectedLead.last_name || ''}`.trim()}
+                  </div>
+                  <div className="text-2xs text-muted-foreground">
+                    Enrolling into slot: {occurrence?.class_template_name} ({formatTime12h(occurrence?.start_time)})
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 py-1 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-2xs font-semibold text-muted-foreground">First Name *</label>
+                  <Input
+                    value={newLeadFirst}
+                    onChange={(e) => setNewLeadFirst(e.target.value)}
+                    placeholder="First name"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-2xs font-semibold text-muted-foreground">Last Name</label>
+                  <Input
+                    value={newLeadLast}
+                    onChange={(e) => setNewLeadLast(e.target.value)}
+                    placeholder="Last name"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-2xs font-semibold text-muted-foreground">Phone Number *</label>
+                <Input
+                  value={newLeadPhone}
+                  onChange={(e) => setNewLeadPhone(e.target.value)}
+                  placeholder="+91 98765 43210"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-2xs font-semibold text-muted-foreground">Email (Optional)</label>
+                <Input
+                  value={newLeadEmail}
+                  onChange={(e) => setNewLeadEmail(e.target.value)}
+                  placeholder="guest@example.com"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsBookTrialOpen(false);
+                setSelectedLead(null);
+                setLeadSearchQuery('');
+                setNewLeadFirst('');
+                setNewLeadLast('');
+                setNewLeadPhone('');
+                setNewLeadEmail('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={
+                bookTrialMutation.isPending ||
+                isCreatingLead ||
+                (trialTab === 'existing' ? !selectedLead : (!newLeadFirst.trim() || !newLeadPhone.trim()))
+              }
+              onClick={async () => {
+                if (trialTab === 'existing' && selectedLead) {
+                  bookTrialMutation.mutate({ lead_id: selectedLead.id });
+                } else if (trialTab === 'new') {
+                  try {
+                    setIsCreatingLead(true);
+                    const branchId = (occurrence as any)?.branch_id || occurrence?.branch?.id;
+                    const lead = await crmApi.createLead({
+                      first_name: newLeadFirst.trim(),
+                      last_name: newLeadLast.trim() || undefined,
+                      phone: newLeadPhone.trim(),
+                      email: newLeadEmail.trim() || undefined,
+                      branch_id: branchId,
+                      lead_source: 'WALK_IN',
+                    } as any);
+                    await bookTrialMutation.mutateAsync({ lead_id: lead.id });
+                  } catch (err: any) {
+                    const msg = err.response?.data?.phone?.[0] || err.response?.data?.detail || err.response?.data?.error || err.message || 'Failed to create guest lead';
+                    toast.error(msg);
+                  } finally {
+                    setIsCreatingLead(false);
+                  }
+                }
+              }}
+              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+            >
+              {(bookTrialMutation.isPending || isCreatingLead) && <Loader2 className="size-3.5 animate-spin" />}
+              Confirm Trial Pass
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+            {/* Direct 1-Click Trainer Assignment Modal */}
       <AssignTrainerModal
         occurrence={currentOccurrence}
         isOpen={isAssignTrainerModalOpen}
