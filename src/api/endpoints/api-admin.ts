@@ -514,6 +514,11 @@ export async function fetchPermissionsApi(module?: string, scope?: string): Prom
   return toArray<PermissionDefRow>(res.data);
 }
 
+export async function syncPermissionsCatalogApi(): Promise<any> {
+  const res = await api.post('/tenant/permissions/sync-catalog/', {});
+  return res.data;
+}
+
 export async function createRoleApi(payload: {
   name: string;
   code?: string;

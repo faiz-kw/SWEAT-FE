@@ -41,6 +41,7 @@ import {
   fetchRolesApi,
   fetchPermissionsApi,
   updateRolePermissionsApi,
+  syncPermissionsCatalogApi,
   type RoleDefRow,
   type PermissionDefRow,
 } from "@/api/endpoints/api-admin";
@@ -391,6 +392,20 @@ export function PermissionsWorkspace() {
   };
 
   // Save changes to database
+    const [syncing, setSyncing] = React.useState(false);
+  const handleSyncCatalog = async () => {
+    setSyncing(true);
+    try {
+      await syncPermissionsCatalogApi();
+      toast.success("Successfully synchronized all platform modules and capabilities!");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to sync permissions catalogue.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -498,6 +513,18 @@ export function PermissionsWorkspace() {
                 Comparison Matrix
               </Button>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncCatalog}
+              disabled={syncing || loading || saving}
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-primary/30 text-primary hover:bg-primary/10"
+              title="Populate missing platform modules and capabilities into the permission matrix"
+            >
+              <Sparkles className={`size-3.5 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing..." : "Sync All Modules"}
+            </Button>
 
             <Button
               variant="outline"
