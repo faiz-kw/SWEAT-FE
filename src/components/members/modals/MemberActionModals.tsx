@@ -1200,7 +1200,7 @@ export const ExtendModal: React.FC<{
           </Button>
           <Button
             onClick={handleExecuteExtend}
-            disabled={mutation.isPending || !canExtend || (extendMode === 'CUSTOM_DATE' && !customDate)}
+            disabled={mutation.isPending || !canExtend || !customDate}
             className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
