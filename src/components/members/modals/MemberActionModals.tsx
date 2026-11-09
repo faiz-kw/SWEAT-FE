@@ -828,6 +828,41 @@ export const UpgradeModal: React.FC<{
   );
 };
 
+// Helper to accurately extract unconsumed sessions remaining from a contract or fallback to member
+export const getContractRemainingSessions = (contract: any, fallbackMember?: any): number => {
+  if (!contract && !fallbackMember) return 0;
+  if (contract?.sessions_left != null && !isNaN(Number(contract.sessions_left))) {
+    return Number(contract.sessions_left);
+  }
+  const snap = contract?.contract_snapshot;
+  const used = contract?.sessions_used ?? snap?.consumed_units;
+  const total = contract?.sessions_total ?? snap?.allocated_units ?? snap?.total_sessions ?? snap?.session_count;
+  if (total != null && used != null && !isNaN(Number(total)) && !isNaN(Number(used))) {
+    return Math.max(0, Number(total) - Number(used));
+  }
+  if (contract?.home_sessions_remaining != null && !isNaN(Number(contract.home_sessions_remaining))) {
+    return Number(contract.home_sessions_remaining);
+  }
+  return Number(fallbackMember?.home_sessions_remaining ?? fallbackMember?.sessions_remaining ?? 0);
+};
+
+export const getContractRemainingPassport = (contract: any, fallbackMember?: any): number => {
+  if (!contract && !fallbackMember) return 0;
+  if (contract?.passport_sessions_left != null && !isNaN(Number(contract.passport_sessions_left))) {
+    return Number(contract.passport_sessions_left);
+  }
+  const snap = contract?.contract_snapshot;
+  const used = contract?.passport_sessions_used ?? snap?.passport_consumed_units;
+  const total = contract?.passport_sessions_total ?? snap?.passport_allocated_units;
+  if (total != null && used != null && !isNaN(Number(total)) && !isNaN(Number(used))) {
+    return Math.max(0, Number(total) - Number(used));
+  }
+  if (contract?.cross_branch_sessions_remaining != null && !isNaN(Number(contract.cross_branch_sessions_remaining))) {
+    return Number(contract.cross_branch_sessions_remaining);
+  }
+  return Number(fallbackMember?.cross_branch_sessions_remaining ?? 0);
+};
+
 // ----------------------------------------------------------------------------
 // 3. EXTEND VALIDITY MODAL
 // ----------------------------------------------------------------------------
@@ -839,9 +874,6 @@ export const ExtendModal: React.FC<{
   pricingConfig?: any;
 }> = ({ isOpen, onClose, member, activeContracts = [], pricingConfig }) => {
   const queryClient = useQueryClient();
-  const [days, setDays] = useState(30);
-  const [extendMode, setExtendMode] = useState<'TIER' | 'CUSTOM_DATE'>('TIER');
-  const [customDate, setCustomDate] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
@@ -872,8 +904,11 @@ export const ExtendModal: React.FC<{
     return contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0];
   }, [contracts, selectedContractId]);
 
-  // Guard: Member must have sessions remaining or active status
-  const pendingSessions = selectedContract?.home_sessions_remaining ?? (member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
+  // Guard: Member must have sessions remaining or active status based on true contract remaining balance
+  const pendingSessions = useMemo(() => {
+    return getContractRemainingSessions(selectedContract, member);
+  }, [selectedContract, member]);
+
   const canExtend = pendingSessions > 0 || (member?.status === 'ACTIVE');
 
   // Base expiry calculation
@@ -887,19 +922,19 @@ export const ExtendModal: React.FC<{
     return nextDay.toISOString().split('T')[0];
   }, [baseDate]);
 
-  // Configured extension tiers from pricingConfig
-  const extensionTiers = useMemo(() => {
-    if (Array.isArray(pricingConfig?.extension_tiers) && pricingConfig.extension_tiers.length > 0) {
-      return pricingConfig.extension_tiers;
+  const defaultExtendedDateStr = useMemo(() => {
+    const d = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+  }, [baseDate]);
+
+  const [customDate, setCustomDate] = useState<string>('');
+
+  // Set default extension date whenever selected contract / baseDate updates
+  useEffect(() => {
+    if (defaultExtendedDateStr) {
+      setCustomDate(defaultExtendedDateStr);
     }
-    const per30 = Number(pricingConfig?.extension_fee_per_30_days) || 1000;
-    return [
-      { days: 15, fee: Math.round(per30 * 0.5) },
-      { days: 30, fee: per30 },
-      { days: 45, fee: Math.round(per30 * 1.5) },
-      { days: 60, fee: per30 * 2 },
-    ];
-  }, [pricingConfig]);
+  }, [defaultExtendedDateStr]);
 
   const per30 = Number(pricingConfig?.extension_fee_per_30_days) || 1050;
   const perDayRate = pricingConfig?.extension_per_day_fee
@@ -907,35 +942,31 @@ export const ExtendModal: React.FC<{
     : Math.max(1, Math.round(per30 / 30));
 
   const effectiveDays = useMemo(() => {
-    if (extendMode === 'CUSTOM_DATE' && customDate) {
+    if (customDate) {
       const targetTime = new Date(customDate).getTime();
       const diffDays = Math.round((targetTime - baseDate.getTime()) / (1000 * 60 * 60 * 24));
       return Math.max(1, diffDays);
     }
-    return days;
-  }, [extendMode, customDate, baseDate, days]);
+    return 30;
+  }, [customDate, baseDate]);
 
   const effectiveFee = useMemo(() => {
-    if (extendMode === 'CUSTOM_DATE') {
-      return Math.round(effectiveDays * perDayRate);
-    }
-    const tier = extensionTiers.find((t: any) => t.days === days);
-    return tier ? tier.fee : Math.round(effectiveDays * perDayRate);
-  }, [extendMode, effectiveDays, perDayRate, extensionTiers, days]);
+    return Math.round(effectiveDays * perDayRate);
+  }, [effectiveDays, perDayRate]);
 
   // Calculate New Extended Expiry Date preview safely
   const newExtendedExpiry = useMemo(() => {
-    if (extendMode === 'CUSTOM_DATE' && customDate) {
+    if (customDate) {
       const d = new Date(customDate);
       return !isNaN(d.getTime())
         ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
         : customDate;
     }
-    const extended = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
+    const extended = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
     return !isNaN(extended.getTime())
       ? extended.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-      : `${days} days extended`;
-  }, [extendMode, customDate, baseDate, days]);
+      : '30 days extended';
+  }, [customDate, baseDate]);
 
   const mutation = useMutation({
     mutationFn: (extraPayload?: any) =>
@@ -1040,11 +1071,14 @@ export const ExtendModal: React.FC<{
                 onChange={(e) => setSelectedContractId(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
               >
-                {contracts.map((c: any) => (
-                  <option key={c.membership_id} value={c.membership_id}>
-                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'} ({c.home_sessions_remaining ?? 0} sessions)
-                  </option>
-                ))}
+                {contracts.map((c: any) => {
+                  const rem = getContractRemainingSessions(c, member);
+                  return (
+                    <option key={c.membership_id} value={c.membership_id}>
+                      {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'} ({rem} sessions left)
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -1062,7 +1096,7 @@ export const ExtendModal: React.FC<{
                   </div>
                 </div>
                 <Badge variant="outline" className="text-[11px] font-medium">
-                  {contracts[0].home_sessions_remaining ?? member.home_sessions_remaining ?? 0} sessions
+                  {getContractRemainingSessions(contracts[0], member)} sessions left
                 </Badge>
               </div>
             </div>
@@ -1092,78 +1126,28 @@ export const ExtendModal: React.FC<{
             </div>
           )}
 
-          {/* Extension Duration Selector: Preset Days + Direct Calendar Date Picker */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold">Select Extension Duration</Label>
-              <span className="text-[11px] text-muted-foreground">Base Fee: ₹{per30} / 30 days</span>
-            </div>
-
-            {/* Quick preset duration buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              {extensionTiers.map((tier: any) => {
-                const isSelected = extendMode === 'TIER' && days === tier.days;
-                return (
-                  <button
-                    key={tier.days}
-                    type="button"
-                    disabled={!canExtend}
-                    onClick={() => {
-                      setExtendMode('TIER');
-                      setDays(tier.days);
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? 'border-amber-500 bg-amber-500/10 shadow-sm ring-1 ring-amber-500/30'
-                        : 'border-border hover:bg-muted/40 disabled:opacity-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-foreground">+{tier.days} Days</span>
-                      <span className="font-bold text-xs text-amber-600 dark:text-amber-400">₹{tier.fee}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground block mt-1">
-                      Preserves {pendingSessions} sessions
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Direct Specific Calendar Expiry Date Selector */}
-            <div className={`p-3 rounded-xl border transition-all ${
-              extendMode === 'CUSTOM_DATE'
-                ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
-                : 'border-border bg-muted/20'
-            }`}>
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Or Pick Specific Custom Expiry Date</span>
-                </Label>
-                {extendMode === 'CUSTOM_DATE' && (
-                  <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600 dark:text-amber-400">
-                    Custom Date Active
-                  </Badge>
-                )}
-              </div>
-              <Input
-                type="date"
-                min={minSelectableDate}
-                value={customDate}
-                disabled={!canExtend}
-                onChange={(e) => {
-                  setCustomDate(e.target.value);
-                  setExtendMode('CUSTOM_DATE');
-                }}
-                className="bg-background text-sm font-medium"
-              />
-              {extendMode === 'CUSTOM_DATE' && (
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1.5">
-                  <span>Calculated Extension: <strong className="text-foreground">+{effectiveDays} Days</strong></span>
-                  <span>Rate: <strong className="text-foreground">₹{perDayRate} / day</strong></span>
-                </div>
-              )}
+          {/* Direct Calendar Date Picker for Validity Extension */}
+          <div className="p-3 rounded-xl border border-border bg-muted/20 space-y-2">
+            <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-amber-500" />
+                Select New Expiry Date
+              </span>
+              <span className="text-[11px] text-muted-foreground font-normal">
+                Rate: ₹{perDayRate} / day
+              </span>
+            </Label>
+            <Input
+              type="date"
+              min={minSelectableDate}
+              value={customDate}
+              disabled={!canExtend}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="bg-background text-sm font-medium h-9"
+            />
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+              <span>Extension Duration: <strong className="text-foreground">+{effectiveDays} Days</strong></span>
+              <span>Calculated Fee: <strong className="text-foreground">₹{effectiveFee.toLocaleString()}</strong></span>
             </div>
           </div>
 
@@ -1358,11 +1342,14 @@ export const FreezeModal: React.FC<{
                 onChange={(e) => setSelectedContractId(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
               >
-                {contracts.map((c: any) => (
-                  <option key={c.membership_id} value={c.membership_id}>
-                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
-                  </option>
-                ))}
+                {contracts.map((c: any) => {
+                  const rem = getContractRemainingSessions(c, member);
+                  return (
+                    <option key={c.membership_id} value={c.membership_id}>
+                      {c.package_name || 'Membership'} ({c.program_name || 'General'}) — Valid till {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'} ({rem} sessions left)
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -1380,7 +1367,7 @@ export const FreezeModal: React.FC<{
                   </div>
                 </div>
                 <Badge variant="outline" className="text-[11px] font-medium">
-                  {contracts[0].home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} sessions
+                  {getContractRemainingSessions(contracts[0], member)} sessions left
                 </Badge>
               </div>
             </div>
@@ -1764,9 +1751,9 @@ export const AdjustEntitlementModal: React.FC<{
   // Current session baseline based on selected active contract
   const currentBase = useMemo(() => {
     if (entitlementType === 'CROSS_BRANCH_SESSION') {
-      return Number(selectedContract?.cross_branch_sessions_remaining ?? member?.cross_branch_sessions_remaining ?? 0);
+      return getContractRemainingPassport(selectedContract, member);
     }
-    return Number(selectedContract?.home_sessions_remaining ?? member?.home_sessions_remaining ?? member?.sessions_remaining ?? 0);
+    return getContractRemainingSessions(selectedContract, member);
   }, [entitlementType, selectedContract, member]);
 
   // Signed units delta:
@@ -1833,11 +1820,15 @@ export const AdjustEntitlementModal: React.FC<{
                 onChange={(e) => setSelectedContractId(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
               >
-                {contracts.map((c: any) => (
-                  <option key={c.membership_id || c.id} value={c.membership_id || c.id}>
-                    {c.package_name || 'Membership'} ({c.program_name || 'General'}) — {c.home_sessions_remaining ?? 0} Home / {c.cross_branch_sessions_remaining ?? 0} Passport ({c.start_date ? new Date(c.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'N/A'} - {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'})
-                  </option>
-                ))}
+                {contracts.map((c: any) => {
+                  const hRem = getContractRemainingSessions(c, member);
+                  const pRem = getContractRemainingPassport(c, member);
+                  return (
+                    <option key={c.membership_id || c.id} value={c.membership_id || c.id}>
+                      {c.package_name || 'Membership'} ({c.program_name || 'General'}) — {hRem} Home / {pRem} Passport ({c.start_date ? new Date(c.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'N/A'} - {c.end_date ? new Date(c.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -1855,7 +1846,7 @@ export const AdjustEntitlementModal: React.FC<{
                   </div>
                 </div>
                 <Badge variant="outline" className="text-[11px] font-medium">
-                  {contracts[0].home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} Sessions Left
+                  {getContractRemainingSessions(contracts[0], member)} Sessions Left
                 </Badge>
               </div>
             </div>
@@ -1876,7 +1867,7 @@ export const AdjustEntitlementModal: React.FC<{
               >
                 <div className="font-semibold">Home Sessions</div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Current: {selectedContract?.home_sessions_remaining ?? member?.home_sessions_remaining ?? 0} available
+                  Current: {getContractRemainingSessions(selectedContract, member)} available
                 </div>
               </button>
 
@@ -1893,7 +1884,7 @@ export const AdjustEntitlementModal: React.FC<{
                   <Globe className="w-3 h-3" /> Passport Sessions
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Current: {selectedContract?.cross_branch_sessions_remaining ?? member?.cross_branch_sessions_remaining ?? 0} available
+                  Current: {getContractRemainingPassport(selectedContract, member)} available
                 </div>
               </button>
             </div>
