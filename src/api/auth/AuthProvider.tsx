@@ -50,8 +50,8 @@
 
 import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../client';
 import {
-  api,
   setAccessToken,
   clearAccessToken,
   clearUserProfile,
@@ -61,7 +61,7 @@ import {
   setUserProfile,
   type AuthUser,
   type LocationInfo,
-} from '@/api';
+} from './tokenManager';
 
 // -----------------------------------------------------------------
 // Types
