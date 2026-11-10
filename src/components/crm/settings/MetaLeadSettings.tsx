@@ -312,6 +312,17 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     onError: (e) => toast.error(formatError(e)),
   });
 
+  const refreshPagesMutation = useMutation({
+    mutationFn: (connectionId?: string) => metaLeadsApi.refreshPages(connectionId),
+    onSuccess: (data) => {
+      toast.success(
+        `Refreshed ${data.pages_refreshed} page(s) for ${data.meta_user_name}.`
+      );
+      void refreshAll();
+    },
+    onError: (e) => toast.error(formatError(e)),
+  });
+
   if (metadataQuery.isPending) {
     return <CRMLoadingState message="Loading Facebook & Instagram Leads settings..." />;
   }
@@ -534,6 +545,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                 const isDisconnectingThis =
                   disconnectMutation.isPending &&
                   disconnectMutation.variables === account.id;
+                const isRefreshingThis =
+                  refreshPagesMutation.isPending &&
+                  refreshPagesMutation.variables === account.id;
 
                 return (
                   <div
@@ -585,6 +599,47 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                       </div>
                     </div>
 
+                    {/* Pages sync health — expandable */}
+                    {account.pages && account.pages.length > 0 && (
+                      <details className="group text-xs">
+                        <summary className="cursor-pointer select-none flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium py-1">
+                          <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180 shrink-0" />
+                          {account.pages.length} page(s) linked
+                        </summary>
+                        <div className="mt-2 space-y-1.5 pl-4">
+                          {account.pages.map((pg) => {
+                            const pgId = pg.page_id || pg.id;
+                            const pgName = pg.page_name || pg.name || pgId;
+                            const lastLead = pg.last_lead_received_at
+                              ? new Date(pg.last_lead_received_at).toLocaleString()
+                              : 'No leads yet';
+                            const lastReconcile = pg.last_reconcile_attempted_at
+                              ? new Date(pg.last_reconcile_attempted_at).toLocaleString()
+                              : 'Not yet run';
+                            return (
+                              <div
+                                key={pgId}
+                                className="rounded border border-border/50 bg-muted/20 px-2.5 py-2 space-y-1"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground truncate">{pgName}</span>
+                                  {pg.is_subscribed_to_webhooks ? (
+                                    <span className="shrink-0 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">● Webhook active</span>
+                                  ) : (
+                                    <span className="shrink-0 text-[10px] text-amber-600 dark:text-amber-400 font-medium">○ Webhook inactive</span>
+                                  )}
+                                </div>
+                                <div className="text-muted-foreground space-y-0.5">
+                                  <p><span className="text-muted-foreground/70">Last lead:</span> {lastLead}</p>
+                                  <p><span className="text-muted-foreground/70">Last reconcile:</span> {lastReconcile}{pg.last_reconcile_leads_found != null ? ` (${pg.last_reconcile_leads_found} found)` : ''}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    )}
+
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
                       {isAccExpired && (
                         <Button
@@ -597,6 +652,17 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                           Reconnect
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canEdit || isRefreshingThis || refreshPagesMutation.isPending}
+                        onClick={() => refreshPagesMutation.mutate(account.id)}
+                        className="h-8 px-2.5 text-xs gap-1.5"
+                        title="Re-discover Facebook Pages for this account without disconnecting"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isRefreshingThis ? 'animate-spin' : ''}`} />
+                        {isRefreshingThis ? 'Refreshing...' : 'Refresh Pages'}
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"

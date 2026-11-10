@@ -11,6 +11,10 @@ export type MetaDiscoveredPage = {
   is_active?: boolean;
   is_subscribed_to_webhooks?: boolean;
   subscribed_at?: string | null;
+  // Sync health fields (populated after migration 0081)
+  last_lead_received_at?: string | null;
+  last_reconcile_attempted_at?: string | null;
+  last_reconcile_leads_found?: number | null;
 };
 
 export type MetaFormQuestion = {
@@ -293,4 +297,14 @@ export const metaLeadsApi = {
   retry: async (id: string) => (await api.post<MetaImport>(`/tenant/meta-lead-imports/${id}/retry/`, {})).data,
   resolve: async (id: string, payload: { reason: string; action?: string }) =>
     (await api.post<MetaImport>(`/tenant/meta-lead-imports/${id}/resolve/`, payload)).data,
+  refreshPages: async (connectionId?: string) =>
+    (
+      await api.post<{
+        status: string;
+        connection_id: string;
+        meta_user_name: string;
+        pages_refreshed: number;
+        pages: { page_id: string; page_name: string; is_subscribed: boolean }[];
+      }>('/tenant/meta-lead-mappings/refresh-pages/', connectionId ? { connection_id: connectionId } : {})
+    ).data,
 };
