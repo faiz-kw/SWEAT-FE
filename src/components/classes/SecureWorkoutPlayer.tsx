@@ -125,11 +125,11 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
       } ${className}`}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* 1. Sandboxed Iframe (aspect ratio preserved, no zoom crop) */}
+      {/* 1. 16:9 Video Stage with Security Shields pinned directly to the video frame */}
       <div
         className={
           isFullscreen
-            ? 'relative aspect-video max-w-full max-h-full flex items-center justify-center'
+            ? 'relative aspect-video max-w-full max-h-full flex items-center justify-center overflow-hidden'
             : 'absolute inset-0 overflow-hidden'
         }
         style={
@@ -152,70 +152,70 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
           allowFullScreen
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
         />
-      </div>
 
-      {/* 2. Solid Top Security Bar: 100% Covers YouTube Title, Channel Avatar & Copy Link button */}
-      <div
-        className="absolute top-0 left-0 right-0 h-14 bg-black/95 border-b border-white/10 pointer-events-auto flex items-center justify-between px-3.5 z-20 shadow-md"
-        onContextMenu={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 text-white text-xs font-semibold select-none truncate max-w-[55%] sm:max-w-[70%]">
-          <Film className="size-4 text-cyan-400 shrink-0" />
-          <span className="truncate">{title}</span>
-        </div>
+        {/* 2. Solid Top Security Bar: 100% Covers YouTube Title, Channel Avatar & Copy Link button */}
+        <div
+          className="absolute top-0 left-0 right-0 h-14 bg-black/95 border-b border-white/10 pointer-events-auto flex items-center justify-between px-3.5 z-20 shadow-md"
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-2 text-white text-xs font-semibold select-none truncate max-w-[55%] sm:max-w-[70%]">
+            <Film className="size-4 text-cyan-400 shrink-0" />
+            <span className="truncate">{title}</span>
+          </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] bg-white/10 text-white/90 px-2.5 py-1 rounded-md border border-white/20 font-medium tracking-wide select-none hidden sm:flex items-center gap-1.5">
-            <Lock className="size-3 text-cyan-300" /> Studio Player
-          </span>
-
-          {/* In-App Clean Prominent Full Screen Button */}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="h-8 px-3 rounded-md bg-white/15 hover:bg-white/25 active:bg-white/30 text-white border border-white/25 shadow-sm text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen'}
-            aria-label={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="size-4 text-cyan-300 shrink-0" />
-            ) : (
-              <Maximize2 className="size-4 text-cyan-300 shrink-0" />
-            )}
-            <span className="text-white text-xs font-semibold whitespace-nowrap">
-              {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] bg-white/10 text-white/90 px-2.5 py-1 rounded-md border border-white/20 font-medium tracking-wide select-none hidden sm:flex items-center gap-1.5">
+              <Lock className="size-3 text-cyan-300" /> Studio Player
             </span>
-          </button>
+
+            {/* In-App Clean Prominent Full Screen Button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="h-8 px-3 rounded-md bg-white/15 hover:bg-white/25 active:bg-white/30 text-white border border-white/25 shadow-sm text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen'}
+              aria-label={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="size-4 text-cyan-300 shrink-0" />
+              ) : (
+                <Maximize2 className="size-4 text-cyan-300 shrink-0" />
+              )}
+              <span className="text-white text-xs font-semibold whitespace-nowrap">
+                {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* 3. Bottom-Left Security Shield: Blocks YouTube video watermark, end-card link & copy link icons */}
-      <div
-        className="absolute bottom-0 left-0 z-30 pointer-events-auto flex items-center gap-1.5 bg-black px-4 py-2.5 rounded-tr-xl border-t border-r border-white/15 shadow-2xl min-w-[140px] h-12 select-none cursor-default"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        title="Protected Stream"
-      >
-        <Lock className="size-3.5 text-cyan-400 shrink-0" />
-        <span className="text-xs text-white/90 font-medium tracking-wide">Protected</span>
-      </div>
+        {/* 3. Bottom-Left Security Shield: Blocks YouTube video watermark, end-card link & copy link icons */}
+        <div
+          className="absolute bottom-0 left-0 z-30 pointer-events-auto flex items-center gap-1.5 bg-black px-4 py-2.5 rounded-tr-xl border-t border-r border-white/15 shadow-2xl min-w-[140px] h-12 select-none cursor-default"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+          title="Protected Stream"
+        >
+          <Lock className="size-3.5 text-cyan-400 shrink-0" />
+          <span className="text-xs text-white/90 font-medium tracking-wide">Protected</span>
+        </div>
 
-      {/* 4. Bottom-Right Expanded Shield: Completely covers YouTube Logo & 'Watch on YouTube' button */}
-      <div
-        className="absolute bottom-0 right-0 z-30 pointer-events-auto flex items-center justify-center gap-2 bg-black px-5 py-2.5 rounded-tl-xl border-t border-l border-white/15 shadow-2xl min-w-[210px] h-12 select-none cursor-default"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        title="Protected Studio Stream"
-      >
-        <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
-        <span className="text-xs text-white font-semibold tracking-wide">Studio Stream</span>
+        {/* 4. Bottom-Right Expanded Shield: Completely covers YouTube Logo & 'Watch on YouTube' button */}
+        <div
+          className="absolute bottom-0 right-0 z-30 pointer-events-auto flex items-center justify-center gap-2 bg-black px-5 py-2.5 rounded-tl-xl border-t border-l border-white/15 shadow-2xl min-w-[210px] h-12 select-none cursor-default"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+          title="Protected Studio Stream"
+        >
+          <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+          <span className="text-xs text-white font-semibold tracking-wide">Studio Stream</span>
+        </div>
       </div>
     </div>
   );
