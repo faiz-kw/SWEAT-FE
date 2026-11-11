@@ -213,8 +213,8 @@ export function TelephonyManager() {
         return null;
       }
     },
-    // Step 6: Back off polling to 30s while SSE is active, immediately restore 2.5s fallback when SSE drops
-    refetchInterval: isSseActive ? 30000 : 2500,
+    // Step 6: Back off polling to 30s while SSE is active, use sane 15s fallback when SSE drops
+    refetchInterval: isSseActive ? 30000 : 15000,
     enabled: Boolean(isAuthenticated && user),
   });
 

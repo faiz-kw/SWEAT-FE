@@ -247,13 +247,17 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     setIsSupported(Boolean(typeof window !== "undefined" && window.RTCPeerConnection));
   }, []);
 
-  // Automated background presence heartbeat (every 45s) to guarantee rep stays AVAILABLE for inbound calls
+  const watchdogRetriesRef = React.useRef<number>(0);
+  const isWatchdogRetryRef = React.useRef<boolean>(false);
+  const [watchdogAttempt, setWatchdogAttempt] = React.useState<number>(0);
+
+  // Automated background presence heartbeat (every 45s) ONLY when agent holds a registered WebPhone line
   React.useEffect(() => {
     if (!isAuthenticated || !user) return;
-    const canUsePhone = canAccessTelephony(user);
-    if (!canUsePhone) return;
+    if (!canAccessTelephony(user)) return;
+    if (connectionStatus !== "REGISTERED") return;
 
-    // Send initial presence heartbeat immediately on mount
+    // Send initial presence heartbeat once SIP registration succeeds
     void crmApi.updateAgentPresence("AVAILABLE").catch(() => {});
 
     const heartbeatTimer = setInterval(() => {
@@ -264,7 +268,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     }, 45000);
 
     return () => clearInterval(heartbeatTimer);
-  }, [isAuthenticated, user, callState]);
+  }, [isAuthenticated, user, callState, connectionStatus]);
 
   // Initialize hidden audio element for remote audio stream
   React.useEffect(() => {
@@ -624,7 +628,19 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         } catch (_) {}
       }
 
+      if (!isWatchdogRetryRef.current) {
+        watchdogRetriesRef.current = 0;
+        setWatchdogAttempt(0);
+      }
+      isWatchdogRetryRef.current = false;
+
       const creds = await crmApi.getWebRTCCredentials();
+
+      if (!creds?.username || creds.is_registered_endpoint === false || creds.available === false) {
+        setAgentCredentials(null);
+        setConnectionStatus("DISCONNECTED");
+        return;
+      }
 
       setAgentCredentials({
         username: creds.username,
@@ -753,17 +769,50 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     };
   }, [setupPhone]);
 
-  // Auto-recovery watchdog: If connectionStatus is stuck in CONNECTING for > 7s, auto-retry connection
+  // Reset circuit breaker whenever SIP registration succeeds
+  React.useEffect(() => {
+    if (connectionStatus === "REGISTERED") {
+      watchdogRetriesRef.current = 0;
+      setWatchdogAttempt(0);
+    }
+  }, [connectionStatus]);
+
+  // Auto-recovery circuit breaker: max 3 retries with exponential backoff (5s, 15s, 45s) while stuck in CONNECTING
   React.useEffect(() => {
     if (connectionStatus !== "CONNECTING") return;
 
+    const BACKOFF_SCHEDULE_MS = [5000, 15000, 45000];
+    const attemptIndex = watchdogRetriesRef.current;
+
+    if (attemptIndex >= BACKOFF_SCHEDULE_MS.length) {
+      const finalTimeout = setTimeout(() => {
+        if (uaRef.current) {
+          try {
+            uaRef.current.stop();
+          } catch {
+            // Ignore cleanup errors
+          }
+          uaRef.current = null;
+        }
+        console.warn("[WebPhone] Connection circuit breaker tripped after 3 failed retries; auto-retry paused until manual reconnect.");
+        setConnectionStatus("ERROR");
+      }, 15000);
+      return () => clearTimeout(finalTimeout);
+    }
+
+    const backoffMs = BACKOFF_SCHEDULE_MS[attemptIndex];
     const timeout = setTimeout(() => {
-      console.warn("[WebPhone] Connection watchdog: Still CONNECTING after 7s, triggering auto-reconnect...");
+      watchdogRetriesRef.current = attemptIndex + 1;
+      isWatchdogRetryRef.current = true;
+      setWatchdogAttempt((n) => n + 1);
+      console.warn(
+        `[WebPhone] Connection watchdog: Still CONNECTING, triggering auto-retry ${attemptIndex + 1}/3 after ${backoffMs}ms...`
+      );
       void setupPhone();
-    }, 7000);
+    }, backoffMs);
 
     return () => clearTimeout(timeout);
-  }, [connectionStatus, setupPhone]);
+  }, [connectionStatus, watchdogAttempt, setupPhone]);
 
   // Answer call
   const answerCall = React.useCallback(

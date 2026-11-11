@@ -1304,12 +1304,14 @@ export const crmApi = {
     sip_username: string;
     last_heartbeat: string;
     active_session_id?: string | null;
+    is_registered_endpoint?: boolean;
   }> => {
     const res = await api.get<{
       status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
       sip_username: string;
       last_heartbeat: string;
       active_session_id?: string | null;
+      is_registered_endpoint?: boolean;
     }>('/tenant/crm/telephony/presence/');
     return res.data;
   },
@@ -1318,17 +1320,20 @@ export const crmApi = {
     status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
     sip_username: string;
     last_heartbeat: string;
+    is_registered_endpoint?: boolean;
   }> => {
     const res = await api.put<{
       status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
       sip_username: string;
       last_heartbeat: string;
+      is_registered_endpoint?: boolean;
     }>('/tenant/crm/telephony/presence/', { status: presenceStatus });
     return res.data;
   },
 
   getWebRTCCredentials: async (): Promise<{
     username: string;
+    sip_username?: string;
     password?: string;
     sip_password?: string;
     sip_domain: string;
@@ -1337,6 +1342,11 @@ export const crmApi = {
     caller_id: string;
     ring_timeout_sec: number;
     status: string;
+    line_status?: string;
+    is_registered_endpoint?: boolean;
+    available?: boolean;
+    can_make_calls?: boolean;
+    error?: string;
     display_name: string;
   }> => {
     const res = await api.get('/tenant/crm/telephony/webrtc-credentials/');
