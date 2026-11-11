@@ -2834,7 +2834,13 @@ export function LeadDetailModal({
                                       <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                                       <div className="space-y-0.5 min-w-0">
                                         <div className="font-semibold flex items-center gap-1.5">
-                                          <span>Call Not Connected ({evt.metadata?.disposition?.replace(/_/g, ' ') || evt.metadata?.status || 'No Answer'})</span>
+                                          <span>
+                                            Call Not Connected (
+                                            {String(evt.metadata?.disposition || '').toUpperCase() === 'TRIAL_BOOKED'
+                                              ? (evt.metadata?.status?.replace(/_/g, ' ') || 'No Answer')
+                                              : (evt.metadata?.disposition?.replace(/_/g, ' ') || evt.metadata?.status?.replace(/_/g, ' ') || 'No Answer')}
+                                            )
+                                          </span>
                                           <Badge variant="outline" className="text-[10px] h-4 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10">
                                             No Audio
                                           </Badge>
