@@ -654,9 +654,17 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         display_name: creds.display_name,
       });
 
-      const targetWss = creds.wss_url?.includes(':5063') ? creds.wss_url : (creds.wss_url?.replace(/:443$/, '') + ':5063');
+      const rawWss = (creds.wss_url || `wss://${creds.sip_domain || 'registrar.vobiz.ai'}:5063`).trim();
+      const targetWss = /:\d+$/.test(rawWss)
+        ? rawWss.replace(/:443$/, ':5063')
+        : `${rawWss}:5063`;
       const socket = new JsSIP.WebSocketInterface(targetWss);
-      const endpointPassword = creds.password || creds.sip_password || 'Sweat@2026!';
+      const endpointPassword = creds.password || creds.sip_password || '';
+      if (!endpointPassword) {
+        console.warn("[WebPhone] Missing SIP endpoint password in credentials; skipping registration.");
+        setConnectionStatus("DISCONNECTED");
+        return;
+      }
       const cleanDomain = creds.sip_domain || 'registrar.vobiz.ai';
       const cleanUri = `${creds.username}@${cleanDomain}`;
 
@@ -1033,16 +1041,26 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       let cleanNumber = targetPhone.trim().replace(/[\s-]/g, "");
       if (!cleanNumber.startsWith("sip:")) {
         const rawDigits = cleanNumber.replace(/\D/g, "");
-        if (rawDigits.length !== 10 && (rawDigits.length !== 12 || !rawDigits.startsWith("91"))) {
-          toast.error("Invalid Number", {
-            description: "Please enter a valid 10-digit mobile number.",
-          });
-          return false;
-        }
-        if (rawDigits.length === 10) {
-          cleanNumber = `+91${rawDigits}`;
-        } else if (rawDigits.length === 12 && rawDigits.startsWith("91")) {
+        if (cleanNumber.startsWith("+")) {
+          if (rawDigits.length < 7 || rawDigits.length > 15) {
+            toast.error("Invalid Number", {
+              description: "Please enter a valid international phone number.",
+            });
+            return false;
+          }
           cleanNumber = `+${rawDigits}`;
+        } else {
+          if (rawDigits.length !== 10 && (rawDigits.length !== 12 || !rawDigits.startsWith("91"))) {
+            toast.error("Invalid Number", {
+              description: "Please enter a valid 10-digit mobile number or +country-code number.",
+            });
+            return false;
+          }
+          if (rawDigits.length === 10) {
+            cleanNumber = `+91${rawDigits}`;
+          } else if (rawDigits.length === 12 && rawDigits.startsWith("91")) {
+            cleanNumber = `+${rawDigits}`;
+          }
         }
       }
       const sipTarget = cleanNumber.startsWith("sip:")

@@ -78,6 +78,7 @@ export function BookTrialModal({
   });
   const [selectedSlot, setSelectedSlot] = React.useState<TrialSlot | null>(null);
   const [notes, setNotes] = React.useState('');
+  const [confirmUpfront, setConfirmUpfront] = React.useState(false);
 
   // Sync state when initialLead or existingTrial changes
   React.useEffect(() => {
@@ -244,6 +245,7 @@ export function BookTrialModal({
       onOpenChange(false);
       setSelectedSlot(null);
       setNotes('');
+      setConfirmUpfront(false);
       if (onSuccess) onSuccess();
     },
     onError: (err: any) => {
@@ -271,6 +273,7 @@ export function BookTrialModal({
       onOpenChange(false);
       setSelectedSlot(null);
       setNotes('');
+      setConfirmUpfront(false);
       if (onSuccess) onSuccess();
     },
     onError: (err: any) => {
@@ -316,6 +319,7 @@ export function BookTrialModal({
         class_occurrence_id: selectedSlot.occurrence_id,
         branch_id: selectedBranchId,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        ...(confirmUpfront ? { confirm_upfront: true } : {}),
       });
     }
   };
@@ -737,6 +741,21 @@ export function BookTrialModal({
                 }
                 className="h-9 text-xs"
               />
+            </div>
+          )}
+
+          {!isConverted && !isReschedule && (
+            <div className="flex items-center space-x-2 pt-1 pb-1">
+              <input
+                type="checkbox"
+                id="confirm-upfront"
+                checked={confirmUpfront}
+                onChange={(e) => setConfirmUpfront(e.target.checked)}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+              />
+              <Label htmlFor="confirm-upfront" className="text-xs font-medium cursor-pointer select-none text-foreground">
+                Mark as Confirmed upfront (prospect verbally confirmed attendance)
+              </Label>
             </div>
           )}
 

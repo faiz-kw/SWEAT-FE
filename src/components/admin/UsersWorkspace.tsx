@@ -268,7 +268,7 @@ export function UsersWorkspace() {
   const [editDepartmentId, setEditDepartmentId] = React.useState("");
   const [editReportsToId, setEditReportsToId] = React.useState("");
   const [editBranchAccess, setEditBranchAccess] = React.useState<Record<string, boolean>>({});
-  const [editStatus, setEditStatus] = React.useState<"Active" | "Inactive" | "Invited" | "Suspended">("Active");
+  const [editStatus, setEditStatus] = React.useState<"Active" | "Deactivated" | "Invited" | "Suspended">("Active");
   const [editSubmitting, setEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
 
@@ -609,7 +609,7 @@ export function UsersWorkspace() {
       "";
     setEditPrimaryBranchId(primaryId);
     const status = String(user.status || (user.is_active ? "ACTIVE" : "INACTIVE")).toUpperCase();
-    setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Inactive");
+    setEditStatus(status === "ACTIVE" ? "Active" : status === "INVITED" ? "Invited" : status === "SUSPENDED" ? "Suspended" : "Deactivated");
     
     // Pre-populate user's current department if found
     const userDeptVal = (user as any)["department"];
@@ -827,6 +827,8 @@ export function UsersWorkspace() {
     users.filter(
       (u) =>
         (!u.is_active && u.status !== "Invited" && u.status !== "INVITED") ||
+        u.status === "Deactivated" ||
+        u.status === "DEACTIVATED" ||
         u.status === "Inactive" ||
         u.status === "INACTIVE"
     ).length;
@@ -943,9 +945,9 @@ export function UsersWorkspace() {
               variant="positive"
             />
             <KpiTile
-              title="Inactive / Disabled"
+              title="Deactivated Accounts"
               value={loading && users.length === 0 ? "..." : inactiveCount}
-              change="Deactivated Accounts"
+              change="Revoked Credentials"
               variant={inactiveCount > 0 ? "warning" : "neutral"}
             />
             <KpiTile
@@ -1146,7 +1148,6 @@ export function UsersWorkspace() {
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
                 <SelectItem value="Invited">Invited</SelectItem>
                 <SelectItem value="Deactivated">Deactivated</SelectItem>
               </SelectContent>
@@ -1477,7 +1478,7 @@ export function UsersWorkspace() {
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                                <XCircle className="size-3" /> Inactive
+                                <XCircle className="size-3" /> Deactivated
                               </span>
                             )}
                           </td>
@@ -1590,7 +1591,7 @@ export function UsersWorkspace() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                            <XCircle className="size-2.5" /> Inactive
+                            <XCircle className="size-2.5" /> Deactivated
                           </span>
                         )}
                       </div>
@@ -2546,7 +2547,7 @@ export function UsersWorkspace() {
                 <Label className="text-xs font-semibold">Account Status</Label>
                 <Select
                   value={editStatus}
-                  onValueChange={(v: "Active" | "Inactive" | "Invited" | "Suspended") =>
+                  onValueChange={(v: "Active" | "Deactivated" | "Invited" | "Suspended") =>
                     setEditStatus(v)
                   }
                 >
@@ -2555,7 +2556,7 @@ export function UsersWorkspace() {
                   </SelectTrigger>
                   <SelectContent className="text-xs">
                     <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Deactivated">Deactivated</SelectItem>
                     <SelectItem value="Suspended">Suspended</SelectItem>
                   </SelectContent>
                 </Select>

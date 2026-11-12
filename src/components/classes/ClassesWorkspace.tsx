@@ -530,6 +530,11 @@ export const ClassesWorkspace: React.FC = () => {
   const [ruleDayOfWeek, setRuleDayOfWeek] = useState<string>('ALL');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+  const [sessionStartTime, setSessionStartTime] = useState<string>('');
+  const [sessionEndTime, setSessionEndTime] = useState<string>('');
+  const isTimeRangeInvalid = Boolean(
+    sessionStartTime && sessionEndTime && sessionEndTime <= sessionStartTime
+  );
 
   const CATEGORY_COLOR_PALETTES = [
     {
@@ -627,6 +632,8 @@ export const ClassesWorkspace: React.FC = () => {
     selectedCheckInFilter,
     selectedBranchFilter,
     selectedCategoryFilter,
+    sessionStartTime,
+    sessionEndTime,
     locationId,
     primaryTab,
   ]);
@@ -863,6 +870,8 @@ export const ClassesWorkspace: React.FC = () => {
       primaryTab === 'sessions' ? selectedStatusFilter : 'ALL',
       primaryTab === 'sessions' ? selectedCheckInFilter : 'ALL',
       primaryTab === 'sessions' ? debouncedSearch : '',
+      primaryTab === 'sessions' ? sessionStartTime : '',
+      primaryTab === 'sessions' ? sessionEndTime : '',
       sessionsPage,
       sessionsPageSize,
     ],
@@ -875,6 +884,8 @@ export const ClassesWorkspace: React.FC = () => {
       status: primaryTab === 'sessions' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
       check_in_status: primaryTab === 'sessions' && selectedCheckInFilter !== 'ALL' ? selectedCheckInFilter : undefined,
       search: primaryTab === 'sessions' && debouncedSearch ? debouncedSearch : undefined,
+      start_time: primaryTab === 'sessions' && sessionStartTime ? sessionStartTime : undefined,
+      end_time: primaryTab === 'sessions' && sessionEndTime ? sessionEndTime : undefined,
       page: sessionsPage,
       page_size: sessionsPageSize,
     }),
@@ -2970,23 +2981,23 @@ export const ClassesWorkspace: React.FC = () => {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
               <div className="flex flex-wrap items-center gap-2 flex-1">
                 {/* Search */}
-                <div className="relative min-w-[200px] flex-1 max-w-xs">
+                <div className="relative w-full sm:w-auto sm:min-w-[220px] sm:max-w-xs flex-1">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
                     placeholder="Search class, type, branch, or trainer..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="h-8 pl-8 text-xs bg-background"
+                    className="h-8 pl-8 text-xs bg-background w-full"
                   />
                 </div>
 
                 {/* Date Filter Tabs */}
-                <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs overflow-x-auto no-scrollbar max-w-full shrink-0">
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('today')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
                       dateFilterMode === 'today'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -2997,7 +3008,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('week')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
                       dateFilterMode === 'week'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -3008,7 +3019,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('custom')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
                       dateFilterMode === 'custom'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -3019,7 +3030,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('range')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
                       dateFilterMode === 'range'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -3030,7 +3041,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilterMode('all')}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
                       dateFilterMode === 'all'
                         ? 'bg-background text-foreground shadow-2xs font-semibold'
                         : 'text-muted-foreground hover:text-foreground'
@@ -3040,15 +3051,9 @@ export const ClassesWorkspace: React.FC = () => {
                   </button>
                 </div>
 
-                {dateFilterMode === 'today' && (
-                  <span className="text-[11px] text-muted-foreground hidden lg:inline-flex items-center gap-1 bg-muted/60 px-2.5 py-1 rounded-md border border-border/50">
-                    Showing today's schedule ({todayLabel}). Click <strong>All Dates</strong> to view all occurrences.
-                  </span>
-                )}
-
                 {/* Custom Date Input */}
                 {dateFilterMode === 'custom' && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
                     <Input
                       type="date"
@@ -3061,7 +3066,7 @@ export const ClassesWorkspace: React.FC = () => {
 
                 {/* Date Range Inputs */}
                 {dateFilterMode === 'range' && (
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <Input
                       type="date"
                       value={sessionFromDate}
@@ -3084,7 +3089,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedCategoryFilter}
                   onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
                   title="Filter by class type (Pilates / Bootcamp)"
                 >
                   <option value="ALL">All Class Types</option>
@@ -3097,7 +3102,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
                 >
                   <option value="">All Branches</option>
                   {branches.map((b) => (
@@ -3109,7 +3114,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedCheckInFilter}
                   onChange={(e) => setSelectedCheckInFilter(e.target.value as any)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
                 >
                   <option value="ALL">All Trainer Check-ins</option>
                   <option value="CHECKED_IN">Checked In</option>
@@ -3120,7 +3125,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <select
                   value={selectedStatusFilter}
                   onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
                 >
                   <option value="ALL">All Statuses</option>
                   {(metadata?.occurrence_statuses || [
@@ -3135,10 +3140,102 @@ export const ClassesWorkspace: React.FC = () => {
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
+
+                {/* Time Range Filter */}
+                <div
+                  className={`inline-flex items-center gap-1.5 bg-background border rounded-lg px-2.5 h-8 transition-colors shrink-0 ${
+                    isTimeRangeInvalid
+                      ? 'border-destructive/60 bg-destructive/5 text-destructive ring-1 ring-destructive/40'
+                      : (sessionStartTime || sessionEndTime)
+                      ? 'border-primary/50 ring-1 ring-primary/20 bg-primary/[0.02]'
+                      : 'border-border hover:border-border/80'
+                  }`}
+                  title={
+                    isTimeRangeInvalid
+                      ? 'End time must be after start time'
+                      : 'Filter classes by scheduled time window'
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('session-start-time-input') as HTMLInputElement | null;
+                      try { el?.showPicker?.(); } catch { el?.focus(); }
+                    }}
+                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors"
+                    title="Click to select start time"
+                  >
+                    <Clock
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        isTimeRangeInvalid
+                          ? 'text-destructive'
+                          : (sessionStartTime || sessionEndTime)
+                          ? 'text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    />
+                    <span className="text-[11px] font-medium hidden sm:inline text-muted-foreground">Time</span>
+                  </button>
+
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-[11px] text-muted-foreground font-medium select-none">From</span>
+                    <input
+                      id="session-start-time-input"
+                      type="time"
+                      value={sessionStartTime}
+                      onChange={(e) => setSessionStartTime(e.target.value)}
+                      onClick={(e) => {
+                        try {
+                          (e.currentTarget as HTMLInputElement).showPicker?.();
+                        } catch {}
+                      }}
+                      className="h-6 w-[100px] sm:w-[106px] text-[11px] sm:text-xs bg-transparent border-0 p-0 text-foreground font-medium focus:outline-none focus:ring-0 cursor-pointer"
+                      title="Filter Start Time (e.g. 06:00 AM)"
+                      aria-label="Filter Start Time"
+                    />
+                    <span className="text-[11px] text-muted-foreground font-medium select-none px-0.5">To</span>
+                    <input
+                      id="session-end-time-input"
+                      type="time"
+                      value={sessionEndTime}
+                      onChange={(e) => setSessionEndTime(e.target.value)}
+                      onClick={(e) => {
+                        try {
+                          (e.currentTarget as HTMLInputElement).showPicker?.();
+                        } catch {}
+                      }}
+                      className="h-6 w-[100px] sm:w-[106px] text-[11px] sm:text-xs bg-transparent border-0 p-0 text-foreground font-medium focus:outline-none focus:ring-0 cursor-pointer"
+                      title="Filter End Time (e.g. 10:00 AM)"
+                      aria-label="Filter End Time"
+                    />
+                  </div>
+
+                  {(sessionStartTime || sessionEndTime) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSessionStartTime('');
+                        setSessionEndTime('');
+                      }}
+                      className="text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
+                      title="Clear time filter"
+                      aria-label="Clear time filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {isTimeRangeInvalid && (
+                  <span className="text-[11px] text-destructive font-medium flex items-center gap-1 shrink-0 animate-in fade-in duration-150">
+                    End time must be after start time
+                  </span>
+                )}
               </div>
 
               {/* View Mode Toggle Only */}
-              <div className="flex items-center gap-2 self-end lg:self-center">
+              <div className="flex items-center gap-2 self-start sm:self-auto sm:ml-auto lg:self-center shrink-0">
                 <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
                   <Button
                     type="button"

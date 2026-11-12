@@ -83,6 +83,8 @@ export const classesApi = {
     to_date?: string | undefined;
     day_of_week?: string | number | undefined;
     search?: string | undefined;
+    start_time?: string | undefined;
+    end_time?: string | undefined;
     page?: number | undefined;
     page_size?: number | undefined;
   }): Promise<{
@@ -141,6 +143,8 @@ export const classesApi = {
     trainer_id?: string | undefined;
     from_date?: string | undefined;
     to_date?: string | undefined;
+    start_time?: string | undefined;
+    end_time?: string | undefined;
     membership_id?: string | undefined;
     user_profile_id?: string | undefined;
     search?: string | undefined;
@@ -162,6 +166,8 @@ export const classesApi = {
     trainer_id?: string | undefined;
     from_date?: string | undefined;
     to_date?: string | undefined;
+    start_time?: string | undefined;
+    end_time?: string | undefined;
     membership_id?: string | undefined;
     user_profile_id?: string | undefined;
     search?: string | undefined;

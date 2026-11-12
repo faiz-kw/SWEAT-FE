@@ -399,7 +399,7 @@ export function TrialManagementWorkspace() {
 
   // Helpers for badges
   const getStatusBadge = (status: string, isRescheduled?: boolean, isActiveTrial?: boolean) => {
-    if (status === 'CANCELLED' && (isRescheduled || isActiveTrial === false)) {
+    if (status === 'CANCELLED' && isRescheduled) {
       return <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground bg-muted/20">Cancelled / Replaced</Badge>;
     }
     switch (status) {

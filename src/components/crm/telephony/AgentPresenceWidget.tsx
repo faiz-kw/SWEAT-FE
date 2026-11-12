@@ -21,9 +21,12 @@ import {
 import { crmApi } from "@/api/endpoints/crmApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useWebRTCPhone } from "./WebRTCPhoneContext";
 
 export function AgentPresenceWidget() {
   const queryClient = useQueryClient();
+  const { agentCredentials } = useWebRTCPhone();
+  const sipDomain = agentCredentials?.sip_domain || "registrar.vobiz.ai";
 
   const { data: presence } = useQuery({
     queryKey: ['telephony-presence'],
@@ -120,7 +123,7 @@ export function AgentPresenceWidget() {
           Vobiz WebPhone Status
           {isRegisteredEndpoint && presence?.sip_username ? (
             <div className="font-mono text-[10px] text-foreground font-normal truncate mt-0.5">
-              sip:{presence.sip_username}@registrar.vobiz.ai
+              sip:{presence.sip_username}@{sipDomain}
             </div>
           ) : (
             <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">

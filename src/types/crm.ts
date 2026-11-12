@@ -726,6 +726,7 @@ export interface BookTrialPayload {
   class_occurrence_id: string;
   branch_id?: string;
   notes?: string;
+  confirm_upfront?: boolean;
 }
 
 export interface RescheduleTrialPayload {

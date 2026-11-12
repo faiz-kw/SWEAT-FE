@@ -35,6 +35,8 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
   const [fromNumber, setFromNumber] = React.useState("");
   const [authId, setAuthId] = React.useState("");
   const [authToken, setAuthToken] = React.useState("");
+  const [applicationId, setApplicationId] = React.useState("");
+  const [endpointPassword, setEndpointPassword] = React.useState("");
   const [registrarHost, setRegistrarHost] = React.useState("");
   const [webrtcUrl, setWebrtcUrl] = React.useState("");
   const [ringTimeout, setRingTimeout] = React.useState<number>(20);
@@ -46,8 +48,10 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
       setFromNumber(config.from_number || "");
       setAuthId(config.auth_id || "");
       setAuthToken(""); // Never prefill real secret
+      setApplicationId((config as any).application_id || "");
+      setEndpointPassword(""); // Never prefill real secret
       setRegistrarHost(config.registrar_host || "registrar.vobiz.ai");
-      setWebrtcUrl(config.webrtc_gateway_url || "wss://registrar.vobiz.ai");
+      setWebrtcUrl(config.webrtc_gateway_url || "wss://registrar.vobiz.ai:5063");
       setRingTimeout(config.ring_timeout_sec || 20);
       setRecordAll(config.record_all_calls !== false);
     }
@@ -76,6 +80,7 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
     const payload: Record<string, any> = {
       from_number: fromNumber.trim(),
       auth_id: authId.trim(),
+      application_id: applicationId.trim(),
       registrar_host: registrarHost.trim(),
       webrtc_gateway_url: webrtcUrl.trim(),
       ring_timeout_sec: Number(ringTimeout) || 20,
@@ -83,6 +88,9 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
     };
     if (authToken.trim()) {
       payload.auth_token = authToken.trim();
+    }
+    if (endpointPassword.trim()) {
+      payload.endpoint_password = endpointPassword.trim();
     }
     updateMutation.mutate(payload);
   };
@@ -123,7 +131,7 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
                 <Input
                   value={fromNumber}
                   onChange={(e) => setFromNumber(e.target.value)}
-                  placeholder="+919240954144"
+                  placeholder="+91XXXXXXXXXX"
                   className="h-8 text-xs font-mono"
                   required
                 />
@@ -143,33 +151,65 @@ export function TelephonySettingsModal({ open, onOpenChange }: TelephonySettings
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Vobiz Auth ID</Label>
-              <Input
-                value={authId}
-                onChange={(e) => setAuthId(e.target.value)}
-                placeholder="MA_WQX7YN42"
-                className="h-8 text-xs font-mono"
-                required
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Vobiz Auth ID</Label>
+                <Input
+                  value={authId}
+                  onChange={(e) => setAuthId(e.target.value)}
+                  placeholder="Enter Vobiz Auth ID"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Voice Application ID (Optional)</Label>
+                <Input
+                  value={applicationId}
+                  onChange={(e) => setApplicationId(e.target.value)}
+                  placeholder="Auto-detected if blank"
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Vobiz Auth Token</Label>
-                {config?.auth_token_masked && (
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    Current: {config.auth_token_masked}
-                  </span>
-                )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Vobiz Auth Token</Label>
+                  {config?.auth_token_masked && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      Current: {config.auth_token_masked}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="password"
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder="Leave blank to keep existing"
+                  className="h-8 text-xs font-mono"
+                />
               </div>
-              <Input
-                type="password"
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-                placeholder="Leave blank to keep existing token"
-                className="h-8 text-xs font-mono"
-              />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">SIP Endpoint Password</Label>
+                  {(config as any)?.endpoint_password_masked && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      Current: {(config as any).endpoint_password_masked}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="password"
+                  value={endpointPassword}
+                  onChange={(e) => setEndpointPassword(e.target.value)}
+                  placeholder="Auto-generated if blank"
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

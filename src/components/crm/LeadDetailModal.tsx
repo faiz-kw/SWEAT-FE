@@ -3707,7 +3707,7 @@ export function LeadDetailModal({
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant="outline" className="text-[10px]">
-                                  {histTrial.status === 'CANCELLED' ? 'CANCELLED / REPLACED' : histTrial.status}
+                                  {histTrial.status === 'CANCELLED' ? (histTrial.is_rescheduled ? 'CANCELLED / REPLACED' : 'CANCELLED') : histTrial.status}
                                 </Badge>
                               </div>
                             </div>

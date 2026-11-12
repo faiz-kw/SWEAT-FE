@@ -44,7 +44,7 @@ function playHarmonicChime() {
 export function TelephonyManager() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
-  const { callState, lastEndedCall, clearLastEndedCall, activeCall } = useWebRTCPhone();
+  const { callState, lastEndedCall, clearLastEndedCall, activeCall, agentCredentials } = useWebRTCPhone();
 
   // SSE Connection & polling fallback state
   const [isSseActive, setIsSseActive] = React.useState<boolean>(false);
@@ -84,7 +84,9 @@ export function TelephonyManager() {
 
       const activePopup = lastActiveCallPopupRef.current;
       const sessId = activePopup?.session_id || lastEndedCall.sessionId || `webrtc-${Date.now()}`;
-      const realPhone = activePopup?.caller_phone || (lastEndedCall.remoteIdentity && !lastEndedCall.remoteIdentity.includes('9240954144') ? lastEndedCall.remoteIdentity : (activePopup?.caller_phone || lastEndedCall.remoteIdentity));
+      const callerDidDigits = (agentCredentials?.caller_id || "").replace(/\D/g, "").slice(-10);
+      const isRemoteOurDid = Boolean(callerDidDigits && lastEndedCall.remoteIdentity?.includes(callerDidDigits));
+      const realPhone = activePopup?.caller_phone || (lastEndedCall.remoteIdentity && !isRemoteOurDid ? lastEndedCall.remoteIdentity : (activePopup?.caller_phone || lastEndedCall.remoteIdentity));
 
       // Ignore if this session or phone number was already disposed
       if (
