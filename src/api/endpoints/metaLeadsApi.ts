@@ -279,8 +279,12 @@ export const metaLeadsApi = {
     : (await api.post<MetaMapping>('/tenant/meta-lead-mappings/', payload)).data,
   toggleActive: async (id: string, is_active: boolean, expected_version: number) =>
     (await api.patch<MetaMapping>(`/tenant/meta-lead-mappings/${id}/`, { is_active, expected_version })).data,
-  auditHistory: async (id: string) =>
-    (await api.get<{ results: MetaAuditHistoryItem[] }>(`/tenant/meta-lead-mappings/${id}/audit-history/`)).data,
+  auditHistory: async (id: string): Promise<MetaAuditHistoryItem[]> => {
+    const res = await api.get<{ results: MetaAuditHistoryItem[] } | MetaAuditHistoryItem[]>(
+      `/tenant/meta-lead-mappings/${id}/audit-history/`
+    );
+    return Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+  },
   imports: async (page = 1, status?: string, page_size?: number) =>
     (
       await api.get<Page<MetaImport>>('/tenant/meta-lead-imports/', {

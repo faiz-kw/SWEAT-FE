@@ -2979,10 +2979,10 @@ function MappingHistoryModal({
             <p className="text-muted-foreground p-4 text-center">Loading change history...</p>
           ) : query.isError ? (
             <p className="text-destructive p-4 text-center">{formatError(query.error)}</p>
-          ) : query.data && query.data.length === 0 ? (
+          ) : !query.data || query.data.length === 0 ? (
             <p className="text-muted-foreground p-4 text-center">No audit history entries found.</p>
           ) : (
-            query.data?.map((entry: MetaAuditHistoryItem) => (
+            query.data.map((entry: MetaAuditHistoryItem) => (
               <div key={entry.id} className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <Badge variant="outline" className="text-[10px] font-semibold">
