@@ -40,6 +40,7 @@ export interface EndedCallInfo {
 interface WebRTCPhoneContextValue {
   connectionStatus: WebPhoneConnectionStatus;
   isRegistered: boolean;
+  isUnassignedLine: boolean;
   callState: WebPhoneCallState;
   activeCall: ActiveCallInfo | null;
   lastEndedCall: EndedCallInfo | null;
@@ -139,6 +140,7 @@ function cleanVobizSdp(sdp: string, isOffer: boolean): string {
 export const DEFAULT_PHONE_CONTEXT: WebRTCPhoneContextValue = {
   connectionStatus: "DISCONNECTED",
   isRegistered: false,
+  isUnassignedLine: false,
   callState: "IDLE",
   activeCall: null,
   lastEndedCall: null,
@@ -222,6 +224,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   const { isAuthenticated, user } = useAuth();
 
   const [connectionStatus, setConnectionStatus] = React.useState<WebPhoneConnectionStatus>("DISCONNECTED");
+  const [isUnassignedLine, setIsUnassignedLine] = React.useState<boolean>(false);
   const [callState, setCallState] = React.useState<WebPhoneCallState>("IDLE");
   const [activeCall, setActiveCall] = React.useState<ActiveCallInfo | null>(null);
   const [lastEndedCall, setLastEndedCall] = React.useState<EndedCallInfo | null>(null);
@@ -637,11 +640,13 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       const creds = await crmApi.getWebRTCCredentials();
 
       if (!creds?.username || creds.is_registered_endpoint === false || creds.available === false) {
+        setIsUnassignedLine(true);
         setAgentCredentials(null);
         setConnectionStatus("DISCONNECTED");
         return;
       }
 
+      setIsUnassignedLine(false);
       setAgentCredentials({
         username: creds.username,
         sip_domain: creds.sip_domain,
@@ -1105,6 +1110,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     () => ({
       connectionStatus,
       isRegistered: connectionStatus === "REGISTERED",
+      isUnassignedLine,
       callState,
       activeCall,
       lastEndedCall,
@@ -1121,6 +1127,7 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     }),
     [
       connectionStatus,
+      isUnassignedLine,
       callState,
       activeCall,
       lastEndedCall,

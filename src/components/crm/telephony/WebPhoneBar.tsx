@@ -32,6 +32,7 @@ const DIALPAD_KEYS = [
 export function WebPhoneBar() {
   const {
     connectionStatus,
+    isUnassignedLine,
     callState,
     activeCall,
     agentCredentials,
@@ -200,12 +201,22 @@ export function WebPhoneBar() {
                   ? "border-amber-500/30 bg-amber-500/5 text-amber-600 hover:bg-amber-500/10"
                   : "border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
               )}
-              title={`WebPhone: ${connectionStatus}`}
+              title={
+                isUnassignedLine
+                  ? "WebPhone: No Vobiz SIP line assigned"
+                  : `WebPhone: ${connectionStatus}`
+              }
             >
               <span
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  isConnected ? "bg-emerald-500" : connectionStatus === "CONNECTING" ? "bg-amber-500 animate-pulse" : "bg-rose-500"
+                  isConnected
+                    ? "bg-emerald-500"
+                    : connectionStatus === "CONNECTING"
+                    ? "bg-amber-500 animate-pulse"
+                    : isUnassignedLine
+                    ? "bg-muted-foreground"
+                    : "bg-rose-500"
                 )}
               />
               <Phone className="size-3.5" />
@@ -230,10 +241,12 @@ export function WebPhoneBar() {
                       ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400"
                       : connectionStatus === "CONNECTING"
                       ? "text-amber-600 border-amber-500/30 bg-amber-500/10"
+                      : isUnassignedLine
+                      ? "text-muted-foreground border-border bg-muted/60"
                       : "text-rose-600 border-rose-500/30 bg-rose-500/10"
                   )}
                 >
-                  {isConnected ? "Ready" : connectionStatus}
+                  {isConnected ? "Ready" : isUnassignedLine ? "No Line" : connectionStatus}
                 </Badge>
                 <Button
                   type="button"
@@ -257,12 +270,18 @@ export function WebPhoneBar() {
                 "mb-3 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200",
                 connectionStatus === "CONNECTING"
                   ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300"
+                  : isUnassignedLine
+                  ? "bg-muted/60 border-border text-muted-foreground"
                   : "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300"
               )}>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <AlertCircle className="size-3.5 shrink-0" />
                   <span className="truncate font-semibold text-[11px]">
-                    {connectionStatus === "CONNECTING" ? "Connecting to carrier..." : "Gateway unlinked or offline"}
+                    {connectionStatus === "CONNECTING"
+                      ? "Connecting to carrier..."
+                      : isUnassignedLine
+                      ? "No Vobiz SIP line assigned to this account"
+                      : "Gateway unlinked or offline"}
                   </span>
                 </div>
                 <Button
@@ -274,7 +293,7 @@ export function WebPhoneBar() {
                   className="h-6 px-2 text-[11px] font-bold gap-1 rounded-md shrink-0 bg-background/90 hover:bg-background border-border/80 shadow-xs"
                 >
                   <RefreshCw className={cn("size-3", isReconnecting && "animate-spin")} />
-                  Retry
+                  {isUnassignedLine ? "Recheck" : "Retry"}
                 </Button>
               </div>
             )}

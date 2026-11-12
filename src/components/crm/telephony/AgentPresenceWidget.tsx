@@ -35,7 +35,11 @@ export function AgentPresenceWidget() {
     mutationFn: (newStatus: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE') =>
       crmApi.updateAgentPresence(newStatus),
     onSuccess: (updated) => {
-      toast.success(`Softphone status set to ${updated.status}`);
+      if (updated.is_registered_endpoint === false) {
+        toast.info("No Vobiz SIP line assigned — account remains Offline for inbound routing.");
+      } else {
+        toast.success(`Softphone status set to ${updated.status}`);
+      }
       queryClient.invalidateQueries({ queryKey: ['telephony-presence'] });
     },
     onError: (err: any) => {
@@ -43,7 +47,12 @@ export function AgentPresenceWidget() {
     },
   });
 
-  const status = presence?.status || 'AVAILABLE';
+  const isRegisteredEndpoint =
+    presence?.is_registered_endpoint !== false &&
+    !presence?.sip_username?.startsWith('unassigned_') &&
+    !presence?.sip_username?.startsWith('agent_');
+
+  const status = !isRegisteredEndpoint ? 'OFFLINE' : (presence?.status || 'AVAILABLE');
 
   const statusConfig = {
     AVAILABLE: {
@@ -109,16 +118,21 @@ export function AgentPresenceWidget() {
       <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl rounded-xl border-border bg-popover text-popover-foreground">
         <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground px-2 py-1">
           Vobiz WebPhone Status
-          {presence?.sip_username && (
+          {isRegisteredEndpoint && presence?.sip_username ? (
             <div className="font-mono text-[10px] text-foreground font-normal truncate mt-0.5">
               sip:{presence.sip_username}@registrar.vobiz.ai
+            </div>
+          ) : (
+            <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+              No dedicated Vobiz SIP line assigned
             </div>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
-          onClick={() => updateMutation.mutate('AVAILABLE')}
+          disabled={!isRegisteredEndpoint || updateMutation.isPending}
+          onClick={() => isRegisteredEndpoint && updateMutation.mutate('AVAILABLE')}
           className="flex items-center justify-between text-xs cursor-pointer py-2"
         >
           <div className="flex items-center gap-2">

@@ -1,4 +1,10 @@
 {
+  "python.analysis.extraPaths": [
+    "./backend"
+  ],
+  "python.autoComplete.extraPaths": [
+    "./backend"
+  ],
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {
