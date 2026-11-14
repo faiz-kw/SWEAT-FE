@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { cmsApi } from '@/api/endpoints/cmsApi';
 import { fetchTenantSettingsApi } from '@/api/endpoints/api-admin';
 import { discountsApi } from '@/api/endpoints/discountsApi';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -880,6 +881,8 @@ export const ExtendModal: React.FC<{
   const [paymentMode, setPaymentMode] = useState<'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE'>('PAY_AT_FACILITY');
   const [facilityAmount, setFacilityAmount] = useState('');
   const [transactionDetails, setTransactionDetails] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -999,13 +1002,28 @@ export const ExtendModal: React.FC<{
     },
   });
 
+  const resolveAttachmentUrl = async (): Promise<string | undefined> => {
+    if (!attachmentFile) return undefined;
+    setUploadingAttachment(true);
+    try {
+      const res = await cmsApi.uploadBannerMedia(attachmentFile);
+      return res?.url;
+    } catch {
+      toast.error('Failed to upload attachment.');
+      return undefined;
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const handleExecuteExtend = async () => {
     if (paymentMode === 'COMPLIMENTARY') {
       if (!reason.trim()) {
         toast.error('Reason is required for a complimentary extension.');
         return;
       }
-      mutation.mutate();
+      const attUrl = await resolveAttachmentUrl();
+      mutation.mutate((attUrl ? { attachment_url: attUrl } : undefined) as any);
       return;
     }
 
@@ -1015,12 +1033,14 @@ export const ExtendModal: React.FC<{
         toast.error('Amount is required for Paid at Facilities.');
         return;
       }
-      mutation.mutate();
+      const attUrl = await resolveAttachmentUrl();
+      mutation.mutate((attUrl ? { attachment_url: attUrl } : undefined) as any);
       return;
     }
 
     // ONLINE gateway
     if (effectiveFee > 0) {
+      const attUrl = await resolveAttachmentUrl();
       try {
         await openRazorpayCheckout({
           amount: effectiveFee,
@@ -1037,6 +1057,7 @@ export const ExtendModal: React.FC<{
             await mutation.mutateAsync({
               razorpay_payment_id: verifyData.razorpay_payment_id,
               razorpay_signature: verifyData.razorpay_signature,
+              ...(attUrl ? { attachment_url: attUrl } : {}),
             } as any);
           },
           onError: (err: any) => {
@@ -1271,6 +1292,18 @@ export const ExtendModal: React.FC<{
                   className="bg-background text-sm font-medium h-9"
                 />
               </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Attachment <span className="text-muted-foreground">(optional)</span></Label>
+                <Input
+                  type="file"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                  className="bg-background text-xs h-9"
+                />
+                {attachmentFile && (
+                  <span className="text-[10px] text-muted-foreground block truncate">{attachmentFile.name}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1281,10 +1314,10 @@ export const ExtendModal: React.FC<{
           </Button>
           <Button
             onClick={handleExecuteExtend}
-            disabled={mutation.isPending || !canExtend || !customDate}
+            disabled={mutation.isPending || uploadingAttachment || !canExtend || !customDate}
             className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
           >
-            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {(mutation.isPending || uploadingAttachment) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             {paymentMode === 'COMPLIMENTARY'
               ? 'Apply Complimentary Extension'
               : paymentMode === 'PAY_AT_FACILITY'

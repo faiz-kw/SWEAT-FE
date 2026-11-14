@@ -139,6 +139,7 @@ export const membersApi = {
       amount?: number | string;
       payment_method?: 'CASH' | 'CARD' | 'UPI';
       transaction_details?: string;
+      attachment_url?: string;
       membership_id?: string;
     },
   ): Promise<{ success: boolean; message: string; payment_mode?: string; payment?: any; member: Member }> {
