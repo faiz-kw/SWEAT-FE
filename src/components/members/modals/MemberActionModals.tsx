@@ -878,7 +878,7 @@ export const ExtendModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
-  const [paymentMode, setPaymentMode] = useState<'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE'>('PAY_AT_FACILITY');
+  const [paymentMode, setPaymentMode] = useState<'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE'>('ONLINE');
   const [facilityAmount, setFacilityAmount] = useState('');
   const [transactionDetails, setTransactionDetails] = useState('');
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
