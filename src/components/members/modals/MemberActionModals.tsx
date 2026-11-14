@@ -1012,7 +1012,7 @@ export const ExtendModal: React.FC<{
     if (paymentMode === 'PAY_AT_FACILITY') {
       const amt = Number(facilityAmount || effectiveFee);
       if (!amt || amt <= 0) {
-        toast.error('Amount is required when paying at facility.');
+        toast.error('Amount is required for Paid at Facilities.');
         return;
       }
       mutation.mutate();
@@ -1201,7 +1201,7 @@ export const ExtendModal: React.FC<{
                 <div className="grid grid-cols-3 gap-2">
                   {([
                     { v: 'COMPLIMENTARY', label: 'Complimentary', hint: 'Free' },
-                    { v: 'PAY_AT_FACILITY', label: 'Pay at Facility', hint: 'Cash / Card / UPI' },
+                    { v: 'PAY_AT_FACILITY', label: 'Paid at Facilities', hint: 'Cash / Card / UPI' },
                     { v: 'ONLINE', label: 'Online', hint: 'Gateway' },
                   ] as const).map((opt) => (
                     <button
