@@ -877,6 +877,9 @@ export const ExtendModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
+  const [paymentMode, setPaymentMode] = useState<'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE'>('PAY_AT_FACILITY');
+  const [facilityAmount, setFacilityAmount] = useState('');
+  const [transactionDetails, setTransactionDetails] = useState('');
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -971,10 +974,17 @@ export const ExtendModal: React.FC<{
   const mutation = useMutation({
     mutationFn: (extraPayload?: any) =>
       membersApi.extendMembership(selectedContract?.membership_id || member?.id, {
+        membership_id: selectedContract?.membership_id || member?.id,
         days: effectiveDays,
-        fee: effectiveFee,
-        payment_method: paymentMethod,
         reason: `${reason} (+${effectiveDays} days)`,
+        payment_mode: paymentMode,
+        ...(paymentMode === 'PAY_AT_FACILITY'
+          ? {
+              amount: Number(facilityAmount || effectiveFee),
+              payment_method: (paymentMethod === 'CARD' ? 'CARD' : paymentMethod === 'CASH' ? 'CASH' : 'UPI') as 'CASH' | 'CARD' | 'UPI',
+              transaction_details: transactionDetails || undefined,
+            }
+          : {}),
         ...(extraPayload || {}),
       } as any),
     onSuccess: (res) => {
@@ -990,7 +1000,27 @@ export const ExtendModal: React.FC<{
   });
 
   const handleExecuteExtend = async () => {
-    if (effectiveFee > 0 && paymentMethod === 'ONLINE') {
+    if (paymentMode === 'COMPLIMENTARY') {
+      if (!reason.trim()) {
+        toast.error('Reason is required for a complimentary extension.');
+        return;
+      }
+      mutation.mutate();
+      return;
+    }
+
+    if (paymentMode === 'PAY_AT_FACILITY') {
+      const amt = Number(facilityAmount || effectiveFee);
+      if (!amt || amt <= 0) {
+        toast.error('Amount is required when paying at facility.');
+        return;
+      }
+      mutation.mutate();
+      return;
+    }
+
+    // ONLINE gateway
+    if (effectiveFee > 0) {
       try {
         await openRazorpayCheckout({
           amount: effectiveFee,
@@ -1016,19 +1046,6 @@ export const ExtendModal: React.FC<{
       } catch (err: any) {
         toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
       }
-      return;
-    }
-
-    if (effectiveFee > 0 && paymentMethod === 'PAYMENT_LINK') {
-      const payUrl = `https://pay.sweatfitness.in/extend/${member?.id || 'pay'}?amount=${effectiveFee}&days=${effectiveDays}`;
-      setGeneratedLink({
-        paymentUrl: payUrl,
-        amount: effectiveFee,
-        orderNumber: `ORD-EXT-${Date.now().toString().slice(-6)}`,
-        memberName: member?.name,
-        memberPhone: member?.phone,
-        packageName: `Validity Extension (+${effectiveDays} Days - Valid till ${newExtendedExpiry})`,
-      });
       return;
     }
 
@@ -1178,18 +1195,82 @@ export const ExtendModal: React.FC<{
           )}
 
           {canExtend && (
-            <div className="space-y-2">
-              <Label className="text-xs">Payment Mode</Label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
-              >
-                <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
-                <option value="CARD">Credit/Debit Card (POS Terminal)</option>
-                <option value="ONLINE">Online Payment (Instant Gateway)</option>
-                <option value="CASH">Cash Payment</option>
-              </select>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Extension Type</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { v: 'COMPLIMENTARY', label: 'Complimentary', hint: 'Free' },
+                    { v: 'PAY_AT_FACILITY', label: 'Pay at Facility', hint: 'Cash / Card / UPI' },
+                    { v: 'ONLINE', label: 'Online', hint: 'Gateway' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setPaymentMode(opt.v)}
+                      className={`p-2 rounded-xl border text-center transition-all ${
+                        paymentMode === opt.v
+                          ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+                          : 'border-border hover:bg-muted/40'
+                      }`}
+                    >
+                      <span className="block font-bold text-xs text-foreground">{opt.label}</span>
+                      <span className="block text-[10px] text-muted-foreground mt-0.5">{opt.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentMode === 'PAY_AT_FACILITY' && (
+                <div className="space-y-2 p-3 rounded-xl border border-border bg-muted/20">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Amount (₹) <span className="text-rose-500">*</span></Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={facilityAmount}
+                      onChange={(e) => setFacilityAmount(e.target.value)}
+                      placeholder={String(effectiveFee || '')}
+                      className="bg-background text-sm font-medium h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Payment Method</Label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value as any)}
+                      className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="CARD">Card (POS)</option>
+                      <option value="PAYMENT_LINK">UPI / QR</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Transaction Details <span className="text-muted-foreground">(optional)</span></Label>
+                    <Input
+                      type="text"
+                      value={transactionDetails}
+                      onChange={(e) => setTransactionDetails(e.target.value)}
+                      placeholder="Ref / UTR / receipt no."
+                      className="bg-background text-sm font-medium h-9"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  Reason {paymentMode === 'COMPLIMENTARY' && <span className="text-rose-500">*</span>}
+                </Label>
+                <Input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Reason for extension"
+                  className="bg-background text-sm font-medium h-9"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -1204,9 +1285,148 @@ export const ExtendModal: React.FC<{
             className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
           >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {paymentMethod === 'ONLINE' && effectiveFee > 0
-              ? `Pay ₹${effectiveFee.toLocaleString()} & Extend`
-              : 'Pay & Extend Validity'}
+            {paymentMode === 'COMPLIMENTARY'
+              ? 'Apply Complimentary Extension'
+              : paymentMode === 'PAY_AT_FACILITY'
+              ? `Collect ₹${Number(facilityAmount || effectiveFee).toLocaleString()} & Extend`
+              : `Pay ₹${effectiveFee.toLocaleString()} & Extend`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ----------------------------------------------------------------------------
+// CHANGE START DATE MODAL
+// ----------------------------------------------------------------------------
+export const ChangeStartDateModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  member: Member;
+  activeContracts?: any[];
+}> = ({ isOpen, onClose, member, activeContracts = [] }) => {
+  const queryClient = useQueryClient();
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({ ...c, membership_id: c.membership_id || c.id }));
+    }
+    return [{
+      membership_id: member?.id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => contracts[0]?.membership_id || member?.id || '');
+  const selectedContract = useMemo(
+    () => contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0],
+    [contracts, selectedContractId],
+  );
+  const [startDate, setStartDate] = useState<string>('');
+  const [reason, setReason] = useState('Corrected membership start date');
+
+  const sessionsUsed = useMemo(() => getContractRemainingSessions(selectedContract, member) >= 0
+    ? (selectedContract?.sessions_used ?? 0)
+    : 0, [selectedContract, member]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      membersApi.changeStartDate(member?.id, {
+        start_date: startDate,
+        membership_id: selectedContract?.membership_id || member?.id,
+        reason,
+      }),
+    onSuccess: (res: any) => {
+      toast.success(res.message || 'Start date updated.');
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err.message || 'Failed to change start date');
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!startDate) {
+      toast.error('Please select a new start date.');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-sky-500" />
+            Change Start Date
+          </DialogTitle>
+          <DialogDescription>
+            Update {member.name}'s membership start date.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-3">
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Membership</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {sessionsUsed > 0 && (
+            <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] flex items-start gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+              <span>Start date can only be changed before any session is used.</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs">New Start Date <span className="text-rose-500">*</span></Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-background text-sm font-medium h-9"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Reason</Label>
+            <Input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for the change"
+              className="bg-background text-sm font-medium h-9"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={mutation.isPending || !startDate}
+            className="bg-sky-600 hover:bg-sky-700 text-white font-semibold"
+          >
+            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Change Start Date
           </Button>
         </DialogFooter>
       </DialogContent>

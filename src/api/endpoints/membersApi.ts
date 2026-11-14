@@ -129,8 +129,28 @@ export const membersApi = {
     return res.data;
   },
 
-  async extendMembership(id: string, data: { days: number; reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async extendMembership(
+    id: string,
+    data: {
+      days?: number;
+      target_end_date?: string;
+      reason?: string;
+      payment_mode?: 'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE';
+      amount?: number | string;
+      payment_method?: 'CASH' | 'CARD' | 'UPI';
+      transaction_details?: string;
+      membership_id?: string;
+    },
+  ): Promise<{ success: boolean; message: string; payment_mode?: string; payment?: any; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/extend/`, data);
+    return res.data;
+  },
+
+  async changeStartDate(
+    id: string,
+    data: { start_date: string; membership_id?: string; reason?: string },
+  ): Promise<{ success: boolean; message: string; old_start_date?: string; new_start_date?: string; new_end_date?: string; member: Member }> {
+    const res = await api.post<any>(`/tenant/members/${id}/change-start-date/`, data);
     return res.data;
   },
 
