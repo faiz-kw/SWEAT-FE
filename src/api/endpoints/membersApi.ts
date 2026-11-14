@@ -119,12 +119,13 @@ export const membersApi = {
     payment_amount?: number;
     carry_forward?: boolean;
     reason?: string;
+    coupon_code?: string;
   }): Promise<{ success: boolean; message: string; member: Member; status?: string; approval_request_id?: string }> {
     const res = await api.post<any>(`/tenant/members/${id}/renew/`, data);
     return res.data;
   },
 
-  async upgradeMembership(id: string, data: { package_id: string; package_version_id?: string; reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async upgradeMembership(id: string, data: { package_id: string; package_version_id?: string; reason?: string; coupon_code?: string }): Promise<{ success: boolean; message: string; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/upgrade/`, data);
     return res.data;
   },
