@@ -149,4 +149,27 @@ export const discountsApi = {
   deleteCoupon: async (codeId: string): Promise<void> => {
     await api.delete(`/tenant/discount-codes/${codeId}/`);
   },
+
+  // Coupons valid for a given package + member + transaction type (for an "available coupons" apply list)
+  getApplicableCoupons: async (params: {
+    package_id?: string;
+    package_version_id?: string;
+    order_type?: 'NEW_MEMBERSHIP' | 'RENEWAL' | 'UPGRADE';
+    user_profile_id?: string;
+    branch_id?: string;
+    order_subtotal?: string | number;
+  }): Promise<{ coupons: ApplicableCoupon[]; count: number }> => {
+    const res = await api.get('/tenant/discount-codes/applicable/', { params });
+    return res.data;
+  },
 };
+
+export interface ApplicableCoupon {
+  code: string;
+  name: string;
+  description: string;
+  discount_type: 'PERCENTAGE' | 'FIXED';
+  discount_value: number;
+  discount_amount: number;
+  final_subtotal: number;
+}

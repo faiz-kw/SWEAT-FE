@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
 import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
+import { discountsApi, type ApplicableCoupon } from '@/api/endpoints/discountsApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
 import { cleanupRazorpayDOM, loadRazorpayScript } from '@/utils/razorpayCheckout';
 
@@ -523,16 +524,29 @@ function PackagePickerStep({
 // ─── Step 2: Pricing Preview ──────────────────────────────────────────────────
 
 function PricingStep({
-  quote, couponCode, onCouponChange, onApplyCoupon, isApplyingCoupon,
+  quote, couponCode, onCouponChange, onApplyCoupon, isApplyingCoupon, onSelectCoupon,
 }: {
   quote: ConversionQuote;
   couponCode: string;
   onCouponChange: (c: string) => void;
   onApplyCoupon: () => void;
   isApplyingCoupon: boolean;
+  onSelectCoupon: (code: string) => void;
 }) {
   const p = quote.pricing;
   const pv = quote.package_version;
+  const appliedCode = (quote.coupon?.is_valid && quote.coupon?.coupon_code) ? quote.coupon.coupon_code : '';
+  const { data: applicable } = useQuery({
+    queryKey: ['applicable-coupons', pv?.id, p.subtotal],
+    queryFn: () => discountsApi.getApplicableCoupons({
+      package_version_id: pv?.id,
+      order_type: 'NEW_MEMBERSHIP',
+      order_subtotal: p.subtotal,
+    }),
+    enabled: !!pv?.id,
+    staleTime: 60_000,
+  });
+  const availableCoupons: ApplicableCoupon[] = applicable?.coupons ?? [];
   const isUnlimited = quote.entitlements.some((e: any) => e.is_unlimited);
   const totalSessions = quote.entitlements.reduce((acc: number, e: any) => {
     if (e.is_unlimited) return acc;
@@ -635,6 +649,40 @@ function PricingStep({
                     ? `Discount applied: ${formatCurrency(quote.coupon.discount_amount ?? '0', p.currency)}`
                     : quote.coupon.reason ?? 'Invalid coupon code'}
                 </span>
+              </div>
+            )}
+            {availableCoupons.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Tag size={11} /> Available Coupons ({availableCoupons.length})
+                </div>
+                {availableCoupons.map((c) => {
+                  const isApplied = appliedCode.toUpperCase() === c.code.toUpperCase();
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => onSelectCoupon(c.code)}
+                      disabled={isApplyingCoupon}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer disabled:opacity-60 ${isApplied ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-background border-border hover:border-primary/40 hover:bg-muted/40'}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-xs tracking-wider">{c.code}</span>
+                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `${formatCurrency(c.discount_value, p.currency)} OFF`}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          Save {formatCurrency(c.discount_amount, p.currency)}{c.name ? ` · ${c.name}` : ''}
+                        </div>
+                      </div>
+                      <span className={`text-[11px] font-bold shrink-0 ${isApplied ? 'text-emerald-600' : 'text-primary'}`}>
+                        {isApplied ? 'Applied' : 'Apply'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2016,6 +2064,18 @@ const handleCancelRazorpay = useCallback(() => {
     }
   }, [selectedVersionId, couponCode, fetchQuote]);
 
+  const handleSelectCoupon = useCallback(async (code: string) => {
+    if (!selectedVersionId || !code) return;
+    setCouponCode(code);
+    setIsApplyingCoupon(true);
+    try {
+      await fetchQuote(selectedVersionId, code);
+      setAppliedCoupon(code);
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }, [selectedVersionId, fetchQuote]);
+
   const convertMutation = useMutation<ConversionResult, Error, ConversionPayload>({
     mutationFn: (payload: ConversionPayload) => crmApi.executeConversion(lead.id, payload),
     onSuccess: (data) => {
@@ -2349,6 +2409,7 @@ const handleCancelRazorpay = useCallback(() => {
                     onCouponChange={setCouponCode}
                     onApplyCoupon={handleApplyCoupon}
                     isApplyingCoupon={isApplyingCoupon}
+                    onSelectCoupon={handleSelectCoupon}
                   />
                 )}
                 {step === 3 && quote && (
