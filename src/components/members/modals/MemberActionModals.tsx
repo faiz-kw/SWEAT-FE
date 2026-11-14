@@ -32,28 +32,45 @@ import { cmsApi } from '@/api/endpoints/cmsApi';
 
 // Reusable coupon input + "available coupons" apply list (renew / upgrade flows)
 const CouponPicker: React.FC<{
+  packageId?: string;
   packageVersionId?: string;
   orderType: 'NEW_MEMBERSHIP' | 'RENEWAL' | 'UPGRADE';
   orderSubtotal?: number;
   userProfileId?: string;
   value: string;
   onChange: (code: string) => void;
-}> = ({ packageVersionId, orderType, orderSubtotal, userProfileId, value, onChange }) => {
+  onApply?: (code: string, discountAmount: number) => void;
+}> = ({ packageId, packageVersionId, orderType, orderSubtotal, userProfileId, value, onChange, onApply }) => {
   const [input, setInput] = useState(value);
+  const [status, setStatus] = useState<null | 'valid' | 'invalid'>(null);
   useEffect(() => { setInput(value); }, [value]);
-  const { data } = useQuery({
-    queryKey: ['applicable-coupons', packageVersionId, orderType, orderSubtotal, userProfileId],
+  const { data, isFetched } = useQuery({
+    queryKey: ['applicable-coupons', packageId, packageVersionId, orderType, orderSubtotal, userProfileId],
     queryFn: () => discountsApi.getApplicableCoupons({
+      package_id: packageId,
       package_version_id: packageVersionId,
       order_type: orderType,
       order_subtotal: orderSubtotal,
       user_profile_id: userProfileId,
     }),
-    enabled: !!packageVersionId,
+    enabled: !!(packageId || packageVersionId),
     staleTime: 60_000,
   });
   const coupons: ApplicableCoupon[] = data?.coupons ?? [];
   const money = (n: number) => `₹${Number(n || 0).toFixed(0)}`;
+  const apply = (code: string) => {
+    const c = code.trim();
+    setInput(c);
+    if (!c) { setStatus(null); onChange(''); onApply?.('', 0); return; }
+    const match = coupons.find((x) => x.code.toUpperCase() === c.toUpperCase());
+    if (match) {
+      setStatus('valid'); onChange(c); onApply?.(c, match.discount_amount);
+    } else if (isFetched) {
+      setStatus('invalid'); onChange(''); onApply?.('', 0);
+    } else {
+      setStatus(null); onChange(c); onApply?.(c, 0);
+    }
+  };
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">Coupon (optional)</label>
@@ -66,12 +83,15 @@ const CouponPicker: React.FC<{
         />
         <button
           type="button"
-          onClick={() => onChange(input.trim())}
+          onClick={() => apply(input)}
           className="h-9 px-4 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold"
         >Apply</button>
       </div>
-      {value && (
-        <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Coupon applied: {value}</div>
+      {status === 'valid' && value && (
+        <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Coupon applied: {value}</div>
+      )}
+      {status === 'invalid' && (
+        <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">✕ Coupon not valid for this package / member</div>
       )}
       {coupons.length > 0 && (
         <div className="space-y-1">
@@ -82,7 +102,7 @@ const CouponPicker: React.FC<{
               <button
                 key={c.code}
                 type="button"
-                onClick={() => { setInput(c.code); onChange(c.code); }}
+                onClick={() => apply(c.code)}
                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-left transition-colors ${applied ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-gray-400'}`}
               >
                 <div className="min-w-0">
@@ -139,6 +159,7 @@ export const RenewModal: React.FC<{
   const [reason, setReason] = useState('Same package membership renewal');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -220,7 +241,7 @@ export const RenewModal: React.FC<{
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
-        payment_amount: priceEstimate,
+        payment_amount: Math.max(0, priceEstimate - couponDiscount),
         carry_forward: carryForward,
         reason: `${reason} (${startSchedule})`,
         coupon_code: couponCode.trim() || undefined,
@@ -424,17 +445,27 @@ export const RenewModal: React.FC<{
           </div>
 
           <CouponPicker
+            packageId={selectedPlan?.package_id || selectedContract?.package_id || member?.package_id}
             packageVersionId={(selectedPlan as any)?.package_version_id}
             orderType="RENEWAL"
             orderSubtotal={priceEstimate}
             userProfileId={member?.id}
             value={couponCode}
-            onChange={setCouponCode}
+            onChange={(c) => { setCouponCode(c); if (!c) setCouponDiscount(0); }}
+            onApply={(_c, d) => setCouponDiscount(d)}
           />
 
-          <div className="p-3 bg-muted/40 rounded-lg flex justify-between items-center text-xs">
-            <span className="text-muted-foreground">Estimated Renewal Total:</span>
-            <span className="font-bold text-base text-foreground">₹{priceEstimate.toLocaleString()}</span>
+          <div className="p-3 bg-muted/40 rounded-lg space-y-1 text-xs">
+            {couponDiscount > 0 && (
+              <>
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal:</span><span>₹{priceEstimate.toLocaleString()}</span></div>
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium"><span>Coupon discount:</span><span>- ₹{Math.round(couponDiscount).toLocaleString()}</span></div>
+              </>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Estimated Renewal Total:</span>
+              <span className="font-bold text-base text-foreground">₹{Math.max(0, priceEstimate - couponDiscount).toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
@@ -467,6 +498,7 @@ export const UpgradeModal: React.FC<{
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Upgraded to higher session tier plan');
   const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -632,7 +664,7 @@ export const UpgradeModal: React.FC<{
 
   // Calculate Difference to Pay: Target Price - Current Paid Price
   const targetPrice = selectedTargetPlan ? selectedTargetPlan.price : 0;
-  const differenceToPay = Math.max(0, targetPrice - currentPlanPrice);
+  const differenceToPay = Math.max(0, (targetPrice - couponDiscount) - currentPlanPrice);
   const extraSessionsAdded = selectedTargetPlan ? Math.max(0, selectedTargetPlan.sessions - currentSessions) : 0;
 
   const mutation = useMutation({
@@ -842,12 +874,14 @@ export const UpgradeModal: React.FC<{
 
           {selectedTargetPlan && (
             <CouponPicker
+              packageId={selectedTargetPlan?.id || selectedPackageId}
               packageVersionId={(selectedTargetPlan as any)?.package_version_id}
               orderType="UPGRADE"
               orderSubtotal={targetPrice}
               userProfileId={member?.id}
               value={couponCode}
-              onChange={setCouponCode}
+              onChange={(c) => { setCouponCode(c); if (!c) setCouponDiscount(0); }}
+              onApply={(_c, d) => setCouponDiscount(d)}
             />
           )}
 
