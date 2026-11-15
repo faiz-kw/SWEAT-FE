@@ -15,14 +15,20 @@ export const SecureWorkoutPlayer: React.FC<SecureWorkoutPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Ensure embedUrl has fs=0 parameter to hide YouTube's native fullscreen button
+  // Ensure embedUrl hides YouTube's fullscreen button (fs=0) and does NOT show captions
+  // (cc_load_policy=0) — auto-captions were covering the exercise name / breath cues on studio screens.
   const safeEmbedUrl = React.useMemo(() => {
     if (!embedUrl) return '';
     if (embedUrl.includes('youtube') || embedUrl.includes('youtu.be')) {
-      const sep = embedUrl.includes('?') ? '&' : '?';
-      if (!embedUrl.includes('fs=')) {
-        return `${embedUrl}${sep}fs=0`;
+      let url = embedUrl.replace(/([?&])cc_load_policy=1/gi, '$1cc_load_policy=0');
+      const extras: string[] = [];
+      if (!/[?&]fs=/.test(url)) extras.push('fs=0');
+      if (!/[?&]cc_load_policy=/.test(url)) extras.push('cc_load_policy=0');
+      if (extras.length) {
+        const sep = url.includes('?') ? '&' : '?';
+        url = `${url}${sep}${extras.join('&')}`;
       }
+      return url;
     }
     return embedUrl;
   }, [embedUrl]);
