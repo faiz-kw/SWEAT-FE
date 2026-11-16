@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
 import { type ApplicableCoupon } from '@/api/endpoints/discountsApi';
+import { getAccessToken } from '@/api/auth/tokenManager';
 import { cmsApi } from '@/api/endpoints/cmsApi';
 
 // Reusable coupon input + "available coupons" apply list (renew / upgrade flows)
@@ -3049,7 +3050,22 @@ export const InvoiceDetailModal: React.FC<{
 }> = ({ isOpen, onClose, invoice, member }) => {
   if (!invoice) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    try {
+      const orderId = invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.id);
+      if (orderId) {
+        const base = ((import.meta.env.VITE_API_BASE_URL as string) || '').replace(/\/$/, '');
+        const token = getAccessToken();
+        const resp = await fetch(`${base}/tenant/invoice/order/${orderId}/`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (resp.ok) {
+          const pdf = await resp.blob();
+          const ou = URL.createObjectURL(pdf);
+          window.open(ou, '_blank');
+          setTimeout(() => URL.revokeObjectURL(ou), 60000);
+          return;
+        }
+      }
+    } catch { /* fall back to plain-text invoice below */ }
     const pkgName = invoice.package_name || (invoice.order && typeof invoice.order === 'object' && invoice.order.items?.[0]?.item_name_snapshot) || 'Membership Plan Subscription';
     const orderRef = invoice.order_number || invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.order_number) || 'ORD-CANONICAL';
     const payRef = invoice.payment_reference || (invoice.order && typeof invoice.order === 'object' && invoice.order.payments?.[0]?.provider_transaction_id) || invoice.order_number || 'TXN-REF';
