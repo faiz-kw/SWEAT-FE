@@ -3052,11 +3052,13 @@ export const InvoiceDetailModal: React.FC<{
 
   const handleDownload = async () => {
     try {
+      const invId = invoice.id || invoice.invoice_id;
       const orderId = invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.id);
-      if (orderId) {
-        const base = ((import.meta.env.VITE_API_BASE_URL as string) || '').replace(/\/$/, '');
+      const base = ((import.meta.env.VITE_API_BASE_URL as string) || '').replace(/\/$/, '');
+      const pdfUrl = invId ? `${base}/tenant/invoice/${invId}/` : (orderId ? `${base}/tenant/invoice/order/${orderId}/` : null);
+      if (pdfUrl) {
         const token = getAccessToken();
-        const resp = await fetch(`${base}/tenant/invoice/order/${orderId}/`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const resp = await fetch(pdfUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         if (resp.ok) {
           const pdf = await resp.blob();
           const ou = URL.createObjectURL(pdf);
