@@ -230,7 +230,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
   // Map user-friendly import filter to backend param
   const backendImportFilter =
-    importStatusFilter === 'ADDED'
+    importStatusFilter === 'NEEDS_ATTENTION'
+      ? 'NEEDS_ATTENTION'
+      : importStatusFilter === 'ADDED'
       ? 'IMPORTED'
       : importStatusFilter === 'RESOLVED'
       ? 'RESOLVED'
@@ -379,22 +381,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     currentFormPage * FORMS_PER_PAGE
   );
 
-  // Client-side filtering for recent imports
-  const displayedImports = allImports.filter((item) => {
-    if (importStatusFilter === 'NEEDS_ATTENTION') {
-      return ['NEEDS_MAPPING', 'NEEDS_ASSIGNMENT', 'NEEDS_REVIEW'].includes(item.status);
-    }
-    if (importStatusFilter === 'ADDED') {
-      return item.status === 'IMPORTED';
-    }
-    if (importStatusFilter === 'RESOLVED') {
-      return item.status === 'RESOLVED';
-    }
-    if (importStatusFilter === 'FAILED') {
-      return item.status === 'FAILED';
-    }
-    return true;
-  });
+  // Server-filtered recent imports list
+  const displayedImports = allImports;
 
   // Connection and Setup Progress state
   const isPlatformConfigured = Boolean(meta.meta_app_configured || meta.app_id_configured);
@@ -422,7 +410,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     );
   const isConnectionAttention = !isConnectionActive && (attentionAccounts.length > 0 || meta.connection_status === 'TOKEN_EXPIRED');
   const hasActiveForms = allMappings.some((m) => m.is_active);
-  const hasReceivedEnquiries = allImports.some((i) => i.status === 'IMPORTED');
+  const hasReceivedEnquiries = Boolean(
+    (meta as any).has_received_enquiries || allImports.some((i) => i.status === 'IMPORTED')
+  );
 
   return (
     <div className="space-y-6 w-full max-w-full overflow-x-hidden">
@@ -1227,14 +1217,23 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
         {importsQuery.isPending ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Loading recent enquiries...</div>
+        ) : importsQuery.isError ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
+            <p className="text-sm font-medium text-destructive">Failed to load recent enquiries.</p>
+            <Button variant="outline" size="sm" onClick={() => importsQuery.refetch()}>
+              Retry
+            </Button>
+          </div>
         ) : displayedImports.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/10">
             <Clock className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="text-sm font-semibold">
-              {allImports.length === 0 ? 'No enquiries received yet' : 'No enquiries match your filter'}
+              {importStatusFilter === 'ALL'
+                ? 'No enquiries received yet'
+                : 'No enquiries match your filter'}
             </p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {allImports.length === 0
+              {importStatusFilter === 'ALL'
                 ? 'Incoming enquiries from your Facebook and Instagram forms will show up here in real time.'
                 : 'Try selecting another status filter to view other enquiries.'}
             </p>
