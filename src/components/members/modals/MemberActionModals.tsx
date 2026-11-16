@@ -3191,11 +3191,8 @@ export const InvoiceDetailModal: React.FC<{
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button id="btn-download-invoice" variant="outline" onClick={handleDownload} className="gap-1.5">
-            <Download className="w-4 h-4" /> Download
-          </Button>
-          <Button id="btn-print-invoice" onClick={() => window.print()} className="bg-primary text-primary-foreground gap-1.5">
-            <Printer className="w-4 h-4" /> Print Invoice
+          <Button id="btn-download-invoice" onClick={handleDownload} className="bg-primary text-primary-foreground gap-1.5">
+            <Download className="w-4 h-4" /> Download PDF
           </Button>
         </DialogFooter>
       </DialogContent>
