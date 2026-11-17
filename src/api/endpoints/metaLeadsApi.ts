@@ -55,6 +55,7 @@ export type MetaMapping = {
   id: string;
   name: string;
   page_id: string;
+  page_name?: string;
   form_id: string;
   is_active: boolean;
   version: number;
@@ -172,6 +173,8 @@ export type MetaMetadata = {
     require_branch_match: boolean;
   };
   phone_validation: string;
+  active_mappings_count?: number;
+  total_mappings_count?: number;
 };
 
 export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] };
@@ -273,7 +276,17 @@ export const metaLeadsApi = {
     };
   },
   // --- FIX: PASS PAGE_ID AND THROW ON ERROR IN FORM_FIELDS END ---
-  mappings: async (page = 1) => (await api.get<Page<MetaMapping>>('/tenant/meta-lead-mappings/', { params: { page } })).data,
+  mappings: async (page = 1, page_id?: string, is_active?: boolean, page_size?: number) =>
+    (
+      await api.get<Page<MetaMapping>>('/tenant/meta-lead-mappings/', {
+        params: {
+          page,
+          ...(page_id && page_id !== 'ALL' ? { page_id } : {}),
+          ...(is_active !== undefined ? { is_active } : {}),
+          ...(page_size ? { page_size } : {}),
+        },
+      })
+    ).data,
   save: async (payload: MappingInput, id?: string) => id
     ? (await api.patch<MetaMapping>(`/tenant/meta-lead-mappings/${id}/`, payload)).data
     : (await api.post<MetaMapping>('/tenant/meta-lead-mappings/', payload)).data,

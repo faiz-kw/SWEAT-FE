@@ -157,7 +157,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
   // UI state
   const [formSearch, setFormSearch] = React.useState('');
-  const [formStatusFilter, setFormStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
+  const [selectedPageFilter, setSelectedPageFilter] = React.useState<string>('ALL');
+  const [formStatusFilter, setFormStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ACTIVE');
   const [formPage, setFormPage] = React.useState(1);
   const FORMS_PER_PAGE = 6;
 
@@ -223,9 +224,22 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
     queryFn: metaLeadsApi.metadata,
   });
 
+  const backendFormIsActive =
+    formStatusFilter === 'ACTIVE'
+      ? true
+      : formStatusFilter === 'PAUSED'
+      ? false
+      : undefined;
+
   const mappingsQuery = useQuery({
-    queryKey: [...queryKeyBase, 'mappings', 1],
-    queryFn: () => metaLeadsApi.mappings(1),
+    queryKey: [...queryKeyBase, 'mappings', selectedPageFilter, backendFormIsActive],
+    queryFn: () =>
+      metaLeadsApi.mappings(
+        1,
+        selectedPageFilter !== 'ALL' ? selectedPageFilter : undefined,
+        backendFormIsActive,
+        100
+      ),
   });
 
   // Map user-friendly import filter to backend param
@@ -343,8 +357,42 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const allMappings = mappingsQuery.data?.results || [];
   const allImports = importsQuery.data?.results || [];
 
-  // Filter mappings by search and status
+  // Dynamically extract unique Facebook Pages from connected metadata and form mappings
+  const uniquePageOptions = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (meta.pages && Array.isArray(meta.pages)) {
+      for (const p of meta.pages) {
+        const pid = p.page_id || p.id;
+        const pname = p.page_name || p.name;
+        if (pid) {
+          map.set(String(pid), pname || `Page ${pid}`);
+        }
+      }
+    }
+    for (const m of allMappings) {
+      if (m.page_id && !map.has(String(m.page_id))) {
+        const matchedPage = meta.pages?.find(
+          (p) =>
+            (p.page_id && p.page_id === m.page_id) ||
+            p.id === m.page_id ||
+            (p.connection_id && p.connection_id === m.page_id)
+        );
+        const name = m.page_name || matchedPage?.page_name || matchedPage?.name || `Page ${m.page_id}`;
+        map.set(String(m.page_id), name);
+      }
+    }
+    return Array.from(map.entries()).map(([page_id, name]) => ({ page_id, name }));
+  }, [meta.pages, allMappings]);
+
+  // Filter mappings by search, selected page, and status
   const filteredMappings = allMappings.filter((m) => {
+    if (selectedPageFilter !== 'ALL' && String(m.page_id) !== selectedPageFilter) {
+      return false;
+    }
+
+    if (formStatusFilter === 'ACTIVE' && !m.is_active) return false;
+    if (formStatusFilter === 'PAUSED' && m.is_active) return false;
+
     if (formSearch.trim()) {
       const q = formSearch.toLowerCase();
       const matchedPage = meta.pages?.find(
@@ -353,7 +401,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           p.id === m.page_id ||
           (p.connection_id && p.connection_id === m.page_id)
       );
-      const pageName = (matchedPage?.page_name || matchedPage?.name || '')?.toLowerCase();
+      const pageName = (m.page_name || matchedPage?.page_name || matchedPage?.name || '')?.toLowerCase();
       const branchName =
         m.branch_mode === 'ALL'
           ? 'all branches'
@@ -366,9 +414,6 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         branchName.includes(q);
       if (!matches) return false;
     }
-
-    if (formStatusFilter === 'ACTIVE' && !m.is_active) return false;
-    if (formStatusFilter === 'PAUSED' && m.is_active) return false;
 
     return true;
   });
@@ -409,7 +454,18 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
         meta.connection_status !== 'TOKEN_EXPIRED'
     );
   const isConnectionAttention = !isConnectionActive && (attentionAccounts.length > 0 || meta.connection_status === 'TOKEN_EXPIRED');
-  const hasActiveForms = allMappings.some((m) => m.is_active);
+  const hasActiveForms =
+    meta.active_mappings_count !== undefined
+      ? meta.active_mappings_count > 0
+      : allMappings.some((m) => m.is_active);
+  const activeFormsCount =
+    meta.active_mappings_count !== undefined
+      ? meta.active_mappings_count
+      : allMappings.filter((m) => m.is_active).length;
+  const totalFormsCount =
+    meta.total_mappings_count !== undefined
+      ? meta.total_mappings_count
+      : allMappings.length;
   const hasReceivedEnquiries = Boolean(
     (meta as any).has_received_enquiries || allImports.some((i) => i.status === 'IMPORTED')
   );
@@ -781,8 +837,8 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
             <h3 className="font-semibold text-sm text-foreground">Choose your forms</h3>
             <p className="text-xs text-muted-foreground">
               {hasActiveForms
-                ? `${allMappings.filter((m) => m.is_active).length} form(s) active and routing enquiries`
-                : allMappings.length > 0
+                ? `${activeFormsCount} form(s) active and routing enquiries`
+                : totalFormsCount > 0
                 ? 'Lead forms are configured but currently paused'
                 : 'Match questions to CRM fields and choose branch'}
             </p>
@@ -854,17 +910,42 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
         {/* Search & Status Filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-card border rounded-lg p-3">
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={formSearch}
-              onChange={(e) => {
-                setFormSearch(e.target.value);
-                setFormPage(1);
-              }}
-              placeholder="Search forms by name, page, or branch..."
-              className="pl-9 text-xs h-9"
-            />
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={formSearch}
+                onChange={(e) => {
+                  setFormSearch(e.target.value);
+                  setFormPage(1);
+                }}
+                placeholder="Search forms by name, page, or branch..."
+                className="pl-9 text-xs h-9"
+              />
+            </div>
+
+            {/* Facebook Page Filter */}
+            <div className="flex items-center gap-1.5 min-w-[180px] sm:min-w-[210px]">
+              <Globe className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:inline" />
+              <select
+                value={selectedPageFilter}
+                onChange={(e) => {
+                  setSelectedPageFilter(e.target.value);
+                  setFormPage(1);
+                }}
+                className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer transition-colors"
+                aria-label="Filter lead forms by Facebook Page"
+              >
+                <option value="ALL">
+                  All Facebook Pages {uniquePageOptions.length > 0 ? `(${uniquePageOptions.length})` : ''}
+                </option>
+                {uniquePageOptions.map((p) => (
+                  <option key={p.page_id} value={p.page_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center rounded-md border p-0.5 bg-muted/40 text-xs">
@@ -920,12 +1001,14 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/10">
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="text-sm font-semibold">
-              {allMappings.length === 0 ? 'No lead forms connected' : 'No lead forms match your search'}
+              {allMappings.length === 0 ? 'No lead forms found' : 'No lead forms match your search or filter'}
             </p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
               {allMappings.length === 0
-                ? 'Click "Set up a form" to connect your first lead form to CRM.'
-                : 'Try adjusting your search or status filter to find what you are looking for.'}
+                ? formStatusFilter !== 'ALL' || selectedPageFilter !== 'ALL'
+                  ? 'No lead forms match the selected Facebook Page and status filter. Try selecting another filter or All forms.'
+                  : 'Click "Set up a form" to connect your first lead form to CRM.'
+                : 'Try adjusting your search, Facebook Page, or status filter to find what you are looking for.'}
             </p>
           </div>
         ) : (
@@ -937,7 +1020,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                   p.id === mapping.page_id ||
                   (p.connection_id && p.connection_id === mapping.page_id)
               );
-              const pageName = matchedPage?.page_name || matchedPage?.name;
+              const pageName = mapping.page_name || matchedPage?.page_name || matchedPage?.name || `Page ${mapping.page_id}`;
               const branchName =
                 mapping.branch_mode === 'ALL'
                   ? 'All branches (Organization-wide)'
