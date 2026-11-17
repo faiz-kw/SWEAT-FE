@@ -88,6 +88,7 @@ import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { cn } from '@/lib/utils';
 import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
+import { ClassBookingBreakdown } from './ClassBookingBreakdown';
 import { AssignTrainerModal } from './AssignTrainerModal';
 
 export function normalizeDaysOfWeek(days: any): number[] {
@@ -3545,6 +3546,10 @@ export const ClassesWorkspace: React.FC = () => {
                               >
                                 {isFull ? `FULL (${bookedCount}/${occ.capacity})` : `${bookedCount} / ${occ.capacity} Booked`}
                               </Badge>
+                              <ClassBookingBreakdown
+                                memberCount={occ.member_booking_count}
+                                trialCount={occ.trial_booking_count}
+                              />
                             </td>
 
                             {/* Waitlist */}

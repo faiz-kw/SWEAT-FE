@@ -43,6 +43,7 @@ import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 import { bookingsApi } from '@/api/endpoints/bookingsApi';
 import { membersApi } from '@/api/endpoints/membersApi';
 import { crmApi } from '@/api/endpoints/crmApi';
+import { countSeatHoldingBookings, isTrialBooking } from './bookingCounts';
 import { Search, Phone, Mail, Plus } from 'lucide-react';
 import { usePermissions } from '../../lib/permissions';
 import { Badge } from '@/components/ui/badge';
@@ -289,11 +290,11 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
   });
 
   const memberBookings = React.useMemo(() => {
-    return bookings.filter((b: any) => b.booking_type !== 'TRIAL' && b.status !== 'WAITLISTED' && b.status !== 'WAITLIST');
+    return bookings.filter((b: any) => !isTrialBooking(b) && b.status !== 'WAITLISTED' && b.status !== 'WAITLIST');
   }, [bookings]);
 
   const trialBookings = React.useMemo(() => {
-    return bookings.filter((b: any) => b.booking_type === 'TRIAL');
+    return bookings.filter((b: any) => isTrialBooking(b));
   }, [bookings]);
 
   const waitlistBookings = React.useMemo(() => {
@@ -440,6 +441,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
     return timeStr.slice(0, 5);
   };
 
+  const bookedSeatCount = countSeatHoldingBookings(bookings);
   const confirmedCount = bookings.filter((b: any) => b.status === 'CONFIRMED').length;
   const presentCount = bookings.filter((b: any) => 
     b.status === 'COMPLETED' || 
@@ -518,7 +520,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 Capacity: <strong className="text-foreground">{occurrence?.capacity || 'Standard'}</strong>
               </span>
               <span className="text-muted-foreground">
-                Booked: <strong className="text-foreground">{bookings.length}</strong>
+                Booked: <strong className="text-foreground">{bookedSeatCount}</strong>
               </span>
               <span className="text-muted-foreground">
                 Checked In: <strong className="text-emerald-500 font-semibold">{presentCount}</strong>
@@ -795,7 +797,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Users className="size-3.5 text-primary" />
-                <span>Enrolled Member Roster ({bookings.length} Booked)</span>
+                <span>Enrolled Member Roster ({bookedSeatCount} Booked)</span>
               </h4>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-2xs text-muted-foreground flex items-center gap-2 mr-1">
