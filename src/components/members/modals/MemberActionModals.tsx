@@ -3557,6 +3557,8 @@ export const PurchaseProgramPackageModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [reason, setReason] = useState('New program & package purchase');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   // Load programs
   const { data: rawPrograms = [] } = useQuery<Array<{ id: string; name: string; status?: string; category_name?: string }>>({
@@ -3709,7 +3711,8 @@ export const PurchaseProgramPackageModal: React.FC<{
         branch_id: selectedBranchId || undefined,
         start_schedule: startSchedule,
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
-        payment_amount: priceEstimate,
+        payment_amount: Math.max(0, priceEstimate - couponDiscount),
+        coupon_code: couponCode.trim() || undefined,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
         reason: `${reason} - ${selectedPkg?.name || ''} (${selectedPkg?.program_name || ''})`,
@@ -3929,10 +3932,29 @@ export const PurchaseProgramPackageModal: React.FC<{
               </select>
             </div>
 
+            {/* Coupon / Promo Code */}
+            <CouponPicker
+              packageId={selectedPkg?.id || selectedPackageId}
+              orderType="NEW_MEMBERSHIP"
+              orderSubtotal={priceEstimate}
+              userProfileId={member?.id}
+              value={couponCode}
+              onChange={(c) => { setCouponCode(c); if (!c) setCouponDiscount(0); }}
+              onApply={(_c, d) => setCouponDiscount(d)}
+            />
+
             {/* Summary Price Callout */}
-            <div className="p-3 bg-muted/30 rounded-xl border border-border flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Payable Amount:</span>
-              <span className="text-base font-bold text-foreground">₹{priceEstimate.toLocaleString()}</span>
+            <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-1 text-xs">
+              {couponDiscount > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-muted-foreground"><span>Subtotal:</span><span>₹{priceEstimate.toLocaleString()}</span></div>
+                  <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium"><span>Coupon discount:</span><span>- ₹{Math.round(couponDiscount).toLocaleString()}</span></div>
+                </>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-medium">Payable Amount:</span>
+                <span className="text-base font-bold text-foreground">₹{Math.max(0, priceEstimate - couponDiscount).toLocaleString()}</span>
+              </div>
             </div>
           </div>
 

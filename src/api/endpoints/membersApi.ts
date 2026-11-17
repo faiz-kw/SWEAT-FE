@@ -199,6 +199,7 @@ export const membersApi = {
     payment_provider?: string | undefined;
     payment_method?: string | undefined;
     reason?: string | undefined;
+    coupon_code?: string | undefined;
   }): Promise<any> {
     const res = await api.post<any>(`/tenant/members/${id}/purchase-package/`, data);
     return res.data;
