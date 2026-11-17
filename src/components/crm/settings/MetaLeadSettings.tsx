@@ -358,31 +358,32 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const allImports = importsQuery.data?.results || [];
 
   // Dynamically extract unique Facebook Pages from connected metadata and form mappings
-  const uniquePageOptions = React.useMemo(() => {
-    const map = new Map<string, string>();
-    if (meta.pages && Array.isArray(meta.pages)) {
-      for (const p of meta.pages) {
-        const pid = p.page_id || p.id;
-        const pname = p.page_name || p.name;
-        if (pid) {
-          map.set(String(pid), pname || `Page ${pid}`);
-        }
+  const uniquePageOptions: { page_id: string; name: string }[] = [];
+  const pageMap = new Map<string, string>();
+  if (meta?.pages && Array.isArray(meta.pages)) {
+    for (const p of meta.pages) {
+      const pid = p.page_id || p.id;
+      const pname = p.page_name || p.name;
+      if (pid) {
+        pageMap.set(String(pid), pname || `Page ${pid}`);
       }
     }
-    for (const m of allMappings) {
-      if (m.page_id && !map.has(String(m.page_id))) {
-        const matchedPage = meta.pages?.find(
-          (p) =>
-            (p.page_id && p.page_id === m.page_id) ||
-            p.id === m.page_id ||
-            (p.connection_id && p.connection_id === m.page_id)
-        );
-        const name = m.page_name || matchedPage?.page_name || matchedPage?.name || `Page ${m.page_id}`;
-        map.set(String(m.page_id), name);
-      }
+  }
+  for (const m of allMappings) {
+    if (m.page_id && !pageMap.has(String(m.page_id))) {
+      const matchedPage = meta?.pages?.find(
+        (p) =>
+          (p.page_id && p.page_id === m.page_id) ||
+          p.id === m.page_id ||
+          (p.connection_id && p.connection_id === m.page_id)
+      );
+      const name = m.page_name || matchedPage?.page_name || matchedPage?.name || `Page ${m.page_id}`;
+      pageMap.set(String(m.page_id), name);
     }
-    return Array.from(map.entries()).map(([page_id, name]) => ({ page_id, name }));
-  }, [meta.pages, allMappings]);
+  }
+  for (const [page_id, name] of pageMap.entries()) {
+    uniquePageOptions.push({ page_id, name });
+  }
 
   // Filter mappings by search, selected page, and status
   const filteredMappings = allMappings.filter((m) => {
