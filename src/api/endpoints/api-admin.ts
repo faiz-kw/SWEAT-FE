@@ -849,9 +849,28 @@ export async function deleteCustomFormApi(formId: string): Promise<void> {
 
 export async function fetchAuditLogsApi(action?: string, module?: string): Promise<AuditLogRow[]> {
   const params = new URLSearchParams();
-  if (action && action !== "all") params.set("action", action);
+  if (action && action !== "all") params.set("action_code", action);
   if (module && module !== "all") params.set("module", module);
   const query = params.toString() ? `?${params.toString()}` : "";
+  try {
+    const res = await api.get<any>(`/tenant/activity-logs/${query}`);
+    const rawList = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    return rawList.map((item: any) => ({
+      id: item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+      user_email: item.actor_email || item.user_email || '',
+      user_name: item.actor_name || item.user_name || item.actor_display || '',
+      action: item.action_verb || item.action_code || item.action || 'AUDIT',
+      module: item.module || item.resource_type || 'General',
+      entity_type: item.entity_type || item.resource_type || 'System',
+      entity_id: item.entity_id || item.resource_id || item.id || '',
+      description: item.event_description || item.description || '',
+      ip_address: item.ip_address || '',
+      user_agent: item.user_agent || '',
+      created_at: item.occurred_at || item.created_at || '',
+    }));
+  } catch {
+    // Fall back to legacy audit-events only if canonical endpoint fails
+  }
   const res = await api.get<any>(`/tenant/audit-events/${query}`);
   const rawList = toArray<any>(res.data);
   return rawList.map((item: any) => ({

@@ -2807,7 +2807,21 @@ export function LeadDetailModal({
                                     </span>
                                   </div>
                                   {evt.description && (
-                                    <p className="text-xs text-muted-foreground whitespace-pre-line">{evt.description}</p>
+                                    <p className="text-xs text-muted-foreground whitespace-pre-line">
+                                      {(() => {
+                                        const statusUpper = String(evt.metadata?.status || '').toUpperCase();
+                                        const errorCode = evt.metadata?.error_code || evt.metadata?.failure_code || evt.metadata?.error_reason;
+                                        const isFailedOrError = ['FAILED', 'CALL_FAILED', 'ERROR', 'UNCONFIGURED', 'SUBMISSION_FAILED'].includes(statusUpper) || evt.title?.toLowerCase().includes('failed');
+
+                                        if (isFailedOrError && evt.description.toLowerCase().includes('no answer from recipient')) {
+                                          if (errorCode) {
+                                            return `Call outcome: Failed (${errorCode}). Live connection could not be established.`;
+                                          }
+                                          return 'Call outcome: Failed (Carrier Unreachable). Live connection could not be established.';
+                                        }
+                                        return evt.description;
+                                      })()}
+                                    </p>
                                   )}
                                   <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
                                     <span>Actor: <strong className="text-foreground font-medium">{evt.actor}</strong></span>
@@ -2828,22 +2842,78 @@ export function LeadDetailModal({
                                       startedAt={evt.occurred_at}
                                       callerName={currentLead ? `${currentLead.first_name} ${currentLead.last_name || ''}`.trim() : 'Faiz Khan'}
                                     />
-                                  ) : (evt.id.startsWith('call-') || (evt.channel === 'VOICE' && evt.metadata?.call_session_id)) &&
-                                      ['NO_ANSWER', 'MISSED', 'BUSY', 'FAILED', 'UNANSWERED', 'REJECTED'].includes(String(evt.metadata?.status || '').toUpperCase()) ? (
-                                    <div className="mt-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
-                                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                                      <div className="space-y-0.5 min-w-0">
-                                        <div className="font-semibold flex items-center gap-1.5">
-                                          <span>Call Not Connected ({evt.metadata?.disposition?.replace(/_/g, ' ') || evt.metadata?.status || 'No Answer'})</span>
-                                          <Badge variant="outline" className="text-[10px] h-4 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10">
-                                            No Audio
-                                          </Badge>
+                                  ) : (evt.id.startsWith('call-') || (evt.channel === 'VOICE' && evt.metadata?.call_session_id) || (isVoiceCallEvent && !evt.metadata?.recording_url)) &&
+                                      (
+                                        ['NO_ANSWER', 'MISSED', 'BUSY', 'FAILED', 'CALL_FAILED', 'UNANSWERED', 'REJECTED', 'DECLINED', 'SWITCHED_OFF', 'TIMEOUT', 'ERROR'].includes(String(evt.metadata?.status || evt.metadata?.disposition || '').toUpperCase()) ||
+                                        evt.title.toLowerCase().includes('failed')
+                                      ) ? (
+                                    (() => {
+                                      const normStatus = String(evt.metadata?.status || '').toUpperCase().trim();
+                                      const normDisp = String(evt.metadata?.disposition || '').toUpperCase().trim();
+
+                                      const isBusy = normStatus === 'BUSY' || normDisp === 'BUSY';
+                                      const isNoAnswer =
+                                        ['NO_ANSWER', 'MISSED', 'UNANSWERED', 'TIMEOUT'].includes(normStatus) ||
+                                        ['NO_ANSWER', 'MISSED', 'UNANSWERED', 'TIMEOUT'].includes(normDisp);
+                                      const isDeclined =
+                                        ['REJECTED', 'DECLINED'].includes(normStatus) ||
+                                        ['REJECTED', 'DECLINED'].includes(normDisp);
+                                      const isSwitchedOff =
+                                        ['SWITCHED_OFF', 'UNREACHABLE'].includes(normStatus) ||
+                                        ['SWITCHED_OFF', 'UNREACHABLE'].includes(normDisp);
+                                      const isFailed =
+                                        ['FAILED', 'CALL_FAILED', 'ERROR', 'NETWORK_ERROR'].includes(normStatus) ||
+                                        ['FAILED', 'CALL_FAILED', 'ERROR', 'NETWORK_ERROR'].includes(normDisp) ||
+                                        evt.title?.toLowerCase().includes('failed');
+
+                                      let failureLabel = 'No Answer';
+                                      let failureDesc = 'The phone rang but was not answered by the recipient before timing out.';
+
+                                      if (isBusy) {
+                                        failureLabel = 'Line Busy';
+                                        failureDesc = "The recipient's phone line was busy or engaged. No conversation was recorded.";
+                                      } else if (isDeclined) {
+                                        failureLabel = 'Call Declined';
+                                        failureDesc = 'The recipient declined or rejected the incoming call before connection.';
+                                      } else if (isSwitchedOff) {
+                                        failureLabel = 'Switched Off / Unreachable';
+                                        failureDesc = 'The recipient handset was switched off or out of cellular network coverage.';
+                                      } else if (isFailed) {
+                                        failureLabel = 'Call Failed';
+                                        failureDesc = 'The call attempt could not connect to the recipient handset. The telecom carrier was unable to establish a live connection.';
+                                      } else if (isNoAnswer) {
+                                        failureLabel = 'No Answer';
+                                        failureDesc = 'The recipient did not answer the phone. The call timed out with no conversation recorded.';
+                                      } else {
+                                        const isSalesMilestone = ['TRIAL_BOOKED', 'CONVERTED', 'NEW', 'INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'FOLLOW_UP_NEEDED'].includes(normDisp);
+                                        failureLabel = !isSalesMilestone && normDisp ? evt.metadata?.disposition?.replace(/_/g, ' ') : (normStatus ? normStatus.replace(/_/g, ' ') : 'Unconnected');
+                                        failureDesc = 'The call did not establish a live voice connection with the recipient. No conversation was recorded.';
+                                      }
+
+                                      const isSalesMilestone = ['TRIAL_BOOKED', 'CONVERTED', 'INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'FOLLOW_UP_NEEDED'].includes(normDisp);
+
+                                      return (
+                                        <div className="mt-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                                          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                          <div className="space-y-0.5 min-w-0 flex-1">
+                                            <div className="font-semibold flex items-center gap-1.5 flex-wrap">
+                                              <span>Call Not Connected ({failureLabel})</span>
+                                              <Badge variant="outline" className="text-[10px] h-4 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10">
+                                                No Audio
+                                              </Badge>
+                                              {isSalesMilestone && (
+                                                <Badge variant="outline" className="text-[10px] h-4 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10">
+                                                  Lead Stage: {evt.metadata?.disposition?.replace(/_/g, ' ')}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground">
+                                              {failureDesc}
+                                            </p>
+                                          </div>
                                         </div>
-                                        <p className="text-[11px] text-muted-foreground">
-                                          The recipient did not answer the phone. The call timed out with no conversation recorded.
-                                        </p>
-                                      </div>
-                                    </div>
+                                      );
+                                    })()
                                   ) : null}
                                 </div>
                               </div>

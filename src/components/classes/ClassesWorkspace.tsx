@@ -38,7 +38,6 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Save,
-  Trash2,
   Upload,
   Ban,
   RotateCcw,
@@ -88,6 +87,7 @@ import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { cn } from '@/lib/utils';
 import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
 import { ClassAttendanceModal } from './ClassAttendanceModal';
+import { ClassBookingBreakdown } from './ClassBookingBreakdown';
 import { AssignTrainerModal } from './AssignTrainerModal';
 
 export function normalizeDaysOfWeek(days: any): number[] {
@@ -483,7 +483,9 @@ export const ClassesWorkspace: React.FC = () => {
     }
   };
   const [searchTerm, setSearchTerm] = useState('');
-  const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val);
+  };
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sessionsPage, setSessionsPage] = useState<number>(1);
   const [sessionsPageSize, setSessionsPageSize] = useState<number>(20);
@@ -530,10 +532,14 @@ export const ClassesWorkspace: React.FC = () => {
   const [ruleDayOfWeek, setRuleDayOfWeek] = useState<string>('ALL');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+  const [selectedTrainerFilter, setSelectedTrainerFilter] = useState<string>('ALL');
   const [sessionStartTime, setSessionStartTime] = useState<string>('');
   const [sessionEndTime, setSessionEndTime] = useState<string>('');
   const isTimeRangeInvalid = Boolean(
     sessionStartTime && sessionEndTime && sessionEndTime <= sessionStartTime
+  );
+  const isDateRangeInvalid = Boolean(
+    dateFilterMode === 'range' && sessionFromDate && sessionToDate && sessionFromDate > sessionToDate
   );
 
   const CATEGORY_COLOR_PALETTES = [
@@ -630,6 +636,7 @@ export const ClassesWorkspace: React.FC = () => {
     ruleDayOfWeek,
     selectedStatusFilter,
     selectedCheckInFilter,
+    selectedTrainerFilter,
     selectedBranchFilter,
     selectedCategoryFilter,
     sessionStartTime,
@@ -666,6 +673,33 @@ export const ClassesWorkspace: React.FC = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }, []);
+
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    selectedBranchFilter ||
+    selectedCategoryFilter !== 'ALL' ||
+    selectedStatusFilter !== 'ALL' ||
+    selectedCheckInFilter !== 'ALL' ||
+    (selectedTrainerFilter && selectedTrainerFilter !== 'ALL') ||
+    sessionStartTime ||
+    sessionEndTime ||
+    dateFilterMode !== 'today'
+  );
+
+  const handleResetFilters = () => {
+    handleSearchChange('');
+    setDebouncedSearch('');
+    setSelectedBranchFilter('');
+    setSelectedCategoryFilter('ALL');
+    setSelectedStatusFilter('ALL');
+    setSelectedCheckInFilter('ALL');
+    setSelectedTrainerFilter('ALL');
+    setSessionStartTime('');
+    setSessionEndTime('');
+    setDateFilterMode('today');
+    setSelectedDate(todayStr);
+    setSessionsPage(1);
+  };
 
   // Modals state
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
@@ -869,6 +903,7 @@ export const ClassesWorkspace: React.FC = () => {
       selectedCategoryFilter,
       primaryTab === 'sessions' ? selectedStatusFilter : 'ALL',
       primaryTab === 'sessions' ? selectedCheckInFilter : 'ALL',
+      primaryTab === 'sessions' ? selectedTrainerFilter : 'ALL',
       primaryTab === 'sessions' ? debouncedSearch : '',
       primaryTab === 'sessions' ? sessionStartTime : '',
       primaryTab === 'sessions' ? sessionEndTime : '',
@@ -877,12 +912,13 @@ export const ClassesWorkspace: React.FC = () => {
     ],
     queryFn: () => classesApi.getOccurrencesPaginated({
       occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
-      from_date: dateFilterMode === 'week' ? todayStr : (dateFilterMode === 'range' && sessionFromDate ? sessionFromDate : undefined),
-      to_date: dateFilterMode === 'week' ? weekEndStr : (dateFilterMode === 'range' && sessionToDate ? sessionToDate : undefined),
+      from_date: dateFilterMode === 'week' ? todayStr : (dateFilterMode === 'range' && sessionFromDate && !isDateRangeInvalid ? sessionFromDate : undefined),
+      to_date: dateFilterMode === 'week' ? weekEndStr : (dateFilterMode === 'range' && sessionToDate && !isDateRangeInvalid ? sessionToDate : undefined),
       branch_id: effectiveBranchFilter,
       category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
       status: primaryTab === 'sessions' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
       check_in_status: primaryTab === 'sessions' && selectedCheckInFilter !== 'ALL' ? selectedCheckInFilter : undefined,
+      trainer_id: primaryTab === 'sessions' && selectedTrainerFilter && selectedTrainerFilter !== 'ALL' ? selectedTrainerFilter : undefined,
       search: primaryTab === 'sessions' && debouncedSearch ? debouncedSearch : undefined,
       start_time: primaryTab === 'sessions' && sessionStartTime ? sessionStartTime : undefined,
       end_time: primaryTab === 'sessions' && sessionEndTime ? sessionEndTime : undefined,
@@ -2988,8 +3024,22 @@ export const ClassesWorkspace: React.FC = () => {
                     placeholder="Search class, type, branch, or trainer..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="h-8 pl-8 text-xs bg-background w-full"
+                    className="h-8 pl-8 pr-7 text-xs bg-background w-full"
                   />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSearchChange('');
+                        setDebouncedSearch('');
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
+                      title="Clear search"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Date Filter Tabs */}
@@ -3071,7 +3121,7 @@ export const ClassesWorkspace: React.FC = () => {
                       type="date"
                       value={sessionFromDate}
                       onChange={(e) => setSessionFromDate(e.target.value)}
-                      className="h-8 bg-background w-auto text-xs"
+                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? 'border-destructive ring-1 ring-destructive/40' : ''}`}
                       title="From Date"
                     />
                     <span className="text-xs text-muted-foreground">to</span>
@@ -3079,9 +3129,14 @@ export const ClassesWorkspace: React.FC = () => {
                       type="date"
                       value={sessionToDate}
                       onChange={(e) => setSessionToDate(e.target.value)}
-                      className="h-8 bg-background w-auto text-xs"
+                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? 'border-destructive ring-1 ring-destructive/40' : ''}`}
                       title="To Date"
                     />
+                    {isDateRangeInvalid && (
+                      <span className="text-[11px] text-destructive font-medium shrink-0 animate-in fade-in duration-150">
+                        From date must be on or before To date
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -3110,6 +3165,25 @@ export const ClassesWorkspace: React.FC = () => {
                   ))}
                 </select>
 
+                {/* Trainer Filter */}
+                <select
+                  value={selectedTrainerFilter}
+                  onChange={(e) => setSelectedTrainerFilter(e.target.value)}
+                  className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
+                  title="Filter by assigned trainer"
+                >
+                  <option value="ALL">All Trainers</option>
+                  {trainers.map((tr: any) => {
+                    const trId = tr.id || tr.trainer_profile_id;
+                    const trName = tr.trainer_name || tr.full_name || tr.name || tr.employee_name || 'Trainer';
+                    return (
+                      <option key={trId} value={trId}>
+                        {trName}
+                      </option>
+                    );
+                  })}
+                </select>
+
                 {/* Trainer Check-In Filter */}
                 <select
                   value={selectedCheckInFilter}
@@ -3119,6 +3193,7 @@ export const ClassesWorkspace: React.FC = () => {
                   <option value="ALL">All Trainer Check-ins</option>
                   <option value="CHECKED_IN">Checked In</option>
                   <option value="PENDING">Pending Check-in</option>
+                  <option value="NO_TRAINER">No Trainer / Unassigned</option>
                 </select>
 
                 {/* Status Filter */}
@@ -3232,6 +3307,21 @@ export const ClassesWorkspace: React.FC = () => {
                     End time must be after start time
                   </span>
                 )}
+
+                {/* Reset All Filters Button */}
+                {hasActiveFilters && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetFilters}
+                    className="h-8 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1 border-dashed shrink-0"
+                    title="Reset all filters to default"
+                  >
+                    <RotateCcw className="size-3" />
+                    <span>Reset Filters</span>
+                  </Button>
+                )}
               </div>
 
               {/* View Mode Toggle Only */}
@@ -3276,15 +3366,22 @@ export const ClassesWorkspace: React.FC = () => {
                 </div>
                 <h3 className="text-base font-semibold text-foreground">No Class Sessions Found</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  {searchTerm || selectedBranchFilter || selectedCategoryFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || selectedCheckInFilter !== 'ALL'
+                  {hasActiveFilters
                     ? "No sessions match the selected filters. Try broadening your search or resetting filters."
                     : `No sessions scheduled for the selected timeframe. Generate sessions from recurring rules or schedule a one-off session.`}
                 </p>
-                {canCreate && (
-                  <Button size="sm" onClick={openNewOccurrenceModal}>
-                    <Plus className="size-3.5 mr-1" /> Schedule One-Off Session
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {hasActiveFilters && (
+                    <Button size="sm" variant="outline" onClick={handleResetFilters}>
+                      <RotateCcw className="size-3.5 mr-1" /> Reset All Filters
+                    </Button>
+                  )}
+                  {canCreate && (
+                    <Button size="sm" onClick={openNewOccurrenceModal}>
+                      <Plus className="size-3.5 mr-1" /> Schedule One-Off Session
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : viewMode === 'list' ? (
               /* ==================== LIST / TABLE VIEW ==================== */
@@ -3293,8 +3390,8 @@ export const ClassesWorkspace: React.FC = () => {
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
-                        <th className="py-3 px-3 text-center w-28 whitespace-nowrap">Actions</th>
-                        <th className="py-3 px-4">Class Session</th>
+                        <th className="py-3 px-3 text-center w-20 min-w-[80px] whitespace-nowrap sticky left-0 z-20 bg-muted/95 backdrop-blur-xs">Actions</th>
+                        <th className="py-3 px-4 min-w-[150px] sticky left-20 z-20 bg-muted/95 backdrop-blur-xs">Class Session</th>
                         <th className="py-3 px-4">Class Type</th>
                         <th className="py-3 px-4">Branch</th>
                         <th className="py-3 px-4">Date & Time</th>
@@ -3356,8 +3453,8 @@ export const ClassesWorkspace: React.FC = () => {
                             }`}
                             title="Click row to view class details, workout video, and roster"
                           >
-                            {/* Column 1: Upfront Cancel/Reactivate Toggle, Edit, and Admin Delete Actions */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            {/* Column 1: Upfront Cancel/Reactivate Toggle and Edit Actions */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap sticky left-0 z-10 bg-card group-hover:bg-muted/90 transition-colors" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-1.5">
                                 {/* Class Active / Cancel Toggle Switch - Placed upfront on the far left before Edit */}
                                 {canCancel && (
@@ -3405,26 +3502,10 @@ export const ClassesWorkspace: React.FC = () => {
                                     <Pencil className="size-3.5" />
                                   </Button>
                                 )}
-
-                                {isAdminUser && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={deletingOccId === occ.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteOccurrenceSlot(occ);
-                                    }}
-                                    className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
-                                    title="Delete slot (Admin only)"
-                                  >
-                                    <Trash2 className="size-3.5" />
-                                  </Button>
-                                )}
                               </div>
                             </td>
                             {/* Class Session Info */}
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-4 min-w-[150px] sticky left-20 z-10 bg-card group-hover:bg-muted/90 transition-colors">
                               <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
                                 <span>{occ.template_name || occ.class_name || 'Class Session'}</span>
                               </div>
@@ -3545,6 +3626,10 @@ export const ClassesWorkspace: React.FC = () => {
                               >
                                 {isFull ? `FULL (${bookedCount}/${occ.capacity})` : `${bookedCount} / ${occ.capacity} Booked`}
                               </Badge>
+                              <ClassBookingBreakdown
+                                memberCount={occ.member_booking_count}
+                                trialCount={occ.trial_booking_count}
+                              />
                             </td>
 
                             {/* Waitlist */}

@@ -293,12 +293,19 @@ export function safeFormatDate(dateVal: any, formatPattern: string, fallback = "
  * Strips internal backend package versioning suffixes (e.g., "-v2", "_v1.0")
  * to ensure pristine customer-facing package titles in the passbook.
  */
-function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string): string {
+function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string, programName?: string): string {
+  let pkg = '';
   if (packageName && packageName.trim()) {
-    return packageName.trim().replace(/[\s\-_]+v\d+(\.\d+)?$/i, '');
+    pkg = packageName.trim().replace(/[\s\-_]+v\d+(\.\d+)?$/i, '');
+  } else {
+    const raw = (nameSnapshot || '').trim();
+    pkg = raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
   }
-  const raw = (nameSnapshot || '').trim();
-  return raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
+  const prog = (programName || '').trim();
+  if (prog && pkg && !pkg.toLowerCase().includes(prog.toLowerCase()) && prog.toLowerCase() !== 'standard') {
+    return `${prog} – ${pkg}`;
+  }
+  return pkg;
 }
 
 /**
@@ -3656,7 +3663,7 @@ function WebMemberPortalWorkspaceInner() {
         } else if (raw?.packs && Array.isArray(raw.packs)) {
           list = raw.packs.map((p: any, idx: number) => ({
             id: p.membership_id || `pack-${idx}`,
-            package_name: cleanPackageDisplayName(undefined, p.package_name) || "Passbook",
+            package_name: cleanPackageDisplayName(undefined, p.package_name, p.program_name) || "Passbook",
             package_type: p.is_unlimited ? "Unlimited Pass" : "Session Passbook",
             total_credits: Number(p.allocated_sessions) || 0,
             used_credits: Number(p.consumed_sessions) || 0,
@@ -3791,7 +3798,7 @@ function WebMemberPortalWorkspaceInner() {
               progs.push({
                 id: m.program_id,
                 name: m.program_name || "Program",
-                package_name: m.package_name || "",
+                package_name: cleanPackageDisplayName(undefined, m.display_package_name || m.package_name, m.program_name) || m.package_name || "",
                 package_id: m.package_id || "",
               });
             }
@@ -3801,7 +3808,7 @@ function WebMemberPortalWorkspaceInner() {
           progs.push({
             id: actData.active_membership.program_id,
             name: actData.active_membership.program_name || "Program",
-            package_name: actData.active_membership.package_name || "",
+            package_name: cleanPackageDisplayName(undefined, actData.active_membership.display_package_name || actData.active_membership.package_name, actData.active_membership.program_name) || actData.active_membership.package_name || "",
             package_id: actData.active_membership.package_id || "",
           });
         }
@@ -4661,16 +4668,35 @@ function WebMemberPortalWorkspaceInner() {
   // --------------------------------------------------------------------------
   // 6.14 Computed KPI Metrics, Passbook Ledger Memos & Attendance History
   // --------------------------------------------------------------------------
-  const totalCredits = membershipActions?.active_membership?.total_sessions 
+  const totalCredits = (credits.length > 0 ? credits.reduce((acc, c) => acc + c.total_credits, 0) : null)
+    ?? membershipActions?.active_membership?.total_sessions 
     ?? profile?.total_sessions 
-    ?? (credits.length > 0 ? credits.reduce((acc, c) => acc + c.total_credits, 0) : 0);
-  const remainingCredits = membershipActions?.active_membership?.remaining_sessions 
+    ?? 0;
+  const remainingCredits = (credits.length > 0 ? credits.reduce((acc, c) => acc + c.remaining_credits, 0) : null)
+    ?? membershipActions?.active_membership?.remaining_sessions 
     ?? profile?.remaining_sessions 
-    ?? (credits.length > 0 ? credits.reduce((acc, c) => acc + c.remaining_credits, 0) : 0);
+    ?? 0;
   const usedCredits = Math.max(0, totalCredits - remainingCredits);
   const passUsagePercent = totalCredits > 0 ? Math.round((usedCredits / totalCredits) * 100) : 0;
-  const endIso = membershipActions?.active_membership?.end_date 
-    ?? profile?.end_date 
+  // Item 2: For multi-contract members, use the EARLIEST expiring pack so members
+  // clearly see which pack needs attention. Single-contract: behaviour unchanged.
+  const _activePacks = membershipActions?.active_memberships ?? [];
+  const _earliestEndIso: string | null = (() => {
+    const dated = _activePacks
+      .map((p: any) => p.end_date as string | null)
+      .filter(Boolean) as string[];
+    if (dated.length === 0) return null;
+    return dated.sort()[0]; // lexicographic ISO sort = chronological
+  })();
+  const _isMultiPack = _activePacks.length > 1;
+  const _earliestPackName: string | null = (() => {
+    if (!_isMultiPack || !_earliestEndIso) return null;
+    const match = _activePacks.find((p: any) => p.end_date === _earliestEndIso);
+    return match?.display_package_name ?? match?.package_name ?? null;
+  })();
+  const endIso = _earliestEndIso
+    ?? membershipActions?.active_membership?.end_date
+    ?? profile?.end_date
     ?? credits[0]?.valid_until;
   const validityUntil = endIso
     ? new Date(endIso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -4720,8 +4746,14 @@ function WebMemberPortalWorkspaceInner() {
   }, [bookings]);
 
   const primaryPass = React.useMemo(() => {
+    const rawPkg = membershipActions?.active_membership?.package_name || profile?.membership_plan || credits[0]?.package_name;
+    const rawProg = membershipActions?.active_membership?.program_name;
+    const displayTitle = rawPkg
+      ? cleanPackageDisplayName(undefined, rawPkg, rawProg)
+      : (credits.length === 0 ? "No Active Pass" : "Active Membership");
+
     return {
-      package_name: membershipActions?.active_membership?.package_name || profile?.membership_plan || credits[0]?.package_name || (credits.length === 0 ? "No Active Pass" : "Active Membership"),
+      package_name: displayTitle,
       valid_from: membershipActions?.active_membership?.start_date || profile?.start_date || credits[0]?.valid_from || null,
       valid_until: membershipActions?.active_membership?.end_date || profile?.end_date || credits[0]?.valid_until || null,
     };
@@ -5231,10 +5263,10 @@ function WebMemberPortalWorkspaceInner() {
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/60 backdrop-blur-xs">
+              <Card className={`border-border/60 bg-card/60 backdrop-blur-xs ${_isMultiPack && daysRemaining <= 15 && daysRemaining >= 0 ? 'border-amber-400/50' : ''}`}>
                 <CardHeader className="pb-2">
                   <CardDescription className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                    Package Validity
+                    {_isMultiPack ? 'Earliest Expiry' : 'Package Validity'}
                     <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-500">
                       <Clock className="h-3.5 w-3.5" />
                     </div>
@@ -5247,6 +5279,11 @@ function WebMemberPortalWorkspaceInner() {
                   <p className="text-xs text-muted-foreground mt-2">
                     Expires on <span className="font-semibold text-foreground">{validityUntil}</span>
                   </p>
+                  {_isMultiPack && _earliestPackName && (
+                    <p className="text-[10px] text-amber-500 mt-1 font-medium truncate" title={_earliestPackName}>
+                      ⚠ {_earliestPackName}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -8510,7 +8547,7 @@ function WebMemberPortalWorkspaceInner() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap mb-1">
                               <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
-                                {cleanPackageDisplayName(opt.name, opt.package_name)}
+                                {cleanPackageDisplayName(opt.name, opt.package_name, opt.program_name)}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
@@ -8844,7 +8881,7 @@ function WebMemberPortalWorkspaceInner() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap mb-1">
                               <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
-                                {cleanPackageDisplayName(opt.name, opt.package_name)}
+                                {cleanPackageDisplayName(opt.name, opt.package_name, opt.program_name)}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
