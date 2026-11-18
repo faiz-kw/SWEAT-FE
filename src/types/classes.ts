@@ -151,6 +151,10 @@ export interface ClassOccurrence {
     status: 'CONFIRMED' | 'PENDING' | 'UNASSIGNED' | 'UNKNOWN';
   };
   booking_count?: number;
+  /** Seat-holding class (member) bookings; booking_count = member_booking_count + trial_booking_count */
+  member_booking_count?: number;
+  /** Seat-holding trial bookings */
+  trial_booking_count?: number;
   total_booked?: number;
   waitlist_count?: number;
   attendance_count?: number;
