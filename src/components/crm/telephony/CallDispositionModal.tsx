@@ -78,6 +78,21 @@ export function CallDispositionModal({
     );
   }, [leadFirstName]);
 
+  // Default disposition appropriately based on actual call outcome
+  React.useEffect(() => {
+    if (isOpen && callEndedData) {
+      const dur = callEndedData.duration ?? callEndedData.duration_seconds ?? 0;
+      const status = String(callEndedData.status || '').toUpperCase();
+      if (status === 'BUSY') {
+        setDisposition('BUSY');
+      } else if (dur === 0 || ['NO_ANSWER', 'MISSED', 'UNANSWERED', 'FAILED'].includes(status)) {
+        setDisposition('NO_ANSWER');
+      } else {
+        setDisposition('FOLLOW_UP_NEEDED');
+      }
+    }
+  }, [isOpen, callEndedData]);
+
   // Check if disposition is an unanswered / busy scenario
   const isUnansweredOutcome = React.useMemo(() => {
     return ["NO_ANSWER", "BUSY", "SWITCHED_OFF", "CALLBACK_REQUESTED"].includes(disposition);
