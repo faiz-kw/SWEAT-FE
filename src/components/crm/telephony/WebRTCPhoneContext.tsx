@@ -273,6 +273,22 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(heartbeatTimer);
   }, [isAuthenticated, user, callState, connectionStatus]);
 
+  // Tell the server this browser is closing so routing stops choosing this agent.
+  // `persisted` is true when the page is only frozen into the back/forward cache, not closing.
+  // keepalive lets the request finish after the page is gone (sendBeacon cannot send the bearer token).
+  const canUseTelephony = Boolean(isAuthenticated && user && canAccessTelephony(user));
+  React.useEffect(() => {
+    if (!canUseTelephony) return;
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
+      void crmApi.updateAgentPresence("OFFLINE", { keepalive: true }).catch(() => {});
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [canUseTelephony]);
+
   // Initialize hidden audio element for remote audio stream
   React.useEffect(() => {
     if (typeof document === "undefined") return;
