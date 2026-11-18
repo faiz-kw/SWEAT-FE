@@ -2807,7 +2807,21 @@ export function LeadDetailModal({
                                     </span>
                                   </div>
                                   {evt.description && (
-                                    <p className="text-xs text-muted-foreground whitespace-pre-line">{evt.description}</p>
+                                    <p className="text-xs text-muted-foreground whitespace-pre-line">
+                                      {(() => {
+                                        const statusUpper = String(evt.metadata?.status || '').toUpperCase();
+                                        const errorCode = evt.metadata?.error_code || evt.metadata?.failure_code || evt.metadata?.error_reason;
+                                        const isFailedOrError = ['FAILED', 'CALL_FAILED', 'ERROR', 'UNCONFIGURED', 'SUBMISSION_FAILED'].includes(statusUpper) || evt.title?.toLowerCase().includes('failed');
+
+                                        if (isFailedOrError && evt.description.toLowerCase().includes('no answer from recipient')) {
+                                          if (errorCode) {
+                                            return `Call outcome: Failed (${errorCode}). Live connection could not be established.`;
+                                          }
+                                          return 'Call outcome: Failed (Carrier Unreachable). Live connection could not be established.';
+                                        }
+                                        return evt.description;
+                                      })()}
+                                    </p>
                                   )}
                                   <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
                                     <span>Actor: <strong className="text-foreground font-medium">{evt.actor}</strong></span>
