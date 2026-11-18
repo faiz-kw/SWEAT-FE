@@ -76,14 +76,10 @@ const getInitials = (name?: string) => {
 };
 
 
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
+
 const formatPhoneNumber = (phone?: string | null, unmasked: boolean = false): string => {
-  if (!phone) return '';
-  if (unmasked) return phone;
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.length >= 4) {
-    return `+91-XXXXX-${digits.slice(-4)}`;
-  }
-  return '+91-XXXXX-XXXX';
+  return formatDisplayPhone(phone, unmasked);
 };
 
 export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
@@ -93,7 +89,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const isUnmaskedAdmin = isOrganizationAdmin(user);
   const isTrainer = isTrainerUser(user);
   const canBookSlot = isUnmaskedAdmin || isTrainer || can('ops.bookings.create');
@@ -996,7 +992,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                           {displayPhone && (
                             <span className="font-mono flex items-center gap-1 text-foreground/80">
                               <Phone className="size-2.5 text-muted-foreground" />
-                              <span>{formatPhoneNumber(displayPhone, isUnmaskedAdmin)}</span>
+                              <span>{formatPhoneNumber(displayPhone, canViewPhoneNumber)}</span>
                             </span>
                           )}
                           {displayEmail && isUnmaskedAdmin && (
@@ -1322,7 +1318,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                           {m.phone && (
                             <>
                               <span>•</span>
-                              <span className="font-mono">{formatPhoneNumber(m.phone, isUnmaskedAdmin)}</span>
+                              <span className="font-mono">{formatPhoneNumber(m.phone, canViewPhoneNumber)}</span>
                             </>
                           )}
                         </div>
@@ -1467,7 +1463,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                           </div>
                           <div className="text-2xs text-muted-foreground flex items-center gap-2">
                             {lead.phone && (
-                              <span className="font-mono">{formatPhoneNumber(lead.phone, isUnmaskedAdmin)}</span>
+                              <span className="font-mono">{formatPhoneNumber(lead.phone, canViewPhoneNumber)}</span>
                             )}
                             {lead.email && isUnmaskedAdmin && (
                               <>

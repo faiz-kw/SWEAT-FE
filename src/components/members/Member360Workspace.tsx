@@ -111,6 +111,7 @@ import {
 } from './modals/MemberActionModals';
 
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { useAuth } from '@/contexts';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '@/utils/dateTimeUtils';
 
@@ -149,7 +150,7 @@ const resolveInitialTab = (tab?: string): TabKey => {
 export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId, initialTab }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can, isSuperAdmin } = usePermissions();
+  const { can, isSuperAdmin, canViewPhoneNumber } = usePermissions();
   const { user } = useAuth();
 
   const roleStr = (user?.role || '').toLowerCase().trim();
@@ -790,7 +791,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   {member.phone && (
                     <div className="flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-muted-foreground/70" />
-                      <span>{member.phone}</span>
+                      <span>{formatDisplayPhone(member.phone, canViewPhoneNumber)}</span>
                       {isWebPhoneReady && (
                         <Button
                           variant="ghost"
@@ -1119,9 +1120,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium font-mono text-foreground">
                         {overview.contact.phone
-                          ? (isSalesOrCounselor && overview.contact.phone.length >= 4
-                              ? `+91-XXXXX-${overview.contact.phone.slice(-4)}`
-                              : overview.contact.phone)
+                          ? formatDisplayPhone(overview.contact.phone, canViewPhoneNumber)
                           : '—'}
                       </span>
                       {overview.contact.phone && isWebPhoneReady && (

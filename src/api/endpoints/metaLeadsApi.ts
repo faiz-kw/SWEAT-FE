@@ -128,6 +128,18 @@ export type MetaImport = {
   ad_id?: string;
   ad_name?: string;
   is_organic?: boolean;
+  facebook_account_name?: string | null;
+  facebook_account_id?: string | null;
+  page_name?: string | null;
+  form_name?: string | null;
+  meta_form_status?: string | null;
+  mapping_state?: 'ACTIVE' | 'PAUSED' | 'UNCONFIGURED';
+  mapping_info?: {
+    id: string;
+    name: string;
+    is_active: boolean;
+    version: number;
+  } | null;
 };
 
 export type MetaAuditHistoryItem = {

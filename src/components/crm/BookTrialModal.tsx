@@ -19,6 +19,8 @@ import {
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { formatBranchOptionLabel, formatBranchAddressOnly } from '@/lib/crmLabels';
 import type { Lead, TrialSlot, BookTrialPayload, TrialBooking, RescheduleTrialPayload } from '@/types/crm';
 import { Button } from '@/components/ui/button';
@@ -52,6 +54,7 @@ export function BookTrialModal({
   onSuccess,
 }: BookTrialModalProps) {
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
   const isReschedule = mode === 'reschedule' && !!existingTrial;
 
   const getLocalTodayDate = () => {
@@ -434,8 +437,8 @@ export function BookTrialModal({
                   <div className="text-xs font-semibold text-foreground truncate">
                     {activeLead.first_name} {activeLead.last_name}
                   </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {activeLead.phone_normalized || activeLead.email_normalized || 'No contact phone'}
+                  <div className="text-[11px] text-muted-foreground truncate font-mono">
+                    {formatDisplayPhone(activeLead.phone_normalized, canViewPhoneNumber) || activeLead.email_normalized || 'No contact phone'}
                   </div>
                 </div>
               </div>
@@ -469,7 +472,7 @@ export function BookTrialModal({
                         setSelectedLeadId(l.id);
                         if (l.branch) setSelectedBranchId(l.branch);
                         if (l.interested_program) setSelectedProgramId(l.interested_program as string);
-                        setLeadSearch(`${l.first_name} ${l.last_name} (${l.phone_normalized || l.email_normalized || 'No contact'})`);
+                        setLeadSearch(`${l.first_name} ${l.last_name} (${formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || l.email_normalized || 'No contact'})`);
                       }}
                       className={`p-2 cursor-pointer hover:bg-muted/50 flex justify-between items-center ${
                         selectedLeadId === l.id ? 'bg-primary/10 font-semibold text-primary' : ''
@@ -477,8 +480,8 @@ export function BookTrialModal({
                     >
                       <div className="truncate">
                         {l.first_name} {l.last_name}
-                        <span className="text-muted-foreground ml-2 text-[11px]">
-                          {l.phone_normalized || l.email_normalized}
+                        <span className="text-muted-foreground ml-2 text-[11px] font-mono">
+                          {formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || l.email_normalized}
                         </span>
                       </div>
                       <Badge variant="outline" className="text-[10px]">

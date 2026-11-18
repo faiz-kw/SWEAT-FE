@@ -134,12 +134,27 @@ export const membersApi = {
     return res.data;
   },
 
-  async freezeMembership(id: string, data: { freeze_from: string; freeze_until: string; reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async freezeMembership(id: string, data: {
+    freeze_from: string;
+    freeze_until: string;
+    reason?: string;
+    membership_id?: string;
+    charge_fee?: boolean;
+    fee_amount?: number | string;
+    payment_method?: 'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH';
+  }): Promise<{
+    success: boolean;
+    message: string;
+    member: Member;
+    order_id?: string;
+    order_number?: string;
+    payment_url?: string;
+  }> {
     const res = await api.post<any>(`/tenant/members/${id}/freeze/`, data);
     return res.data;
   },
 
-  async unfreezeMembership(id: string, data?: { reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async unfreezeMembership(id: string, data?: { reason?: string; membership_id?: string }): Promise<{ success: boolean; message: string; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/unfreeze/`, data || {});
     return res.data;
   },

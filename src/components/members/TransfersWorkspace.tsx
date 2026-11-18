@@ -47,11 +47,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 export const TransfersWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { locationId } = useApp();
+  const { canViewPhoneNumber } = usePermissions();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -398,7 +401,7 @@ export const TransfersWorkspace: React.FC = () => {
                     <div>
                       <div className="font-semibold text-foreground">{m.name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {m.home_branch || 'Primary Branch'} · {m.phone || m.email || ''}
+                        {m.home_branch || 'Primary Branch'} · {formatDisplayPhone(m.phone, canViewPhoneNumber) || m.email || ''}
                       </div>
                     </div>
                     <Badge variant="outline" className="text-[10px]">

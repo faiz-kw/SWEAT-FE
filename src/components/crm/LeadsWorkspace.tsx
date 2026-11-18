@@ -84,6 +84,7 @@ import { CRMEmptyState } from './common/CRMEmptyState';
 import { CRMErrorState } from './common/CRMErrorState';
 import { formatCrmLabel, formatBranchOptionLabel, formatBranchTitle, formatBranchAddressOnly } from '@/lib/crmLabels';
 import { usePermissions } from '@/lib/permissions';
+import { canExposeRawPhoneAction, formatDisplayPhone } from '@/lib/phonePrivacy';
 import { useAuth } from '@/contexts';
 import { isOrganizationAdmin } from '@/lib/nav';
 import { NewLeadModal } from './NewLeadModal';
@@ -253,7 +254,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const isOrgAdmin = isOrganizationAdmin(user);
 
   // Authoritative Effective Permissions
@@ -1515,7 +1516,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                 {lead.phone_normalized && (
                                   <div className="flex items-center gap-1.5 font-mono">
                                     <Phone className="w-3 h-3 opacity-60" />
-                                    <span>{lead.phone_normalized}</span>
+                                    <span>{formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}</span>
                                   </div>
                                 )}
                                 {lead.branch_name && (
@@ -1816,7 +1817,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                             {lead.phone_normalized && (
                               <div className="flex items-center gap-1.5 font-mono text-foreground/90">
                                 <Phone className="w-3 h-3 text-muted-foreground/70 shrink-0" />
-                                <span>{lead.phone_normalized}</span>
+                                <span>{formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}</span>
                               </div>
                             )}
                             {lead.email_normalized && (
@@ -2133,13 +2134,19 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                       {lead.phone_normalized && (
                         <div>
                           <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Phone</span>
-                          <a
-                            href={`tel:${lead.phone_normalized}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="font-mono text-foreground hover:text-primary hover:underline truncate block"
-                          >
-                            {lead.phone_normalized}
-                          </a>
+                          {canExposeRawPhoneAction(lead.phone_normalized, canViewPhoneNumber) ? (
+                            <a
+                              href={`tel:${lead.phone_normalized}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-mono text-foreground hover:text-primary hover:underline truncate block"
+                            >
+                              {formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}
+                            </a>
+                          ) : (
+                            <span className="font-mono text-muted-foreground truncate block">
+                              {formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}
+                            </span>
+                          )}
                         </div>
                       )}
                       <div>

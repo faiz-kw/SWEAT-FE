@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { getCurrentUser } from '@/services';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
@@ -1410,6 +1411,7 @@ function ReviewStep({
   signatureData: string | null;
   onEditTerms?: () => void;
 }) {
+  const { canViewPhoneNumber } = usePermissions();
   const p = quote.pricing;
   const providerLabel = PROVIDER_METADATA[paymentProvider]?.label ?? paymentProvider;
   const isUnlimited = quote.entitlements.some((e: any) => e.is_unlimited);
@@ -1424,7 +1426,7 @@ function ReviewStep({
 
   const rows: { label: string; value: string; highlight?: boolean }[] = [
     { label: 'Member / Prospect', value: `${lead.first_name} ${lead.last_name}` },
-    { label: 'Phone', value: lead.phone_normalized ?? '—' },
+    { label: 'Phone', value: formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber) || '—' },
     { label: 'Program', value: quote.program.name },
     { label: 'Selected Package', value: pkgName },
     ...(sessionsBadge ? [{ label: 'Sessions Included', value: sessionsBadge, highlight: true }] : []),
@@ -1844,7 +1846,7 @@ export function ConversionWizard(props: ConversionWizardProps) {
 
 function ConversionWizardInner({ lead, open, onOpenChange, onConverted }: ConversionWizardProps) {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canRecordPayment = can('finance.payments.create') || can('core.settings.edit');
   const [step, setStep] = useState(1);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(lead.branch ?? '');
@@ -2293,7 +2295,7 @@ const handleCancelRazorpay = useCallback(() => {
                 {lead.phone_normalized && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 border border-border/50 text-[11px] text-muted-foreground">
                     <Phone size={10} className="text-muted-foreground/70 shrink-0" />
-                    <span className="font-mono tracking-tight">{lead.phone_normalized}</span>
+                    <span className="font-mono tracking-tight">{formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}</span>
                   </span>
                 )}
 

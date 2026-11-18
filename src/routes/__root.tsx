@@ -1,4 +1,3 @@
-import { Agentation } from "agentation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -159,7 +158,6 @@ function RootComponent() {
       <AuthProvider>
         <Outlet />
         <Toaster position="top-right" richColors closeButton />
-        {import.meta.env.DEV && <Agentation />}
       </AuthProvider>
     </QueryClientProvider>
   );

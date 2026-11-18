@@ -28,6 +28,9 @@ import {
 } from 'lucide-react';
 import { membersApi } from '@/api/endpoints/membersApi';
 
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
+
 interface LegacyLiveSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,6 +44,7 @@ export const LegacyLiveSearchModal: React.FC<LegacyLiveSearchModalProps> = ({
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [isSearching, setIsSearching] = useState(false);
@@ -210,7 +214,7 @@ export const LegacyLiveSearchModal: React.FC<LegacyLiveSearchModalProps> = ({
                           {candidate.phone && (
                             <span className="flex items-center gap-1">
                               <Phone className="w-3 h-3 text-muted-foreground/70" />
-                              {candidate.phone}
+                              {formatDisplayPhone(candidate.phone, canViewPhoneNumber)}
                             </span>
                           )}
                           {candidate.email && (

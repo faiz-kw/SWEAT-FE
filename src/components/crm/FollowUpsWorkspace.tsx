@@ -29,6 +29,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type {
@@ -67,7 +68,7 @@ const PRIORITY_BADGES: Record<string, { label: string; className: string }> = {
 
 export function FollowUpsWorkspace() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canEdit = can('crm.leads.edit') || can('crm.leads.create');
 
   // Filters & Tabs state
@@ -693,7 +694,7 @@ export function FollowUpsWorkspace() {
                 <option value="">-- Choose Lead --</option>
                 {leadsList.map((l: any) => (
                   <option key={l.id} value={l.id}>
-                    {l.first_name} {l.last_name} ({l.phone_normalized || l.email_normalized || 'No contact'})
+                    {l.first_name} {l.last_name} ({formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || l.email_normalized || 'No contact'})
                   </option>
                 ))}
               </select>

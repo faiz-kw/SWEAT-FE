@@ -114,6 +114,42 @@ export function hasAllPermissions(
   return validCodes.every((code) => hasPermission(user, code));
 }
 
+export const SENSITIVE_PERMISSIONS = {
+  VIEW_PHONE_NUMBER: 'core.privacy.view_phone_number',
+} as const;
+
+export type SensitivePermissionCode =
+  (typeof SENSITIVE_PERMISSIONS)[keyof typeof SENSITIVE_PERMISSIONS];
+
+function isPlatformSuperAdmin(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  if (user.userType === 'platform' && !user.tenantId) return true;
+  const roleStr = (user.role || '').toUpperCase().trim();
+  return roleStr === 'SUPER_ADMIN' || roleStr === 'SUPER ADMIN';
+}
+
+/**
+ * Strict evaluator for sensitive data-privacy permissions (e.g. phone visibility).
+ * Unlike general feature permissions:
+ * - Only Platform Super Admin bypasses.
+ * - Tenant roles (including ORG_ADMIN) and '*' wildcards do NOT bypass; the exact
+ *   permission code must be explicitly present in user.permissions from live RBAC.
+ */
+export function hasSensitivePermission(
+  user: AuthUser | null | undefined,
+  permissionCode: string
+): boolean {
+  if (!user) return false;
+  if (isPlatformSuperAdmin(user)) return true;
+
+  const perms = user.permissions || [];
+  if (perms.length === 0) return false;
+
+  const target = permissionCode.toLowerCase().trim();
+  return perms.some((p) => p.toLowerCase().trim() === target);
+}
+
 /**
  * Evaluates whether a user is authorized to view and use Sales Calling & Telephony features.
  * Access is governed strictly by the RBAC Permission Matrix:
@@ -152,10 +188,19 @@ export function usePermissions() {
     return hasAllPermissions(user, permissionCodes);
   };
 
+  const canViewSensitive = (permissionCode: string): boolean => {
+    if (isLoading) return false;
+    return hasSensitivePermission(user, permissionCode);
+  };
+
+  const canViewPhoneNumber = !isLoading && hasSensitivePermission(user, SENSITIVE_PERMISSIONS.VIEW_PHONE_NUMBER);
+
   return {
     can,
     canAny,
     canAll,
+    canViewSensitive,
+    canViewPhoneNumber,
     hasPermission: can,
     hasAnyPermission: canAny,
     hasAllPermissions: canAll,

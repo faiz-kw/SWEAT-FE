@@ -39,6 +39,9 @@ import {
   RotateCcw,
   Lock,
   AlertTriangle,
+  SlidersHorizontal,
+  X,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { catalogApi } from '@/api/endpoints/catalogApi';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -156,6 +159,55 @@ const formatSessionCount = (val: any) => {
   if (isNaN(num)) return String(val);
   return num % 1 === 0 ? num.toFixed(0) : String(num);
 };
+
+/**
+ * Visual ON/OFF status toggle switch matching the red/green slider pattern.
+ */
+function StatusToggleSwitch({
+  isActive,
+  onToggle,
+  disabled = false,
+  title,
+  size = 'md',
+}: {
+  isActive: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  title?: string;
+  size?: 'sm' | 'md';
+}) {
+  const isSm = size === 'sm';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isActive}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={`group relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs select-none disabled:opacity-50 disabled:cursor-not-allowed ${
+        isSm ? 'h-5 w-11' : 'h-6 w-13'
+      } ${isActive ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-rose-600 dark:bg-rose-500'}`}
+      title={title || (isActive ? 'Active (ON) - click to deactivate' : 'Inactive (OFF) - click to activate')}
+    >
+      <span className="sr-only">{isActive ? 'Active' : 'Inactive'}</span>
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-flex items-center justify-center transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out font-black text-[8px] uppercase tracking-tighter ${
+          isSm ? 'h-4 w-4' : 'h-5 w-5'
+        } ${
+          isActive
+            ? `${isSm ? 'translate-x-6' : 'translate-x-7'} text-emerald-700`
+            : 'translate-x-0 text-rose-700'
+        }`}
+      >
+        {isActive ? 'ON' : 'OFF'}
+      </span>
+    </button>
+  );
+}
 
 export const PackagesWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
@@ -476,28 +528,48 @@ export const PackagesWorkspace: React.FC = () => {
     });
   }, [auditEvents, auditPackage?.id]);
 
-  // Map packages to their program
+  // Calculate accurate status counts across all packages
+  const statusCounts = useMemo(() => {
+    let active = 0;
+    let inactive = 0;
+    let draft = 0;
+    let archived = 0;
+
+    for (const pkg of packages) {
+      if (pkg.status === 'ARCHIVED') {
+        archived++;
+      } else if (pkg.status === 'INACTIVE') {
+        inactive++;
+      } else if (pkg.status === 'DRAFT' || pkg.versions?.some((v: any) => v.status === 'DRAFT')) {
+        draft++;
+      } else if (pkg.status === 'ACTIVE') {
+        active++;
+      }
+    }
+
+    return {
+      all: packages.length,
+      active,
+      inactive,
+      draft,
+      archived,
+    };
+  }, [packages]);
+
+  // Map packages to their program respecting current status filter
   const packagesByProgram = useMemo(() => {
     const map = new Map<string, Package[]>();
-    const progMap = new Map<string, Program>();
-    for (const p of programs) {
-      progMap.set(p.id, p);
-    }
     for (const pkg of packages) {
       if (pkg.program) {
-        const parentProg = progMap.get(pkg.program);
         if (progFilterStatus === 'ACTIVE') {
-          if (pkg.status !== 'ACTIVE' || parentProg?.status !== 'ACTIVE') continue;
+          if (pkg.status !== 'ACTIVE') continue;
         } else if (progFilterStatus === 'INACTIVE') {
-          const isInactive = pkg.status === 'INACTIVE' || parentProg?.status === 'INACTIVE';
-          if (!isInactive) continue;
-        } else if (progFilterStatus !== 'ALL') {
-          if (progFilterStatus === 'DRAFT') {
-            const hasDraftVer = pkg.versions?.some((v) => v.status === 'DRAFT');
-            if (pkg.status !== 'DRAFT' && !hasDraftVer) continue;
-          } else if (pkg.status !== progFilterStatus) {
-            continue;
-          }
+          if (pkg.status !== 'INACTIVE') continue;
+        } else if (progFilterStatus === 'DRAFT') {
+          const hasDraftVer = pkg.versions?.some((v) => v.status === 'DRAFT');
+          if (pkg.status !== 'DRAFT' && !hasDraftVer) continue;
+        } else if (progFilterStatus === 'ARCHIVED') {
+          if (pkg.status !== 'ARCHIVED') continue;
         }
         const list = map.get(pkg.program) || [];
         list.push(pkg);
@@ -505,7 +577,7 @@ export const PackagesWorkspace: React.FC = () => {
       }
     }
     return map;
-  }, [packages, programs, progFilterStatus]);
+  }, [packages, progFilterStatus]);
 
   // Mutations
   const createPackageMutation = useMutation({
@@ -549,7 +621,6 @@ export const PackagesWorkspace: React.FC = () => {
       setIsNewPackageOpen(false);
       // Auto expand the program to show the newly created package
       if (pkg.program) {
-        const parentProg = progMap.get(pkg.program);
         setExpandedProgramIds((prev) => new Set([...prev, pkg.program!]));
       }
       setNewPkgName('');
@@ -595,11 +666,17 @@ export const PackagesWorkspace: React.FC = () => {
   });
 
   const togglePackageStatusMutation = useMutation({
-    mutationFn: ({ id, newStatus }: { id: string; newStatus: 'ACTIVE' | 'INACTIVE' }) =>
-      catalogApi.updatePackage(id, { status: newStatus }),
-    onSuccess: () => {
+    mutationFn: ({ id, newStatus }: { id: string; newStatus: 'ACTIVE' | 'INACTIVE' }) => {
+      if (newStatus === 'ACTIVE') {
+        return catalogApi.reactivatePackage(id);
+      } else {
+        return catalogApi.deactivatePackage(id);
+      }
+    },
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
-      toast.success('Package status updated.');
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      toast.success(`Package ${vars.newStatus === 'ACTIVE' ? 'activated' : 'deactivated'} successfully.`);
     },
     onError: (err: any) => {
       toast.error(getErrorMessage(err));
@@ -1029,9 +1106,13 @@ export const PackagesWorkspace: React.FC = () => {
         return false;
       }
 
-      // Status filter
-      if (progFilterStatus !== 'ALL' && prog.status !== progFilterStatus) {
-        return false;
+      // Status filter: match program status OR program containing matching packages
+      if (progFilterStatus !== 'ALL') {
+        const matchingPkgs = packagesByProgram.get(prog.id) || [];
+        const matchesProgStatus = prog.status === progFilterStatus;
+        if (!matchesProgStatus && matchingPkgs.length === 0) {
+          return false;
+        }
       }
 
       // Delivery Mode filter
@@ -1064,10 +1145,29 @@ export const PackagesWorkspace: React.FC = () => {
     programCategories,
   ]);
 
+  // Auto-expand programs that have matching packages when user switches status filter
+  React.useEffect(() => {
+    if (progFilterStatus !== 'ALL' && progFilterStatus !== 'ACTIVE') {
+      const idsToExpand = new Set<string>();
+      for (const [progId, pkgs] of packagesByProgram.entries()) {
+        if (pkgs.length > 0) {
+          idsToExpand.add(progId);
+        }
+      }
+      if (idsToExpand.size > 0) {
+        setExpandedProgramIds((prev) => new Set([...prev, ...idsToExpand]));
+      }
+    }
+  }, [progFilterStatus, packagesByProgram]);
+
   // Status-filtered programs for category pills counts
   const statusFilteredPrograms = useMemo(() => {
-    return programs.filter((p) => progFilterStatus === 'ALL' || p.status === progFilterStatus);
-  }, [programs, progFilterStatus]);
+    return programs.filter((p) => {
+      if (progFilterStatus === 'ALL') return true;
+      const matchingPkgs = packagesByProgram.get(p.id) || [];
+      return p.status === progFilterStatus || matchingPkgs.length > 0;
+    });
+  }, [programs, progFilterStatus, packagesByProgram]);
 
   // Filtered terms docs (search by name or type)
   const filteredTermsDocs = termsDocs.filter((doc) => {
@@ -1267,32 +1367,62 @@ export const PackagesWorkspace: React.FC = () => {
       />
 
       <PageBody className="pb-28">
-        {/* KPI Tiles */}
+        {/* KPI Tiles (Interactive Fast-Navigation) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <KpiTile
-            title="Program Categories"
-            value={programCategories.length}
-            icon={<Settings2 className="w-5 h-5 text-indigo-500" />}
-            subtitle="Catalog classification tiers"
-          />
-          <KpiTile
-            title="Active Programs"
-            value={programs.filter((p) => p.status === 'ACTIVE').length}
-            icon={<Layers className="w-5 h-5 text-blue-500" />}
-            subtitle={`Across ${programs.length} total programs`}
-          />
-          <KpiTile
-            title="Total Packages"
-            value={packages.length}
-            icon={<PackageIcon className="w-5 h-5 text-primary" />}
-            subtitle={`${packages.filter((p) => p.status === 'ACTIVE').length} active packages`}
-          />
-          <KpiTile
-            title="Legal Policies"
-            value={termsDocs.length}
-            icon={<FileText className="w-5 h-5 text-purple-500" />}
-            subtitle="Policy & Terms Documents"
-          />
+          <div
+            onClick={() => setActiveTab('categories')}
+            className="cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
+            title="Click to view Program Categories"
+          >
+            <KpiTile
+              title="Program Categories"
+              value={programCategories.length}
+              icon={<Settings2 className="w-5 h-5 text-indigo-500" />}
+              subtitle="Catalog classification tiers"
+            />
+          </div>
+          <div
+            onClick={() => {
+              setActiveTab('programs');
+              setProgFilterStatus('ACTIVE');
+            }}
+            className="cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
+            title="Click to view Active Programs & Packages"
+          >
+            <KpiTile
+              title="Active Programs"
+              value={programs.filter((p) => p.status === 'ACTIVE').length}
+              icon={<Layers className="w-5 h-5 text-blue-500" />}
+              subtitle={`Across ${programs.length} total programs`}
+            />
+          </div>
+          <div
+            onClick={() => {
+              setActiveTab('programs');
+              setProgFilterStatus('ALL');
+            }}
+            className="cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
+            title="Click to view All Packages"
+          >
+            <KpiTile
+              title="Total Packages"
+              value={packages.length}
+              icon={<PackageIcon className="w-5 h-5 text-primary" />}
+              subtitle={`${packages.filter((p) => p.status === 'ACTIVE').length} active packages`}
+            />
+          </div>
+          <div
+            onClick={() => setActiveTab('terms')}
+            className="cursor-pointer transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
+            title="Click to view Legal Policies"
+          >
+            <KpiTile
+              title="Legal Policies"
+              value={termsDocs.length}
+              icon={<FileText className="w-5 h-5 text-purple-500" />}
+              subtitle="Policy & Terms Documents"
+            />
+          </div>
         </div>
 
         {/* Workspace Top Tabs */}
@@ -1473,28 +1603,18 @@ export const PackagesWorkspace: React.FC = () => {
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className={`w-7 h-7 shrink-0 ${
-                                    cat.status === 'ACTIVE'
-                                      ? 'text-amber-500 hover:text-amber-600'
-                                      : 'text-emerald-500 hover:text-emerald-600'
-                                  }`}
-                                  onClick={() => {
+                                <StatusToggleSwitch
+                                  size="sm"
+                                  isActive={cat.status === 'ACTIVE'}
+                                  onToggle={() => {
                                     toggleProgramCategoryStatusMutation.mutate({
                                       id: cat.id,
                                       currentStatus: cat.status,
                                     });
                                   }}
-                                  title={cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                >
-                                  {cat.status === 'ACTIVE' ? (
-                                    <ToggleRight className="w-4 h-4" />
-                                  ) : (
-                                    <ToggleLeft className="w-4 h-4" />
-                                  )}
-                                </Button>
+                                  disabled={toggleProgramCategoryStatusMutation.isPending}
+                                  title={cat.status === 'ACTIVE' ? 'Category is Active (ON) - click to deactivate' : 'Category is Inactive (OFF) - click to activate'}
+                                />
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1564,53 +1684,284 @@ export const PackagesWorkspace: React.FC = () => {
         {/* ========================================================================= */}
         {activeTab === 'programs' && (
           <div className="space-y-5">
-            {/* Search and Filters toolbar */}
-            <div className="flex flex-col gap-3 bg-card p-4 rounded-xl border border-border/60 shadow-xs">
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Search programs or packages by name, category, sessions, or price..."
-                    value={progSearchQuery}
-                    onChange={(e) => setProgSearchQuery(e.target.value)}
-                    className="pl-9 text-sm"
-                  />
+            {/* Unified Enterprise Control Toolbar */}
+            <div className="bg-card rounded-2xl border border-border/70 shadow-xs divide-y divide-border/60 overflow-hidden">
+              {/* Row 1: Search + Status Segmented Tabs + View Controls */}
+              <div className="p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* Left: Search input + Status Tabs together in one unified focal group */}
+                <div className="flex flex-col md:flex-row md:items-center gap-3 flex-1 min-w-0">
+                  <div className="relative w-full md:max-w-xs lg:max-w-sm xl:max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="text"
+                      placeholder="Search programs or packages by name, sessions, or price..."
+                      value={progSearchQuery}
+                      onChange={(e) => setProgSearchQuery(e.target.value)}
+                      className="pl-9 pr-8 text-xs sm:text-sm h-9 bg-background/70 border-border/70"
+                    />
+                    {progSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setProgSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full"
+                        title="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Status Segmented Control right next to Search */}
+                  <div className="inline-flex items-center p-1 bg-muted/60 dark:bg-muted/40 rounded-xl border border-border/60 text-xs font-semibold shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setProgFilterStatus('ALL')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        progFilterStatus === 'ALL'
+                          ? 'bg-background text-foreground shadow-xs font-bold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span>All</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted-foreground/15 font-mono">
+                        {statusCounts.all}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setProgFilterStatus('ACTIVE')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        progFilterStatus === 'ACTIVE'
+                          ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                      }`}
+                      title="Show active packages only"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${progFilterStatus === 'ACTIVE' ? 'bg-white' : 'bg-emerald-500'}`} />
+                      <span>Active</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        progFilterStatus === 'ACTIVE' ? 'bg-emerald-700/80 text-white' : 'bg-muted-foreground/15'
+                      }`}>
+                        {statusCounts.active}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setProgFilterStatus('INACTIVE')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        progFilterStatus === 'INACTIVE'
+                          ? 'bg-rose-600 text-white shadow-xs font-bold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                      }`}
+                      title="Show deactivated packages only"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${progFilterStatus === 'INACTIVE' ? 'bg-white' : 'bg-rose-500'}`} />
+                      <span>Deactivated</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        progFilterStatus === 'INACTIVE' ? 'bg-rose-700/80 text-white' : 'bg-muted-foreground/15'
+                      }`}>
+                        {statusCounts.inactive}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setProgFilterStatus('DRAFT')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        progFilterStatus === 'DRAFT'
+                          ? 'bg-amber-600 text-white shadow-xs font-bold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                      }`}
+                      title="Show draft packages or versions"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${progFilterStatus === 'DRAFT' ? 'bg-white' : 'bg-amber-500'}`} />
+                      <span>Draft</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        progFilterStatus === 'DRAFT' ? 'bg-amber-700/80 text-white' : 'bg-muted-foreground/15'
+                      }`}>
+                        {statusCounts.draft}
+                      </span>
+                    </button>
+
+                    {statusCounts.archived > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setProgFilterStatus('ARCHIVED')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          progFilterStatus === 'ARCHIVED'
+                            ? 'bg-zinc-700 text-white shadow-xs font-bold'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                        }`}
+                        title="Show archived packages"
+                      >
+                        <span className={`w-2 h-2 rounded-full ${progFilterStatus === 'ARCHIVED' ? 'bg-white' : 'bg-zinc-400'}`} />
+                        <span>Archived</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                          progFilterStatus === 'ARCHIVED' ? 'bg-zinc-800 text-white' : 'bg-muted-foreground/15'
+                        }`}>
+                          {statusCounts.archived}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+
+                {/* Right: Expand / Collapse View Controls */}
+                <div className="flex items-center border border-border/70 rounded-xl p-0.5 bg-background/60 shadow-2xs shrink-0 self-start lg:self-auto">
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => setExpandedProgramIds(new Set(filteredPrograms.map((p) => p.id)))}
-                    className="h-9 text-xs gap-1.5"
+                    className="h-8 text-xs gap-1.5 px-2.5 text-muted-foreground hover:text-foreground font-medium"
+                    title="Expand all programs to show package details"
                   >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Expand All Packages</span>
+                    <ChevronsUpDown className="w-3.5 h-3.5" />
+                    <span>Expand All</span>
                   </Button>
                   {expandedProgramIds.size > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setExpandedProgramIds(new Set())}
-                      className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                      className="h-8 text-xs gap-1 px-2 text-muted-foreground hover:text-foreground"
+                      title="Collapse all programs"
                     >
                       <ChevronUp className="w-3.5 h-3.5" />
-                      <span>Collapse All</span>
+                      <span>Collapse</span>
                     </Button>
                   )}
                 </div>
               </div>
 
-              {/* Quick Category Pills */}
+              {/* Row 2: Category Filter & Secondary Facet Filters */}
+              <div className="px-3.5 sm:px-4 py-2.5 bg-muted/20 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+                {/* Left: Facet Selects & Quick Toggles */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-muted-foreground font-semibold flex items-center gap-1.5 mr-0.5 shrink-0">
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Filter By:</span>
+                  </span>
+
+                  {/* Category Selector Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={progFilterCategory}
+                      onChange={(e) => setProgFilterCategory(e.target.value)}
+                      className={`h-8 pl-2.5 pr-7 rounded-lg border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer transition-colors ${
+                        progFilterCategory !== 'ALL'
+                          ? 'border-primary/50 bg-primary/10 text-primary font-semibold'
+                          : 'border-input bg-background text-foreground'
+                      }`}
+                    >
+                      <option value="ALL">All Categories ({programCategories.length})</option>
+                      {programCategories.map((cat) => {
+                        const count = statusFilteredPrograms.filter((p) => p.category === cat.id).length;
+                        return (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Delivery Mode Filter */}
+                  <div className="relative">
+                    <select
+                      value={progFilterDeliveryMode}
+                      onChange={(e) => setProgFilterDeliveryMode(e.target.value)}
+                      className={`h-8 pl-2.5 pr-7 rounded-lg border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer transition-colors ${
+                        progFilterDeliveryMode !== 'ALL'
+                          ? 'border-primary/50 bg-primary/10 text-primary font-semibold'
+                          : 'border-input bg-background text-foreground'
+                      }`}
+                    >
+                      <option value="ALL">All Delivery Modes</option>
+                      {DELIVERY_MODES.map((dm) => (
+                        <option key={dm.value} value={dm.value}>
+                          {dm.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Branch Filter */}
+                  <div className="relative">
+                    <select
+                      value={progFilterBranch}
+                      onChange={(e) => setProgFilterBranch(e.target.value)}
+                      className={`h-8 pl-2.5 pr-7 rounded-lg border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer transition-colors ${
+                        progFilterBranch !== 'ALL'
+                          ? 'border-primary/50 bg-primary/10 text-primary font-semibold'
+                          : 'border-input bg-background text-foreground'
+                      }`}
+                    >
+                      <option value="ALL">All Branches</option>
+                      {branches.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.city ? `${b.city} · ${b.name}` : b.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Right: Active Filters Reset */}
+                {(() => {
+                  const activeFilterCount =
+                    (progFilterCategory !== 'ALL' ? 1 : 0) +
+                    (progFilterStatus !== 'ALL' ? 1 : 0) +
+                    (progFilterBranch !== 'ALL' ? 1 : 0) +
+                    (progFilterDeliveryMode !== 'ALL' ? 1 : 0) +
+                    (progSearchQuery ? 1 : 0);
+
+                  if (activeFilterCount === 0) {
+                    return (
+                      <span className="text-[11px] text-muted-foreground font-medium hidden md:inline">
+                        Showing {filteredPrograms.length} {filteredPrograms.length === 1 ? 'program' : 'programs'}
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setProgFilterCategory('ALL');
+                        setProgFilterStatus('ALL');
+                        setProgFilterBranch('ALL');
+                        setProgFilterDeliveryMode('ALL');
+                        setProgFilterTrialOnly(false);
+                        setProgSearchQuery('');
+                      }}
+                      className="h-8 px-2.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 gap-1.5 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reset Filters</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold text-[10px]">
+                        {activeFilterCount}
+                      </span>
+                    </Button>
+                  );
+                })()}
+              </div>
+
+              {/* Quick Horizontal Category Scroll Bar (Smooth, Single-line, Zero-wrapping) */}
               {programCategories.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap pt-1 pb-1 border-b border-border/40">
+                <div className="px-3.5 sm:px-4 py-2 bg-background/50 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap border-t border-border/40">
                   <button
                     type="button"
                     onClick={() => setProgFilterCategory('ALL')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all shrink-0 cursor-pointer ${
                       progFilterCategory === 'ALL'
-                        ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                        : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
+                        ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                        : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
                     }`}
                   >
                     All Categories ({statusFilteredPrograms.length})
@@ -1623,10 +1974,10 @@ export const PackagesWorkspace: React.FC = () => {
                         key={cat.id}
                         type="button"
                         onClick={() => setProgFilterCategory(isSelected ? 'ALL' : cat.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all shrink-0 cursor-pointer ${
                           isSelected
-                            ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                            : 'bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                            : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
                         }`}
                       >
                         {cat.name} ({count})
@@ -1635,93 +1986,6 @@ export const PackagesWorkspace: React.FC = () => {
                   })}
                 </div>
               )}
-
-              {/* Filter Controls Row */}
-              <div className="flex items-center gap-2.5 flex-wrap pt-0.5 text-xs">
-                <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                  <Filter className="w-3.5 h-3.5" />
-                  <span>Filters:</span>
-                </div>
-
-                {/* Delivery Mode Filter */}
-                <select
-                  value={progFilterDeliveryMode}
-                  onChange={(e) => setProgFilterDeliveryMode(e.target.value)}
-                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="ALL">All Delivery Modes</option>
-                  {DELIVERY_MODES.map((dm) => (
-                    <option key={dm.value} value={dm.value}>
-                      {dm.label}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Branch Filter */}
-                <select
-                  value={progFilterBranch}
-                  onChange={(e) => setProgFilterBranch(e.target.value)}
-                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="ALL">All Branches</option>
-                  {branches.map((b: any) => (
-                    <option key={b.id} value={b.id}>
-                      {b.city ? `${b.city} · ${b.name}` : b.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Status Filter */}
-                <select
-                  value={progFilterStatus}
-                  onChange={(e) => setProgFilterStatus(e.target.value)}
-                  className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="ARCHIVED">Archived</option>
-                </select>
-
-                {/* Trial Allowed Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setProgFilterTrialOnly((prev) => !prev)}
-                  className={`h-8 px-2.5 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 ${
-                    progFilterTrialOnly
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                      : 'bg-background text-muted-foreground border-input hover:text-foreground'
-                  }`}
-                >
-                  {progFilterTrialOnly ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                  <span>Trial Eligible Only</span>
-                </button>
-
-                {/* Reset Filters */}
-                {(progFilterCategory !== 'ALL' ||
-                  progFilterStatus !== 'ALL' ||
-                  progFilterBranch !== 'ALL' ||
-                  progFilterDeliveryMode !== 'ALL' ||
-                  progFilterTrialOnly ||
-                  progSearchQuery) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setProgFilterCategory('ALL');
-                      setProgFilterStatus('ALL');
-                      setProgFilterBranch('ALL');
-                      setProgFilterDeliveryMode('ALL');
-                      setProgFilterTrialOnly(false);
-                      setProgSearchQuery('');
-                    }}
-                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Reset Filters
-                  </Button>
-                )}
-              </div>
             </div>
 
             {/* Loading */}
@@ -1942,11 +2206,11 @@ export const PackagesWorkspace: React.FC = () => {
                                           {availBranches.length === 0 ? (
                                             <span className="text-amber-500 italic">No branches assigned</span>
                                           ) : isAllBranches ? (
-                                            <span title={availBranches.map((b) => b.name).join(', ')}>
+                                            <span title={availBranches.map((b: any) => b.branch_name || b.name).join(', ')}>
                                               All Branches ({availBranches.length})
                                             </span>
                                           ) : (
-                                            availBranches.map((b) => b.name).join(' · ')
+                                            availBranches.map((b: any) => b.branch_name || b.name).join(' · ')
                                           )}
                                         </span>
                                         {prog.description && (
@@ -2019,28 +2283,18 @@ export const PackagesWorkspace: React.FC = () => {
                                               <span className="hidden sm:inline">Edit</span>
                                             </Button>
 
-                                            <Button
-                                              variant="ghost"
+                                            <StatusToggleSwitch
                                               size="sm"
-                                              onClick={() => {
+                                              isActive={prog.status === 'ACTIVE'}
+                                              onToggle={() => {
                                                 toggleProgramStatusMutation.mutate({
                                                   id: prog.id,
                                                   currentStatus: prog.status,
                                                 });
                                               }}
-                                              className={`text-xs h-8 px-2.5 gap-1 ${
-                                                prog.status === 'ACTIVE'
-                                                  ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700'
-                                                  : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
-                                              }`}
-                                              title={prog.status === 'ACTIVE' ? 'Deactivate Program' : 'Activate Program'}
-                                            >
-                                              {prog.status === 'ACTIVE' ? (
-                                                <ToggleRight className="w-4 h-4" />
-                                              ) : (
-                                                <ToggleLeft className="w-4 h-4" />
-                                              )}
-                                            </Button>
+                                              disabled={toggleProgramStatusMutation.isPending}
+                                              title={prog.status === 'ACTIVE' ? 'Program is Active (ON) - click to deactivate' : 'Program is Inactive (OFF) - click to activate'}
+                                            />
 
                                             <Button
                                               variant="ghost"
@@ -2087,11 +2341,10 @@ export const PackagesWorkspace: React.FC = () => {
                                         <table className="w-full text-left border-collapse text-xs sm:text-sm">
                                           <thead>
                                             <tr className="border-b border-border/60 bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                              <th className="py-2.5 px-4">Package / Session Tier</th>
-                                              <th className="py-2.5 px-3">Sessions Included</th>
+                                              <th className="py-2.5 px-4">Package Tier</th>
+                                              <th className="py-2.5 px-3">Sessions & Access</th>
                                               <th className="py-2.5 px-3">Validity</th>
-                                              <th className="py-2.5 px-3">Passport Sessions</th>
-                                              <th className="py-2.5 px-3">Price</th>
+                                              <th className="py-2.5 px-3">Price & Tax</th>
                                               <th className="py-2.5 px-3">Status</th>
                                               <th className="py-2.5 px-4 text-right">Actions</th>
                                             </tr>
@@ -2157,9 +2410,19 @@ export const PackagesWorkspace: React.FC = () => {
                                                   {/* 1. Package Name */}
                                                   <td className="py-3 px-4 font-semibold text-foreground">
                                                     <div className="flex items-center gap-2 flex-wrap">
-                                                      <span className="text-sm font-bold text-foreground">
-                                                        {displayPkgName}
-                                                      </span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setHistoryPackage(pkg);
+                                                          if (activeVer?.id) {
+                                                            setExpandedVersionId(activeVer.id);
+                                                          }
+                                                        }}
+                                                        className="text-sm font-bold text-foreground hover:text-primary transition-colors text-left cursor-pointer group"
+                                                        title="Click to view full package details and commercial versions"
+                                                      >
+                                                        <span className="group-hover:underline underline-offset-2">{displayPkgName}</span>
+                                                      </button>
                                                       {isTrialPkg && (
                                                         <Badge
                                                           variant="outline"
@@ -2196,13 +2459,27 @@ export const PackagesWorkspace: React.FC = () => {
                                                         )}
                                                       </div>
                                                     ) : homeEnt ? (
-                                                      <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs">
-                                                        {homeEnt.is_unlimited
-                                                          ? 'Unlimited Sessions'
-                                                          : `${formatSessionCount(homeEnt.allocated_units)} ${
-                                                              Number(homeEnt.allocated_units) === 1 ? 'Session' : 'Sessions'
-                                                            }`}
-                                                      </span>
+                                                      (() => {
+                                                        const homeUnits = Number(homeEnt.allocated_units || 0);
+                                                        const passportUnits = Number(crossEnt?.allocated_units ?? cfgPassportSessions ?? 0);
+                                                        const totalSessions = homeUnits + passportUnits;
+                                                        return (
+                                                          <div className="flex flex-col gap-0.5 items-start">
+                                                            <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs">
+                                                              {homeEnt.is_unlimited
+                                                                ? 'Unlimited Sessions'
+                                                                : `${formatSessionCount(totalSessions)} ${
+                                                                    Number(totalSessions) === 1 ? 'Session' : 'Sessions'
+                                                                  }`}
+                                                            </span>
+                                                            {!homeEnt.is_unlimited && passportUnits > 0 && (
+                                                              <span className="text-[10px] text-muted-foreground font-medium">
+                                                                {formatSessionCount(homeUnits)} Home + {formatSessionCount(passportUnits)} Passport
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      })()
                                                     ) : (
                                                       <span className="text-muted-foreground text-xs">—</span>
                                                     )}
@@ -2219,24 +2496,7 @@ export const PackagesWorkspace: React.FC = () => {
                                                     )}
                                                   </td>
 
-                                                  {/* 4. Passport Sessions */}
-                                                  <td className="py-3 px-3 text-xs">
-                                                    {crossEnt ? (
-                                                      <span className="font-medium text-foreground">
-                                                        {crossEnt.is_unlimited
-                                                          ? 'Unlimited'
-                                                          : `${formatSessionCount(crossEnt.allocated_units)} Sessions`}
-                                                      </span>
-                                                    ) : cfgPassportSessions > 0 ? (
-                                                      <span className="font-medium text-foreground">
-                                                        {cfgPassportSessions} {cfgPassportSessions === 1 ? 'Session' : 'Sessions'}
-                                                      </span>
-                                                    ) : (
-                                                      <span className="text-muted-foreground">—</span>
-                                                    )}
-                                                  </td>
-
-                                                  {/* 5. Price */}
+                                                  {/* 4. Price & Tax */}
                                                   <td className="py-3 px-3">
                                                     {firstPrice ? (
                                                       <div className="space-y-0.5">
@@ -2269,35 +2529,48 @@ export const PackagesWorkspace: React.FC = () => {
                                                     )}
                                                   </td>
 
-                                                  {/* 6. Status */}
+                                                  {/* 5. Status & Activation Switch */}
                                                   <td className="py-3 px-3">
-                                                    <Badge
-                                                      variant={
+                                                    <div className="flex items-center gap-2">
+                                                      <StatusToggleSwitch
+                                                        size="sm"
+                                                        isActive={pkg.status === 'ACTIVE'}
+                                                        onToggle={() => {
+                                                          togglePackageStatusMutation.mutate({
+                                                            id: pkg.id,
+                                                            newStatus:
+                                                              pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+                                                          });
+                                                        }}
+                                                        disabled={togglePackageStatusMutation.isPending}
+                                                        title={pkg.status === 'ACTIVE' ? 'Active (ON) - click to deactivate' : 'Inactive (OFF) - click to activate'}
+                                                      />
+                                                      <span className={`text-[11px] font-bold ${
                                                         pkg.status === 'ACTIVE'
-                                                          ? 'default'
+                                                          ? 'text-emerald-600 dark:text-emerald-400'
                                                           : pkg.status === 'ARCHIVED'
-                                                          ? 'destructive'
-                                                          : 'secondary'
-                                                      }
-                                                      className={`text-[10px] font-semibold ${
-                                                        pkg.status === 'ACTIVE'
-                                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
-                                                          : ''
-                                                      }`}
-                                                    >
-                                                      {pkg.status}
-                                                    </Badge>
+                                                          ? 'text-purple-600 dark:text-purple-400'
+                                                          : 'text-rose-600 dark:text-rose-400'
+                                                      }`}>
+                                                        {pkg.status}
+                                                      </span>
+                                                    </div>
                                                   </td>
 
-                                                  {/* 7. Actions */}
+                                                  {/* 6. Actions */}
                                                   <td className="py-3 px-4 text-right">
                                                     <div className="flex items-center justify-end gap-1 flex-wrap">
                                                       <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        onClick={() => setHistoryPackage(pkg)}
+                                                        onClick={() => {
+                                                          setHistoryPackage(pkg);
+                                                          if (activeVer?.id) {
+                                                            setExpandedVersionId(activeVer.id);
+                                                          }
+                                                        }}
                                                         className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground gap-1"
-                                                        title="View version history"
+                                                        title="View package details & versions"
                                                       >
                                                         <History className="w-3.5 h-3.5" />
                                                         <span>Versions</span>
@@ -2394,34 +2667,6 @@ export const PackagesWorkspace: React.FC = () => {
                                                             title="Edit package"
                                                           >
                                                             <Pencil className="w-3.5 h-3.5" />
-                                                          </Button>
-
-                                                          <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => {
-                                                              togglePackageStatusMutation.mutate({
-                                                                id: pkg.id,
-                                                                newStatus:
-                                                                  pkg.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                                                              });
-                                                            }}
-                                                            className={`h-7 text-xs px-2 ${
-                                                              pkg.status === 'ACTIVE'
-                                                                ? 'text-amber-600 dark:text-amber-400'
-                                                                : 'text-emerald-600 dark:text-emerald-400'
-                                                            }`}
-                                                            title={
-                                                              pkg.status === 'ACTIVE'
-                                                                ? 'Deactivate package'
-                                                                : 'Activate package'
-                                                            }
-                                                          >
-                                                            {pkg.status === 'ACTIVE' ? (
-                                                              <ToggleRight className="w-4 h-4" />
-                                                            ) : (
-                                                              <ToggleLeft className="w-4 h-4" />
-                                                            )}
                                                           </Button>
 
                                                           {pkg.status !== 'ARCHIVED' ? (
@@ -2702,11 +2947,11 @@ export const PackagesWorkspace: React.FC = () => {
                   <div className="flex items-center gap-2 mb-0.5">
                     <History className="w-4 h-4 text-primary shrink-0" />
                     <h2 className="font-bold text-base text-foreground leading-snug">
-                      Version History — {historyPackage.name}
+                      Package Details & Versions — {historyPackage.name}
                     </h2>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Immutable commercial snapshots · click a version to view all fields
+                    Complete commercial terms, pricing snapshots, entitlements, and versions
                   </p>
                 </div>
                 <Badge variant="outline" className="text-[10px] shrink-0 font-mono">

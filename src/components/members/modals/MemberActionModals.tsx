@@ -1285,9 +1285,13 @@ export const FreezeModal: React.FC<{
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.freezeMembership(selectedContract?.membership_id || member?.id, {
+        membership_id: selectedContract?.membership_id || member?.id,
         freeze_from: freezeFrom,
         freeze_until: freezeUntil,
         reason: `${reason}${chargeFee ? ` (Fee: ₹${feeAmount} via ${paymentMethod})` : ' (Fee Waived)'}`,
+        charge_fee: chargeFee,
+        fee_amount: chargeFee ? parseFloat(feeAmount || String(calculatedFreezeFee)) : 0,
+        payment_method: paymentMethod,
       }),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
@@ -1295,7 +1299,7 @@ export const FreezeModal: React.FC<{
       queryClient.invalidateQueries({ queryKey: ['members'] });
 
       if (chargeFee && paymentMethod === 'PAYMENT_LINK') {
-        const payUrl = res.payment_url || `https://pay.sweatfitness.in/frz/${member?.id || 'pay'}`;
+        const payUrl = res.payment_url || `https://pay.sweatfitness.in/frz/${res.order_number || member?.id || 'pay'}`;
         setGeneratedLink({
           paymentUrl: payUrl,
           amount: parseFloat(feeAmount || String(calculatedFreezeFee)),

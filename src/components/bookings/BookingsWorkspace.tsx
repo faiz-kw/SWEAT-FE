@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '../../lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { BookTrialModal } from '../crm/BookTrialModal';
 import { MemberParqSigningModal } from '../members/modals/MemberParqSigningModal';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
@@ -70,7 +71,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   initialTab = 'bookings',
 }) => {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canCreate = can('ops.bookings.create');
   const canEdit = can('ops.bookings.edit');
   const canDelete = can('ops.bookings.delete');
@@ -1624,7 +1625,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                         <span>{selectedMember.user?.email || selectedMember.email_snapshot}</span>
                       )}
                       {(selectedMember.phone || selectedMember.user?.phone || selectedMember.phone_snapshot) && (
-                        <span>· {selectedMember.phone || selectedMember.user?.phone || selectedMember.phone_snapshot}</span>
+                        <span>· {formatDisplayPhone(selectedMember.phone || selectedMember.user?.phone || selectedMember.phone_snapshot, canViewPhoneNumber)}</span>
                       )}
                       <span>· Member #{selectedMember.member_number || selectedMember.membership_number || selectedMember.id?.slice(0, 8)}</span>
                       {selectedMember.home_branch && <span>· Studio: {selectedMember.home_branch}</span>}
@@ -1705,7 +1706,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                                 <span>{m.user?.email || m.email_snapshot}</span>
                               )}
                               {(m.phone || m.user?.phone || m.phone_snapshot) && (
-                                <span>· {m.phone || m.user?.phone || m.phone_snapshot}</span>
+                                <span>· {formatDisplayPhone(m.phone || m.user?.phone || m.phone_snapshot, canViewPhoneNumber)}</span>
                               )}
                               <span>· Member #{m.member_number || m.membership_number || m.id?.slice(0, 8)}</span>
                               {m.home_branch && <span>· {m.home_branch}</span>}

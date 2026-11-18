@@ -77,10 +77,11 @@ import { CRMLoadingState } from './common/CRMLoadingState';
 import { formatCrmLabel } from '@/lib/crmLabels';
 import { BookTrialModal } from './BookTrialModal';
 import { LeadDetailModal } from './LeadDetailModal';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 export function TrialManagementWorkspace() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canEdit = can('crm.trials.edit') || can('crm.leads.edit') || can('sales.leads.edit');
 
   // Filters
@@ -807,8 +808,8 @@ export function TrialManagementWorkspace() {
                               </Badge>
                             )}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {trial.lead_phone || trial.lead_email || 'No contact'}
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {formatDisplayPhone(trial.lead_phone, canViewPhoneNumber) || trial.lead_email || 'No contact'}
                           </div>
                         </td>
 
@@ -1008,8 +1009,8 @@ export function TrialManagementWorkspace() {
                           </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {trial.lead_phone || trial.lead_email || 'No contact'}
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {formatDisplayPhone(trial.lead_phone, canViewPhoneNumber) || trial.lead_email || 'No contact'}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">

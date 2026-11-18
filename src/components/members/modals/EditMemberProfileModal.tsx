@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { membersApi } from '@/api/endpoints/membersApi';
 import { crmApi } from '@/api/endpoints/crmApi';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone, isMaskedPhone } from '@/lib/phonePrivacy';
 
 export interface EditMemberProfileModalProps {
   isOpen: boolean;
@@ -38,6 +40,7 @@ export const EditMemberProfileModal: React.FC<EditMemberProfileModalProps> = ({
   initialData,
 }) => {
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -77,14 +80,16 @@ export const EditMemberProfileModal: React.FC<EditMemberProfileModalProps> = ({
     mutationFn: () => {
       const payload: Record<string, any> = {
         name: name.trim(),
-        phone: phone.trim(),
         email: email.trim(),
         gender,
         date_of_birth: dateOfBirth || null,
         emergencyContact: emergencyContact.trim(),
       };
+      if (canViewPhoneNumber && !isMaskedPhone(phone)) {
+        payload['phone'] = phone.trim();
+      }
       if (branchId) {
-        payload.locationId = branchId;
+        payload['locationId'] = branchId;
       }
       return membersApi.updateMember(memberId, payload);
     },
@@ -145,10 +150,12 @@ export const EditMemberProfileModal: React.FC<EditMemberProfileModalProps> = ({
               <div className="relative">
                 <Phone className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
-                  value={phone}
+                  value={canViewPhoneNumber ? phone : formatDisplayPhone(phone, false)}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+91 98765 43210"
                   className="pl-9 text-sm font-mono"
+                  disabled={!canViewPhoneNumber}
+                  title={!canViewPhoneNumber ? 'Phone visibility permission required to edit phone number' : undefined}
                 />
               </div>
             </div>

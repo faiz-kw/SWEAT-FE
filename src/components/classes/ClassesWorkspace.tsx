@@ -2896,26 +2896,29 @@ export const ClassesWorkspace: React.FC = () => {
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={rule.status === 'ACTIVE'}
                               onClick={() => toggleRuleStatusMutation.mutate({
                                 id: rule.id,
                                 status: rule.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
                               })}
-                              className={`w-6 h-6 shrink-0 ${
-                                rule.status === 'ACTIVE'
-                                  ? 'text-amber-500 hover:text-amber-600'
-                                  : 'text-emerald-500 hover:text-emerald-600'
+                              className={`group relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs select-none h-5 w-11 ${
+                                rule.status === 'ACTIVE' ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-rose-600 dark:bg-rose-500'
                               }`}
-                              title={rule.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                              title={rule.status === 'ACTIVE' ? 'Active (ON) - click to deactivate' : 'Inactive (OFF) - click to activate'}
                             >
-                              {rule.status === 'ACTIVE' ? (
-                                <ToggleRight className="w-4 h-4" />
-                              ) : (
-                                <ToggleLeft className="w-4 h-4" />
-                              )}
-                            </Button>
+                              <span className="sr-only">{rule.status === 'ACTIVE' ? 'Active' : 'Inactive'}</span>
+                              <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-flex items-center justify-center transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out font-black text-[8px] uppercase tracking-tighter h-4 w-4 ${
+                                  rule.status === 'ACTIVE' ? 'translate-x-6 text-emerald-700' : 'translate-x-0 text-rose-700'
+                                }`}
+                              >
+                                {rule.status === 'ACTIVE' ? 'ON' : 'OFF'}
+                              </span>
+                            </button>
                           </div>
                         )}
                       </div>

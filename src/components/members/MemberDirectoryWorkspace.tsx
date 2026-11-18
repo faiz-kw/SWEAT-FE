@@ -56,6 +56,8 @@ import { Label } from '@/components/ui/label';
 import { CollectPaymentModal } from './modals/MemberActionModals';
 import { LegacyLiveSearchModal } from './modals/LegacyLiveSearchModal';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 type QuickViewTab = 'all' | 'active' | 'expiring_soon' | 'expired' | 'frozen' | 'outstanding';
 
@@ -77,6 +79,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { locationId } = useApp();
+  const { canViewPhoneNumber } = usePermissions();
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
@@ -579,7 +582,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                                 </span>
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                                <span>{member.phone || 'No phone'}</span>
+                                <span className="font-mono">{formatDisplayPhone(member.phone, canViewPhoneNumber) || 'No phone'}</span>
                                 {member.email && <span>·</span>}
                                 <span className="truncate max-w-[150px]">{member.email}</span>
                               </div>
@@ -775,7 +778,7 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-muted-foreground">{member.phone}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{formatDisplayPhone(member.phone, canViewPhoneNumber)}</span>
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {hasOutstanding && (
                           <Button
