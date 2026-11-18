@@ -114,6 +114,19 @@ import { usePermissions } from '@/lib/permissions';
 import { useAuth } from '@/contexts';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '@/utils/dateTimeUtils';
 
+function formatProgramPackage(programName?: string | null, packageName?: string | null): string {
+  const pkg = (packageName || '').trim();
+  const prog = (programName || '').trim();
+  if (!pkg && !prog) return 'Standard Plan';
+  if (!prog || prog.toLowerCase() === 'standard' || prog.toLowerCase() === 'none') return pkg || 'Standard Plan';
+  if (!pkg || pkg.toLowerCase() === 'none' || pkg.toLowerCase() === 'plan') return prog;
+  if (pkg.toLowerCase().startsWith(prog.toLowerCase())) {
+    const cleanPkg = pkg.slice(prog.length).replace(/^[\s–—:·\-]+/, '');
+    return cleanPkg ? `${prog} – ${cleanPkg}` : prog;
+  }
+  return `${prog} – ${pkg}`;
+}
+
 interface Member360WorkspaceProps {
   memberId: string;
   initialTab?: string | undefined;
@@ -275,8 +288,29 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       } else if (typeLower.includes('home') || typeLower.includes('session') || typeLower.includes('class')) {
         normKey = 'HOME';
       }
-      if (!m.has(normKey) || Number(ent.consumed || 0) > Number(m.get(normKey).consumed || 0)) {
-        m.set(normKey, ent);
+      if (!m.has(normKey)) {
+        m.set(normKey, {
+          ...ent,
+          normKey,
+          allocated: ent.allocated != null ? Number(ent.allocated) : null,
+          consumed: Number(ent.consumed || 0),
+          remaining: ent.remaining != null ? Number(ent.remaining) : null,
+        });
+      } else {
+        const existing = m.get(normKey);
+        const newAlloc = (existing.allocated != null && ent.allocated != null)
+          ? existing.allocated + Number(ent.allocated)
+          : (existing.allocated ?? (ent.allocated != null ? Number(ent.allocated) : null));
+        const newConsumed = (existing.consumed || 0) + Number(ent.consumed || 0);
+        const newRem = (existing.remaining != null && ent.remaining != null)
+          ? existing.remaining + Number(ent.remaining)
+          : (existing.remaining ?? (ent.remaining != null ? Number(ent.remaining) : null));
+        m.set(normKey, {
+          ...existing,
+          allocated: newAlloc,
+          consumed: newConsumed,
+          remaining: newRem,
+        });
       }
     }
     return m;
@@ -292,32 +326,46 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     current_package_version: data360.header?.current_package_version || member.package_version_name || 'v1',
     expiry_date: data360.header?.expiry_date || member.expiry_date,
     home_sessions_remaining: (() => {
-      const activeMem = data360.memberships?.active as any;
       const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes(
         (data360.header?.status || member.membership_status || member.status || '').toUpperCase()
       );
       if (!isMemberActiveOrFrozen) return 0;
+      const activeList = Array.isArray(data360.memberships?.active_list) ? data360.memberships.active_list : [];
+      if (activeList.length > 0) {
+        return activeList.reduce((acc: number, c: any) => acc + Number(c.sessions_left ?? c.home_sessions_remaining ?? 0), 0);
+      }
+      if (typeof data360.header?.home_sessions_remaining === 'number') {
+        return data360.header.home_sessions_remaining;
+      }
       const homeEnt = dedupedRawMap.get('HOME');
       if (homeEnt && homeEnt.remaining != null) return Math.round(Number(homeEnt.remaining));
+      const activeMem = data360.memberships?.active as any;
       if (activeMem) {
         if (typeof activeMem.sessions_left === 'number') return activeMem.sessions_left;
         if (typeof activeMem.home_sessions_remaining === 'number') return activeMem.home_sessions_remaining;
       }
-      return data360.header?.home_sessions_remaining ?? member.home_sessions_remaining ?? 0;
+      return member.home_sessions_remaining ?? 0;
     })(),
     cross_branch_sessions_remaining: (() => {
-      const activeMem = data360.memberships?.active as any;
       const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes(
         (data360.header?.status || member.membership_status || member.status || '').toUpperCase()
       );
       if (!isMemberActiveOrFrozen) return 0;
+      const activeList = Array.isArray(data360.memberships?.active_list) ? data360.memberships.active_list : [];
+      if (activeList.length > 0) {
+        return activeList.reduce((acc: number, c: any) => acc + Number(c.passport_sessions_left ?? c.cross_branch_sessions_remaining ?? 0), 0);
+      }
+      if (typeof data360.header?.cross_branch_sessions_remaining === 'number') {
+        return data360.header.cross_branch_sessions_remaining;
+      }
       const passEnt = dedupedRawMap.get('PASSPORT');
       if (passEnt && passEnt.remaining != null) return Math.round(Number(passEnt.remaining));
+      const activeMem = data360.memberships?.active as any;
       if (activeMem) {
         if (typeof activeMem.passport_sessions_left === 'number') return activeMem.passport_sessions_left;
         if (typeof activeMem.cross_branch_sessions_remaining === 'number') return activeMem.cross_branch_sessions_remaining;
       }
-      return data360.header?.cross_branch_sessions_remaining ?? member.cross_branch_sessions_remaining ?? 0;
+      return member.cross_branch_sessions_remaining ?? 0;
     })(),
     outstanding_balance: Number(data360.header?.outstanding_balance ?? member.outstanding_balance ?? 0),
     credits_remaining: (() => {
@@ -403,12 +451,30 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
       }
 
       if (!grouped.has(normKey)) {
-        grouped.set(normKey, { ...ent, normKey, displayLabel, isPassport });
+        grouped.set(normKey, {
+          ...ent,
+          normKey,
+          displayLabel,
+          isPassport,
+          allocated: ent.allocated != null ? Number(ent.allocated) : null,
+          consumed: Number(ent.consumed || 0),
+          remaining: ent.remaining != null ? Number(ent.remaining) : null,
+        });
       } else {
         const existing = grouped.get(normKey);
-        if (Number(ent.consumed || 0) > Number(existing.consumed || 0)) {
-          grouped.set(normKey, { ...ent, normKey, displayLabel, isPassport });
-        }
+        const newAlloc = (existing.allocated != null && ent.allocated != null)
+          ? existing.allocated + Number(ent.allocated)
+          : (existing.allocated ?? (ent.allocated != null ? Number(ent.allocated) : null));
+        const newConsumed = (existing.consumed || 0) + Number(ent.consumed || 0);
+        const newRem = (existing.remaining != null && ent.remaining != null)
+          ? existing.remaining + Number(ent.remaining)
+          : (existing.remaining ?? (ent.remaining != null ? Number(ent.remaining) : null));
+        grouped.set(normKey, {
+          ...existing,
+          allocated: newAlloc,
+          consumed: newConsumed,
+          remaining: newRem,
+        });
       }
     }
 
@@ -465,7 +531,10 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
     const raw = data360?.passport;
     const isMemberActiveOrFrozen = ['ACTIVE', 'FROZEN'].includes((header.status || '').toUpperCase());
     const activeMem = memberships.active;
-    if (!isMemberActiveOrFrozen || !activeMem) {
+    const activeList = Array.isArray(memberships.active_list) && memberships.active_list.length > 0
+      ? memberships.active_list
+      : (activeMem ? [activeMem] : []);
+    if (!isMemberActiveOrFrozen || activeList.length === 0) {
       return {
         ...raw,
         passport_allowed: 0,
@@ -473,16 +542,27 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
         passport_remaining: 0,
       };
     }
-    const hasExplicitActivePassport = typeof activeMem.passport_sessions_left === 'number' || typeof activeMem.cross_branch_sessions_remaining === 'number';
-    const passAlloc = typeof activeMem.passport_sessions_total === 'number'
+    if (activeList.length > 1) {
+      const aggAlloc = activeList.reduce((acc, c: any) => acc + Number(c.passport_sessions_total ?? c.cross_branch_sessions_remaining ?? 0), 0);
+      const aggUsed = activeList.reduce((acc, c: any) => acc + Number(c.passport_sessions_used ?? 0), 0);
+      const aggLeft = activeList.reduce((acc, c: any) => acc + Number(c.passport_sessions_left ?? c.cross_branch_sessions_remaining ?? 0), 0);
+      return {
+        ...raw,
+        passport_allowed: aggAlloc > 0 ? aggAlloc : (raw?.passport_allowed ?? 0),
+        passport_consumed: aggUsed > 0 ? aggUsed : (raw?.passport_consumed ?? 0),
+        passport_remaining: aggLeft > 0 ? aggLeft : (raw?.passport_remaining ?? 0),
+      };
+    }
+    const hasExplicitActivePassport = typeof activeMem?.passport_sessions_left === 'number' || typeof activeMem?.cross_branch_sessions_remaining === 'number';
+    const passAlloc = typeof activeMem?.passport_sessions_total === 'number'
       ? activeMem.passport_sessions_total
-      : (typeof activeMem.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_allowed ?? 0));
-    const passUsed = typeof activeMem.passport_sessions_used === 'number'
+      : (typeof activeMem?.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_allowed ?? 0));
+    const passUsed = typeof activeMem?.passport_sessions_used === 'number'
       ? activeMem.passport_sessions_used
       : (raw?.passport_consumed ?? 0);
-    const passLeft = typeof activeMem.passport_sessions_left === 'number'
+    const passLeft = typeof activeMem?.passport_sessions_left === 'number'
       ? activeMem.passport_sessions_left
-      : (typeof activeMem.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_remaining ?? 0));
+      : (typeof activeMem?.cross_branch_sessions_remaining === 'number' ? activeMem.cross_branch_sessions_remaining : (raw?.passport_remaining ?? 0));
 
     return {
       ...raw,
@@ -743,7 +823,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   </span>
                   <span>•</span>
                   <span>
-                    Package: <strong className="text-foreground">{header.current_package || 'No Package'}</strong>{' '}
+                    Package: <strong className="text-foreground">{header.current_package_display || formatProgramPackage(header.current_program, header.current_package) || 'No Package'}</strong>{' '}
                     <span className="text-muted-foreground/80">({header.current_package_version})</span>
                   </span>
                   {header.assigned_trainer && header.assigned_trainer !== 'Unassigned' && (
@@ -792,8 +872,19 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                 <div className="text-[9px] text-muted-foreground">coins</div>
               </div>
 
-              <div className="bg-card/90 border border-border/70 rounded-xl px-2.5 py-1.5 text-center shadow-sm">
-                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Expiry</div>
+              <div className={`bg-card/90 border rounded-xl px-2.5 py-1.5 text-center shadow-sm ${
+                (header as any).earliest_expiry_date &&
+                (() => {
+                  const d = new Date((header as any).earliest_expiry_date);
+                  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+                  return days <= 15 && days >= 0;
+                })()
+                  ? 'border-amber-400/60 bg-amber-500/5'
+                  : 'border-border/70'
+              }`}>
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  {(header as any).multi_contract_expiry ? 'Earliest Expiry' : 'Expiry'}
+                </div>
                 <div className="text-xs font-bold text-foreground mt-0.5 whitespace-nowrap">
                   {header.expiry_date
                     ? new Date(header.expiry_date).toLocaleDateString('en-GB', {
@@ -803,7 +894,11 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       })
                     : 'No Active Plan'}
                 </div>
-                <div className="text-[9px] text-muted-foreground">valid till</div>
+                <div className="text-[9px] text-muted-foreground truncate max-w-[80px]">
+                  {(header as any).multi_contract_expiry && (header as any).earliest_expiry_package
+                    ? (header as any).earliest_expiry_package
+                    : 'valid till'}
+                </div>
               </div>
 
               <div
@@ -1151,7 +1246,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                       <div>
                         <div className="text-xs text-muted-foreground">Package & Program</div>
                         <div className="font-semibold text-foreground text-sm mt-0.5">
-                          {overview.current_membership.package_name}
+                          {formatProgramPackage(overview.current_membership.program_name, overview.current_membership.package_name)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {overview.current_membership.program_name} · {overview.current_membership.package_version_name}
@@ -1911,11 +2006,11 @@ const MemberMembershipsSection: React.FC<{
     if (activeContracts.length > 0) {
       return activeContracts.reduce((acc: number, c: any) => {
         const anyC = c as any;
-        return acc + Number(anyC.home_sessions_remaining ?? anyC.sessions_left ?? 0);
+        return acc + Number(anyC.sessions_left ?? anyC.home_sessions_remaining ?? 0);
       }, 0);
     }
     const anyActive = memberships.active as any;
-    return Number(anyActive?.home_sessions_remaining ?? anyActive?.sessions_left ?? 0);
+    return Number(anyActive?.sessions_left ?? anyActive?.home_sessions_remaining ?? 0);
   }, [activeContracts, memberships.active]);
 
   // Assemble unified commercial passbook ledger for laymen
@@ -2014,7 +2109,7 @@ const MemberMembershipsSection: React.FC<{
         id: `mem-${memberships.active.id}`,
         date: memberships.active.start_date,
         type: 'PURCHASE',
-        title: memberships.active.package_name,
+        title: formatProgramPackage(memberships.active.program_name, memberships.active.package_name),
         originalPrice: catPrice || paidPrice,
         discountAmount: discAmt,
         finalAmount: paidPrice,
@@ -2117,11 +2212,11 @@ const MemberMembershipsSection: React.FC<{
           <div className="text-sm font-bold text-foreground mt-1 truncate">
             {activeContracts.length > 1
               ? `${activeContracts.length} Active Contracts`
-              : (memberships.active?.package_name || 'No Active Plan')}
+              : (formatProgramPackage(memberships.active?.program_name, memberships.active?.package_name) || 'No Active Plan')}
           </div>
           <span className="text-[10px] text-muted-foreground truncate block">
             {activeContracts.length > 1
-              ? activeContracts.map((c: any) => c.package_name).join(', ')
+              ? activeContracts.map((c: any) => formatProgramPackage(c.program_name, c.package_name)).join(', ')
               : (memberships.active ? `Status: ${memberships.active.status}` : 'Inactive')}
           </span>
         </div>
@@ -2284,8 +2379,32 @@ const MemberMembershipsSection: React.FC<{
               const passTotal = plan.passport_sessions_total ?? (plan.cross_branch_sessions_remaining != null ? plan.cross_branch_sessions_remaining + passUsed : 0);
               const passLeft = plan.passport_sessions_left ?? (passTotal > passUsed ? passTotal - passUsed : (plan.cross_branch_sessions_remaining ?? 0));
 
+              const cardEndDate = plan.end_date || plan.expiry_date;
+              const daysUntilExpiry = plan.days_until_expiry != null
+                ? plan.days_until_expiry
+                : (cardEndDate ? Math.ceil((new Date(cardEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null);
+              const isNearExpiry = plan.near_expiry != null
+                ? plan.near_expiry
+                : (daysUntilExpiry !== null && daysUntilExpiry <= 15 && daysUntilExpiry >= 0);
+              const isExpired = plan.is_expired != null
+                ? plan.is_expired
+                : (daysUntilExpiry !== null && daysUntilExpiry < 0);
+
               return (
-                <div key={plan.id || idx} className="p-4 rounded-xl bg-card border border-border shadow-xs space-y-3">
+                <div key={plan.id || idx} className={`p-4 rounded-xl bg-card border shadow-xs space-y-3 ${isNearExpiry && !isExpired ? 'border-amber-400/50 bg-amber-500/5' : 'border-border'}`}>
+                  {/* Near-expiry warning badge */}
+                  {isNearExpiry && !isExpired && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-500 text-[11px] font-semibold w-fit">
+                      <span>⚠</span>
+                      <span>Expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''} ({cardEndDate ? new Date(cardEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''})</span>
+                    </div>
+                  )}
+                  {isExpired && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-400/40 text-rose-500 text-[11px] font-semibold w-fit">
+                      <span>✕</span>
+                      <span>Expired {cardEndDate ? `on ${new Date(cardEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}</span>
+                    </div>
+                  )}
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     {/* Details Column */}
                     <div className="space-y-1.5 flex-1">
@@ -2293,7 +2412,9 @@ const MemberMembershipsSection: React.FC<{
                       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
                         <div>
                           <span className="font-semibold text-foreground">Plan Name:</span>{' '}
-                          <span className="text-muted-foreground">{plan.package_name || plan.plan_name || 'Sweat Pilates'}</span>
+                          <span className="text-muted-foreground">
+                            {formatProgramPackage(plan.program_name, plan.package_name || plan.plan_name || 'Sweat Pilates')}
+                          </span>
                         </div>
                         <div>
                           <span className="font-semibold text-foreground">Branch Name:</span>{' '}

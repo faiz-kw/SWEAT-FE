@@ -59,6 +59,20 @@ import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 
 type QuickViewTab = 'all' | 'active' | 'expiring_soon' | 'expired' | 'frozen' | 'outstanding';
 
+function formatMemberPackageTitle(prog?: string | null, pkg?: string | null, disp?: string | null): string {
+  if (disp && disp.trim()) return disp.trim();
+  const p = (prog || '').trim();
+  const k = (pkg || '').trim();
+  if (!k && !p) return 'Standard Plan';
+  if (!p || p.toLowerCase() === 'standard' || p.toLowerCase() === 'none') return k || 'Standard Plan';
+  if (!k || k.toLowerCase() === 'none' || k.toLowerCase() === 'plan') return p;
+  if (k.toLowerCase().startsWith(p.toLowerCase())) {
+    const clean = k.slice(p.length).replace(/^[\s–—:·\-]+/, '');
+    return clean ? `${p} – ${clean}` : p;
+  }
+  return `${p} – ${k}`;
+}
+
 export const MemberDirectoryWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -581,8 +595,11 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                         </td>
 
                         <td className="py-3 px-3 whitespace-nowrap">
-                          <div className="text-xs font-medium text-foreground max-w-[210px] truncate" title={member.package_name || 'Standard Plan'}>
-                            {member.package_name || 'Standard Plan'}
+                          <div
+                            className="text-xs font-medium text-foreground max-w-[210px] truncate"
+                            title={formatMemberPackageTitle(member.program_name, member.package_name, (member as any).display_package_name)}
+                          >
+                            {formatMemberPackageTitle(member.program_name, member.package_name, (member as any).display_package_name)}
                           </div>
                           <div className="text-[11px] text-muted-foreground max-w-[210px] truncate" title={`${member.program_name || ''} · ${member.package_version_name || ''}`}>
                             {member.program_name} · <span className="font-mono">{member.package_version_name}</span>
@@ -735,7 +752,9 @@ export const MemberDirectoryWorkspace: React.FC = () => {
                     <div className="bg-muted/40 rounded-lg p-2.5 grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <div className="text-muted-foreground text-[10px] uppercase font-semibold">Package</div>
-                        <div className="font-medium text-foreground truncate">{member.package_name || 'Standard'}</div>
+                        <div className="font-medium text-foreground truncate">
+                          {formatMemberPackageTitle(member.program_name, member.package_name, (member as any).display_package_name)}
+                        </div>
                       </div>
                       <div>
                         <div className="text-muted-foreground text-[10px] uppercase font-semibold">Expiry Date</div>
