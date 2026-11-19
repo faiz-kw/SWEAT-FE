@@ -46,9 +46,11 @@ import {
   Download,
   RotateCcw,
   BarChart3,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AttentionQueueView } from './AttentionQueueView';
+import { LeadTransferModal } from './settings/LeadTransferModal';
 
 import { crmApi } from '@/api/endpoints/crmApi';
 import { useWebRTCPhone } from '@/components/crm/telephony';
@@ -323,6 +325,10 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
   const [isStatusOpen, setIsStatusOpen] = React.useState(false);
   const [isTrialOpen, setIsTrialOpen] = React.useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = React.useState(false);
+  const [transferSourceUserId, setTransferSourceUserId] = React.useState<string | undefined>(undefined);
+  const [selectedLeadIds, setSelectedLeadIds] = React.useState<string[]>([]);
+  const [isSelectAllAcrossPages, setIsSelectAllAcrossPages] = React.useState(false);
 
   // Status Change Form State
   const [targetStatus, setTargetStatus] = React.useState<LeadStatus>('INTERESTED');
@@ -385,7 +391,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       if (effectiveDateTo) p.date_to = effectiveDateTo;
       return crmApi.getLeadsPaginated(p);
     },
-    enabled: canView,
+    enabled: canView && viewMode !== 'ATTENTION',
   });
 
   // Multi-column Asc/Desc sort (Server-side for created_at/name/status, fallback in-page for others)
@@ -796,6 +802,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                     queryClient.invalidateQueries({ queryKey: ['leads'] }),
                     queryClient.invalidateQueries({ queryKey: ['lead-summary-metrics'] }),
                     queryClient.invalidateQueries({ queryKey: ['pipeline-counts'] }),
+                    queryClient.invalidateQueries({ queryKey: ['attention-queue'] }),
                     refetch(),
                   ]);
                 } finally {
@@ -826,6 +833,22 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
               )}
               <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export Excel'}</span>
             </Button>
+
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTransferSourceUserId(scopeFilter === 'UNASSIGNED' ? 'unassigned' : undefined);
+                  setIsTransferModalOpen(true);
+                }}
+                className="gap-1.5 h-9 border-primary/30 text-primary hover:bg-primary/5 font-semibold"
+                title="Transfer RM Pipeline / Bulk Reassign Leads"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5 text-primary" />
+                <span className="hidden sm:inline">Transfer Leads</span>
+              </Button>
+            )}
 
             
             {canEdit && viewMode === 'ATTENTION' && (
@@ -867,14 +890,14 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           <CRMKpiTile
             label="Total Leads"
             value={metrics.total}
-            isLoading={isMetricsLoading && isLoading}
+            isLoading={isMetricsLoading}
             isError={isError}
             hint="All registered prospects"
           />
           <CRMKpiTile
             label="Active Enquiries"
             value={metrics.inquiries}
-            isLoading={isMetricsLoading && isLoading}
+            isLoading={isMetricsLoading}
             isError={isError}
             badge={{ text: 'In Pipeline', variant: 'info' }}
             hint="Fresh & Interested"
@@ -882,7 +905,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           <CRMKpiTile
             label="Trial"
             value={metrics.trials}
-            isLoading={isMetricsLoading && isLoading}
+            isLoading={isMetricsLoading}
             isError={isError}
             badge={{ text: 'Booked / Attended', variant: 'warning' }}
             hint="Trial sessions"
@@ -890,7 +913,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           <CRMKpiTile
             label="Converted"
             value={metrics.converted}
-            isLoading={isMetricsLoading && isLoading}
+            isLoading={isMetricsLoading}
             isError={isError}
             badge={{ text: 'Paying', variant: 'positive' }}
             hint="Successful conversions"
@@ -898,7 +921,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
           <CRMKpiTile
             label="SLA Breached"
             value={metrics.slaBreaches}
-            isLoading={isLoading}
+            isLoading={isMetricsLoading}
             isError={isError}
             badge={{
               text: metrics.slaBreaches > 0 ? 'Urgent' : 'Clear',
@@ -1402,13 +1425,7 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         )}
 
         {/* Content View */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : viewMode === 'ATTENTION' ? (
+        {viewMode === 'ATTENTION' ? (
           /* --- ATTENTION QUEUE VIEW --- */
           <AttentionQueueView
             branchFilter={branchFilter}
@@ -1417,6 +1434,12 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
             onBookTrialClick={openTrialModal}
             onStatusTransitionClick={openStatusModal}
           />
+        ) : isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            ))}
+          </div>
         ) : isError ? (
           <CRMErrorState
             title="Unable to Load Leads"
@@ -1593,12 +1616,61 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         ) : (
           /* --- LIST / TABLE VIEW --- */
           <>
+            {/* Select All Across Pages Banner (Feature 1) */}
+            {selectedLeadIds.length === leads.length && leads.length > 0 && (leadsData.count || 0) > leads.length && (
+              <div className="mb-3 p-3 rounded-xl bg-primary/10 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-foreground shadow-2xs animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary" />
+                  <span>All {leads.length} leads on this page are selected.</span>
+                </div>
+                {!isSelectAllAcrossPages ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsSelectAllAcrossPages(true)}
+                    className="h-7 text-xs font-bold bg-background text-primary border-primary/30 hover:bg-primary/5"
+                  >
+                    Select all {(leadsData.count || 0).toLocaleString()} leads matching this filter
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 font-bold text-primary">
+                    <span>✓ All {(leadsData.count || 0).toLocaleString()} matching leads selected across all pages!</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSelectAllAcrossPages(false)}
+                      className="text-xs text-muted-foreground hover:underline ml-1"
+                    >
+                      (Clear)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Desktop Full Data Table (1280px+) */}
             <div className="hidden xl:block rounded-2xl border border-border/70 bg-card shadow-xs overflow-hidden">
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-left text-sm min-w-[1020px]">
                   <thead className="bg-muted/40 border-b border-border/70 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     <tr>
+                      {/* Checkbox Selection Column */}
+                      <th className="px-4 py-3.5 w-10 text-center select-none">
+                        <input
+                          type="checkbox"
+                          checked={leads.length > 0 && selectedLeadIds.length === leads.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedLeadIds(leads.map((l) => l.id));
+                            } else {
+                              setSelectedLeadIds([]);
+                            }
+                          }}
+                          className="accent-primary w-3.5 h-3.5 rounded cursor-pointer"
+                          title="Select all on this page"
+                        />
+                      </th>
+
                       {/* 1. Created Date Column */}
                       <th 
                         onClick={() => handleSort('created_at')} 
@@ -1751,12 +1823,27 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                         color: 'text-muted-foreground border-border',
                         bgBadge: 'bg-muted',
                       };
+                      const isSelected = selectedLeadIds.includes(lead.id);
                       return (
                         <tr
                           key={lead.id}
-                          className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                          className={`hover:bg-muted/30 transition-colors cursor-pointer group ${isSelected ? 'bg-primary/5' : ''}`}
                           onClick={() => openLeadDetail(lead)}
                         >
+                          {/* Row Checkbox */}
+                          <td className="px-4 py-3.5 w-10 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                setSelectedLeadIds((prev) =>
+                                  prev.includes(lead.id) ? prev.filter((id) => id !== lead.id) : [...prev, lead.id]
+                                );
+                              }}
+                              className="accent-primary w-3.5 h-3.5 rounded cursor-pointer"
+                            />
+                          </td>
+
                           {/* 1. Created Date */}
                           <td className="px-5 py-3.5 min-w-[170px] whitespace-nowrap">
                             {(() => {
@@ -2039,6 +2126,40 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 </table>
               </div>
             </div>
+
+            {/* Floating Bulk Action Bar when leads are selected */}
+            {selectedLeadIds.length > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-card/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <span>
+                    {isSelectAllAcrossPages
+                      ? `All ${(leadsData.count || 0).toLocaleString()} Matching Leads Selected`
+                      : `${selectedLeadIds.length} Leads Selected`}
+                  </span>
+                </div>
+                <div className="h-4 w-px bg-border" />
+                <Button
+                  size="sm"
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-bold"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  Transfer Selected ({isSelectAllAcrossPages ? (leadsData.count || 0).toLocaleString() : selectedLeadIds.length})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedLeadIds([]);
+                    setIsSelectAllAcrossPages(false);
+                  }}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Deselect
+                </Button>
+              </div>
+            )}
 
             {/* Mobile & Tablet Cards View (Responsive < 1280px) */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-3.5">
@@ -2532,6 +2653,29 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
         lead={selectedLead}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['leads'] });
+          refetch();
+        }}
+      />
+
+      {/* RM Pipeline Transfer & Reassignment Modal */}
+      <LeadTransferModal
+        open={isTransferModalOpen}
+        onOpenChange={(open) => {
+          setIsTransferModalOpen(open);
+          if (!open) {
+            setSelectedLeadIds([]);
+            setIsSelectAllAcrossPages(false);
+            setTransferSourceUserId(undefined);
+          }
+        }}
+        initialSelectedLeadIds={selectedLeadIds}
+        initialSourceUserId={transferSourceUserId}
+        isSelectAllAcrossPages={isSelectAllAcrossPages}
+        totalMatchingFilterCount={leadsData.count || 0}
+        onSuccess={() => {
+          setSelectedLeadIds([]);
+          setIsSelectAllAcrossPages(false);
+          setTransferSourceUserId(undefined);
           refetch();
         }}
       />

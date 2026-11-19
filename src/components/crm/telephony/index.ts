@@ -7,3 +7,4 @@ export * from "./WebRTCPhoneContext";
 export * from "./WebPhoneBar";
 export * from "./TelephonySettingsModal";
 export * from "./TelephonyAnalyticsDashboard";
+export * from "./LeadCallButton";

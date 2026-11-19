@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  RefreshCw,
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
@@ -148,16 +147,6 @@ export function AttentionQueueView({
           <span className="text-xs text-muted-foreground">
             {isLoading ? 'Counting...' : `${totalCount} leads require attention`}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="h-8 px-2 text-xs"
-            title="Refresh attention queue"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          </Button>
         </div>
       </div>
 

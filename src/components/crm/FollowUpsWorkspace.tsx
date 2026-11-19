@@ -39,6 +39,7 @@ import type {
   EligibleAgent,
 } from '@/types/crm';
 import { LeadDetailModal } from './LeadDetailModal';
+import { LeadCallButton } from './telephony';
 import { CRMPageHeader } from './common/CRMPageHeader';
 import { CRMKpiTile } from './common/CRMKpiTile';
 import { CRMFilterBar } from './common/CRMFilterBar';
@@ -629,7 +630,12 @@ export function FollowUpsWorkspace() {
                       </Button>
 
                       {!isCompleted && !isCancelled && canEdit && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <LeadCallButton
+                            leadId={task.lead}
+                            phone={task.lead_phone}
+                            contactName={task.lead_name || 'Prospect'}
+                          />
                           <Button
                             variant="outline"
                             size="sm"

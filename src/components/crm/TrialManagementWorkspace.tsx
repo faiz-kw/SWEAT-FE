@@ -77,6 +77,7 @@ import { CRMLoadingState } from './common/CRMLoadingState';
 import { formatCrmLabel } from '@/lib/crmLabels';
 import { BookTrialModal } from './BookTrialModal';
 import { LeadDetailModal } from './LeadDetailModal';
+import { LeadCallButton } from './telephony';
 import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 export function TrialManagementWorkspace() {
@@ -880,6 +881,12 @@ export function TrialManagementWorkspace() {
                         {/* Actions */}
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <LeadCallButton
+                              leadId={trial.lead}
+                              phone={trial.lead_phone}
+                              contactName={trial.lead_name || 'Prospect'}
+                              compact
+                            />
                             {/* Primary contextual action */}
                             {canEdit && trial.is_active_trial !== false && trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
                               <Button
@@ -1052,8 +1059,14 @@ export function TrialManagementWorkspace() {
 
                   {/* Mobile Action buttons */}
                   {canEdit && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                      <div>
+                    <div className="flex items-center justify-between pt-2 border-t border-border/40 gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <LeadCallButton
+                          leadId={trial.lead}
+                          phone={trial.lead_phone}
+                          contactName={trial.lead_name || 'Prospect'}
+                          compact
+                        />
                         {trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
                           <Button
                             size="sm"

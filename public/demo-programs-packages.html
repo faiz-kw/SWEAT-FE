@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SWEAT - Programs & Packages Enterprise Redesign Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .toggle-checkbox:checked {
+      right: 0;
+      border-color: #16a34a;
+    }
+    .toggle-checkbox:checked + .toggle-label {
+      background-color: #16a34a;
+    }
+    /* Drawer animation */
+    #detailDrawer {
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    }
+    #drawerBackdrop {
+      transition: opacity 0.25s ease;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen flex antialiased">
+
+  <!-- Sidebar Mockup -->
+  <aside class="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col flex-shrink-0 select-none">
+    <div class="h-16 flex items-center px-6 border-b border-slate-200 gap-3">
+      <div class="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-extrabold text-sm tracking-wider shadow-sm">SW</div>
+      <div>
+        <div class="font-bold text-sm tracking-tight text-slate-900 leading-none">SWEAT Demo</div>
+        <div class="text-[11px] text-slate-500 font-medium mt-0.5">Organization Admin</div>
+      </div>
+    </div>
+
+    <div class="p-4 space-y-1 text-sm font-medium">
+      <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 px-3 py-1">Main</div>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+        Dashboard
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+        Members
+      </a>
+
+      <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 px-3 py-2 pt-3">Operations</div>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        Calendar & Schedule
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+        Classes
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 font-semibold border-l-4 border-amber-600 -ml-4 pl-7 shadow-sm">
+        <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+        Programs & Packages
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+        Bookings
+      </a>
+    </div>
+
+    <div class="mt-auto p-4 border-t border-slate-200">
+      <div class="flex items-center gap-3 px-2 py-1.5">
+        <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs">PN</div>
+        <div class="text-xs">
+          <div class="font-bold text-slate-800">Praveen Nair</div>
+          <div class="text-slate-500">Super Administrator</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar">
+
+    <!-- Top App Bar -->
+    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10">
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60">PRO WORKSPACE</span>
+        <span class="text-slate-300">/</span>
+        <span class="text-sm font-semibold text-slate-800">Operations</span>
+        <span class="text-slate-300">/</span>
+        <span class="text-sm font-bold text-slate-900">Programs & Packages</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
+          <span>All Studio Branches (3)</span>
+          <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </div>
+
+        <div class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Online CRM</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="p-8 max-w-[1600px] w-full mx-auto space-y-6">
+
+      <!-- Header Section -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Programs & Packages</h1>
+          <p class="text-sm text-slate-500 mt-1">Configure your program catalog, commercial package tiers, immutable pricing versions, and legal policies.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm font-semibold transition-all shadow-sm">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            New Program
+          </button>
+          <button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            New Package
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:border-slate-300 transition-all">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Packages</span>
+            <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <span class="text-3xl font-extrabold text-slate-900 tracking-tight">303</span>
+            <span class="text-xs font-semibold text-emerald-600">253 Active</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Across 56 active programs</p>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:border-slate-300 transition-all">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Active Programs</span>
+            <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <span class="text-3xl font-extrabold text-slate-900 tracking-tight">10</span>
+            <span class="text-xs font-medium text-slate-500">of 56 total</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Pilates, Bootcamp, Elite...</p>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:border-slate-300 transition-all">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Program Categories</span>
+            <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <span class="text-3xl font-extrabold text-slate-900 tracking-tight">12</span>
+            <span class="text-xs font-medium text-slate-500">Tiers</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Classification taxonomy</p>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm hover:border-slate-300 transition-all">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Draft Versions</span>
+            <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <span class="text-3xl font-extrabold text-amber-600 tracking-tight">6</span>
+            <span class="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Needs Publish</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Pending immutable activation</p>
+        </div>
+      </div>
+
+      <!-- Main Navigation Tabs: Flat Packages First! -->
+      <div class="border-b border-slate-200 flex items-center gap-8">
+        <button class="pb-3 border-b-2 border-amber-600 text-amber-700 font-bold text-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+          All Packages
+          <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">303</span>
+        </button>
+        <button class="pb-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-semibold text-sm flex items-center gap-2 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          Programs & Classes
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">56</span>
+        </button>
+        <button class="pb-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-semibold text-sm flex items-center gap-2 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+          Categories
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">12</span>
+        </button>
+        <button class="pb-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-semibold text-sm flex items-center gap-2 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          Legal Policies
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">0</span>
+        </button>
+      </div>
+
+      <!-- Integrated Unified Filter Bar (No clutter!) -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+
+        <!-- Search Bar -->
+        <div class="relative flex-1 max-w-md">
+          <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Search by package name, program, code, or sessions..."
+            class="w-full pl-10 pr-4 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 transition-all placeholder:text-slate-400"
+          >
+        </div>
+
+        <!-- Filter Dropdowns & Status Segmented Switcher -->
+        <div class="flex flex-wrap items-center gap-3">
+
+          <!-- Program Filter Dropdown -->
+          <select id="programFilter" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer">
+            <option value="ALL">All Programs (56)</option>
+            <option value="Sweat Pilates">Sweat Pilates</option>
+            <option value="Sweat Bootcamp">Sweat Bootcamp</option>
+            <option value="Sweat Elite">Sweat Elite</option>
+            <option value="Sweat Recovery">Sweat Recovery</option>
+          </select>
+
+          <!-- Branch Filter Dropdown -->
+          <select class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer">
+            <option value="ALL">All Studio Branches</option>
+            <option value="Goregaon">Sweat Goregaon West</option>
+            <option value="Andheri">Sweat Andheri West</option>
+          </select>
+
+          <!-- Divider -->
+          <div class="h-6 w-[1px] bg-slate-200 hidden sm:block"></div>
+
+          <!-- Clean Segmented Status Switcher -->
+          <div class="inline-flex p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold select-none">
+            <button onclick="setStatusFilter('ALL')" id="tab-ALL" class="px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm transition-all">
+              All <span class="text-slate-500 font-normal">303</span>
+            </button>
+            <button onclick="setStatusFilter('ACTIVE')" id="tab-ACTIVE" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Active <span class="text-slate-400 font-normal">253</span>
+            </button>
+            <button onclick="setStatusFilter('INACTIVE')" id="tab-INACTIVE" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-rose-500"></span> Inactive <span class="text-slate-400 font-normal">50</span>
+            </button>
+            <button onclick="setStatusFilter('DRAFT')" id="tab-DRAFT" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span> Draft <span class="text-slate-400 font-normal">6</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Packages Enterprise Data Table -->
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50/75 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th class="py-3.5 px-6">Package Name & Code</th>
+                <th class="py-3.5 px-4">Program & Category</th>
+                <th class="py-3.5 px-4">Workout Sessions</th>
+                <th class="py-3.5 px-4">Validity</th>
+                <th class="py-3.5 px-4">Price (Incl. Tax)</th>
+                <th class="py-3.5 px-4">Availability</th>
+                <th class="py-3.5 px-4 text-center">Status</th>
+                <th class="py-3.5 px-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="packageTableBody" class="divide-y divide-slate-100 text-sm">
+
+              <!-- Row 1: Intro Pack -->
+              <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" onclick="openPackageDrawer('Intro Pack - 5 session', 'PKG-PLT-005', 'Sweat Pilates', 'Group Class', '₹7,999', '12 Days', '5 Sessions', '4 Home + 1 Passport', 'v2', true)">
+                <td class="py-4 px-6">
+                  <div class="font-bold text-slate-900 group-hover:text-amber-700 flex items-center gap-2">
+                    Intro Pack - 5 session
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">v2</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5 font-mono">PKG-PLT-005 • Active version</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="font-medium text-slate-800">Sweat Pilates</div>
+                  <div class="text-xs text-slate-400">Sweat Pilates - Group Classes</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200/60">
+                    5 Total Sessions
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">4 Home + 1 Passport</div>
+                </td>
+                <td class="py-4 px-4 font-semibold text-slate-700">12 Days</td>
+                <td class="py-4 px-4">
+                  <div class="font-bold text-slate-900 text-base">₹7,999</div>
+                  <div class="text-[11px] text-slate-400">₹1,600 / session</div>
+                </td>
+                <td class="py-4 px-4">
+                  <span class="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    All 3 Branches
+                  </span>
+                </td>
+                <td class="py-4 px-4 text-center" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked onchange="toggleStatus(this)" class="sr-only peer">
+                    <div class="relative w-12 h-6 bg-rose-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shadow-inner">
+                      <span class="absolute left-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none peer-checked:hidden">OFF</span>
+                      <span class="absolute right-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none hidden peer-checked:block">ON</span>
+                    </div>
+                  </label>
+                </td>
+                <td class="py-4 px-6 text-right" onclick="event.stopPropagation()">
+                  <div class="flex items-center justify-end gap-1">
+                    <button onclick="openPackageDrawer('Intro Pack - 5 session', 'PKG-PLT-005', 'Sweat Pilates', 'Group Class', '₹7,999', '12 Days', '5 Sessions', '4 Home + 1 Passport', 'v2', true)" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="View details & versions">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Package options">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 2: Essential 12 -->
+              <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" onclick="openPackageDrawer('Essential 12', 'PKG-PLT-012', 'Sweat Pilates', 'Group Class', '₹15,999', '28 Days', '14 Sessions', '12 Home + 2 Passport', 'v3', true)">
+                <td class="py-4 px-6">
+                  <div class="font-bold text-slate-900 group-hover:text-amber-700 flex items-center gap-2">
+                    Essential 12
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">v3</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5 font-mono">PKG-PLT-012 • Active version</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="font-medium text-slate-800">Sweat Pilates</div>
+                  <div class="text-xs text-slate-400">Sweat Pilates - Group Classes</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200/60">
+                    14 Total Sessions
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">12 Home + 2 Passport</div>
+                </td>
+                <td class="py-4 px-4 font-semibold text-slate-700">28 Days</td>
+                <td class="py-4 px-4">
+                  <div class="font-bold text-slate-900 text-base">₹15,999</div>
+                  <div class="text-[11px] text-slate-400">₹1,143 / session</div>
+                </td>
+                <td class="py-4 px-4">
+                  <span class="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    All 3 Branches
+                  </span>
+                </td>
+                <td class="py-4 px-4 text-center" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked onchange="toggleStatus(this)" class="sr-only peer">
+                    <div class="relative w-12 h-6 bg-rose-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shadow-inner">
+                      <span class="absolute left-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none peer-checked:hidden">OFF</span>
+                      <span class="absolute right-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none hidden peer-checked:block">ON</span>
+                    </div>
+                  </label>
+                </td>
+                <td class="py-4 px-6 text-right" onclick="event.stopPropagation()">
+                  <div class="flex items-center justify-end gap-1">
+                    <button onclick="openPackageDrawer('Essential 12', 'PKG-PLT-012', 'Sweat Pilates', 'Group Class', '₹15,999', '28 Days', '14 Sessions', '12 Home + 2 Passport', 'v3', true)" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="View details & versions">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 3: Performance 36 -->
+              <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" onclick="openPackageDrawer('Performance 36', 'PKG-PLT-036', 'Sweat Pilates', 'Group Class', '₹36,999', '84 Days', '43 Sessions', '36 Home + 7 Passport', 'v2', true)">
+                <td class="py-4 px-6">
+                  <div class="font-bold text-slate-900 group-hover:text-amber-700 flex items-center gap-2">
+                    Performance 36
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">v2</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5 font-mono">PKG-PLT-036 • Active version</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="font-medium text-slate-800">Sweat Pilates</div>
+                  <div class="text-xs text-slate-400">Sweat Pilates - Group Classes</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200/60">
+                    43 Total Sessions
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">36 Home + 7 Passport</div>
+                </td>
+                <td class="py-4 px-4 font-semibold text-slate-700">84 Days</td>
+                <td class="py-4 px-4">
+                  <div class="font-bold text-slate-900 text-base">₹36,999</div>
+                  <div class="text-[11px] text-slate-400">₹860 / session</div>
+                </td>
+                <td class="py-4 px-4">
+                  <span class="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    All 3 Branches
+                  </span>
+                </td>
+                <td class="py-4 px-4 text-center" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked onchange="toggleStatus(this)" class="sr-only peer">
+                    <div class="relative w-12 h-6 bg-rose-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shadow-inner">
+                      <span class="absolute left-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none peer-checked:hidden">OFF</span>
+                      <span class="absolute right-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none hidden peer-checked:block">ON</span>
+                    </div>
+                  </label>
+                </td>
+                <td class="py-4 px-6 text-right" onclick="event.stopPropagation()">
+                  <div class="flex items-center justify-end gap-1">
+                    <button onclick="openPackageDrawer('Performance 36', 'PKG-PLT-036', 'Sweat Pilates', 'Group Class', '₹36,999', '84 Days', '43 Sessions', '36 Home + 7 Passport', 'v2', true)" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 4: Transform 72 -->
+              <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" onclick="openPackageDrawer('Transform 72', 'PKG-PLT-072', 'Sweat Pilates', 'Group Class', '₹54,999', '168 Days', '86 Sessions', '72 Home + 14 Passport', 'v2', true)">
+                <td class="py-4 px-6">
+                  <div class="font-bold text-slate-900 group-hover:text-amber-700 flex items-center gap-2">
+                    Transform 72
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">v2</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5 font-mono">PKG-PLT-072 • Active version</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="font-medium text-slate-800">Sweat Pilates</div>
+                  <div class="text-xs text-slate-400">Sweat Pilates - Group Classes</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200/60">
+                    86 Total Sessions
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">72 Home + 14 Passport</div>
+                </td>
+                <td class="py-4 px-4 font-semibold text-slate-700">168 Days</td>
+                <td class="py-4 px-4">
+                  <div class="font-bold text-slate-900 text-base">₹54,999</div>
+                  <div class="text-[11px] text-slate-400">₹639 / session</div>
+                </td>
+                <td class="py-4 px-4">
+                  <span class="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    All 3 Branches
+                  </span>
+                </td>
+                <td class="py-4 px-4 text-center" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked onchange="toggleStatus(this)" class="sr-only peer">
+                    <div class="relative w-12 h-6 bg-rose-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shadow-inner">
+                      <span class="absolute left-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none peer-checked:hidden">OFF</span>
+                      <span class="absolute right-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none hidden peer-checked:block">ON</span>
+                    </div>
+                  </label>
+                </td>
+                <td class="py-4 px-6 text-right" onclick="event.stopPropagation()">
+                  <div class="flex items-center justify-end gap-1">
+                    <button onclick="openPackageDrawer('Transform 72', 'PKG-PLT-072', 'Sweat Pilates', 'Group Class', '₹54,999', '168 Days', '86 Sessions', '72 Home + 14 Passport', 'v2', true)" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 5: Trial Session (Deactivated / Inactive demo) -->
+              <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer bg-slate-50/40" onclick="openPackageDrawer('Trial session', 'PKG-BTC-001', 'Sweat Bootcamp', 'Group Class', '₹0', '30 Days', '1 Session', '1 Home + 0 Passport', 'v4 (Draft)', false)">
+                <td class="py-4 px-6">
+                  <div class="font-bold text-slate-700 group-hover:text-amber-700 flex items-center gap-2">
+                    Trial session
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">v4 Draft</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mt-0.5 font-mono">PKG-BTC-001 • Complimentary Trial</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="font-medium text-slate-700">Sweat Bootcamp</div>
+                  <div class="text-xs text-slate-400">Sweat Bootcamp - Group Classes</div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200">
+                    1 Total Session
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">1 Home + 0 Passport</div>
+                </td>
+                <td class="py-4 px-4 font-semibold text-slate-500">30 Days</td>
+                <td class="py-4 px-4">
+                  <div class="font-bold text-slate-600 text-base">Free (₹0)</div>
+                  <div class="text-[11px] text-slate-400">Trial tier</div>
+                </td>
+                <td class="py-4 px-4">
+                  <span class="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    Sweat Andheri West
+                  </span>
+                </td>
+                <td class="py-4 px-4 text-center" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" onchange="toggleStatus(this)" class="sr-only peer">
+                    <div class="relative w-12 h-6 bg-rose-500 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shadow-inner">
+                      <span class="absolute left-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none peer-checked:hidden">OFF</span>
+                      <span class="absolute right-1.5 top-1 text-[9px] font-black text-white/90 uppercase pointer-events-none hidden peer-checked:block">ON</span>
+                    </div>
+                  </label>
+                </td>
+                <td class="py-4 px-6 text-right" onclick="event.stopPropagation()">
+                  <div class="flex items-center justify-end gap-1">
+                    <button onclick="openPackageDrawer('Trial session', 'PKG-BTC-001', 'Sweat Bootcamp', 'Group Class', '₹0', '30 Days', '1 Session', '1 Home + 0 Passport', 'v4 (Draft)', false)" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Pagination Footer -->
+        <div class="px-6 py-4 border-t border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 font-medium">
+          <div>
+            Showing <span class="font-bold text-slate-800">1</span> to <span class="font-bold text-slate-800">5</span> of <span class="font-bold text-slate-800">303</span> packages
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold disabled:opacity-50" disabled>Previous</button>
+            <button class="px-3 py-1.5 rounded-md bg-amber-600 text-white font-bold">1</button>
+            <button class="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold">2</button>
+            <button class="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold">3</button>
+            <span class="px-1 text-slate-400">...</span>
+            <button class="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold">13</button>
+            <button class="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold">Next</button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Slide-Over Drawer Backdrop -->
+  <div id="drawerBackdrop" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden opacity-0 transition-opacity" onclick="closePackageDrawer()"></div>
+
+  <!-- Slide-Over Package Detail Drawer -->
+  <div id="detailDrawer" class="fixed top-0 right-0 bottom-0 w-full max-w-xl bg-white shadow-2xl z-50 flex flex-col transform translate-x-full border-l border-slate-200">
+
+    <!-- Drawer Header -->
+    <div class="p-6 border-b border-slate-200 flex items-start justify-between bg-slate-50/60">
+      <div>
+        <div class="flex items-center gap-2">
+          <span id="drawerBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">Active</span>
+          <span id="drawerVersion" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">v3 Current</span>
+          <span id="drawerCode" class="text-xs font-mono text-slate-400">PKG-PLT-012</span>
+        </div>
+        <h2 id="drawerTitle" class="text-xl font-extrabold text-slate-900 tracking-tight mt-1.5">Essential 12</h2>
+        <p id="drawerProgram" class="text-xs text-slate-500 mt-0.5">Program: Sweat Pilates • Sweat Pilates - Group Classes</p>
+      </div>
+      <button onclick="closePackageDrawer()" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <!-- Drawer Body -->
+    <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+
+      <!-- Current Active Commercial Terms Card -->
+      <div class="bg-gradient-to-br from-amber-50/50 to-orange-50/20 border border-amber-200/80 rounded-xl p-5 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center justify-between">
+          <span>Active Pricing & Terms</span>
+          <span class="text-[11px] font-normal text-amber-600">Published Oct 12, 2024</span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="drawerPrice" class="text-3xl font-extrabold text-slate-900">₹15,999</span>
+          <span class="text-xs text-slate-500 font-medium">Incl. 18% GST (Base: ₹13,558.47)</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mt-5 pt-4 border-t border-amber-200/60 text-xs">
+          <div>
+            <div class="text-slate-400 font-medium">Workout Entitlement</div>
+            <div id="drawerSessions" class="font-bold text-slate-800 text-sm mt-0.5">14 Total Sessions</div>
+            <div id="drawerSessionsSub" class="text-[11px] text-slate-500 mt-0.5">12 Home Studio + 2 Passport</div>
+          </div>
+          <div>
+            <div class="text-slate-400 font-medium">Validity Duration</div>
+            <div id="drawerValidity" class="font-bold text-slate-800 text-sm mt-0.5">28 Days</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">From date of redemption</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Studio Availability -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Studio Branch Availability</h3>
+        <div class="flex flex-wrap gap-2 text-xs font-medium">
+          <span class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            Sweat Goregaon West (Home)
+          </span>
+          <span class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            Sweat Andheri West (Passport)
+          </span>
+          <span class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            Sweat Bandra West (Passport)
+          </span>
+        </div>
+      </div>
+
+      <!-- Version Audit History Timeline -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Version History & Audit Log</h3>
+          <span class="text-xs text-amber-700 font-semibold hover:underline cursor-pointer">+ New Version Draft</span>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl divide-y divide-slate-100 text-xs">
+          <!-- Active v3 -->
+          <div class="p-3.5 flex items-start justify-between bg-emerald-50/30">
+            <div>
+              <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                Version 3
+                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Current</span>
+              </div>
+              <div class="text-slate-500 mt-1">₹15,999 • 28 Days • 14 Sessions (12+2)</div>
+              <div class="text-[11px] text-slate-400 mt-1">Activated on Oct 12, 2024 by Praveen Nair</div>
+            </div>
+            <span class="text-emerald-700 font-bold text-xs">Active</span>
+          </div>
+
+          <!-- Retired v2 -->
+          <div class="p-3.5 flex items-start justify-between opacity-70">
+            <div>
+              <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                Version 2
+                <span class="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600">Retired</span>
+              </div>
+              <div class="text-slate-500 mt-1">₹14,999 • 28 Days • 12 Sessions (12+0)</div>
+              <div class="text-[11px] text-slate-400 mt-1">Retired on Oct 12, 2024 (Price adjusted)</div>
+            </div>
+            <span class="text-slate-400 font-medium text-xs">Retired</span>
+          </div>
+
+          <!-- Retired v1 -->
+          <div class="p-3.5 flex items-start justify-between opacity-60">
+            <div>
+              <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                Version 1
+                <span class="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600">Archived</span>
+              </div>
+              <div class="text-slate-500 mt-1">₹12,999 • 28 Days • 10 Sessions</div>
+              <div class="text-[11px] text-slate-400 mt-1">Created on Aug 01, 2024</div>
+            </div>
+            <span class="text-slate-400 font-medium text-xs">Retired</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-5 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+      <button class="px-4 py-2 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 text-xs font-bold transition-all">
+        Deactivate Package
+      </button>
+      <div class="flex items-center gap-2">
+        <button onclick="closePackageDrawer()" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all">
+          Close
+        </button>
+        <button class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-sm">
+          + Create New Version
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function openPackageDrawer(title, code, program, category, price, validity, sessions, sessionsSub, version, isActive) {
+      document.getElementById('drawerTitle').innerText = title;
+      document.getElementById('drawerCode').innerText = code;
+      document.getElementById('drawerProgram').innerText = `Program: ${program} • ${category}`;
+      document.getElementById('drawerPrice').innerText = price;
+      document.getElementById('drawerValidity').innerText = validity;
+      document.getElementById('drawerSessions').innerText = sessions;
+      document.getElementById('drawerSessionsSub').innerText = sessionsSub;
+      document.getElementById('drawerVersion').innerText = version;
+
+      const badge = document.getElementById('drawerBadge');
+      if (isActive) {
+        badge.innerText = 'Active';
+        badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider';
+      } else {
+        badge.innerText = 'Inactive';
+        badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider';
+      }
+
+      const backdrop = document.getElementById('drawerBackdrop');
+      const drawer = document.getElementById('detailDrawer');
+
+      backdrop.classList.remove('hidden');
+      setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        drawer.classList.remove('translate-x-full');
+      }, 10);
+    }
+
+    function closePackageDrawer() {
+      const backdrop = document.getElementById('drawerBackdrop');
+      const drawer = document.getElementById('detailDrawer');
+
+      drawer.classList.add('translate-x-full');
+      backdrop.classList.add('opacity-0');
+      setTimeout(() => {
+        backdrop.classList.add('hidden');
+      }, 250);
+    }
+
+    function toggleStatus(checkbox) {
+      console.log('Status toggled:', checkbox.checked ? 'Active' : 'Inactive');
+    }
+
+    function setStatusFilter(status) {
+      const tabs = ['ALL', 'ACTIVE', 'INACTIVE', 'DRAFT'];
+      tabs.forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if (t === status) {
+          el.className = 'px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm transition-all flex items-center gap-1.5 font-bold';
+        } else {
+          el.className = 'px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 font-medium';
+        }
+      });
+    }
+
+    // Live search filter demo
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+      const q = e.target.value.toLowerCase();
+      const rows = document.querySelectorAll('#packageTableBody tr');
+      rows.forEach(r => {
+        const text = r.innerText.toLowerCase();
+        if (text.includes(q)) {
+          r.style.display = '';
+        } else {
+          r.style.display = 'none';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

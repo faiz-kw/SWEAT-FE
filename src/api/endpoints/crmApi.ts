@@ -86,6 +86,112 @@ export interface InitiateLeadCallResponse {
   is_duplicate: boolean;
 }
 
+export interface TransferSourceRep {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  branch_id: string | null;
+  branch_name: string;
+  is_deactivated: boolean;
+  lead_count: number;
+  active_lead_count: number;
+  converted_lead_count: number;
+  lost_lead_count: number;
+  trial_count: number;
+  task_count: number;
+  hot_count: number;
+  warm_count: number;
+  cold_count: number;
+  has_meta_ads: boolean;
+}
+
+export interface PreviewLeadItem {
+  id: string;
+  name: string;
+  phone: string;
+  branch: string;
+  status: string;
+  temperature: 'HOT' | 'WARM' | 'COLD';
+  trialStatus?: string | null;
+}
+
+export interface LeadTransferPreviewResponse {
+  total_leads: number;
+  active_leads: number;
+  converted_leads: number;
+  lost_leads: number;
+  hot_leads: number;
+  warm_leads: number;
+  cold_leads: number;
+  trials_count: number;
+  followups_count: number;
+  has_meta_ads: boolean;
+  sample_leads: PreviewLeadItem[];
+}
+
+export interface LeadTransferPreviewPayload {
+  source_user_id?: string;
+  lead_ids?: string[];
+  is_all_matching?: boolean;
+  branch_id?: string;
+  stage_filter?: string;
+  include_converted?: boolean;
+  include_lost?: boolean;
+}
+
+export interface LeadTransferExecutePayload {
+  source_user_id?: string;
+  lead_ids?: string[];
+  is_all_matching?: boolean;
+  target_user_ids: string[];
+  transfer_mode: 'SINGLE' | 'ROUND_ROBIN' | 'LEAST_BUSY';
+  custom_weights?: Record<string, number>;
+  branch_id?: string;
+  stage_filter?: string;
+  include_converted?: boolean;
+  include_lost?: boolean;
+  stop_auto_assign?: boolean;
+  auto_switch_meta?: boolean;
+  reason?: string;
+}
+
+export interface LeadTransferExecuteResponse {
+  success: boolean;
+  batch_id: string;
+  transferred_leads_count: number;
+  transferred_trials_count: number;
+  transferred_followups_count: number;
+  target_summary: Array<{
+    user_id: string;
+    user_name: string;
+    leads_count: number;
+    percentage: number;
+  }>;
+  message: string;
+}
+
+export interface LeadTransferBatchHistoryItem {
+  id: string;
+  created_at: string;
+  source_user_id: string | null;
+  source_user_name: string;
+  target_users_summary: Array<{
+    user_id: string;
+    user_name: string;
+    leads_count: number;
+    percentage: number;
+  }>;
+  transfer_mode: string;
+  leads_count: number;
+  trials_count: number;
+  followups_count: number;
+  reason: string;
+  status: 'COMPLETED' | 'ROLLED_BACK';
+  performed_by_user_id: string | null;
+  performed_by_user_name: string;
+}
+
 export interface LeadsPaginatedResult {
   results: Lead[];
   count: number;
@@ -1218,20 +1324,23 @@ export const crmApi = {
   },
 
   // ── Telephony & Vobiz Sales Calling ──────────────────────────────────────────
-  clickToCall: async (leadId: string): Promise<{
+  clickToCall: async (
+    target: string | { lead_id?: string | null; member_id?: string | null; session_id?: string | null }
+  ): Promise<{
     call_session_id: string;
     status: string;
     message: string;
     agent_sip: string;
     masked_phone: string;
   }> => {
+    const payload = typeof target === 'string' ? { lead_id: target } : target;
     const res = await api.post<{
       call_session_id: string;
       status: string;
       message: string;
       agent_sip: string;
       masked_phone: string;
-    }>('/tenant/crm/telephony/click-to-call/', { lead_id: leadId });
+    }>('/tenant/crm/telephony/click-to-call/', payload);
     return res.data;
   },
 
@@ -1487,6 +1596,34 @@ export const crmApi = {
     return res.data;
   },
 
+  // =========================================================================
+  // Block 1: RM Handover & Bulk Lead Transfers
+  // =========================================================================
+
+  getTransferSourceReps: async (): Promise<{ source_reps: TransferSourceRep[] }> => {
+    const res = await api.get<{ source_reps: TransferSourceRep[] }>('/tenant/crm/lead-transfers/source-reps/');
+    return res.data;
+  },
+
+  previewLeadTransfer: async (payload: LeadTransferPreviewPayload): Promise<LeadTransferPreviewResponse> => {
+    const res = await api.post<LeadTransferPreviewResponse>('/tenant/crm/lead-transfers/preview/', payload);
+    return res.data;
+  },
+
+  executeLeadTransfer: async (payload: LeadTransferExecutePayload): Promise<LeadTransferExecuteResponse> => {
+    const res = await api.post<LeadTransferExecuteResponse>('/tenant/crm/lead-transfers/execute/', payload);
+    return res.data;
+  },
+
+  rollbackLeadTransfer: async (batchId: string): Promise<{ success: boolean; batch_id: string; rolled_back_leads_count: number; message: string }> => {
+    const res = await api.post<{ success: boolean; batch_id: string; rolled_back_leads_count: number; message: string }>('/tenant/crm/lead-transfers/rollback/', { batch_id: batchId });
+    return res.data;
+  },
+
+  getLeadTransferHistory: async (params?: { limit?: number }): Promise<{ history: LeadTransferBatchHistoryItem[] }> => {
+    const res = await api.get<{ history: LeadTransferBatchHistoryItem[] }>('/tenant/crm/lead-transfers/history/', { params });
+    return res.data;
+  },
 };
 
 

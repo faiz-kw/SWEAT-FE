@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { crmApi } from "@/api/endpoints/crmApi";
 import { useWebRTCPhone } from "./WebRTCPhoneContext";
+import { usePermissions } from "@/lib/permissions";
+import { formatDisplayPhone, isMaskedPhone } from "@/lib/phonePrivacy";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -43,21 +45,27 @@ interface MissedCallItem {
 
 export function MissedCallsDesk() {
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
 
   const { isRegistered: isWebPhoneReady, makeCall: makeWebPhoneCall, callState: webPhoneCallState } = useWebRTCPhone();
 
   const handleCallback = async (item: any) => {
-    if (isWebPhoneReady) {
-      const leadName = item.lead
-        ? `${item.lead.first_name} ${item.lead.last_name || ''}`.trim()
-        : "Prospect";
-      const phoneToCall = item.lead?.phone_normalized || item.user_phone_number;
+    const leadName = item.lead
+      ? `${item.lead.first_name} ${item.lead.last_name || ''}`.trim()
+      : "Prospect";
+    const phoneToCall = (item.lead?.phone_normalized || item.user_phone_number || '').trim();
+    const masked = isMaskedPhone(phoneToCall);
+
+    if (isWebPhoneReady && phoneToCall && !masked) {
       await makeWebPhoneCall(phoneToCall, leadName, {
         leadId: item.lead?.id,
         leadName,
       });
-    } else if (item.lead?.id) {
-      callbackMutation.mutate(item.lead.id);
+    } else if (item.lead?.id || item.session_id || item.id) {
+      callbackMutation.mutate({
+        lead_id: item.lead?.id || undefined,
+        session_id: !item.lead?.id ? (item.session_id || item.id) : undefined,
+      });
     }
   };
 
@@ -68,7 +76,7 @@ export function MissedCallsDesk() {
   });
 
   const callbackMutation = useMutation({
-    mutationFn: (leadId: string) => crmApi.clickToCall(leadId),
+    mutationFn: (target: { lead_id?: string; session_id?: string }) => crmApi.clickToCall(target),
     onSuccess: (res) => {
       toast.success(res.message || "Calling your Vobiz WebPhone first, then bridging lead.");
       queryClient.invalidateQueries({ queryKey: ['telephony-missed-calls'] });
@@ -152,7 +160,10 @@ export function MissedCallsDesk() {
               const leadName = item.lead
                 ? `${item.lead.first_name} ${item.lead.last_name || ''}`.trim()
                 : "New Prospect";
-              const maskedPhone = item.lead?.masked_phone || item.user_phone_number.replace(/\d(?=\d{4})/g, "X");
+              const displayPhone = formatDisplayPhone(
+                item.user_phone_number || item.lead?.masked_phone,
+                canViewPhoneNumber
+              );
 
               return (
                 <div key={item.id} className="p-3.5 hover:bg-muted/30 transition-colors flex items-center justify-between gap-3">
@@ -168,7 +179,7 @@ export function MissedCallsDesk() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
-                      <span>{maskedPhone}</span>
+                      <span>{displayPhone}</span>
                       <span>·</span>
                       <span className="flex items-center gap-0.5 font-sans">
                         <Clock className="size-3" />

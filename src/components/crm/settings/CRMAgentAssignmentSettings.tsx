@@ -8,11 +8,13 @@ import {
   Sparkles,
   ShieldAlert,
   Info,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { CRMAgentAssignmentConfig } from '@/types/crm';
+import { LeadTransferModal } from './LeadTransferModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -37,6 +39,15 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
     queryFn: () => crmApi.getAgentAssignmentConfig(),
   });
 
+  const {
+    data: historyData,
+    isLoading: isLoadingHistory,
+    refetch: refetchHistory,
+  } = useQuery({
+    queryKey: ['lead-transfer-history'],
+    queryFn: () => crmApi.getLeadTransferHistory(),
+  });
+
   const [allowedRoleCodes, setAllowedRoleCodes] = React.useState<string[]>([]);
   const [excludedUserIds, setExcludedUserIds] = React.useState<string[]>([]);
   const [requireBranchMatch, setRequireBranchMatch] = React.useState(true);
@@ -49,6 +60,7 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
   const [notifyManagerOnUnassigned, setNotifyManagerOnUnassigned] = React.useState(true);
   const [hasChanges, setHasChanges] = React.useState(false);
   const [userSearch, setUserSearch] = React.useState('');
+  const [isTransferModalOpen, setIsTransferModalOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (config) {
@@ -182,6 +194,33 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
             {updateMutation.isPending ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
           </Button>
         </div>
+      </div>
+
+      {/* RM Offboarding & Pipeline Bulk Transfer Action Card */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-primary/10 via-card to-card border border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
+              <ArrowRightLeft className="w-4 h-4" />
+            </div>
+            <h4 className="text-sm font-bold text-foreground">RM Offboarding & Pipeline Bulk Transfer</h4>
+            <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
+              Handover Tool
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+            When a sales rep or RM resigns, transfers branches, or takes long leave, reassign all their leads, trials, and pending follow-ups to active staff in one atomic batch without losing history.
+          </p>
+        </div>
+
+        <Button
+          type="button"
+          onClick={() => setIsTransferModalOpen(true)}
+          className="h-9 px-4 text-xs font-bold gap-2 shrink-0 self-start sm:self-auto shadow-sm"
+        >
+          <ArrowRightLeft className="w-3.5 h-3.5" />
+          Transfer RM Pipeline
+        </Button>
       </div>
 
       {/* Automatic Lead Distribution Rules Section */}
@@ -493,6 +532,102 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
           </div>
         </div>
       )}
+      {/* Recent Pipeline Transfers & Audit Log */}
+      <div className="space-y-3 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+            Recent Pipeline Transfers & Audit Log
+          </div>
+          <span className="text-[11px] text-muted-foreground">Historical RM reassignments & batch handovers</span>
+        </div>
+
+        <div className="border border-border/60 rounded-2xl overflow-hidden bg-card shadow-xs text-xs">
+          <table className="w-full text-left">
+            <thead className="bg-muted/40 text-[11px] font-bold text-muted-foreground uppercase border-b border-border/60">
+              <tr>
+                <th className="py-2.5 px-4">Date & Time</th>
+                <th className="py-2.5 px-4">From RM</th>
+                <th className="py-2.5 px-4">Transferred To</th>
+                <th className="py-2.5 px-4">Records Moved</th>
+                <th className="py-2.5 px-4">Mode</th>
+                <th className="py-2.5 px-4">Performed By</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50 text-foreground">
+              {isLoadingHistory ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-muted-foreground text-xs">
+                    Loading transfer audit log...
+                  </td>
+                </tr>
+              ) : !historyData?.history || historyData.history.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-muted-foreground text-xs">
+                    No pipeline transfers executed yet. Historical handovers will be logged here automatically.
+                  </td>
+                </tr>
+              ) : (
+                historyData.history.map((batch) => (
+                  <tr key={batch.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="py-3 px-4 font-mono text-[11px] text-muted-foreground">
+                      {new Date(batch.created_at).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-foreground">
+                      {batch.source_user_name || 'Unassigned'}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {batch.target_users_summary.map((t, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="text-[10px] bg-primary/10 text-primary border-primary/20"
+                          >
+                            {t.user_name} ({t.percentage}%)
+                          </Badge>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground">
+                      <span className="font-mono font-medium text-foreground">{batch.leads_count} Leads</span>
+                      {batch.trials_count > 0 && <span> · {batch.trials_count} Trials</span>}
+                      {batch.followups_count > 0 && <span> · {batch.followups_count} Tasks</span>}
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <span>{batch.transfer_mode.replace('_', ' ')}</span>
+                        {batch.status === 'ROLLED_BACK' && (
+                          <Badge variant="outline" className="text-[9px] bg-destructive/10 text-destructive border-destructive/20 font-bold">
+                            Rolled Back
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-medium text-foreground">
+                      {batch.performed_by_user_name}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* RM Pipeline Transfer Modal */}
+      <LeadTransferModal
+        open={isTransferModalOpen}
+        onOpenChange={setIsTransferModalOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['crm-agent-assignment-config'] });
+        }}
+      />
     </form>
   );
 }

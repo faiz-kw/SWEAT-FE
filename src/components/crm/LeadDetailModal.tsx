@@ -257,19 +257,31 @@ export function LeadDetailModal({
 
   const handleDirectCall = async () => {
     if (!currentLead) return;
-    const targetPhone = currentLead.phone_normalized || currentLead.phone || '';
+    const targetPhone = (currentLead.phone_normalized || currentLead.phone || '').trim();
     const fullName = [currentLead.first_name, currentLead.last_name].filter(Boolean).join(' ') || 'Prospect';
+    const masked = isMaskedPhone(targetPhone);
 
-    if (isWebPhoneReady) {
+    if (targetPhone && !masked && isWebPhoneReady) {
       toast.info(`Dialing ${fullName} via Vobiz WebPhone...`);
       await makeWebPhoneCall(targetPhone, fullName, {
         leadId: currentLead.id,
         leadName: fullName,
       });
-    } else {
-      toast.error('Vobiz WebPhone Not Ready', {
-        description: 'Please click WebPhone in the top navigation bar to connect before placing calls.',
+      return;
+    }
+
+    try {
+      const res = await crmApi.clickToCall(currentLead.id);
+      toast.success(`Calling ${fullName}`, {
+        description: res.message || 'Ringing your Vobiz WebPhone first, then bridging lead.',
       });
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Failed to initiate call via Vobiz.';
+      toast.error(msg);
     }
   };
 
@@ -1219,8 +1231,9 @@ export function LeadDetailModal({
                         currentLead.do_not_contact ||
                         (currentLead as any).is_opted_out
                       );
-                      const cleanPhoneDigits = (currentLead.phone_normalized || (currentLead as any).phone || '').replace(/\D/g, '');
-                      const hasValidPhone = cleanPhoneDigits.length >= 10;
+                      const rawPhoneValue = currentLead.phone_normalized || (currentLead as any).phone || '';
+                      const cleanPhoneDigits = rawPhoneValue.replace(/\D/g, '');
+                      const hasValidPhone = cleanPhoneDigits.length >= 10 || isMaskedPhone(rawPhoneValue);
                       const isCallInProgress = Boolean(
                         activeCallSession && ['QUEUED', 'INITIATED', 'RINGING', 'CONNECTED'].includes(activeCallSession.status)
                       );
