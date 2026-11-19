@@ -219,3 +219,41 @@ export interface MemberAttendanceState {
   last_successful_attendance_at?: string | null;
   updated_at: string;
 }
+
+
+export interface AttendancePolicySet {
+  id: string;
+  name: string;
+  is_active: boolean;
+  strike_limit: number;
+  reset_window_days: number;
+  suspension_days: number;
+  normal_max_advance_bookings: number;
+  restricted_max_advance_bookings: number;
+  restriction_threshold: number;
+  restriction_duration_days: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AttendancePenaltyRule {
+  id: string;
+  policy_set: string;
+  name?: string;
+  strike_count?: number;
+  penalty_action?: string;
+  penalty_duration_days?: number;
+  is_active?: boolean;
+}
+
+export interface AccessEvent {
+  id: string;
+  member_id?: string;
+  member_name?: string;
+  event_type: string;
+  direction?: 'ENTRY' | 'EXIT';
+  access_point?: string;
+  status?: string;
+  timestamp: string;
+  device_name?: string;
+}

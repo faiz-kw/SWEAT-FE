@@ -8,7 +8,7 @@ import {
   MemberAttendanceState,
   AttendancePolicySet,
   AttendancePenaltyRule,
-} from '../types/bookings';
+} from '../../types/bookings';
 
 export interface PaginatedBookingsResponse {
   results: Booking[];
