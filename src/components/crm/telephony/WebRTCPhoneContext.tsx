@@ -626,7 +626,9 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     if (!isAuthenticated || !isSupported) return;
 
     // Only attempt to set up WebRTC phone if user has calling permissions in Permission Matrix
-    if (!canUseTelephony) {
+    // userId is part of the guard (and of the dependency list) so a different user signing in on
+    // this tab registers their own line instead of keeping the previous user's UA.
+    if (!canUseTelephony || !userId) {
       setConnectionStatus('DISCONNECTED');
       return;
     }
