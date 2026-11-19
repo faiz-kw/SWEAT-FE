@@ -1316,7 +1316,10 @@ export const crmApi = {
     return res.data;
   },
 
-  updateAgentPresence: async (presenceStatus: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE'): Promise<{
+  updateAgentPresence: async (
+    presenceStatus: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE',
+    options?: { keepalive?: boolean },
+  ): Promise<{
     status: 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'OFFLINE';
     sip_username: string;
     last_heartbeat: string;
@@ -1327,7 +1330,17 @@ export const crmApi = {
       sip_username: string;
       last_heartbeat: string;
       is_registered_endpoint?: boolean;
-    }>('/tenant/crm/telephony/presence/', { status: presenceStatus });
+    }>('/tenant/crm/telephony/presence/', { status: presenceStatus }, options);
+    return res.data;
+  },
+
+  // Pure liveness ping: refreshes the server's heartbeat timestamps and sends NO status.
+  // The server decides any status change. tabId only identifies the writer (cadence experiment).
+  sendPresenceHeartbeat: async (tabId: string): Promise<{ status: string }> => {
+    const res = await api.put<{ status: string }>('/tenant/crm/telephony/presence/', {
+      heartbeat: true,
+      tab_id: tabId,
+    });
     return res.data;
   },
 
