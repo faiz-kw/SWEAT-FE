@@ -530,19 +530,26 @@ export const PackagesWorkspace: React.FC = () => {
 
   // Calculate accurate status counts across all packages
   const statusCounts = useMemo(() => {
+    const progMap = new Map<string, Program>();
+    for (const p of programs) {
+      progMap.set(p.id, p);
+    }
     let active = 0;
     let inactive = 0;
     let draft = 0;
     let archived = 0;
 
     for (const pkg of packages) {
+      const parentProg = pkg.program ? progMap.get(pkg.program) : null;
+      const isParentActive = parentProg ? parentProg.status === 'ACTIVE' : true;
+
       if (pkg.status === 'ARCHIVED') {
         archived++;
-      } else if (pkg.status === 'INACTIVE') {
+      } else if (pkg.status === 'INACTIVE' || !isParentActive) {
         inactive++;
       } else if (pkg.status === 'DRAFT' || pkg.versions?.some((v: any) => v.status === 'DRAFT')) {
         draft++;
-      } else if (pkg.status === 'ACTIVE') {
+      } else if (pkg.status === 'ACTIVE' && isParentActive) {
         active++;
       }
     }
@@ -554,17 +561,23 @@ export const PackagesWorkspace: React.FC = () => {
       draft,
       archived,
     };
-  }, [packages]);
+  }, [packages, programs]);
 
   // Map packages to their program respecting current status filter
   const packagesByProgram = useMemo(() => {
     const map = new Map<string, Package[]>();
+    const progMap = new Map<string, Program>();
+    for (const p of programs) {
+      progMap.set(p.id, p);
+    }
     for (const pkg of packages) {
       if (pkg.program) {
+        const parentProg = progMap.get(pkg.program);
         if (progFilterStatus === 'ACTIVE') {
-          if (pkg.status !== 'ACTIVE') continue;
+          if (pkg.status !== 'ACTIVE' || parentProg?.status !== 'ACTIVE') continue;
         } else if (progFilterStatus === 'INACTIVE') {
-          if (pkg.status !== 'INACTIVE') continue;
+          const isInactive = pkg.status === 'INACTIVE' || parentProg?.status === 'INACTIVE';
+          if (!isInactive) continue;
         } else if (progFilterStatus === 'DRAFT') {
           const hasDraftVer = pkg.versions?.some((v) => v.status === 'DRAFT');
           if (pkg.status !== 'DRAFT' && !hasDraftVer) continue;
@@ -577,7 +590,7 @@ export const PackagesWorkspace: React.FC = () => {
       }
     }
     return map;
-  }, [packages, progFilterStatus]);
+  }, [packages, programs, progFilterStatus]);
 
   // Mutations
   const createPackageMutation = useMutation({
@@ -1106,13 +1119,9 @@ export const PackagesWorkspace: React.FC = () => {
         return false;
       }
 
-      // Status filter: match program status OR program containing matching packages
-      if (progFilterStatus !== 'ALL') {
-        const matchingPkgs = packagesByProgram.get(prog.id) || [];
-        const matchesProgStatus = prog.status === progFilterStatus;
-        if (!matchesProgStatus && matchingPkgs.length === 0) {
-          return false;
-        }
+      // Status filter: strictly show only programs matching the selected status (Active, Inactive, Draft, Archived)
+      if (progFilterStatus !== 'ALL' && prog.status !== progFilterStatus) {
+        return false;
       }
 
       // Delivery Mode filter
@@ -1162,12 +1171,8 @@ export const PackagesWorkspace: React.FC = () => {
 
   // Status-filtered programs for category pills counts
   const statusFilteredPrograms = useMemo(() => {
-    return programs.filter((p) => {
-      if (progFilterStatus === 'ALL') return true;
-      const matchingPkgs = packagesByProgram.get(p.id) || [];
-      return p.status === progFilterStatus || matchingPkgs.length > 0;
-    });
-  }, [programs, progFilterStatus, packagesByProgram]);
+    return programs.filter((p) => progFilterStatus === 'ALL' || p.status === progFilterStatus);
+  }, [programs, progFilterStatus]);
 
   // Filtered terms docs (search by name or type)
   const filteredTermsDocs = termsDocs.filter((doc) => {
