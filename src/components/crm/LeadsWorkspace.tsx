@@ -86,7 +86,7 @@ import { CRMEmptyState } from './common/CRMEmptyState';
 import { CRMErrorState } from './common/CRMErrorState';
 import { formatCrmLabel, formatBranchOptionLabel, formatBranchTitle, formatBranchAddressOnly } from '@/lib/crmLabels';
 import { usePermissions } from '@/lib/permissions';
-import { canExposeRawPhoneAction, formatDisplayPhone } from '@/lib/phonePrivacy';
+import { canExposeRawPhoneAction, formatDisplayPhone, isMaskedPhone } from '@/lib/phonePrivacy';
 import { useAuth } from '@/contexts';
 import { isOrganizationAdmin } from '@/lib/nav';
 import { NewLeadModal } from './NewLeadModal';
@@ -636,6 +636,27 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
       return;
     }
     const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Prospect';
+
+    // Masked number (staff without phone-view permission): dial server-side by lead_id.
+    if (isMaskedPhone(phoneToCall) || isMaskedPhone(lead.phone)) {
+      try {
+        setCallingLeadId(lead.id);
+        const res = await crmApi.clickToCall({ lead_id: lead.id });
+        toast.success(`Calling ${fullName}`, {
+          description: res.message || 'Ringing your Vobiz WebPhone first, then bridging customer.',
+        });
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.error ||
+            err?.response?.data?.detail ||
+            err?.message ||
+            'Failed to initiate call via Vobiz.'
+        );
+      } finally {
+        setCallingLeadId(null);
+      }
+      return;
+    }
 
     if (!isWebPhoneReady) {
       toast.error('Vobiz WebPhone Not Ready', {
