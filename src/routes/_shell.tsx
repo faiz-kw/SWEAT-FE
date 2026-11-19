@@ -184,7 +184,7 @@ function ShellLayout() {
     }
   }, [pathname, user, isLoading, navigate]);
 
-  if (isLoading) {
+  if (isLoading || !mounted) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
