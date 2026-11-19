@@ -220,6 +220,15 @@ function stopRingbackTone() {
   }
 }
 
+// Stops a SIP UA. stop() unregisters only this UA's own contact, so a second tab of the same
+// agent keeps its registration (unregister({ all: true }) would remove every binding).
+function disposeUa(ua: JsSIP.UA | null | undefined): void {
+  if (!ua) return;
+  try {
+    ua.stop();
+  } catch (_) {}
+}
+
 export function WebRTCPhoneProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
 
@@ -238,6 +247,19 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   const callDurationRef = React.useRef<number>(0);
   const pendingAnswerRef = React.useRef<boolean>(false);
 
+  // Primitives for effect dependencies: effects must not re-run when `user` is recreated with equal data.
+  const userId = user?.userId ?? null;
+  const canUseTelephony = Boolean(isAuthenticated && user && canAccessTelephony(user));
+  // Bumped on every setupPhone call and on pagehide. A setup that finds a newer number after its
+  // await abandons itself.
+  const setupGenerationRef = React.useRef(0);
+  // Temporary: identifies this tab in the heartbeat so the server log can count writers.
+  const tabIdRef = React.useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : String(Math.random()).slice(2),
+  );
+
   const clearLastEndedCall = React.useCallback(() => {
     setLastEndedCall(null);
   }, []);
@@ -254,40 +276,20 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
   const isWatchdogRetryRef = React.useRef<boolean>(false);
   const [watchdogAttempt, setWatchdogAttempt] = React.useState<number>(0);
 
-  // Automated background presence heartbeat (every 45s) ONLY when agent holds a registered WebPhone line
-  React.useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    if (!canAccessTelephony(user)) return;
-    if (connectionStatus !== "REGISTERED") return;
-
-    // Send initial presence heartbeat once SIP registration succeeds
-    void crmApi.updateAgentPresence("AVAILABLE").catch(() => {});
-
-    const heartbeatTimer = setInterval(() => {
-      // Keep presence fresh while agent is IDLE (not currently on an active call)
-      if (callState === "IDLE") {
-        void crmApi.updateAgentPresence("AVAILABLE").catch(() => {});
-      }
-    }, 45000);
-
-    return () => clearInterval(heartbeatTimer);
-  }, [isAuthenticated, user, callState, connectionStatus]);
-
-  // Tell the server this browser is closing so routing stops choosing this agent.
-  // `persisted` is true when the page is only frozen into the back/forward cache, not closing.
-  // keepalive lets the request finish after the page is gone (sendBeacon cannot send the bearer token).
-  const canUseTelephony = Boolean(isAuthenticated && user && canAccessTelephony(user));
+  // Liveness ping: once after SIP registration, then every 45 s. It sends no status and does not
+  // depend on the call state, so it can never free a busy agent and keeps the liveness
+  // timestamps fresh during long calls. The server decides any status change.
   React.useEffect(() => {
     if (!canUseTelephony) return;
+    if (connectionStatus !== "REGISTERED") return;
 
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) return;
-      void crmApi.updateAgentPresence("OFFLINE", { keepalive: true }).catch(() => {});
+    const beat = () => {
+      void crmApi.sendPresenceHeartbeat(tabIdRef.current).catch(() => {});
     };
-
-    window.addEventListener("pagehide", handlePageHide);
-    return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [canUseTelephony]);
+    beat();
+    const heartbeatTimer = setInterval(beat, 45000);
+    return () => clearInterval(heartbeatTimer);
+  }, [canUseTelephony, connectionStatus]);
 
   // Initialize hidden audio element for remote audio stream
   React.useEffect(() => {
@@ -624,19 +626,16 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
     if (!isAuthenticated || !isSupported) return;
 
     // Only attempt to set up WebRTC phone if user has calling permissions in Permission Matrix
-    const canUsePhone = canAccessTelephony(user);
-    if (!canUsePhone) {
+    if (!canUseTelephony) {
       setConnectionStatus('DISCONNECTED');
       return;
     }
 
+    const generation = ++setupGenerationRef.current;
+
     try {
-      if (uaRef.current) {
-        try {
-          uaRef.current.stop();
-        } catch (_) {}
-        uaRef.current = null;
-      }
+      disposeUa(uaRef.current);
+      uaRef.current = null;
 
       setConnectionStatus("CONNECTING");
 
@@ -654,6 +653,9 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       isWatchdogRetryRef.current = false;
 
       const creds = await crmApi.getWebRTCCredentials();
+      // The only await in this function. If a newer setup (or a page hide) started meanwhile,
+      // abandon this one. No UA exists yet at this point, so there is nothing to stop.
+      if (generation !== setupGenerationRef.current) return;
 
       if (!creds?.username || creds.is_registered_endpoint === false || creds.available === false) {
         setIsUnassignedLine(true);
@@ -698,26 +700,34 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
       };
 
       const ua = new JsSIP.UA(configuration);
+      // Defensive: should a future change add an await above, never start a superseded UA.
+      if (generation !== setupGenerationRef.current) {
+        disposeUa(ua);
+        return;
+      }
+      // Events from a replaced UA must not change the state of the current one.
+      const isCurrent = () => uaRef.current === ua;
 
       ua.on("connected", () => {
-        setConnectionStatus("CONNECTING");
+        if (isCurrent()) setConnectionStatus("CONNECTING");
       });
 
       ua.on("registered", () => {
         console.log("[WebPhone] Successfully registered to Vobiz WebRTC gateway as", creds.username);
-        setConnectionStatus("REGISTERED");
+        if (isCurrent()) setConnectionStatus("REGISTERED");
       });
 
       ua.on("unregistered", () => {
-        setConnectionStatus("DISCONNECTED");
+        if (isCurrent()) setConnectionStatus("DISCONNECTED");
       });
 
       ua.on("registrationFailed", (data: any) => {
         console.warn("[WebPhone] Registration failed. Cause:", data?.cause, "Response:", data?.response?.status_code, data?.response?.reason_phrase);
-        setConnectionStatus("ERROR");
+        if (isCurrent()) setConnectionStatus("ERROR");
       });
 
       ua.on("newRTCSession", (data: any) => {
+        if (!isCurrent()) return; // a replaced UA must not raise a call popup
         const session = data.session;
         if (session.direction === "incoming") {
           currentSessionRef.current = session;
@@ -777,26 +787,49 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
         }
       });
 
+      uaRef.current = ua; // assigned before start so the first events already see the current UA
       ua.start();
-      uaRef.current = ua;
     } catch (err) {
       console.warn("[WebPhone] Could not initialize WebRTC credentials:", err);
-      setConnectionStatus("ERROR");
+      if (generation === setupGenerationRef.current) setConnectionStatus("ERROR");
     }
-  }, [isAuthenticated, user, isSupported, bindSessionEvents]);
+  }, [isAuthenticated, canUseTelephony, userId, isSupported, bindSessionEvents]);
 
   React.useEffect(() => {
     void setupPhone();
 
     return () => {
-      if (uaRef.current) {
-        try {
-          uaRef.current.stop();
-        } catch (_) {}
-        uaRef.current = null;
-      }
+      disposeUa(uaRef.current);
+      uaRef.current = null;
     };
   }, [setupPhone]);
+
+  // Page lifecycle.
+  // Closing the tab: stop the SIP registration and tell the server this browser is gone.
+  // Back/forward cache: the page is frozen, not closed. Stop the UA (its socket may not survive
+  // the freeze) and set the phone up again on pageshow, because a restored page does not run setup.
+  // keepalive lets the OFFLINE request finish after the page is gone (sendBeacon cannot send the bearer token).
+  React.useEffect(() => {
+    if (!canUseTelephony) return;
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      setupGenerationRef.current += 1; // abandon any setup still waiting for credentials
+      disposeUa(uaRef.current);
+      uaRef.current = null;
+      if (event.persisted) return; // frozen, not closing: no OFFLINE
+      void crmApi.updateAgentPresence("OFFLINE", { keepalive: true }).catch(() => {});
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void setupPhone();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [canUseTelephony, setupPhone]);
 
   // Reset circuit breaker whenever SIP registration succeeds
   React.useEffect(() => {
@@ -815,14 +848,8 @@ export function WebRTCPhoneProvider({ children }: { children: React.ReactNode })
 
     if (attemptIndex >= BACKOFF_SCHEDULE_MS.length) {
       const finalTimeout = setTimeout(() => {
-        if (uaRef.current) {
-          try {
-            uaRef.current.stop();
-          } catch {
-            // Ignore cleanup errors
-          }
-          uaRef.current = null;
-        }
+        disposeUa(uaRef.current);
+        uaRef.current = null;
         console.warn("[WebPhone] Connection circuit breaker tripped after 3 failed retries; auto-retry paused until manual reconnect.");
         setConnectionStatus("ERROR");
       }, 15000);
