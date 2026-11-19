@@ -115,6 +115,7 @@ export interface DiscountEligibilityRule {
   valid_from: string;
   valid_until?: string | null;
   status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+  configuration?: Record<string, any>;
   created_by_user?: string | null;
   conditions: DiscountRuleCondition[];
   actions: DiscountRuleAction[];

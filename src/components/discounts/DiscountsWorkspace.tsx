@@ -614,12 +614,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
 
   // Reactive cleanup: When a program is deselected in Dynamic Rules, prune any packages not belonging to selected programs
   React.useEffect(() => {
-    if (ruleProgramIds.length > 0 && ruleProgramIds.length < programs.length) {
+    if (packages.length > 0 && ruleProgramIds.length > 0 && ruleProgramIds.length < programs.length) {
       const progIdSet = new Set(ruleProgramIds);
       setRulePackageIds((prev) =>
         prev.filter((pkgId) => {
-          const pkg = (packages || []).find((p: any) => p.id === pkgId);
-          if (!pkg) return false;
+          const pkg = packages.find((p: any) => p.id === pkgId);
+          if (!pkg) return true;
           const progId = pkg.program || (pkg as any).program_id;
           return progId && progIdSet.has(progId);
         })
@@ -912,8 +912,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
 
   const openEditRuleModal = (rule: DiscountEligibilityRule) => {
     setEditingRule(rule);
+
+    const cleanDesc = (rule.description || '').replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim();
     setRuleName(rule.name);
-    setRuleDesc(rule.description || '');
+    setRuleDesc(cleanDesc);
     setRuleType(rule.rule_type);
     setRulePriority(String(rule.priority));
     setRuleEvaluationMode(rule.evaluation_mode);
@@ -922,18 +924,49 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setRuleSourcePackageId(rule.source_package || '');
     setRuleTargetPackageId(rule.target_package || '');
 
-    const bId = rule.branch;
-    const pkgId = rule.target_package || rule.source_package;
-    const bIds = bId ? [bId] : branches.map((b) => b.id);
-    const targetPkg = pkgId ? (packages || []).find((p: any) => p.id === pkgId) : null;
-    const progId = targetPkg ? (targetPkg.program || (targetPkg as any).program_id) : null;
-    const progIds = progId ? [progId] : programs.map((p) => p.id);
-    const pkgIds = pkgId ? [pkgId] : activePackages.map((p) => p.id);
+    const cfg = rule.configuration || {};
+    const legacyPkgId = rule.target_package || rule.source_package;
+    const targetPkg = legacyPkgId ? (packages || []).find((p: any) => p.id === legacyPkgId) : null;
+    const legacyProgId = targetPkg ? (targetPkg.program || (targetPkg as any).program_id) : null;
+
+    // 1. Branch IDs
+    const bIds = Array.isArray(cfg['branch_ids']) && (cfg['branch_ids'] as string[]).length > 0
+      ? (cfg['branch_ids'] as string[])
+      : cfg['branch_id']
+      ? [cfg['branch_id'] as string]
+      : rule.branch
+      ? [rule.branch]
+      : branches.map((b) => b.id);
+
+    // 2. Program IDs
+    const progIds = Array.isArray(cfg['program_ids']) && (cfg['program_ids'] as string[]).length > 0
+      ? (cfg['program_ids'] as string[])
+      : cfg['program_id']
+      ? [cfg['program_id'] as string]
+      : legacyProgId
+      ? [legacyProgId]
+      : programs.map((p) => p.id);
+
+    // 3. Package IDs
+    const availableForProgs = (progIds.length > 0 && progIds.length < programs.length)
+      ? activePackages.filter((p: any) => {
+          const pId = p.program || p.program_id;
+          return progIds.includes(pId);
+        })
+      : activePackages;
+
+    const pkgIds = Array.isArray(cfg['package_ids']) && (cfg['package_ids'] as string[]).length > 0
+      ? (cfg['package_ids'] as string[])
+      : cfg['package_id']
+      ? [cfg['package_id'] as string]
+      : legacyPkgId
+      ? [legacyPkgId]
+      : availableForProgs.map((p) => p.id);
 
     setRuleBranchIds(bIds);
     setRuleProgramIds(progIds);
     setRulePackageIds(pkgIds);
-    setRuleProgramId(progId || '');
+    setRuleProgramId(progIds[0] || '');
 
     if (rule.conditions && rule.conditions.length > 0) {
       setRuleConditions(
@@ -973,11 +1006,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     e.preventDefault();
     try {
       const isAllBranches = ruleBranchIds.length === branches.length || ruleBranchIds.length === 0;
+      const isAllPrograms = ruleProgramIds.length === programs.length || ruleProgramIds.length === 0;
       const isAllPackages = rulePackageIds.length === availablePackagesForRule.length || rulePackageIds.length === 0;
 
-      const rulePayload: Partial<DiscountEligibilityRule> = {
+      const rulePayload: any = {
         name: ruleName,
-        description: ruleDesc,
+        description: ruleDesc.replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim(),
         rule_type: ruleType,
         priority: parseInt(rulePriority) || 10,
         evaluation_mode: ruleEvaluationMode,
@@ -986,6 +1020,14 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
         source_package: null,
         target_package: isAllPackages ? null : (rulePackageIds[0] || null),
         valid_from: editingRule?.valid_from || new Date().toISOString(),
+        configuration: {
+          ...(editingRule?.configuration || {}),
+          branch_ids: isAllBranches ? [] : ruleBranchIds,
+          branch_id: isAllBranches ? null : (ruleBranchIds[0] || null),
+          program_ids: isAllPrograms ? [] : ruleProgramIds,
+          package_ids: isAllPackages ? [] : rulePackageIds,
+          package_id: isAllPackages ? null : (rulePackageIds[0] || null),
+        },
       };
 
       let savedRule: DiscountEligibilityRule;
@@ -1758,9 +1800,47 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             ) : (
               <div className="divide-y divide-border/60 p-4 sm:p-5 space-y-4">
                 {rules.map((r) => {
-                  const branchName = branches.find((b) => b.id === r.branch)?.name;
+                  const rawDesc = (r.description || '').replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim();
+                  const rCfg = r.configuration || {};
+
+                  // Scopes from configuration, falling back to legacy single fields
+                  let scopeBranchIds: string[] = Array.isArray(rCfg['branch_ids']) && (rCfg['branch_ids'] as string[]).length > 0
+                    ? (rCfg['branch_ids'] as string[])
+                    : r.branch ? [r.branch] : [];
+
+                  let scopeProgIds: string[] = Array.isArray(rCfg['program_ids']) && (rCfg['program_ids'] as string[]).length > 0
+                    ? (rCfg['program_ids'] as string[])
+                    : [];
+
+                  let scopePkgIds: string[] = Array.isArray(rCfg['package_ids']) && (rCfg['package_ids'] as string[]).length > 0
+                    ? (rCfg['package_ids'] as string[])
+                    : r.target_package ? [r.target_package] : [];
+
+                  if (scopePkgIds.length > 0 && scopeProgIds.length === 0) {
+                    const targetPkg = packages.find((p) => p.id === scopePkgIds[0]);
+                    const progId = targetPkg ? (targetPkg.program || (targetPkg as any).program_id) : null;
+                    if (progId) scopeProgIds = [progId];
+                  }
+
+                  const branchScopeLabel = scopeBranchIds.length === 1
+                    ? branches.find((b) => b.id === scopeBranchIds[0])?.name || '1 Branch'
+                    : scopeBranchIds.length > 1
+                    ? `${scopeBranchIds.length} Branches`
+                    : null;
+
+                  const programScopeLabel = scopeProgIds.length === 1
+                    ? programs.find((p) => p.id === scopeProgIds[0])?.name || '1 Program'
+                    : scopeProgIds.length > 1
+                    ? `${scopeProgIds.length} Programs`
+                    : null;
+
+                  const packageScopeLabel = scopePkgIds.length === 1
+                    ? packages.find((p) => p.id === scopePkgIds[0])?.name || '1 Package'
+                    : scopePkgIds.length > 1
+                    ? `${scopePkgIds.length} Packages`
+                    : null;
+
                   const srcPkgName = packages.find((p) => p.id === r.source_package)?.name;
-                  const tgtPkgName = packages.find((p) => p.id === r.target_package)?.name;
 
                   return (
                     <div key={r.id} className="pt-4 first:pt-0 space-y-3">
@@ -1795,28 +1875,34 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {r.description || 'No description provided.'}
+                            {rawDesc || 'No description provided.'}
                           </p>
 
                           {/* Scopes */}
-                          {(branchName || srcPkgName || tgtPkgName) && (
+                          {(branchScopeLabel || programScopeLabel || packageScopeLabel || srcPkgName) && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              {branchName && (
+                              {branchScopeLabel && (
                                 <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                   <Building2 className="w-3 h-3 text-muted-foreground" />
-                                  Branch: {branchName}
+                                  {branchScopeLabel}
+                                </Badge>
+                              )}
+                              {programScopeLabel && (
+                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                  <Layers className="w-3 h-3 text-muted-foreground" />
+                                  {programScopeLabel}
+                                </Badge>
+                              )}
+                              {packageScopeLabel && (
+                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                  <PackageIcon className="w-3 h-3 text-muted-foreground" />
+                                  {packageScopeLabel}
                                 </Badge>
                               )}
                               {srcPkgName && (
                                 <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                   <PackageIcon className="w-3 h-3 text-muted-foreground" />
                                   Source Pkg: {srcPkgName}
-                                </Badge>
-                              )}
-                              {tgtPkgName && (
-                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
-                                  <PackageIcon className="w-3 h-3 text-muted-foreground" />
-                                  Target Pkg: {tgtPkgName}
                                 </Badge>
                               )}
                             </div>
@@ -3026,14 +3112,16 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     <SearchableSingleSelect
                       label="Campaign"
                       allLabel="-- Choose Campaign --"
-                      items={campaigns.map((camp) => ({
-                        id: camp.id,
-                        name: `${camp.name} (${camp.discount_type === 'PERCENTAGE' ? `${camp.discount_value}%` : formatCurrency(camp.discount_value)})`,
-                      }))}
+                      items={campaigns
+                        .filter((camp) => camp.status === 'ACTIVE' || camp.id === ruleActionCampaignId)
+                        .map((camp) => ({
+                          id: camp.id,
+                          name: `${camp.name} (${camp.discount_type === 'PERCENTAGE' ? `${formatPercentage(camp.discount_value)}%` : formatCurrency(camp.discount_value)})`,
+                        }))}
                       value={ruleActionCampaignId}
                       onChange={setRuleActionCampaignId}
-                      placeholder="Search campaigns..."
-                      emptyMessage="No campaigns available"
+                      placeholder="Search active campaigns..."
+                      emptyMessage="No active campaigns available"
                     />
                   </div>
                 )}
