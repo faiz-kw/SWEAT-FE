@@ -69,7 +69,7 @@ export function AuditLogsWorkspace() {
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [selectedModule, setSelectedModule] = React.useState("ALL");
   const [selectedCategory, setSelectedCategory] = React.useState("ALL");
-  const [selectedActorType, setSelectedActorType] = React.useState("ALL");
+  const [selectedRole, setSelectedRole] = React.useState("ALL");
   const [selectedActorKey, setSelectedActorKey] = React.useState("ALL");
   const [selectedResult, setSelectedResult] = React.useState("ALL");
   const [selectedBranch, setSelectedBranch] = React.useState("ALL");
@@ -90,16 +90,34 @@ export function AuditLogsWorkspace() {
     return () => clearTimeout(handler);
   }, [search]);
 
+  // Group CRM staff and system actors (members are excluded as they operate via mobile/portal)
+  const staffActors = React.useMemo(() => {
+    return (filtersData?.actors || []).filter((a) => {
+      const t = (a.actor_type || 'STAFF').toUpperCase();
+      return t === 'STAFF' || t === 'ADMIN' || t === 'SUPER_ADMIN';
+    });
+  }, [filtersData?.actors]);
+
+  const systemActors = React.useMemo(() => {
+    return (filtersData?.actors || []).filter((a) => {
+      const t = (a.actor_type || '').toUpperCase();
+      return t === 'SYSTEM' || t === 'GATEWAY';
+    });
+  }, [filtersData?.actors]);
+
   // Build active query params dynamically
   const buildActiveParams = React.useCallback(
     (includePagination: boolean): ActivityQueryParams => {
       let actorId: string | undefined = undefined;
       let actorEmail: string | undefined = undefined;
+      let actorName: string | undefined = undefined;
       if (selectedActorKey !== "ALL") {
         if (selectedActorKey.startsWith("id:")) {
           actorId = selectedActorKey.slice(3);
         } else if (selectedActorKey.startsWith("email:")) {
           actorEmail = selectedActorKey.slice(6);
+        } else if (selectedActorKey.startsWith("name:")) {
+          actorName = selectedActorKey.slice(5);
         }
       }
       return {
@@ -108,9 +126,11 @@ export function AuditLogsWorkspace() {
         search: debouncedSearch || undefined,
         module: selectedModule !== "ALL" ? selectedModule : undefined,
         category: selectedCategory !== "ALL" ? selectedCategory : undefined,
-        actor_type: selectedActorType !== "ALL" ? selectedActorType : undefined,
+        role: selectedRole !== "ALL" ? selectedRole : undefined,
+        actor_type: selectedRole !== "ALL" ? selectedRole : undefined,
         actor_id: actorId,
         actor_email: actorEmail,
+        actor_name: actorName,
         result: selectedResult !== "ALL" ? selectedResult : undefined,
         branch_id: selectedBranch !== "ALL" ? selectedBranch : undefined,
         source_channel: selectedChannel !== "ALL" ? selectedChannel : undefined,
@@ -124,7 +144,7 @@ export function AuditLogsWorkspace() {
       debouncedSearch,
       selectedModule,
       selectedCategory,
-      selectedActorType,
+      selectedRole,
       selectedActorKey,
       selectedResult,
       selectedBranch,
@@ -179,7 +199,7 @@ export function AuditLogsWorkspace() {
     setSearch("");
     setSelectedModule("ALL");
     setSelectedCategory("ALL");
-    setSelectedActorType("ALL");
+    setSelectedRole("ALL");
     setSelectedActorKey("ALL");
     setSelectedResult("ALL");
     setSelectedBranch("ALL");
@@ -193,7 +213,7 @@ export function AuditLogsWorkspace() {
     search ||
       selectedModule !== "ALL" ||
       selectedCategory !== "ALL" ||
-      selectedActorType !== "ALL" ||
+      selectedRole !== "ALL" ||
       selectedActorKey !== "ALL" ||
       selectedResult !== "ALL" ||
       selectedBranch !== "ALL" ||
@@ -246,52 +266,71 @@ export function AuditLogsWorkspace() {
     setSelectedLog(log);
   };
 
-  // Helper for Actor Type Icon & Pill
-  const renderActorBadge = (actorType: string) => {
-    switch (actorType) {
-      case "ADMIN":
-        return (
-          <Badge variant="outline" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 gap-1 text-[10px] font-semibold">
-            <ShieldCheck className="w-3 h-3" /> Admin
-          </Badge>
-        );
-      case "STAFF":
-        return (
-          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 gap-1 text-[10px] font-semibold">
-            <User className="w-3 h-3" /> Staff
-          </Badge>
-        );
-      case "IOT_DEVICE":
-        return (
-          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1 text-[10px] font-semibold">
-            <Cpu className="w-3 h-3" /> Turnstile IoT
-          </Badge>
-        );
-      case "AI_AGENT":
-        return (
-          <Badge variant="outline" className="bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20 gap-1 text-[10px] font-semibold">
-            <Bot className="w-3 h-3" /> AI Voice
-          </Badge>
-        );
-      case "WEBHOOK":
-        return (
-          <Badge variant="outline" className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 gap-1 text-[10px] font-semibold">
-            <Radio className="w-3 h-3" /> Webhook
-          </Badge>
-        );
-      case "MEMBER":
-        return (
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 text-[10px] font-semibold">
-            <User className="w-3 h-3" /> Member
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 gap-1 text-[10px] font-semibold">
-            <Layers className="w-3 h-3" /> {actorType || "System"}
-          </Badge>
-        );
+  // Helper for Role & Performer Badge
+  const renderActorBadge = (roleName?: string, actorType?: string) => {
+    const r = (roleName || "").toUpperCase();
+    const t = (actorType || "").toUpperCase();
+    if (r.includes("ADMIN") || t === "ADMIN") {
+      return (
+        <Badge variant="outline" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 gap-1 text-[10px] font-semibold">
+          <ShieldCheck className="w-3 h-3" /> {roleName || "Admin"}
+        </Badge>
+      );
     }
+    if (r.includes("TRAINER") || r.includes("COACH")) {
+      return (
+        <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20 gap-1 text-[10px] font-semibold">
+          <User className="w-3 h-3" /> {roleName || "Trainer"}
+        </Badge>
+      );
+    }
+    if (r.includes("SALES") || r.includes("CRM")) {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1 text-[10px] font-semibold">
+          <User className="w-3 h-3" /> {roleName || "Sales Rep"}
+        </Badge>
+      );
+    }
+    if (r.includes("MANAGER") || r.includes("DESK") || t === "STAFF" || r.includes("STAFF")) {
+      return (
+        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 gap-1 text-[10px] font-semibold">
+          <User className="w-3 h-3" /> {roleName || "Staff"}
+        </Badge>
+      );
+    }
+    if (t === "IOT_DEVICE" || r.includes("TURNSTILE") || r.includes("IOT")) {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1 text-[10px] font-semibold">
+          <Cpu className="w-3 h-3" /> Turnstile IoT
+        </Badge>
+      );
+    }
+    if (t === "AI_AGENT" || r.includes("AI")) {
+      return (
+        <Badge variant="outline" className="bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20 gap-1 text-[10px] font-semibold">
+          <Bot className="w-3 h-3" /> AI Copilot
+        </Badge>
+      );
+    }
+    if (t === "WEBHOOK" || r.includes("GATEWAY") || r.includes("WEBHOOK")) {
+      return (
+        <Badge variant="outline" className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 gap-1 text-[10px] font-semibold">
+          <Radio className="w-3 h-3" /> Webhook
+        </Badge>
+      );
+    }
+    if (t === "MEMBER" || r.includes("MEMBER")) {
+      return (
+        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1 text-[10px] font-semibold">
+          <User className="w-3 h-3" /> Member
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 gap-1 text-[10px] font-semibold">
+        <Layers className="w-3 h-3" /> {roleName || actorType || "System"}
+      </Badge>
+    );
   };
 
   // Helper for Result Status Badge
@@ -528,7 +567,7 @@ export function AuditLogsWorkspace() {
               ))}
             </select>
 
-            {/* Specific User / Staff Filter (Dynamic from DB) */}
+            {/* Specific Staff / User Filter (Dynamic from DB) */}
             <select
               value={selectedActorKey}
               onChange={(e) => {
@@ -537,37 +576,68 @@ export function AuditLogsWorkspace() {
               }}
               className="h-9 px-2.5 rounded-lg border border-border/60 bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer max-w-[200px] truncate"
             >
-              <option value="ALL">All Users / Staff</option>
-              {filtersData?.actors?.map((a, idx) => {
-                const keyVal = a.actor_id
-                  ? `id:${a.actor_id}`
-                  : `email:${a.actor_email || a.actor_name}`;
-                const label = a.actor_role
-                  ? `${a.actor_name} (${a.actor_role})`
-                  : a.actor_name || a.actor_email;
-                return (
-                  <option key={`${keyVal}-${idx}`} value={keyVal}>
-                    {label}
-                  </option>
-                );
-              })}
+              <option value="ALL">All Staff / Users</option>
+              {staffActors.length > 0 && (
+                <optgroup label="Staff & Management">
+                  {staffActors.map((a, idx) => {
+                    const keyVal = a.actor_id
+                      ? `id:${a.actor_id}`
+                      : a.actor_email
+                      ? `email:${a.actor_email}`
+                      : `name:${a.actor_name}`;
+                    const label = a.actor_role
+                      ? `${a.actor_name} (${a.actor_role})`
+                      : a.actor_name;
+                    return (
+                      <option key={`staff-${keyVal}-${idx}`} value={keyVal}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
+              {systemActors.length > 0 && (
+                <optgroup label="System Automations & Services">
+                  {systemActors.map((a, idx) => {
+                    const keyVal = a.actor_id
+                      ? `id:${a.actor_id}`
+                      : a.actor_email
+                      ? `email:${a.actor_email}`
+                      : `name:${a.actor_name}`;
+                    const label = a.actor_role
+                      ? `${a.actor_name} (${a.actor_role})`
+                      : a.actor_name;
+                    return (
+                      <option key={`system-${keyVal}-${idx}`} value={keyVal}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
             </select>
 
-            {/* Actor Type Filter */}
+            {/* Roles Filter (Dynamic from CRM Backend Role Models) */}
             <select
-              value={selectedActorType}
+              value={selectedRole}
               onChange={(e) => {
-                setSelectedActorType(e.target.value);
+                setSelectedRole(e.target.value);
                 setPage(1);
               }}
               className="h-9 px-2.5 rounded-lg border border-border/60 bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
             >
-              <option value="ALL">All Actor Types</option>
-              {filtersData?.actor_types?.map((at) => (
-                <option key={at} value={at}>
-                  {at}
-                </option>
-              ))}
+              <option value="ALL">All Roles</option>
+              {filtersData?.roles && filtersData.roles.length > 0
+                ? filtersData.roles.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.name}
+                    </option>
+                  ))
+                : filtersData?.actor_types?.map((at) => (
+                    <option key={at} value={at}>
+                      {at}
+                    </option>
+                  ))}
             </select>
 
             {/* Result Status Filter (Dynamic from DB) */}
@@ -643,7 +713,7 @@ export function AuditLogsWorkspace() {
               <thead className="bg-muted/40 border-b border-border/60 text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Timestamp (IST)</th>
-                  <th className="py-3 px-4">Actor / Performer</th>
+                  <th className="py-3 px-4">Performer / Role</th>
                   <th className="py-3 px-4">Status & Action</th>
                   <th className="py-3 px-4">Module & Target</th>
                   <th className="py-3 px-4 min-w-[280px]">Activity Narrative (Plain English)</th>
@@ -699,7 +769,7 @@ export function AuditLogsWorkspace() {
                           </div>
                         </td>
 
-                        {/* Actor */}
+                        {/* Performer / Role */}
                         <td className="py-3 px-4 font-sans max-w-[200px]">
                           <div className="font-semibold text-foreground truncate">
                             {log.actor_name || log.actor_email || log.actor_type}
@@ -707,7 +777,7 @@ export function AuditLogsWorkspace() {
                           <div className="text-[11px] text-muted-foreground truncate">
                             {log.actor_email || log.actor_role || "—"}
                           </div>
-                          <div className="mt-1">{renderActorBadge(log.actor_type)}</div>
+                          <div className="mt-1">{renderActorBadge(log.actor_role, log.actor_type)}</div>
                         </td>
 
                         {/* Status & Action */}
@@ -893,7 +963,7 @@ export function AuditLogsWorkspace() {
                         {selectedLog.actor_name || selectedLog.actor_email || selectedLog.actor_type}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        Role: {selectedLog.actor_role || "—"} | Type: {selectedLog.actor_type}
+                        Role: {selectedLog.actor_role || selectedLog.actor_type || "—"} | Performer Type: {selectedLog.actor_type}
                       </p>
                     </div>
 
