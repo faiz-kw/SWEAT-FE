@@ -35,7 +35,7 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'INACTIVE'>('ALL');
   const [page, setPage] = useState(1);
   const [accumulatedMembers, setAccumulatedMembers] = useState<Member[]>([]);
 
@@ -49,7 +49,7 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   }, [searchQuery]);
 
   // Reset page and list when status filter changes
-  const handleStatusFilterChange = (filter: 'ALL' | 'ACTIVE' | 'EXPIRED') => {
+  const handleStatusFilterChange = (filter: 'ALL' | 'ACTIVE' | 'EXPIRED' | 'INACTIVE') => {
     setStatusFilter(filter);
     setPage(1);
     setAccumulatedMembers([]);
@@ -266,6 +266,19 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Expired
           </button>
+          <button
+            type="button"
+            onClick={() => handleStatusFilterChange('INACTIVE')}
+            className={cn(
+              'flex-1 py-1 text-[11px] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5',
+              statusFilter === 'INACTIVE'
+                ? 'bg-muted-foreground/15 text-foreground border border-border shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />
+            Inactive
+          </button>
         </div>
 
         {/* Search Input */}
@@ -300,6 +313,8 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
                     ? 'active members'
                     : statusFilter === 'EXPIRED'
                     ? 'expired members'
+                    : statusFilter === 'INACTIVE'
+                    ? 'inactive members'
                     : 'members'
                 }`}
           </span>
@@ -333,6 +348,8 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
                   ? 'No active members are currently registered in this organization.'
                   : statusFilter === 'EXPIRED'
                   ? 'No expired members found in this organization.'
+                  : statusFilter === 'INACTIVE'
+                  ? 'No inactive members found in this organization.'
                   : 'No members found in this organization.'}
               </p>
             </div>

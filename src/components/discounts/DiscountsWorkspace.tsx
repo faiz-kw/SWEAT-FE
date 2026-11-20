@@ -2195,19 +2195,27 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   )}
 
                   {liveMemberContext && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 border-t border-border/40">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] pt-2 border-t border-border/40">
                       <div>
                         <span className="text-muted-foreground">
-                          {liveMemberContext.membership_status === 'EXPIRED' ? 'Expired Package:' : 'Active Package:'}
+                          {liveMemberContext.membership_status === 'EXPIRED'
+                            ? 'Expired Package:'
+                            : liveMemberContext.membership_status === 'INACTIVE'
+                            ? 'Assigned Package:'
+                            : 'Active Package:'}
                         </span>{' '}
                         <span className="font-semibold text-foreground">
-                          {liveMemberContext.current_package_name || 'Unavailable'}
+                          {liveMemberContext.current_package_name && liveMemberContext.current_package_name !== 'None'
+                            ? liveMemberContext.current_package_name
+                            : liveMemberContext.membership_status === 'INACTIVE'
+                            ? 'None (No active package)'
+                            : 'None'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Branch:</span>{' '}
+                        <span className="text-muted-foreground">Studio Branch:</span>{' '}
                         <span className="font-semibold text-foreground">
-                          {liveMemberContext.branch_name || 'Unavailable'}
+                          {liveMemberContext.branch_name || 'Main Branch'}
                         </span>
                       </div>
                       <div>
@@ -2217,17 +2225,19 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           liveMemberContext.membership_status === 'ACTIVE' ? "text-emerald-600 dark:text-emerald-400" :
                           liveMemberContext.membership_status === 'EXPIRED' ? "text-rose-600 dark:text-rose-400" :
                           liveMemberContext.membership_status === 'FROZEN' ? "text-amber-600 dark:text-amber-400" :
-                          "text-foreground"
+                          "text-muted-foreground font-medium"
                         )}>
-                          {liveMemberContext.membership_status || 'Unavailable'}
+                          {liveMemberContext.membership_status || 'INACTIVE'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Package Age:</span>{' '}
+                        <span className="text-muted-foreground">
+                          {liveMemberContext.has_membership ? 'Package Age:' : 'Account Age:'}
+                        </span>{' '}
                         <span className="font-mono text-foreground">
                           {liveMemberContext.package_age_days !== null && liveMemberContext.package_age_days !== undefined
                             ? `${liveMemberContext.package_age_days} days`
-                            : 'Unavailable'}
+                            : '0 days'}
                         </span>
                       </div>
                       <div>
@@ -2235,7 +2245,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <span className="font-mono text-foreground">
                           {liveMemberContext.remaining_days !== null && liveMemberContext.remaining_days !== undefined
                             ? `${liveMemberContext.remaining_days} days`
-                            : 'Unavailable'}
+                            : '0 days'}
                         </span>
                       </div>
                       <div>
@@ -2243,7 +2253,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <span className="font-mono text-foreground font-semibold">
                           {liveMemberContext.usage_percentage !== null && liveMemberContext.usage_percentage !== undefined
                             ? `${formatPercentage(liveMemberContext.usage_percentage)}%`
-                            : 'Unavailable'}
+                            : '0.00%'}
                         </span>
                       </div>
                       <div className="col-span-2 sm:col-span-3">
@@ -2252,20 +2262,32 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           {liveMemberContext.is_unlimited
                             ? 'Unlimited Plan'
                             : liveMemberContext.sessions_allocated !== null && liveMemberContext.sessions_allocated !== undefined
-                            ? `${liveMemberContext.sessions_consumed ?? 'Unavailable'} consumed / ${liveMemberContext.sessions_allocated} allocated (${liveMemberContext.sessions_remaining ?? 'Unavailable'} remaining)`
-                            : 'Unavailable (No session allocation record)'}
+                            ? `${liveMemberContext.sessions_consumed ?? 0} consumed / ${liveMemberContext.sessions_allocated} allocated (${liveMemberContext.sessions_remaining ?? 0} remaining)`
+                            : '0 consumed / 0 allocated (No active plan)'}
                         </span>
                       </div>
                     </div>
                   )}
 
                   {!liveMemberContext?.has_membership ? (
-                    <div className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded border border-amber-500/20">
-                      ℹ️ This member has no membership record. Rules requiring active package or session usage will fail-closed.
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <span>ℹ️ Inactive Member (No Active Plan)</span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        This member is registered in the database but currently has no active membership package.
+                        To simulate and test retention rules requiring session usage or active packages, check <strong>"Simulate What-If Metrics"</strong> below.
+                        For promo coupons, select a package under <strong>"Target Package (Optional)"</strong> to validate applicability.
+                      </p>
                     </div>
                   ) : liveMemberContext?.membership_status === 'EXPIRED' ? (
-                    <div className="text-[11px] text-muted-foreground bg-muted/60 p-2 rounded border border-border/40">
-                      ℹ️ Member's previous package has ended. Eligible for Win-Back / Rejoin retention rules and new package offers.
+                    <div className="text-[11px] text-muted-foreground bg-muted/60 p-2.5 rounded-lg border border-border/40 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5 text-foreground">
+                        <span>ℹ️ Expired Member</span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        Member's previous package has ended. Eligible for Win-Back / Rejoin retention rules and new package checkout offers.
+                      </p>
                     </div>
                   ) : null}
                 </div>
