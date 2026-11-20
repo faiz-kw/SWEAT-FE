@@ -881,10 +881,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       configuration: {
         ...(editingCampaign?.configuration || {}),
         branch_ids: isAllBranches ? [] : campBranchIds,
-        branch_id: isAllBranches ? null : (campBranchIds[0] || null),
+        branch_id: isAllBranches ? null : (campBranchIds.length === 1 ? campBranchIds[0] : null),
         program_ids: isAllPrograms ? [] : campProgramIds,
         package_ids: isAllPackages ? [] : campPackageIds,
-        package_id: isAllPackages ? null : (campPackageIds[0] || null),
+        package_id: isAllPackages ? null : (campPackageIds.length === 1 ? campPackageIds[0] : null),
       },
     };
     saveCampaignMutation.mutate(payload);
@@ -1016,17 +1016,17 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
         priority: parseInt(rulePriority) || 10,
         evaluation_mode: ruleEvaluationMode,
         status: ruleStatus,
-        branch: isAllBranches ? null : (ruleBranchIds[0] || null),
+        branch: isAllBranches ? null : (ruleBranchIds.length === 1 ? ruleBranchIds[0] : null),
         source_package: null,
-        target_package: isAllPackages ? null : (rulePackageIds[0] || null),
+        target_package: isAllPackages ? null : (rulePackageIds.length === 1 ? rulePackageIds[0] : null),
         valid_from: editingRule?.valid_from || new Date().toISOString(),
         configuration: {
           ...(editingRule?.configuration || {}),
           branch_ids: isAllBranches ? [] : ruleBranchIds,
-          branch_id: isAllBranches ? null : (ruleBranchIds[0] || null),
+          branch_id: isAllBranches ? null : (ruleBranchIds.length === 1 ? ruleBranchIds[0] : null),
           program_ids: isAllPrograms ? [] : ruleProgramIds,
           package_ids: isAllPackages ? [] : rulePackageIds,
-          package_id: isAllPackages ? null : (rulePackageIds[0] || null),
+          package_id: isAllPackages ? null : (rulePackageIds.length === 1 ? rulePackageIds[0] : null),
         },
       };
 
@@ -2323,6 +2323,64 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   </span>
                 </div>
 
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="simHypoToggle"
+                    checked={simUseHypothetical}
+                    onChange={(e) => setSimUseHypothetical(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
+                  />
+                  <label htmlFor="simHypoToggle" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Simulate What-If Metrics (for testing inactive/new members)
+                  </label>
+                </div>
+
+                {simUseHypothetical && (
+                  <div className="grid grid-cols-2 gap-2 p-3 bg-muted/40 rounded-lg border border-border/60 text-xs">
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Session Usage %</label>
+                      <Input
+                        type="number"
+                        value={simHypoUsagePct}
+                        onChange={(e) => setSimHypoUsagePct(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 85"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Package Age (Days)</label>
+                      <Input
+                        type="number"
+                        value={simHypoAgeDays}
+                        onChange={(e) => setSimHypoAgeDays(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 75"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Sessions Consumed</label>
+                      <Input
+                        type="number"
+                        value={simHypoConsumed}
+                        onChange={(e) => setSimHypoConsumed(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 17"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Sessions Remaining</label>
+                      <Input
+                        type="number"
+                        value={simHypoRemaining}
+                        onChange={(e) => setSimHypoRemaining(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 3"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <Button
                   variant="secondary"
                   onClick={handleSimulateOffers}
@@ -2416,6 +2474,27 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           </Badge>
                         </div>
                         <p className="text-amber-700 dark:text-amber-300">{off.message}</p>
+                        {off.campaign_name && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Target Campaign: <span className="font-medium text-foreground">{off.campaign_name}</span>
+                          </div>
+                        )}
+                        {off.coupon_code && (
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-muted-foreground text-[11px]">Associated Code:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimCode(off.coupon_code!);
+                                toast.info(`Coupon '${off.coupon_code}' copied to Section A!`);
+                              }}
+                              className="font-mono font-bold text-xs text-primary hover:underline flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded border border-primary/20"
+                            >
+                              <Tag className="w-3 h-3" />
+                              {off.coupon_code} (Use in Section A)
+                            </button>
+                          </div>
+                        )}
                         <div className="text-amber-800 dark:text-amber-200 font-mono font-bold flex items-center justify-between pt-1 border-t border-amber-500/20">
                           <span>Benefit:</span>
                           <span>

@@ -158,6 +158,9 @@ export interface DynamicOffer {
   rule_type: RuleType;
   action_type: ActionType;
   message: string;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
+  coupon_code?: string | null;
   discount_percentage?: string | null;
   discount_amount?: string | null;
   maximum_discount?: string | null;
