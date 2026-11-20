@@ -626,8 +626,10 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
 
       const detected = res.data?.entity_type;
       if (detected && detected !== 'UNKNOWN') {
-        setEntityType(detected);
-        toast.info(`Smart Detection: Identified as ${formatEntityLabel(detected)} (${res.data.confidence}% confidence)`);
+        // If detected as WOD_VIDEO, default to CLASS_SCHEDULE since workout videos are managed in WOD Content Library
+        const effectiveType = detected === 'WOD_VIDEO' ? 'CLASS_SCHEDULE' : detected;
+        setEntityType(effectiveType);
+        toast.info(`Smart Detection: Identified as ${formatEntityLabel(effectiveType)} (${res.data.confidence}% confidence)`);
       }
     } catch (err: any) {
       console.warn('Detection fallback to default:', err);
@@ -1048,7 +1050,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
               <div>
                 <DialogTitle className="text-xl font-bold">Excel Schedule & Video Importer</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Check and upload class timetables, daily workout videos, and trainer shifts.
+                  Check and upload class timetables and trainer shifts.
                 </DialogDescription>
               </div>
             </div>
@@ -1120,10 +1122,11 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { id: 'CLASS_SCHEDULE', label: 'Class Timetable', desc: 'MWF/TT/SS slots & studios' },
-                  { id: 'WOD_VIDEO', label: 'Class Workout Videos', desc: 'Daily YouTube links & class videos' },
+                  // Hidden from frontend selection as requested; WOD Content Library is responsible for class workout videos
+                  // { id: 'WOD_VIDEO', label: 'Class Workout Videos', desc: 'Daily YouTube links & class videos' },
                   { id: 'TRAINER_ROSTER', label: 'Trainer Roster', desc: 'Weekly shifts & rotations' },
                 ].map((item) => (
                   <button
