@@ -36,6 +36,36 @@ export interface MobilePassbookCredit {
   status: string;
 }
 
+export interface MobileCoupon {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  discount_type: 'PERCENTAGE' | 'FIXED';
+  discount_value: number;
+  max_discount?: number | null;
+  minimum_order_amount?: number;
+  valid_until?: string | null;
+  applicable_branch?: string;
+  applicable_package?: string;
+}
+
+export interface CouponValidationResultMobile {
+  is_valid: boolean;
+  code: string;
+  discount_type?: string;
+  discount_value?: number;
+  discount_amount: number;
+  final_price: number;
+  payable_amount?: number;
+  tax_amount?: number;
+  gross_amount?: number;
+  message?: string;
+  error?: string;
+  reason?: string;
+  reason_code?: string;
+}
+
 export interface MobileScheduleOccurrence {
   id: string;
   class_definition_id: string;
@@ -454,6 +484,7 @@ export const mobileApi = {
     existing_submission_id?: string;
     signature_data?: string;
     answers?: Record<string, any>;
+    coupon_code?: string;
   }) =>
     api.post<{
       order_id: string;
@@ -482,6 +513,7 @@ export const mobileApi = {
     existing_submission_id?: string;
     signature_data?: string;
     answers?: Record<string, any>;
+    coupon_code?: string;
   }) =>
     api.post<{
       detail: string;
@@ -569,4 +601,19 @@ export const mobileApi = {
       order_number?: string;
       already_processed?: boolean;
     }>('/mobile/checkout/verify/', data),
+
+  // Unified Coupon Discovery & Validation
+  getAvailableCoupons: (params?: {
+    package_id?: string | undefined;
+    order_type?: string | undefined;
+    branch_id?: string | undefined;
+  }) => api.get<MobileCoupon[]>('/mobile/coupons/', params ? { params } : undefined),
+
+  validateCoupon: (data: {
+    code: string;
+    package_id?: string | undefined;
+    subtotal: number | string;
+    order_type?: string | undefined;
+    branch_id?: string | undefined;
+  }) => api.post<CouponValidationResultMobile>('/mobile/coupons/validate/', data),
 };

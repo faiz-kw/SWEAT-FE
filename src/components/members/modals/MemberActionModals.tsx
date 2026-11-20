@@ -45,6 +45,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { PaymentLinkShareModal } from './PaymentLinkShareModal';
+import { ApplicableOffersSelector, AppliedCouponState } from '@/components/discounts/ApplicableOffersSelector';
+import { openRazorpayCheckout } from '@/utils/razorpayCheckout';
 
 // ----------------------------------------------------------------------------
 // 1. RENEW MEMBERSHIP MODAL
@@ -62,6 +64,7 @@ export const RenewModal: React.FC<{
   const [carryForward, setCarryForward] = useState(true);
   const [reason, setReason] = useState('Same package membership renewal');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponState | null>(null);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -72,7 +75,7 @@ export const RenewModal: React.FC<{
     }
     return [{
       membership_id: member?.id,
-      membership_number: member?.membership_number,
+      membership_number: (member as any)?.membership_number || (member as any)?.member_number,
       package_id: member?.package_id,
       package_name: member?.package_name,
       program_name: member?.program_name,
@@ -135,6 +138,9 @@ export const RenewModal: React.FC<{
     return 15000;
   }, [selectedPlan, selectedContract]);
 
+  const discountAmount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+  const finalPrice = Math.max(0, priceEstimate - discountAmount);
+
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.renewMembership(selectedContract?.membership_id || member?.id, {
@@ -143,9 +149,10 @@ export const RenewModal: React.FC<{
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
-        payment_amount: priceEstimate,
+        payment_amount: finalPrice,
         carry_forward: carryForward,
         reason: `${reason} (${startSchedule})`,
+        coupon_code: appliedCoupon ? appliedCoupon.code : undefined,
       }),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
@@ -155,7 +162,7 @@ export const RenewModal: React.FC<{
       if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
         setGeneratedLink({
           paymentUrl: res.payment_url,
-          amount: res.amount || priceEstimate,
+          amount: res.amount || finalPrice,
           orderNumber: res.order_number,
           memberName: member?.name,
           memberPhone: member?.phone,
@@ -345,9 +352,35 @@ export const RenewModal: React.FC<{
             />
           </div>
 
-          <div className="p-3 bg-muted/40 rounded-lg flex justify-between items-center text-xs">
-            <span className="text-muted-foreground">Estimated Renewal Total:</span>
-            <span className="font-bold text-base text-foreground">₹{priceEstimate.toLocaleString()}</span>
+          {/* Unified Coupon & Offers Selector */}
+          <div className="pt-2 pb-1 border-t border-border/50">
+            <ApplicableOffersSelector
+              packageId={selectedPlan?.package_id || selectedContract?.package_id || member?.package_id}
+              subtotal={priceEstimate}
+              orderType="RENEWAL"
+              branchId={selectedContract?.purchase_branch_id || (member as any)?.branch_id}
+              appliedCoupon={appliedCoupon}
+              onApplyCoupon={(c) => setAppliedCoupon(c)}
+              onRemoveCoupon={() => setAppliedCoupon(null)}
+              disabled={mutation.isPending}
+            />
+          </div>
+
+          <div className="p-3 bg-muted/40 rounded-lg space-y-1.5 text-xs">
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span>Catalog Subtotal:</span>
+              <span>₹{priceEstimate.toLocaleString()}</span>
+            </div>
+            {appliedCoupon && (
+              <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span>Coupon Discount ({appliedCoupon.code}):</span>
+                <span>-₹{discountAmount.toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-1 border-t border-border/50 font-bold text-sm">
+              <span className="text-foreground">Estimated Renewal Total:</span>
+              <span className="text-base text-foreground">₹{finalPrice.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
@@ -378,6 +411,7 @@ export const UpgradeModal: React.FC<{
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponState | null>(null);
   const [reason, setReason] = useState('Upgraded to higher session tier plan');
 
   const contracts = useMemo(() => {
@@ -389,7 +423,7 @@ export const UpgradeModal: React.FC<{
     }
     return [{
       membership_id: member?.id,
-      membership_number: member?.membership_number,
+      membership_number: (member as any)?.membership_number || (member as any)?.member_number,
       package_id: member?.package_id,
       package_name: member?.package_name,
       program_name: member?.program_name,
@@ -544,7 +578,9 @@ export const UpgradeModal: React.FC<{
 
   // Calculate Difference to Pay: Target Price - Current Paid Price
   const targetPrice = selectedTargetPlan ? selectedTargetPlan.price : 0;
-  const differenceToPay = Math.max(0, targetPrice - currentPlanPrice);
+  const rawDifference = Math.max(0, targetPrice - currentPlanPrice);
+  const discountAmount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+  const differenceToPay = Math.max(0, rawDifference - discountAmount);
   const extraSessionsAdded = selectedTargetPlan ? Math.max(0, selectedTargetPlan.sessions - currentSessions) : 0;
 
   const mutation = useMutation({
@@ -556,6 +592,7 @@ export const UpgradeModal: React.FC<{
         payment_method: paymentMethod,
         payment_amount: differenceToPay,
         difference_amount: differenceToPay,
+        coupon_code: appliedCoupon ? appliedCoupon.code : undefined,
         reason: `${reason}: upgraded from ${currentSessions} to ${selectedTargetPlan?.sessions} sessions`,
         ...(extraPayload || {}),
       } as any),
@@ -592,10 +629,10 @@ export const UpgradeModal: React.FC<{
               razorpay_signature: verifyData.razorpay_signature,
             } as any);
           },
-          onError: (err: any) => {
+          onFailure: (err: any) => {
             toast.error(err?.message || 'Payment cancelled or failed.');
           },
-        });
+        } as any);
       } catch (err: any) {
         toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
       }
@@ -751,6 +788,22 @@ export const UpgradeModal: React.FC<{
             )}
           </div>
 
+          {/* Unified Coupon & Offers Selector */}
+          {selectedTargetPlan && (
+            <div className="pt-2 pb-1 border-t border-border/50">
+              <ApplicableOffersSelector
+                packageId={selectedTargetPlan.id}
+                subtotal={rawDifference > 0 ? rawDifference : targetPrice}
+                orderType="UPGRADE"
+                branchId={selectedContract?.purchase_branch_id || (member as any)?.branch_id}
+                appliedCoupon={appliedCoupon}
+                onApplyCoupon={(c) => setAppliedCoupon(c)}
+                onRemoveCoupon={() => setAppliedCoupon(null)}
+                disabled={mutation.isPending}
+              />
+            </div>
+          )}
+
           {/* Difference Calculation Breakdown */}
           {selectedTargetPlan && (
             <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2 text-xs">
@@ -762,6 +815,12 @@ export const UpgradeModal: React.FC<{
                 <span>Current Plan Paid Credit ({currentSessions} Sessions):</span>
                 <span className="font-medium text-foreground">-₹{currentPlanPrice.toLocaleString()}</span>
               </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span>Upgrade Coupon ({appliedCoupon.code}):</span>
+                  <span>-₹{discountAmount.toLocaleString()}</span>
+                </div>
+              )}
               {catalogMRP > currentPlanPrice && (
                 <div className="flex justify-between text-[11px] text-muted-foreground/80">
                   <span>Current Package Catalog MRP:</span>
@@ -887,7 +946,7 @@ export const ExtendModal: React.FC<{
     }
     return [{
       membership_id: member?.id,
-      membership_number: member?.membership_number,
+      membership_number: (member as any)?.membership_number || (member as any)?.member_number,
       package_id: member?.package_id,
       package_name: member?.package_name,
       program_name: member?.program_name,
@@ -1009,10 +1068,10 @@ export const ExtendModal: React.FC<{
               razorpay_signature: verifyData.razorpay_signature,
             } as any);
           },
-          onError: (err: any) => {
+          onFailure: (err: any) => {
             toast.error(err?.message || 'Payment cancelled or failed.');
           },
-        });
+        } as any);
       } catch (err: any) {
         toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
       }
@@ -1237,7 +1296,7 @@ export const FreezeModal: React.FC<{
     }
     return [{
       membership_id: member?.id,
-      membership_number: member?.membership_number,
+      membership_number: (member as any)?.membership_number || (member as any)?.member_number,
       package_id: member?.package_id,
       package_name: member?.package_name,
       program_name: member?.program_name,
@@ -1718,13 +1777,13 @@ export const AdjustEntitlementModal: React.FC<{
     }
     return [{
       membership_id: member?.id,
-      membership_number: member?.membership_number,
+      membership_number: (member as any)?.membership_number || (member as any)?.member_number,
       package_id: member?.package_id,
       package_name: member?.package_name,
       program_name: member?.program_name,
       end_date: member?.expiry_date,
       start_date: (member as any)?.start_date,
-      home_sessions_remaining: member?.home_sessions_remaining ?? member?.sessions_remaining,
+      home_sessions_remaining: member?.home_sessions_remaining ?? (member as any)?.sessions_remaining,
       cross_branch_sessions_remaining: member?.cross_branch_sessions_remaining,
     }];
   }, [activeContracts, member]);
@@ -2052,7 +2111,7 @@ export const BuyPassportModal: React.FC<{
     enabled: isOpen,
   });
 
-  const passportConfig = adminSettings?.membership_config?.passport_config;
+  const passportConfig = (adminSettings?.membership_config as any)?.passport_config;
   const costPerSession = Number(passportConfig?.cost_per_session) || 500;
 
   const packs = useMemo(() => [
@@ -2117,10 +2176,10 @@ export const BuyPassportModal: React.FC<{
           onSuccess: async () => {
             await mutation.mutateAsync();
           },
-          onError: (err: any) => {
+          onFailure: (err: any) => {
             toast.error(err?.message || 'Payment cancelled or failed.');
           },
-        });
+        } as any);
       } catch (err: any) {
         toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
       }
@@ -2475,17 +2534,19 @@ export const RejoinModal: React.FC<{
     mutationFn: () => {
       const payload: {
         package_id: string;
-        package_version_id?: string;
-        branch_id?: string;
-        payment_amount?: number;
-        payment_provider?: string;
-        payment_method?: string;
-        reason?: string;
+        package_version_id?: string | undefined;
+        branch_id?: string | undefined;
+        payment_amount?: number | undefined;
+        payment_provider?: string | undefined;
+        payment_method?: string | undefined;
+        reason?: string | undefined;
+        coupon_code?: string | undefined;
       } = {
         package_id: selectedPlan?.package_id || selectedPlan?.id || selectedPlanId,
         payment_provider: paymentProvider,
         payment_method: paymentMethod,
         reason,
+        coupon_code: couponCode || undefined,
       };
       if (selectedPlan?.package_version_id) payload.package_version_id = selectedPlan.package_version_id;
       if (paymentAmount) payload.payment_amount = parseFloat(paymentAmount);
@@ -2568,33 +2629,30 @@ export const RejoinModal: React.FC<{
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label>Promotional Coupon (Optional)</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="text"
-                placeholder="Enter promo coupon code"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                className="font-mono text-xs uppercase"
+          {/* Applicable Offers & Promotional Discounts */}
+          {selectedPlan && (
+            <div className="pt-2 pb-1 border-t border-border/50">
+              <ApplicableOffersSelector
+                packageId={selectedPlan.package_id || selectedPlan.id}
+                branchId={(member as any).branch_id || (member as any).branch || undefined}
+                subtotal={Number(selectedPlan.price || 0)}
+                orderType="RENEWAL"
+                appliedCoupon={appliedCoupon}
+                onApplyCoupon={(c) => {
+                  setAppliedCoupon(c);
+                  setCouponCode(c.code);
+                  const finalAmt = Math.max(0, Number(selectedPlan.price || 0) - c.discount_amount);
+                  setPaymentAmount(String(finalAmt));
+                }}
+                onRemoveCoupon={() => {
+                  setAppliedCoupon(null);
+                  setCouponCode('');
+                  setPaymentAmount(String(selectedPlan.price || 0));
+                }}
+                disabled={isApplyingCoupon}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleApplyCoupon}
-                disabled={!couponCode.trim() || !selectedPlanId || isApplyingCoupon}
-                className="text-xs h-9"
-              >
-                {isApplyingCoupon ? 'Checking...' : 'Apply'}
-              </Button>
             </div>
-            {appliedCoupon && (
-              <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                ✓ Coupon {appliedCoupon.code} applied: Saved {formatCurrency(appliedCoupon.discount_amount)}
-              </div>
-            )}
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label>Initial Payment Amount (₹)</Label>
@@ -3160,6 +3218,7 @@ export const PurchaseProgramPackageModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [reason, setReason] = useState('New program & package purchase');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponState | null>(null);
 
   // Load programs
   const { data: rawPrograms = [] } = useQuery<Array<{ id: string; name: string; status?: string; category_name?: string }>>({
@@ -3305,6 +3364,11 @@ export const PurchaseProgramPackageModal: React.FC<{
     return selectedPkg?.price || 15000;
   }, [selectedPkg]);
 
+  const finalPayable = useMemo(() => {
+    const discount = appliedCoupon?.discount_amount || 0;
+    return Math.max(0, priceEstimate - discount);
+  }, [priceEstimate, appliedCoupon]);
+
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.purchasePackage(member.id, {
@@ -3312,10 +3376,11 @@ export const PurchaseProgramPackageModal: React.FC<{
         branch_id: selectedBranchId || undefined,
         start_schedule: startSchedule,
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
-        payment_amount: priceEstimate,
+        payment_amount: finalPayable,
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
         reason: `${reason} - ${selectedPkg?.name || ''} (${selectedPkg?.program_name || ''})`,
+        coupon_code: appliedCoupon?.code || undefined,
       }),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
@@ -3325,7 +3390,7 @@ export const PurchaseProgramPackageModal: React.FC<{
       if (res.status === 'PAYMENT_LINK_GENERATED' && res.payment_url) {
         setGeneratedLink({
           paymentUrl: res.payment_url,
-          amount: res.amount || priceEstimate,
+          amount: res.amount || finalPayable,
           memberId: member.id,
           memberName: member.name,
           memberPhone: member.phone,
@@ -3517,7 +3582,22 @@ export const PurchaseProgramPackageModal: React.FC<{
               </div>
             </div>
 
-            {/* 5. Payment Mode */}
+            {/* 5. Applicable Offers & Coupons */}
+            {selectedPkg && (
+              <div className="pt-2 pb-1 border-t border-border/50">
+                <ApplicableOffersSelector
+                  packageId={selectedPkg.id}
+                  branchId={selectedBranchId}
+                  subtotal={priceEstimate}
+                  orderType="NEW_PACKAGE"
+                  appliedCoupon={appliedCoupon}
+                  onApplyCoupon={(c) => setAppliedCoupon(c)}
+                  onRemoveCoupon={() => setAppliedCoupon(null)}
+                />
+              </div>
+            )}
+
+            {/* 6. Payment Mode */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Payment Method</Label>
               <select
@@ -3533,9 +3613,21 @@ export const PurchaseProgramPackageModal: React.FC<{
             </div>
 
             {/* Summary Price Callout */}
-            <div className="p-3 bg-muted/30 rounded-xl border border-border flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Payable Amount:</span>
-              <span className="text-base font-bold text-foreground">₹{priceEstimate.toLocaleString()}</span>
+            <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-1.5 text-xs">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Base Package Price:</span>
+                <span>₹{priceEstimate.toLocaleString()}</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>Coupon Discount ({appliedCoupon.code}):</span>
+                  <span>-₹{appliedCoupon.discount_amount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1.5 border-t border-border/60">
+                <span className="font-semibold text-foreground">Total Payable Amount:</span>
+                <span className="text-base font-bold text-foreground">₹{finalPayable.toLocaleString()}</span>
+              </div>
             </div>
           </div>
 

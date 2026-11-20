@@ -330,13 +330,38 @@ export function UsersWorkspace() {
     });
   }, [roles]);
 
+  // Helper to distinguish staff/workforce roles from customer members and prospective leads
+  const isCustomerOrLeadRole = React.useCallback((r: RoleDefRow) => {
+    const code = (r.code || "").trim().toUpperCase();
+    const name = (r.name || "").trim().toUpperCase();
+    // Keep roles that explicitly represent staff, workforce, trainers, coaches, admins, or managers
+    if (code === "STAFF" || name.includes("STAFF") || name.includes("TRAINER") || name.includes("COACH") || name.includes("ADMIN") || name.includes("MANAGER")) {
+      return false;
+    }
+    // Exclude customer members, leads, and client self-service roles from staff provisioning
+    if (code === "MEMBER" || code === "LEAD" || code === "CLIENT" || code === "GUEST") {
+      return true;
+    }
+    if (name === "GYM MEMBER" || name === "MEMBER" || name === "LEAD" || name.startsWith("MEMBER ") || name.endsWith(" MEMBER")) {
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Filtered operational staff roles for user provisioning and management
+  const staffRoles = React.useMemo(() => {
+    return uniqueRoles.filter((r) => !isCustomerOrLeadRole(r));
+  }, [uniqueRoles, isCustomerOrLeadRole]);
+
   // Open Invite Modal helper with safe default initializations
   const handleOpenInviteModal = React.useCallback(() => {
-    if (!inviteRole && roles.length > 0) {
+    if (!inviteRole && staffRoles.length > 0) {
       const defaultRole =
-        roles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
-        roles[0];
-      setInviteRole(defaultRole.id);
+        staffRoles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
+        staffRoles[0];
+      if (defaultRole?.id) {
+        setInviteRole(defaultRole.id);
+      }
     }
     if (!inviteBranchId && branches.length > 0) {
       setInviteBranchId(branches[0].id);
@@ -349,7 +374,7 @@ export function UsersWorkspace() {
     if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
     setInviteReportsToId("");
     setInviteModalOpen(true);
-  }, [inviteRole, roles, inviteBranchId, branches, inviteDepartmentId, departments]);
+  }, [inviteRole, staffRoles, inviteBranchId, branches, inviteDepartmentId, departments]);
 
   // Branch-scoped user: restrict branch selector once if not org-wide
   const hasInitializedBranchRef = React.useRef(false);
@@ -1132,7 +1157,7 @@ export function UsersWorkspace() {
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="STAFF">Staff (General)</SelectItem>
-                {uniqueRoles.map((r) => (
+                {staffRoles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
                   </SelectItem>
@@ -2009,7 +2034,7 @@ export function UsersWorkspace() {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56">
-                    {roles.map((r) => (
+                    {staffRoles.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         <span className="font-semibold">{r.name}</span>
                         {r.description ? (
@@ -2371,7 +2396,7 @@ export function UsersWorkspace() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56 max-w-sm">
-                    {uniqueRoles.map((r) => (
+                    {staffRoles.map((r) => (
                       <SelectItem key={r.id} value={r.id} className="cursor-pointer py-1.5">
                         <div className="flex flex-col gap-0.5 text-left max-w-[320px]">
                           <div className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">

@@ -586,7 +586,11 @@ export function RolesWorkspace() {
                     <div className="mt-3 flex items-center gap-3 text-xs">
                       <span className="flex items-center gap-1 font-semibold text-foreground">
                         <Users className="size-3.5 text-muted-foreground" />
-                        {role.users_count ?? 0} {role.users_count === 1 ? "staff" : "staff"}
+                        {role.users_count ?? 0} {
+                          (role.code || "").toUpperCase() === "MEMBER" || (role.name || "").toLowerCase().includes("member")
+                            ? (role.users_count === 1 ? "member" : "members")
+                            : (role.users_count === 1 ? "staff" : "staff")
+                        }
                       </span>
                       <span className="flex items-center gap-1 text-muted-foreground">
                         <CheckCircle2 className="size-3.5 text-emerald-500" />

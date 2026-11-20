@@ -25,7 +25,11 @@ import {
 export const classesApi = {
   // --- Class Categories ---
   async getCategories(params?: { status?: string }): Promise<ClassCategory[]> {
-    const res = await api.get<any>('/tenant/class-categories/', { params: params || { status: 'ACTIVE' } });
+    const queryParams: { status?: string } = { ...(params || {}) };
+    if (queryParams.status && queryParams.status.toUpperCase() === 'ALL') {
+      delete queryParams.status;
+    }
+    const res = await api.get<any>('/tenant/class-categories/', { params: queryParams });
     return res.data?.results || res.data || [];
   },
 
@@ -45,9 +49,15 @@ export const classesApi = {
 
   // --- Class Templates ---
   async getTemplates(paramsOrCategoryId?: string | { category_id?: string; status?: string }): Promise<ClassTemplate[]> {
-    const params = typeof paramsOrCategoryId === 'string'
-      ? { category_id: paramsOrCategoryId, status: 'ACTIVE' }
-      : { status: 'ACTIVE', ...(paramsOrCategoryId || {}) };
+    const params: { category_id?: string; status?: string } = {};
+    if (typeof paramsOrCategoryId === 'string') {
+      params.category_id = paramsOrCategoryId;
+    } else if (paramsOrCategoryId) {
+      Object.assign(params, paramsOrCategoryId);
+    }
+    if (params.status && params.status.toUpperCase() === 'ALL') {
+      delete params.status;
+    }
     const res = await api.get<any>('/tenant/class-templates/', { params });
     return res.data?.results || res.data || [];
   },

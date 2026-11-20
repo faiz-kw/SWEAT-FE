@@ -201,6 +201,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ApplicableOffersSelector, AppliedCouponState } from "@/components/discounts/ApplicableOffersSelector";
 import {
   Sheet,
   SheetContent,
@@ -3487,8 +3488,10 @@ function WebMemberPortalWorkspaceInner() {
   const [membershipActions, setMembershipActions] = React.useState<MobileMembershipActionOptions | null>(null);
   const [isRenewModalOpen, setIsRenewModalOpen] = React.useState<boolean>(false);
   const [selectedRenewPackageId, setSelectedRenewPackageId] = React.useState<string>("");
+  const [renewAppliedCoupon, setRenewAppliedCoupon] = React.useState<AppliedCouponState | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = React.useState<boolean>(false);
   const [selectedUpgradePackageId, setSelectedUpgradePackageId] = React.useState<string>("");
+  const [upgradeAppliedCoupon, setUpgradeAppliedCoupon] = React.useState<AppliedCouponState | null>(null);
   const [upgradeReason, setUpgradeReason] = React.useState<string>("");
   const [isExtendModalOpen, setIsExtendModalOpen] = React.useState<boolean>(false);
   const [extendDays, setExtendDays] = React.useState<number>(14);
@@ -3926,6 +3929,7 @@ function WebMemberPortalWorkspaceInner() {
         branch_id: selectedRenewBranchId || membershipActions?.active_membership?.branch_id,
         package_id: selectedRenewPackageId,
         parq_decision: renewParqDecision,
+        coupon_code: renewAppliedCoupon ? renewAppliedCoupon.code : undefined,
       };
       if (parqSurvey?.submission?.id) {
         payload.existing_submission_id = parqSurvey.submission.id;
@@ -4005,6 +4009,7 @@ function WebMemberPortalWorkspaceInner() {
         target_package_id: selectedUpgradePackageId,
         reason: upgradeReason || "Self-service package upgrade",
         parq_decision: upgradeParqDecision,
+        coupon_code: upgradeAppliedCoupon ? upgradeAppliedCoupon.code : undefined,
       };
       if (parqSurvey?.submission?.id) {
         payload.existing_submission_id = parqSurvey.submission.id;
@@ -8697,6 +8702,24 @@ function WebMemberPortalWorkspaceInner() {
               )}
             </div>
 
+            {/* Offer Selector & Dynamic Coupons */}
+            {selectedRenewPackageId && (
+              <div className="rounded-xl border border-border bg-card/60 p-3.5 space-y-3">
+                <ApplicableOffersSelector
+                  packageId={selectedRenewPackageId}
+                  subtotal={
+                    filteredRenewOptions.find((o) => o.package_id === selectedRenewPackageId)?.total_price || 0
+                  }
+                  orderType="RENEWAL"
+                  branchId={selectedRenewBranchId || membershipActions?.active_membership?.branch_id}
+                  appliedCoupon={renewAppliedCoupon}
+                  onApplyCoupon={(c) => setRenewAppliedCoupon(c)}
+                  onRemoveCoupon={() => setRenewAppliedCoupon(null)}
+                  disabled={isSubmittingAction}
+                />
+              </div>
+            )}
+
             {(() => {
               const selectedOpt = filteredRenewOptions.find(
                 (o) => o.package_id === selectedRenewPackageId
@@ -8740,9 +8763,17 @@ function WebMemberPortalWorkspaceInner() {
                       ₹{(selectedOpt.tax_amount || Math.round(selectedOpt.total_price - selectedOpt.base_price)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
+                  {renewAppliedCoupon && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span>Coupon Discount ({renewAppliedCoupon.code}):</span>
+                      <span className="font-mono">-₹{renewAppliedCoupon.discount_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-emerald-500">
                     <span>Total Amount Payable:</span>
-                    <span>₹{selectedOpt.total_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span>
+                      ₹{Math.max(0, selectedOpt.total_price - (renewAppliedCoupon ? renewAppliedCoupon.discount_amount : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               );
@@ -8842,9 +8873,9 @@ function WebMemberPortalWorkspaceInner() {
               const selectedOpt = filteredRenewOptions.find(
                 (o) => o.package_id === selectedRenewPackageId
               );
-              const amount = selectedOpt?.total_price
-                ? selectedOpt.total_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })
-                : "0.00";
+              const discount = renewAppliedCoupon ? renewAppliedCoupon.discount_amount : 0;
+              const finalAmount = selectedOpt?.total_price ? Math.max(0, selectedOpt.total_price - discount) : 0;
+              const amount = finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 });
               return (
                 <Button
                   size="sm"
@@ -9067,6 +9098,25 @@ function WebMemberPortalWorkspaceInner() {
               )}
             </div>
 
+            {/* Offer Selector & Dynamic Coupons for Upgrade */}
+            {selectedUpgradePackageId && (
+              <div className="rounded-xl border border-border bg-card/60 p-3.5 space-y-3">
+                <ApplicableOffersSelector
+                  packageId={selectedUpgradePackageId}
+                  subtotal={
+                    filteredUpgradeOptions.find((o) => o.package_id === selectedUpgradePackageId)?.price_difference ||
+                    filteredUpgradeOptions.find((o) => o.package_id === selectedUpgradePackageId)?.total_price || 0
+                  }
+                  orderType="UPGRADE"
+                  branchId={selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id}
+                  appliedCoupon={upgradeAppliedCoupon}
+                  onApplyCoupon={(c) => setUpgradeAppliedCoupon(c)}
+                  onRemoveCoupon={() => setUpgradeAppliedCoupon(null)}
+                  disabled={isSubmittingAction}
+                />
+              </div>
+            )}
+
             {/* Dynamic Comparison Card */}
             {(() => {
               const selectedOpt = filteredUpgradeOptions.find(
@@ -9076,6 +9126,8 @@ function WebMemberPortalWorkspaceInner() {
               const currentVal = selectedOpt.current_price || 0;
               const totalVal = selectedOpt.total_price || 0;
               const diffVal = selectedOpt.price_difference || 0;
+              const discount = upgradeAppliedCoupon ? upgradeAppliedCoupon.discount_amount : 0;
+              const netPayable = Math.max(0, diffVal - discount);
               return (
                 <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-2 text-xs">
                   <div className="flex justify-between">
@@ -9105,9 +9157,15 @@ function WebMemberPortalWorkspaceInner() {
                       +{selectedOpt.additional_days || 0} Days
                     </span>
                   </div>
+                  {upgradeAppliedCoupon && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span>Upgrade Coupon ({upgradeAppliedCoupon.code}):</span>
+                      <span className="font-mono">-₹{discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-blue-500">
                     <span>Authoritative Net Payable:</span>
-                    <span>₹{diffVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span>₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               );
@@ -9215,7 +9273,9 @@ function WebMemberPortalWorkspaceInner() {
                 (o) => o.package_id === selectedUpgradePackageId
               );
               const diff = selectedOpt?.price_difference || 0;
-              const formattedDiff = diff.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+              const discount = upgradeAppliedCoupon ? upgradeAppliedCoupon.discount_amount : 0;
+              const netPayable = Math.max(0, diff - discount);
+              const formattedDiff = netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 });
               return (
                 <Button
                   size="sm"
@@ -9224,7 +9284,7 @@ function WebMemberPortalWorkspaceInner() {
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
-                  {isSubmittingAction ? "Processing..." : diff > 0 ? `Pay ₹${formattedDiff} & Upgrade` : "Confirm Upgrade"}
+                  {isSubmittingAction ? "Processing..." : netPayable > 0 ? `Pay ₹${formattedDiff} & Upgrade` : "Confirm Upgrade"}
                 </Button>
               );
             })()}

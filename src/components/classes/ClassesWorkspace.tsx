@@ -298,6 +298,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
   const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('today');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [ruleStatusFilter, setRuleStatusFilter] = useState<string>('ACTIVE');
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
   const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
   const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
@@ -635,6 +636,7 @@ export const ClassesWorkspace: React.FC = () => {
     ruleToDate,
     ruleDayOfWeek,
     selectedStatusFilter,
+    ruleStatusFilter,
     selectedCheckInFilter,
     selectedTrainerFilter,
     selectedBranchFilter,
@@ -863,7 +865,7 @@ export const ClassesWorkspace: React.FC = () => {
       'class-schedule-rules',
       effectiveBranchFilter,
       selectedCategoryFilter,
-      primaryTab === 'rules' ? selectedStatusFilter : 'ALL',
+      primaryTab === 'rules' ? ruleStatusFilter : 'ALL',
       primaryTab === 'rules' ? debouncedSearch : '',
       primaryTab === 'rules' ? ruleDateFilterMode : 'all',
       primaryTab === 'rules' ? ruleSelectedDate : '',
@@ -876,7 +878,7 @@ export const ClassesWorkspace: React.FC = () => {
     queryFn: () => classesApi.getScheduleRulesPaginated({
       branch_id: effectiveBranchFilter,
       category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
-      status: primaryTab === 'rules' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
+      status: primaryTab === 'rules' && ruleStatusFilter !== 'ALL' ? ruleStatusFilter : undefined,
       date: primaryTab === 'rules'
         ? (ruleDateFilterMode === 'today' ? todayStr : ruleDateFilterMode === 'custom' ? ruleSelectedDate : undefined)
         : undefined,
@@ -1619,10 +1621,20 @@ export const ClassesWorkspace: React.FC = () => {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
       toast.success(vars.status === 'ACTIVE' ? 'Rule activated' : 'Rule deactivated');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || 'Failed to update rule status');
+      const apiError =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        (typeof err?.response?.data === 'object'
+          ? Object.entries(err.response.data)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+              .join(' | ')
+          : null) ||
+        'Failed to update rule status';
+      toast.error(apiError);
     },
   });
 
@@ -2100,7 +2112,7 @@ export const ClassesWorkspace: React.FC = () => {
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
               setSearchTerm('');
-              setSelectedStatusFilter('ALL');
+              setRuleStatusFilter('ACTIVE');
               setSelectedBranchFilter('');
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -2377,7 +2389,10 @@ export const ClassesWorkspace: React.FC = () => {
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
+                      {(metadata?.statuses?.length ? metadata.statuses.filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE') : [
+                        { value: 'ACTIVE', label: 'Active' },
+                        { value: 'INACTIVE', label: 'Inactive' },
+                      ]).map((s: { value: string; label: string }) => (
                         <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
@@ -2394,11 +2409,15 @@ export const ClassesWorkspace: React.FC = () => {
                     <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                       <Award className="size-6" />
                     </div>
-                    <h3 className="text-base font-semibold text-foreground">No Class Templates Found</h3>
+                    <h3 className="text-base font-semibold text-foreground">
+                      {selectedStatusFilter === 'INACTIVE' ? 'No Inactive Class Templates' : 'No Class Templates Found'}
+                    </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      Create high-intensity, mobility, or strength workout templates to schedule group classes.
+                      {selectedStatusFilter === 'INACTIVE'
+                        ? 'There are currently no deactivated or inactive class templates.'
+                        : 'Create high-intensity, mobility, or strength workout templates to schedule group classes.'}
                     </p>
-                    {canCreate && (
+                    {canCreate && selectedStatusFilter !== 'INACTIVE' && (
                       <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }}>
                         <Plus className="size-3.5 mr-1" /> New Template
                       </Button>
@@ -2407,7 +2426,7 @@ export const ClassesWorkspace: React.FC = () => {
                 ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredTemplates.map((tpl) => (
-                  <div key={tpl.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs overflow-hidden">
+                  <div key={tpl.id} className={`bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs overflow-hidden ${tpl.status === 'INACTIVE' ? 'opacity-85 bg-muted/15 border-dashed' : ''}`}>
                     <div>
                       {tpl.image_url && (
                         <div className="-mx-4 -mt-4 sm:-mx-5 sm:-mt-5 mb-3.5 h-36 w-[calc(100%+2rem)] sm:w-[calc(100%+2.5rem)] overflow-hidden bg-muted/30 border-b border-border">
@@ -2432,7 +2451,7 @@ export const ClassesWorkspace: React.FC = () => {
                             <span>Class Template</span>
                           </div>
                         )}
-                        <Badge variant={tpl.status === 'ACTIVE' ? 'default' : 'secondary'} className={tpl.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
+                        <Badge variant={tpl.status === 'ACTIVE' ? 'default' : 'secondary'} className={tpl.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-zinc-500/10 text-zinc-600 border border-zinc-500/20 dark:text-zinc-400'}>
                           {tpl.status}
                         </Badge>
                       </div>
@@ -2547,12 +2566,12 @@ export const ClassesWorkspace: React.FC = () => {
                         {canEdit && (
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant={tpl.status === 'ACTIVE' ? 'ghost' : 'outline'}
                             onClick={() => toggleTemplateStatusMutation.mutate({
                               id: tpl.id,
                               status: tpl.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
                             })}
-                            className={`text-xs h-7 ${tpl.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
+                            className={`text-xs h-7 ${tpl.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10 font-medium'}`}
                           >
                             {tpl.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                           </Button>
@@ -2711,14 +2730,13 @@ export const ClassesWorkspace: React.FC = () => {
                       ))}
                     </select>
                     <select
-                      value={selectedStatusFilter}
-                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      value={ruleStatusFilter}
+                      onChange={(e) => setRuleStatusFilter(e.target.value)}
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
                       <option value="ALL">All Statuses</option>
-                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
                     </select>
                   </div>
                 </div>
@@ -2733,11 +2751,15 @@ export const ClassesWorkspace: React.FC = () => {
                     <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                       <RotateCw className="size-6" />
                     </div>
-                    <h3 className="text-base font-semibold text-foreground">No Recurring Schedule Rules</h3>
+                    <h3 className="text-base font-semibold text-foreground">
+                      {ruleStatusFilter === 'INACTIVE' ? 'No Inactive Schedule Rules' : 'No Recurring Schedule Rules'}
+                    </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      Configure recurring weekly timetable patterns to automatically populate occurrence slots.
+                      {ruleStatusFilter === 'INACTIVE'
+                        ? 'There are currently no deactivated or inactive recurring schedule rules.'
+                        : 'Configure recurring weekly timetable patterns to automatically populate occurrence slots.'}
                     </p>
-                    {canCreate && (
+                    {canCreate && ruleStatusFilter !== 'INACTIVE' && (
                       <Button size="sm" onClick={openNewRuleModal}>
                         <Plus className="size-3.5 mr-1" /> New Recurring Rule
                       </Button>
@@ -4664,7 +4686,9 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="">Select Template</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id} disabled={t.status === 'INACTIVE' && ruleForm.class_template !== t.id}>
+                      {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -5301,7 +5325,9 @@ export const ClassesWorkspace: React.FC = () => {
 >
 <option value="">Select Template</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id} disabled={t.status === 'INACTIVE' && occurrenceForm.class_template !== t.id}>
+                      {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -5848,7 +5874,9 @@ export const ClassesWorkspace: React.FC = () => {
               >
                 <option value="">Any / None</option>
                 {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
+                  </option>
                 ))}
               </select>
             </div>

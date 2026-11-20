@@ -25,6 +25,7 @@ import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
 import { cleanupRazorpayDOM, loadRazorpayScript } from '@/utils/razorpayCheckout';
+import { ApplicableOffersSelector, AppliedCouponState } from '@/components/discounts/ApplicableOffersSelector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -524,12 +525,22 @@ function PackagePickerStep({
 // ─── Step 2: Pricing Preview ──────────────────────────────────────────────────
 
 function PricingStep({
-  quote, couponCode, onCouponChange, onApplyCoupon, isApplyingCoupon,
+  quote,
+  couponCode,
+  packageId,
+  branchId,
+  onCouponChange,
+  onApplyCoupon,
+  onRemoveCoupon,
+  isApplyingCoupon,
 }: {
   quote: ConversionQuote;
   couponCode: string;
+  packageId?: string | undefined;
+  branchId?: string | undefined;
   onCouponChange: (c: string) => void;
-  onApplyCoupon: () => void;
+  onApplyCoupon: (code?: string) => void;
+  onRemoveCoupon?: (() => void) | undefined;
   isApplyingCoupon: boolean;
 }) {
   const p = quote.pricing;
@@ -596,53 +607,38 @@ function PricingStep({
         )}
       </div>
 
-      {/* 2 & 3: Coupon on Left, Price Breakdown on Right */}
+      {/* 2 & 3: Offers Selector on Left, Price Breakdown on Right */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        {/* Left: Coupon Code Card */}
-        <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-xs flex flex-col justify-between">
-          <div>
-            <Label className="text-xs font-bold text-foreground uppercase tracking-wider block mb-2">
-              Coupon Code (Optional)
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                value={couponCode}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onCouponChange(e.target.value.toUpperCase())}
-                placeholder="PROMO CODE"
-                className="bg-background border-border font-mono uppercase text-xs sm:text-sm h-10 tracking-wider"
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={onApplyCoupon}
-                disabled={!couponCode.trim() || isApplyingCoupon}
-                className="h-10 px-4 shrink-0 font-semibold rounded-xl bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 active:scale-95 transition-all shadow-xs gap-1.5 cursor-pointer"
-              >
-                {isApplyingCoupon ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles size={13} className="text-amber-400" />
-                    <span>Apply</span>
-                  </>
-                )}
-              </Button>
-            </div>
-            {quote.coupon && (
-              <div className={`mt-2 flex items-center gap-2 text-xs px-3 py-2 rounded-xl border ${quote.coupon.is_valid ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-medium' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 font-medium'}`}>
-                {quote.coupon.is_valid ? <Check size={13} strokeWidth={2.5} /> : <X size={13} strokeWidth={2.5} />}
-                <span className="text-[11px] leading-tight">
-                  {quote.coupon.is_valid
-                    ? `Discount applied: ${formatCurrency(quote.coupon.discount_amount ?? '0', p.currency)}`
-                    : quote.coupon.reason ?? 'Invalid coupon code'}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="p-2.5 rounded-xl bg-muted/30 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <Tag size={13} className="text-primary shrink-0" />
-            <span>Promotional discounts automatically adjust final payable amount.</span>
-          </div>
+        {/* Left: Applicable Offers & Coupons Card */}
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+          <ApplicableOffersSelector
+            packageId={packageId || (pv as any).package_id || (quote as any).package?.id}
+            branchId={branchId}
+            subtotal={Number(p.subtotal)}
+            orderType="NEW_MEMBERSHIP"
+            appliedCoupon={
+              quote.coupon && quote.coupon.is_valid
+                ? {
+                    code: quote.coupon.coupon_code || couponCode,
+                    discount_amount: parseFloat(quote.coupon.discount_amount || '0'),
+                    discount_type: (quote.coupon as any).discount_type || 'PERCENTAGE',
+                  }
+                : null
+            }
+            onApplyCoupon={(c) => {
+              onCouponChange(c.code);
+              onApplyCoupon(c.code);
+            }}
+            onRemoveCoupon={() => {
+              if (onRemoveCoupon) {
+                onRemoveCoupon();
+              } else {
+                onCouponChange('');
+                onApplyCoupon('');
+              }
+            }}
+            disabled={isApplyingCoupon}
+          />
         </div>
 
         {/* Right: Price Breakdown Card */}
@@ -1210,7 +1206,7 @@ function parseClausesFromContent(
           });
           currentBodyLines = [];
         }
-        currentTitle = match[2].trim();
+        currentTitle = (match[2] ?? '').trim();
       }
     } else if (currentTitle) {
       if (trimmed !== '---') {
@@ -2007,16 +2003,36 @@ const handleCancelRazorpay = useCallback(() => {
     }
   }, [lead.id, selectedBranchId, paymentProvider]);
 
-  const handleApplyCoupon = useCallback(async () => {
-    if (!selectedVersionId || !couponCode.trim()) return;
+  const handleApplyCoupon = useCallback(async (codeToApply?: string) => {
+    const code = (codeToApply || couponCode).trim();
+    if (!selectedVersionId || !code) return;
     setIsApplyingCoupon(true);
     try {
-      await fetchQuote(selectedVersionId, couponCode.trim());
-      setAppliedCoupon(couponCode.trim());
+      const q = await fetchQuote(selectedVersionId, code);
+      if (q?.coupon?.is_valid) {
+        setAppliedCoupon(code);
+        setCouponCode(code);
+        toast.success(`Coupon ${code} applied successfully!`);
+      } else if (q?.coupon && !q.coupon.is_valid) {
+        toast.error(q.coupon.reason || 'Coupon is not eligible for this package');
+      }
     } finally {
       setIsApplyingCoupon(false);
     }
   }, [selectedVersionId, couponCode, fetchQuote]);
+
+  const handleRemoveCoupon = useCallback(async () => {
+    if (!selectedVersionId) return;
+    setIsApplyingCoupon(true);
+    try {
+      await fetchQuote(selectedVersionId, undefined);
+      setAppliedCoupon('');
+      setCouponCode('');
+      toast.info('Coupon removed');
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }, [selectedVersionId, fetchQuote]);
 
   const convertMutation = useMutation<ConversionResult, Error, ConversionPayload>({
     mutationFn: (payload: ConversionPayload) => crmApi.executeConversion(lead.id, payload),
@@ -2348,8 +2364,11 @@ const handleCancelRazorpay = useCallback(() => {
                   <PricingStep
                     quote={quote}
                     couponCode={couponCode}
+                    packageId={(quote.package_version as any)?.package_id || (quote as any).package?.id}
+                    branchId={selectedBranchId}
                     onCouponChange={setCouponCode}
                     onApplyCoupon={handleApplyCoupon}
+                    onRemoveCoupon={handleRemoveCoupon}
                     isApplyingCoupon={isApplyingCoupon}
                   />
                 )}
