@@ -626,6 +626,7 @@ export function CRMAgentAssignmentSettings({ canEdit }: CRMAgentAssignmentSettin
         onOpenChange={setIsTransferModalOpen}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['crm-agent-assignment-config'] });
+          queryClient.invalidateQueries({ queryKey: ['lead-transfer-history'] });
         }}
       />
     </form>

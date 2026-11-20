@@ -258,6 +258,12 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const { user } = useAuth();
   const { can, canViewPhoneNumber } = usePermissions();
   const isOrgAdmin = isOrganizationAdmin(user);
+  const isSupervisor = Boolean(
+    isOrgAdmin ||
+    user?.isSuperAdmin ||
+    user?.roles?.some((r: any) => ['ORG_ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'BRANCH_MANAGER', 'SALES_MANAGER'].includes(r.code)) ||
+    ['ORG_ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'SALES_MANAGER'].includes((user?.role || '').toUpperCase())
+  );
 
   // Authoritative Effective Permissions
   const canCreate = can('crm.leads.create') || can('sales.leads.create');
@@ -272,7 +278,9 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
   const [campaignFilter, setCampaignFilter] = React.useState<string>('');
   const [slaFilter, setSlaFilter] = React.useState<string>('ALL');
   const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
-  const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'MY_TEAM' | 'MY_DAY' | 'UNASSIGNED'>('ALL');
+  const [scopeFilter, setScopeFilter] = React.useState<'ALL' | 'MY_LEADS' | 'MY_TEAM' | 'MY_DAY' | 'UNASSIGNED'>(
+    isSupervisor ? 'ALL' : 'MY_LEADS'
+  );
   const [myDayBucket, setMyDayBucket] = React.useState<'ALL' | 'NEW' | 'DUE_TODAY' | 'OVERDUE'>('ALL');
   const [datePreset, setDatePreset] = React.useState<string>('ALL');
   const [customDateFrom, setCustomDateFrom] = React.useState<string>('');

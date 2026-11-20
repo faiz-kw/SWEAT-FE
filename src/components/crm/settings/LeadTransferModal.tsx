@@ -198,6 +198,7 @@ export function LeadTransferModal({
           role: u.roles[0]?.name || u.user_type || 'Counselor',
           branch: u.home_branch_name || 'All Branches',
           isDeactivated: false,
+          roles: u.roles,
         }))
       : sourceReps
           .filter((u) => !u.is_deactivated)
@@ -207,7 +208,23 @@ export function LeadTransferModal({
             role: u.role,
             branch: u.branch_name,
             isDeactivated: false,
+            roles: [] as Array<{ id: string; code: string; name: string; scope_type: string }>,
           }));
+
+    // Filter candidate pool by CRM assignment rules: allowed_role_codes and excluded_user_ids
+    if (config?.allowed_role_codes && config.allowed_role_codes.length > 0) {
+      pool = pool.filter((u) => {
+        if (config.excluded_user_ids && config.excluded_user_ids.includes(u.id)) {
+          return false;
+        }
+        if (u.roles && u.roles.length > 0) {
+          return u.roles.some((r) => config.allowed_role_codes!.includes(r.code));
+        }
+        return true;
+      });
+    } else if (config?.excluded_user_ids && config.excluded_user_ids.length > 0) {
+      pool = pool.filter((u) => !config.excluded_user_ids!.includes(u.id));
+    }
 
     // Exclude current source representative (unless Unassigned pool is selected)
     if (selectedSourceId && selectedSourceId !== 'unassigned') {
@@ -221,7 +238,7 @@ export function LeadTransferModal({
       );
     }
     return pool;
-  }, [availableTargetUsers, sourceReps, selectedSourceId, targetSearch]);
+  }, [availableTargetUsers, sourceReps, selectedSourceId, targetSearch, config]);
 
   // Initialize target users selection once candidates load
   React.useEffect(() => {
