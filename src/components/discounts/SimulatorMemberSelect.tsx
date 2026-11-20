@@ -35,6 +35,7 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED'>('ALL');
   const [page, setPage] = useState(1);
   const [accumulatedMembers, setAccumulatedMembers] = useState<Member[]>([]);
 
@@ -42,24 +43,36 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery.trim());
+      setPage(1);
     }, 300);
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  const isSearching = debouncedSearchQuery.length > 0;
+  // Reset page and list when status filter changes
+  const handleStatusFilterChange = (filter: 'ALL' | 'ACTIVE' | 'EXPIRED') => {
+    setStatusFilter(filter);
+    setPage(1);
+    setAccumulatedMembers([]);
+  };
 
-  // 1. Fetch browsable members list (paginated, 50 per page)
+  // Fetch browsable & filtered members directly from database (50 per page)
   const {
     data: listData,
     isLoading: loadingList,
     isFetching: fetchingList,
   } = useQuery({
-    queryKey: ['simulator-members-list', page],
-    queryFn: () => membersApi.getMembers({ page, page_size: 50 }),
-    staleTime: 60 * 1000,
+    queryKey: ['simulator-members-list', page, statusFilter, debouncedSearchQuery],
+    queryFn: () =>
+      membersApi.getMembers({
+        page,
+        page_size: 50,
+        status: statusFilter === 'ALL' ? undefined : statusFilter,
+        search: debouncedSearchQuery || undefined,
+      }),
+    staleTime: 30 * 1000,
   });
 
-  // Accumulate members as user pages through the list
+  // Accumulate members as user pages through the list or reset on new query
   useEffect(() => {
     if (listData?.results) {
       setAccumulatedMembers((prev) => {
@@ -71,30 +84,13 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
     }
   }, [listData, page]);
 
-  // 2. Fetch search results directly from backend when searching
-  const {
-    data: searchData,
-    isLoading: loadingSearch,
-    isFetching: fetchingSearch,
-  } = useQuery({
-    queryKey: ['simulator-members-search', debouncedSearchQuery],
-    queryFn: () => membersApi.getMembers({ search: debouncedSearchQuery, page_size: 50 }),
-    enabled: isSearching,
-    staleTime: 30 * 1000,
-  });
-
-  // Active list to render
-  const displayedMembers = useMemo(() => {
-    return isSearching ? (searchData?.results || []) : accumulatedMembers;
-  }, [isSearching, searchData, accumulatedMembers]);
-
-  const totalCount = isSearching ? (searchData?.count || 0) : (listData?.count || 0);
+  const isSearching = debouncedSearchQuery.length > 0;
+  const displayedMembers = accumulatedMembers;
+  const totalCount = listData?.count || 0;
   const isSearchPending = searchQuery.trim() !== debouncedSearchQuery;
-  const isLoading = isSearching
-    ? loadingSearch || fetchingSearch || isSearchPending
-    : loadingList;
+  const isLoading = loadingList || (isSearchPending && displayedMembers.length === 0);
 
-  // 3. Fallback direct member fetch for currently selected member if not in loaded list
+  // Fallback direct member fetch for currently selected member if not in loaded list
   const { data: directMember } = useQuery({
     queryKey: ['simulator-member-detail', selectedMemberId],
     queryFn: () => membersApi.getMember(selectedMemberId),
@@ -118,31 +114,31 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   }, [accumulatedMembers, selectedMemberId, onSelectMember]);
 
   const renderStatusBadge = (status?: string) => {
-    const s = (status || 'ACTIVE').toUpperCase();
+    const s = (status || 'INACTIVE').toUpperCase();
     if (s === 'ACTIVE') {
       return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
           Active
-        </span>
-      );
-    }
-    if (s === 'FROZEN') {
-      return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-          Frozen
         </span>
       );
     }
     if (s === 'EXPIRED') {
       return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
           Expired
+        </span>
+      );
+    }
+    if (s === 'FROZEN') {
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+          Frozen
         </span>
       );
     }
     return (
       <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-muted text-muted-foreground border border-border">
-        {status || 'Unknown'}
+        {status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : 'Inactive'}
       </span>
     );
   };
@@ -177,7 +173,18 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
                   {selectedMember.phone && <span>· {selectedMember.phone}</span>}
                   {selectedMember.home_branch && <span>· Studio: {selectedMember.home_branch}</span>}
                   {selectedMember.package_name && selectedMember.package_name !== 'None' && (
-                    <span className="text-primary font-medium">· {selectedMember.package_name}</span>
+                    <span className={cn(
+                      "font-medium",
+                      (selectedMember.membership_status || selectedMember.status || '').toUpperCase() === 'EXPIRED'
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-primary"
+                    )}>
+                      · {(selectedMember.membership_status || selectedMember.status || '').toUpperCase() === 'EXPIRED'
+                        ? `Expired Plan: ${selectedMember.package_name}`
+                        : (selectedMember.membership_status || selectedMember.status || '').toUpperCase() === 'ACTIVE'
+                        ? `Active Plan: ${selectedMember.package_name}`
+                        : `Plan: ${selectedMember.package_name}`}
+                    </span>
                   )}
                 </div>
               </div>
@@ -219,6 +226,48 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
         className="w-[calc(100vw-2rem)] sm:w-[520px] p-3 z-[70] bg-popover text-popover-foreground border shadow-xl rounded-xl space-y-3"
         align="start"
       >
+        {/* Status Filter Tabs (Database-backed filter: All / Active / Expired) */}
+        <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-lg border border-border/40">
+          <button
+            type="button"
+            onClick={() => handleStatusFilterChange('ALL')}
+            className={cn(
+              'flex-1 py-1 text-[11px] font-semibold rounded-md transition-colors text-center',
+              statusFilter === 'ALL'
+                ? 'bg-background text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            All Members
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusFilterChange('ACTIVE')}
+            className={cn(
+              'flex-1 py-1 text-[11px] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5',
+              statusFilter === 'ACTIVE'
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Active
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusFilterChange('EXPIRED')}
+            className={cn(
+              'flex-1 py-1 text-[11px] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5',
+              statusFilter === 'EXPIRED'
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            Expired
+          </button>
+        </div>
+
         {/* Search Input */}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -246,7 +295,13 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
           <span>
             {isSearching
               ? `Found ${totalCount} member${totalCount === 1 ? '' : 's'} matching "${debouncedSearchQuery}"`
-              : `Showing ${accumulatedMembers.length} of ${totalCount || accumulatedMembers.length} members`}
+              : `Showing ${accumulatedMembers.length} of ${totalCount || accumulatedMembers.length} ${
+                  statusFilter === 'ACTIVE'
+                    ? 'active members'
+                    : statusFilter === 'EXPIRED'
+                    ? 'expired members'
+                    : 'members'
+                }`}
           </span>
           {isSearching && (
             <button
@@ -254,7 +309,7 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
               onClick={() => setSearchQuery('')}
               className="text-primary hover:underline font-medium"
             >
-              Show all members
+              Clear search
             </button>
           )}
         </div>
@@ -274,7 +329,11 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
               <p className="text-[11px] text-muted-foreground">
                 {isSearching
                   ? 'Try searching by first or last name, phone (+91), email address, or member ID.'
-                  : 'No active members are currently registered in this organization.'}
+                  : statusFilter === 'ACTIVE'
+                  ? 'No active members are currently registered in this organization.'
+                  : statusFilter === 'EXPIRED'
+                  ? 'No expired members found in this organization.'
+                  : 'No members found in this organization.'}
               </p>
             </div>
           ) : (
@@ -329,9 +388,27 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
 
                     {/* Bottom Row: Package / Plan */}
                     {m.package_name && m.package_name !== 'None' && (
-                      <div className="text-[11px] flex items-center gap-1.5 text-primary">
-                        <PackageIcon className="w-3 h-3 shrink-0" />
-                        <span className="font-medium truncate">{m.package_name}</span>
+                      <div className="text-[11px] flex items-center gap-1.5">
+                        <PackageIcon className={cn(
+                          "w-3 h-3 shrink-0",
+                          (m.membership_status || m.status || '').toUpperCase() === 'EXPIRED'
+                            ? "text-rose-500"
+                            : "text-primary"
+                        )} />
+                        <span className={cn(
+                          "font-medium truncate",
+                          (m.membership_status || m.status || '').toUpperCase() === 'EXPIRED'
+                            ? "text-rose-600 dark:text-rose-400"
+                            : (m.membership_status || m.status || '').toUpperCase() === 'ACTIVE'
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        )}>
+                          {(m.membership_status || m.status || '').toUpperCase() === 'EXPIRED'
+                            ? `Expired Plan: ${m.package_name}`
+                            : (m.membership_status || m.status || '').toUpperCase() === 'ACTIVE'
+                            ? `Active Plan: ${m.package_name}`
+                            : `Plan: ${m.package_name}`}
+                        </span>
                       </div>
                     )}
                   </div>

@@ -568,10 +568,20 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Active Packages only
+  // Active Packages only (strictly active packages under active programs)
   const activePackages = React.useMemo(() => {
-    return (packages || []).filter((p: any) => p.status === 'ACTIVE' || !p.status);
-  }, [packages]);
+    const activeProgramIdSet = new Set(
+      (programs || []).filter((prog: any) => prog.status === 'ACTIVE').map((prog: any) => prog.id)
+    );
+    return (packages || [])
+      .filter((p: any) => {
+        if (p.status !== 'ACTIVE') return false;
+        const progId = p.program || p.program_id;
+        if (programs.length > 0 && progId && !activeProgramIdSet.has(progId)) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+  }, [packages, programs]);
 
   // Packages dynamically filtered by selected programs for Campaign Modal
   const availablePackagesForCampaign = React.useMemo(() => {
@@ -2145,13 +2155,21 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     </span>
                     {loadingMemberContext ? (
                       <span className="text-[10px] text-muted-foreground animate-pulse">Loading context...</span>
-                    ) : liveMemberContext?.metrics_available ? (
+                    ) : liveMemberContext?.membership_status === 'ACTIVE' ? (
                       <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-600">
-                        Entitlement Active
+                        {liveMemberContext?.metrics_available ? 'Active · Entitlement Live' : 'Active Membership'}
+                      </Badge>
+                    ) : liveMemberContext?.membership_status === 'EXPIRED' ? (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 bg-rose-600 text-white">
+                        Expired Membership
+                      </Badge>
+                    ) : liveMemberContext?.membership_status === 'FROZEN' ? (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500 text-white">
+                        Frozen Membership
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                        {liveMemberContext?.has_membership ? 'Membership Active' : 'No Active Membership'}
+                        {liveMemberContext?.has_membership ? (liveMemberContext.membership_status || 'Inactive') : 'No Active Membership'}
                       </Badge>
                     )}
                   </div>
@@ -2160,7 +2178,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   {liveMemberContext?.all_memberships && liveMemberContext.all_memberships.length > 1 && (
                     <div className="pt-2 pb-1 border-t border-border/40">
                       <label className="block text-[11px] font-semibold text-primary mb-1">
-                        Select Active Membership Plan ({liveMemberContext.all_memberships.length} active plans found):
+                        Select Membership Plan ({liveMemberContext.all_memberships.length} plans found):
                       </label>
                       <select
                         value={selectedMembershipId || liveMemberContext.membership_id || ''}
@@ -2179,7 +2197,9 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   {liveMemberContext && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 border-t border-border/40">
                       <div>
-                        <span className="text-muted-foreground">Active Package:</span>{' '}
+                        <span className="text-muted-foreground">
+                          {liveMemberContext.membership_status === 'EXPIRED' ? 'Expired Package:' : 'Active Package:'}
+                        </span>{' '}
                         <span className="font-semibold text-foreground">
                           {liveMemberContext.current_package_name || 'Unavailable'}
                         </span>
@@ -2192,7 +2212,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                       </div>
                       <div>
                         <span className="text-muted-foreground">Membership Status:</span>{' '}
-                        <span className="font-medium text-foreground">
+                        <span className={cn(
+                          "font-semibold",
+                          liveMemberContext.membership_status === 'ACTIVE' ? "text-emerald-600 dark:text-emerald-400" :
+                          liveMemberContext.membership_status === 'EXPIRED' ? "text-rose-600 dark:text-rose-400" :
+                          liveMemberContext.membership_status === 'FROZEN' ? "text-amber-600 dark:text-amber-400" :
+                          "text-foreground"
+                        )}>
                           {liveMemberContext.membership_status || 'Unavailable'}
                         </span>
                       </div>
@@ -2233,11 +2259,15 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     </div>
                   )}
 
-                  {!liveMemberContext?.has_membership && (
+                  {!liveMemberContext?.has_membership ? (
                     <div className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded border border-amber-500/20">
-                      ℹ️ This member has no active membership record. Rules requiring active package or session usage will fail-closed.
+                      ℹ️ This member has no membership record. Rules requiring active package or session usage will fail-closed.
                     </div>
-                  )}
+                  ) : liveMemberContext?.membership_status === 'EXPIRED' ? (
+                    <div className="text-[11px] text-muted-foreground bg-muted/60 p-2 rounded border border-border/40">
+                      ℹ️ Member's previous package has ended. Eligible for Win-Back / Rejoin retention rules and new package offers.
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -2291,14 +2321,17 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     <select
                       value={simPackageId}
                       onChange={(e) => setSimPackageId(e.target.value)}
-                      className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs text-foreground"
+                      className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs text-foreground font-medium"
                     >
-                      <option value="">Any Package</option>
-                      {packages.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
+                      <option value="">Any Active Package</option>
+                      {activePackages.map((p) => {
+                        const progName = p.program_name || programs.find((pr: any) => pr.id === (p.program || (p as any).program_id))?.name;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {progName ? `${p.name} (${progName})` : p.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -2827,12 +2860,15 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   onChange={(e) => setCodePackageId(e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
                 >
-                  <option value="">Inherit Campaign / All</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  <option value="">Inherit Campaign / All Active Packages</option>
+                  {activePackages.map((p) => {
+                    const progName = p.program_name || programs.find((pr: any) => pr.id === (p.program || (p as any).program_id))?.name;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {progName ? `${p.name} (${progName})` : p.name}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
