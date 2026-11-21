@@ -316,7 +316,7 @@ export const RenewModal: React.FC<{
               <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
               <option value="CARD">Credit/Debit Card (POS Terminal)</option>
               <option value="ONLINE">Online Payment (Instant Gateway)</option>
-              <option value="CASH">Cash (Requires Manager Approval)</option>
+              <option value="CASH">Cash (Direct Activation for Admins / Approval for Staff)</option>
             </select>
             {paymentMethod === 'PAYMENT_LINK' && (
               <p className="text-[11px] text-primary">
@@ -324,8 +324,8 @@ export const RenewModal: React.FC<{
               </p>
             )}
             {paymentMethod === 'CASH' && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                ⚠ Cash renewal creates a provisional contract pending manager approval before entitlement activation.
+              <p className="text-[11px] text-muted-foreground">
+                💵 Cash renewal directly activates for authorized administrators, or creates a provisional request pending manager approval if recorded by front-desk staff.
               </p>
             )}
           </div>
@@ -3402,6 +3402,9 @@ export const PurchaseProgramPackageModal: React.FC<{
           orderNumber: res.order_number,
           orderId: res.order_id,
         });
+      } else if (res.status === 'PENDING_APPROVAL') {
+        toast.info(res.message || 'Purchase submitted for manager approval');
+        onClose();
       } else {
         toast.success(res.message || 'New program package purchased successfully!');
         onClose();
@@ -3612,7 +3615,7 @@ export const PurchaseProgramPackageModal: React.FC<{
                 <option value="PAYMENT_LINK">Send Payment Link (WhatsApp / SMS / Online)</option>
                 <option value="CARD">Credit/Debit Card (ICICI POS Terminal)</option>
                 <option value="ONLINE">UPI / Online Gateway</option>
-                <option value="CASH">Cash (Front Desk Settlement)</option>
+                <option value="CASH">Cash (Front Desk / Admin Direct Activation)</option>
               </select>
             </div>
 

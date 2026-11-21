@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   Clock,
@@ -42,18 +42,20 @@ import {
   Ban,
   RotateCcw,
   X,
-} from 'lucide-react';
-import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
-import { AssignWorkoutVideoModal } from './AssignWorkoutVideoModal';
-import { CancelClassModal } from './CancelClassModal';
-import { BranchScheduleTimePicker, formatTime12h } from './BranchScheduleTimePicker';
-import { formatOccurrenceDate, formatOccurrenceDateTime } from '@/utils/dateTimeUtils';
-import { toast } from 'sonner';
-import { classesApi } from '@/api/endpoints/classesApi';
+  Trash2,
+} from "lucide-react";
+import { ExcelImportWizardModal } from "@/components/common/ExcelImportWizardModal";
+import { AssignWorkoutVideoModal } from "./AssignWorkoutVideoModal";
+import { CancelClassModal } from "./CancelClassModal";
+import { BranchScheduleTimePicker, formatTime12h } from "./BranchScheduleTimePicker";
+import { formatOccurrenceDate, formatOccurrenceDateTime } from "@/utils/dateTimeUtils";
+import { toast } from "sonner";
+import { classesApi } from "@/api/endpoints/classesApi";
 import {
   ClassCategory,
   ClassTemplate,
   ClassScheduleRule,
+  RuleTimeSlot,
   ClassOccurrence,
   ClassOccurrenceTrainerInfo,
   ClassContentItem,
@@ -64,38 +66,38 @@ import {
   TrainerOccurrenceRole,
   ClassesMetadata,
   ClassesMetadataOption,
-} from '../../types/classes';
-import { useAuth } from '@/api/auth/AuthProvider';
-import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
-import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useApp } from '@/contexts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+} from "../../types/classes";
+import { useAuth } from "@/api/auth/AuthProvider";
+import { isOrganizationAdmin, isTrainerUser } from "@/lib/nav";
+import { PageHeader, PageBody, KpiTile } from "@/components/enterprise/Page";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useApp } from "@/contexts";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { usePermissions } from '../../lib/permissions';
-import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
-import { cn } from '@/lib/utils';
-import { TrainerAllottedClassesView } from './TrainerAllottedClassesView';
-import { ClassAttendanceModal } from './ClassAttendanceModal';
-import { ClassBookingBreakdown } from './ClassBookingBreakdown';
-import { AssignTrainerModal } from './AssignTrainerModal';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { usePermissions } from "../../lib/permissions";
+import { useGlobalSearchSync } from "@/hooks/useGlobalSearchSync";
+import { cn } from "@/lib/utils";
+import { TrainerAllottedClassesView } from "./TrainerAllottedClassesView";
+import { ClassAttendanceModal } from "./ClassAttendanceModal";
+import { ClassBookingBreakdown } from "./ClassBookingBreakdown";
+import { AssignTrainerModal } from "./AssignTrainerModal";
 
 export function normalizeDaysOfWeek(days: any): number[] {
   if (!days) return [];
   if (Array.isArray(days)) {
     return days.map(Number).filter((n) => !isNaN(n) && n >= 1 && n <= 7);
   }
-  if (typeof days === 'string') {
+  if (typeof days === "string") {
     try {
       const parsed = JSON.parse(days);
       if (Array.isArray(parsed)) {
@@ -105,11 +107,11 @@ export function normalizeDaysOfWeek(days: any): number[] {
       // not json
     }
     return days
-      .split(',')
+      .split(",")
       .map((s) => Number(s.trim()))
       .filter((n) => !isNaN(n) && n >= 1 && n <= 7);
   }
-  if (typeof days === 'object') {
+  if (typeof days === "object") {
     if (Array.isArray(days.days)) {
       return days.days.map(Number).filter((n: any) => !isNaN(n) && n >= 1 && n <= 7);
     }
@@ -137,7 +139,7 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
   suggestions,
   badgeColorClass = "bg-primary/10 text-primary border-primary/20",
 }) => {
-  const [inputVal, setInputVal] = useState('');
+  const [inputVal, setInputVal] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -148,8 +150,8 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
         setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const query = inputVal.trim().toLowerCase();
@@ -159,7 +161,7 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
     ? suggestions.filter(
         (s) =>
           s.toLowerCase().includes(query) &&
-          !selectedTags.some((st) => st.toLowerCase() === s.toLowerCase())
+          !selectedTags.some((st) => st.toLowerCase() === s.toLowerCase()),
       )
     : [];
 
@@ -167,18 +169,16 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
     const trimmed = tagToAdd.trim();
     if (!trimmed) return;
     if (selectedTags.some((st) => st.toLowerCase() === trimmed.toLowerCase())) {
-      setInputVal('');
+      setInputVal("");
       setIsOpen(false);
       return;
     }
     // Match against suggestions to preserve canonical casing from WOD tags
-    const existingMatch = suggestions.find(
-      (s) => s.toLowerCase() === trimmed.toLowerCase()
-    );
+    const existingMatch = suggestions.find((s) => s.toLowerCase() === trimmed.toLowerCase());
     const finalTag = existingMatch || trimmed;
 
     onChange([...selectedTags, finalTag]);
-    setInputVal('');
+    setInputVal("");
     setIsOpen(false);
   };
 
@@ -187,25 +187,23 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       if (filteredSuggestions.length > 0) {
         handleAddTag(filteredSuggestions[0]);
       } else if (inputVal.trim()) {
-        handleAddTag(inputVal.replace(/,/g, ''));
+        handleAddTag(inputVal.replace(/,/g, ""));
       }
-    } else if (e.key === 'Backspace' && !inputVal && selectedTags.length > 0) {
+    } else if (e.key === "Backspace" && !inputVal && selectedTags.length > 0) {
       handleRemoveTag(selectedTags.length - 1);
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       setIsOpen(false);
     }
   };
 
   return (
     <div className="relative" ref={containerRef}>
-      <Label className="text-[10px] font-semibold block mb-1 text-foreground">
-        {label}
-      </Label>
+      <Label className="text-[10px] font-semibold block mb-1 text-foreground">{label}</Label>
       <div
         className="min-h-[34px] w-full rounded-md border border-input bg-background p-1.5 text-xs focus-within:ring-1 focus-within:ring-primary flex flex-wrap items-center gap-1.5 cursor-text transition-colors"
         onClick={() => inputRef.current?.focus()}
@@ -241,7 +239,7 @@ const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
             if (inputVal.trim()) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder={selectedTags.length === 0 ? placeholder : '+ add tag...'}
+          placeholder={selectedTags.length === 0 ? placeholder : "+ add tag..."}
           className="flex-1 min-w-[100px] bg-transparent border-0 p-0 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
         />
       </div>
@@ -275,80 +273,95 @@ export const ClassesWorkspace: React.FC = () => {
   const { user } = useAuth();
   const { locationId } = useApp();
   const { can } = usePermissions();
-  const canCreate = can('ops.classes.create');
-  const canEdit = can('ops.classes.edit');
-  const canDelete = can('ops.classes.delete');
+  const canCreate = can("ops.classes.create");
+  const canEdit = can("ops.classes.edit");
+  const canDelete = can("ops.classes.delete");
   const isOrgAdmin = isOrganizationAdmin(user);
-  const canCancel = can('ops.classes.cancel') || isOrgAdmin || canEdit;
+  const canCancel = can("ops.classes.cancel") || isOrgAdmin || canEdit;
   const isTrainer = isTrainerUser(user);
-  const canViewClasses = can('ops.classes.view') || isOrgAdmin;
-  const isAuthorized = !isTrainer && (canViewClasses || isOrgAdmin || canCreate || canEdit || Boolean(user?.permissions && user.permissions.includes('core.settings.edit')));
+  const canViewClasses = can("ops.classes.view") || isOrgAdmin;
+  const isAuthorized =
+    !isTrainer &&
+    (canViewClasses ||
+      isOrgAdmin ||
+      canCreate ||
+      canEdit ||
+      Boolean(user?.permissions && user.permissions.includes("core.settings.edit")));
   const isTrainerRole = isTrainer;
 
   // Global Branch Scope
-  const globalBranchId = locationId && locationId !== 'all' ? locationId : undefined;
+  const globalBranchId = locationId && locationId !== "all" ? locationId : undefined;
 
-  type PrimaryTab = 'sessions' | 'setup' | 'rules';
-  type SetupSubTab = 'templates' | 'categories';
+  type PrimaryTab = "sessions" | "setup" | "rules";
+  type SetupSubTab = "templates" | "categories";
 
-  const [primaryTab, setPrimaryTab] = useState<PrimaryTab>('sessions');
-  const [setupSubTab, setSetupSubTab] = useState<SetupSubTab>('templates');
+  const [primaryTab, setPrimaryTab] = useState<PrimaryTab>("sessions");
+  const [setupSubTab, setSetupSubTab] = useState<SetupSubTab>("templates");
   const [showTrainerCheckins, setShowTrainerCheckins] = useState<boolean>(isTrainerRole);
   const [showContentStudio, setShowContentStudio] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
-  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'week' | 'custom' | 'range' | 'all'>('today');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
-  const [ruleStatusFilter, setRuleStatusFilter] = useState<string>('ACTIVE');
-  const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'PENDING'>('ALL');
-  const [attendanceModalOccurrence, setAttendanceModalOccurrence] = useState<ClassOccurrence | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "cards">("list");
+  const [dateFilterMode, setDateFilterMode] = useState<
+    "today" | "week" | "custom" | "range" | "all"
+  >("today");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
+  const [ruleStatusFilter, setRuleStatusFilter] = useState<string>("ACTIVE");
+  const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<
+    "ALL" | "CHECKED_IN" | "PENDING"
+  >("ALL");
+  const [attendanceModalOccurrence, setAttendanceModalOccurrence] =
+    useState<ClassOccurrence | null>(null);
   const [deletingOccId, setDeletingOccId] = useState<string | null>(null);
   const [cancellingOccurrence, setCancellingOccurrence] = useState<ClassOccurrence | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState<boolean>(false);
   const [restoringOccId, setRestoringOccId] = useState<string | null>(null);
-  const [selectedVideoOccurrence, setSelectedVideoOccurrence] = useState<ClassOccurrence | null>(null);
+  const [selectedVideoOccurrence, setSelectedVideoOccurrence] = useState<ClassOccurrence | null>(
+    null,
+  );
   const [isAssignVideoOpen, setIsAssignVideoOpen] = useState<boolean>(false);
   const [editOccurrence, setEditOccurrence] = useState<ClassOccurrence | null>(null);
-  const [editDate, setEditDate] = useState('');
-  const [editStartTime, setEditStartTime] = useState('');
-  const [editEndTime, setEditEndTime] = useState('');
-  const [editCapacity, setEditCapacity] = useState('20');
-  const [editStatus, setEditStatus] = useState('SCHEDULED');
-  const [editTrainerId, setEditTrainerId] = useState('');
-  const [initialTrainerId, setInitialTrainerId] = useState('');
-  const [editVideoUrl, setEditVideoUrl] = useState('');
+  const [editDate, setEditDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
+  const [editCapacity, setEditCapacity] = useState("20");
+  const [editStatus, setEditStatus] = useState("SCHEDULED");
+  const [editTrainerId, setEditTrainerId] = useState("");
+  const [initialTrainerId, setInitialTrainerId] = useState("");
+  const [editVideoUrl, setEditVideoUrl] = useState("");
   const [editMuscles, setEditMuscles] = useState<string[]>([]);
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const handleOpenEditSlot = (occ: ClassOccurrence) => {
     setEditOccurrence(occ);
-    setEditDate(occ.occurrence_date || '');
+    setEditDate(occ.occurrence_date || "");
 
-    let sTime = occ.start_time || '';
+    let sTime = occ.start_time || "";
     if (!sTime && occ.start_at) {
       const d = new Date(occ.start_at);
-      sTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : '';
+      sTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : "";
     } else if (sTime.length > 5) {
       sTime = sTime.substring(0, 5);
     }
     setEditStartTime(sTime);
 
-    let eTime = occ.end_time || '';
+    let eTime = occ.end_time || "";
     if (!eTime && occ.end_at) {
       const d = new Date(occ.end_at);
-      eTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : '';
+      eTime = !isNaN(d.getTime()) ? d.toTimeString().substring(0, 5) : "";
     } else if (eTime.length > 5) {
       eTime = eTime.substring(0, 5);
     }
     setEditEndTime(eTime);
 
     setEditCapacity(String(occ.capacity || 20));
-    setEditStatus(occ.status || 'SCHEDULED');
-    setEditVideoUrl(occ.online_join_url || '');
-    const curVideoUrl = occ.online_join_url || '';
+    setEditStatus(occ.status || "SCHEDULED");
+    setEditVideoUrl(occ.online_join_url || "");
+    const curVideoUrl = occ.online_join_url || "";
     if (curVideoUrl) {
       const normYt = (url: string) => {
-        const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+        const m = url.match(
+          /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
+        );
         return m ? m[1] : url.trim().toLowerCase();
       };
       const searchKey = normYt(curVideoUrl);
@@ -359,14 +372,20 @@ export const ClassesWorkspace: React.FC = () => {
       if (matched) {
         const mList = Array.isArray(matched.targeted_muscles)
           ? matched.targeted_muscles
-          : typeof matched.targeted_muscles === 'string'
-          ? matched.targeted_muscles.split(/[,|&/]/).map((s: string) => s.trim()).filter(Boolean)
-          : [];
+          : typeof matched.targeted_muscles === "string"
+            ? matched.targeted_muscles
+                .split(/[,|&/]/)
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : [];
         const eList = Array.isArray(matched.equipment_required)
           ? matched.equipment_required
-          : typeof matched.equipment_required === 'string'
-          ? matched.equipment_required.split(/[,+/&|]/).map((s: string) => s.trim()).filter(Boolean)
-          : [];
+          : typeof matched.equipment_required === "string"
+            ? matched.equipment_required
+                .split(/[,+/&|]/)
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : [];
         setEditMuscles(mList);
         setEditEquipment(eList);
       } else {
@@ -378,33 +397,40 @@ export const ClassesWorkspace: React.FC = () => {
       setEditEquipment([]);
     }
 
-    const isCancelledOrDeactivated = occ.status === 'CANCELLED' || occ.status === 'DEACTIVATED';
+    const isCancelledOrDeactivated = occ.status === "CANCELLED" || occ.status === "DEACTIVATED";
     const activeTrainers = isCancelledOrDeactivated
       ? []
-      : [
-          ...(occ.trainers || []),
-          ...(occ.assigned_trainers || []),
-        ].filter((t: any) => t.status === 'ASSIGNED' || t.status === 'CONFIRMED');
-    const leadTrainer = activeTrainers.find((t: any) => t.trainer_role === 'LEAD') || activeTrainers[0];
-    const currentTrId = leadTrainer?.trainer_profile || leadTrainer?.trainer_profile_id || '';
+      : [...(occ.trainers || []), ...(occ.assigned_trainers || [])].filter(
+          (t: any) => t.status === "ASSIGNED" || t.status === "CONFIRMED",
+        );
+    const leadTrainer =
+      activeTrainers.find((t: any) => t.trainer_role === "LEAD") || activeTrainers[0];
+    const currentTrId = leadTrainer?.trainer_profile || leadTrainer?.trainer_profile_id || "";
     setEditTrainerId(currentTrId);
     setInitialTrainerId(currentTrId);
 
     // Auto-fetch workout video, targeted muscles, and equipment from Content Studio / trainer-video if available
     if (occ.id) {
-      classesApi.getTrainerClassVideo(occ.id).then((vInfo) => {
-        if (vInfo) {
-          if (vInfo.video_url) {
-            setEditVideoUrl((prev) => prev || vInfo.video_url || '');
+      classesApi
+        .getTrainerClassVideo(occ.id)
+        .then((vInfo) => {
+          if (vInfo) {
+            if (vInfo.video_url) {
+              setEditVideoUrl((prev) => prev || vInfo.video_url || "");
+            }
+            if (Array.isArray(vInfo.targeted_muscles) && vInfo.targeted_muscles.length > 0) {
+              setEditMuscles((prev) =>
+                prev.length > 0 ? prev : (vInfo.targeted_muscles as string[]),
+              );
+            }
+            if (Array.isArray(vInfo.equipment_required) && vInfo.equipment_required.length > 0) {
+              setEditEquipment((prev) =>
+                prev.length > 0 ? prev : (vInfo.equipment_required as string[]),
+              );
+            }
           }
-          if (Array.isArray(vInfo.targeted_muscles) && vInfo.targeted_muscles.length > 0) {
-            setEditMuscles((prev) => (prev.length > 0 ? prev : (vInfo.targeted_muscles as string[])));
-          }
-          if (Array.isArray(vInfo.equipment_required) && vInfo.equipment_required.length > 0) {
-            setEditEquipment((prev) => (prev.length > 0 ? prev : (vInfo.equipment_required as string[])));
-          }
-        }
-      }).catch(() => {});
+        })
+        .catch(() => {});
     }
   };
 
@@ -421,7 +447,7 @@ export const ClassesWorkspace: React.FC = () => {
         online_join_url: editVideoUrl.trim(),
       });
 
-      if (editVideoUrl.trim() || editVideoUrl.trim() !== (editOccurrence.online_join_url || '')) {
+      if (editVideoUrl.trim() || editVideoUrl.trim() !== (editOccurrence.online_join_url || "")) {
         await classesApi.updateOccurrenceVideo(editOccurrence.id, editVideoUrl.trim(), undefined, {
           targeted_muscles: editMuscles,
           equipment_required: editEquipment,
@@ -433,35 +459,43 @@ export const ClassesWorkspace: React.FC = () => {
       let trainerAssignedSuccess = false;
       if (editTrainerId && editTrainerId !== initialTrainerId) {
         try {
-          await classesApi.assignTrainer(editOccurrence.id, editTrainerId, 'LEAD');
+          await classesApi.assignTrainer(editOccurrence.id, editTrainerId, "LEAD");
           trainerAssignedSuccess = true;
         } catch (trainerErr: any) {
-          console.warn('Trainer assignment warning:', trainerErr);
-          trainerWarning = trainerErr?.response?.data?.error || trainerErr?.response?.data?.detail || 'Trainer could not be assigned.';
+          console.warn("Trainer assignment warning:", trainerErr);
+          trainerWarning =
+            trainerErr?.response?.data?.error ||
+            trainerErr?.response?.data?.detail ||
+            "Trainer could not be assigned.";
         }
       } else if (!editTrainerId && initialTrainerId) {
         try {
           await classesApi.unassignTrainer(editOccurrence.id, initialTrainerId);
         } catch (unassignErr: any) {
-          console.warn('Trainer unassign warning:', unassignErr);
+          console.warn("Trainer unassign warning:", unassignErr);
         }
       }
 
       if (trainerWarning) {
         toast.warning(`Class slot updated, but trainer assignment warning: ${trainerWarning}`);
       } else if (trainerAssignedSuccess) {
-        toast.success('Class slot and trainer assigned successfully!');
+        toast.success("Class slot and trainer assigned successfully!");
       } else {
-        toast.success('Class slot updated successfully!');
+        toast.success("Class slot updated successfully!");
       }
 
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['tenant-trainers'] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+      queryClient.invalidateQueries({ queryKey: ["classes-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-trainers"] });
       refetchOccurrences();
       setEditOccurrence(null);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Failed to update class slot');
+      toast.error(
+        err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "Failed to update class slot",
+      );
     } finally {
       setIsSavingEdit(false);
     }
@@ -471,19 +505,20 @@ export const ClassesWorkspace: React.FC = () => {
   const handleDeleteOccurrenceSlot = async (occ: ClassOccurrence) => {
     if (!occ?.id) return;
     const booked = occ.total_booked || 0;
-    const msg = booked > 0
-      ? `Warning: This class slot has ${booked} active booking(s). Deleting it will permanently remove the slot and cancel bookings. Proceed?`
-      : `Are you sure you want to permanently delete this slot (${occ.class_template_name || 'Class'} on ${occ.occurrence_date} at ${occ.start_time})?`;
+    const msg =
+      booked > 0
+        ? `Warning: This class slot has ${booked} active booking(s). Deleting it will permanently remove the slot and cancel bookings. Proceed?`
+        : `Are you sure you want to permanently delete this slot (${occ.class_template_name || "Class"} on ${occ.occurrence_date} at ${occ.start_time})?`;
     if (!window.confirm(msg)) return;
     try {
       setDeletingOccId(occ.id);
       await classesApi.deleteOccurrence(occ.id);
-      toast.success('Class slot deleted successfully.');
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      toast.success("Class slot deleted successfully.");
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+      queryClient.invalidateQueries({ queryKey: ["classes-calendar"] });
       refetchOccurrences();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || 'Failed to delete class slot.');
+      toast.error(err?.response?.data?.detail || err?.message || "Failed to delete class slot.");
     } finally {
       setDeletingOccId(null);
     }
@@ -491,27 +526,29 @@ export const ClassesWorkspace: React.FC = () => {
 
   const handleRestoreOccurrenceSlot = async (occ: ClassOccurrence) => {
     if (!occ?.id) return;
-    const msg = `Reactivate this class session (${occ.template_name || occ.class_name || 'Class'} on ${occ.occurrence_date})? It will be reopened for member bookings.`;
+    const msg = `Reactivate this class session (${occ.template_name || occ.class_name || "Class"} on ${occ.occurrence_date})? It will be reopened for member bookings.`;
     if (!window.confirm(msg)) return;
     try {
       setRestoringOccId(occ.id);
       const res = await classesApi.restoreOccurrence(occ.id);
-      toast.success(res?.message || 'Class session reactivated successfully.');
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-      queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['mobile-schedule'] });
+      toast.success(res?.message || "Class session reactivated successfully.");
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+      queryClient.invalidateQueries({ queryKey: ["classes-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-schedule"] });
       refetchOccurrences();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.message || 'Failed to reactivate class session.');
+      toast.error(
+        err?.response?.data?.detail || err?.message || "Failed to reactivate class session.",
+      );
     } finally {
       setRestoringOccId(null);
     }
   };
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const handleSearchChange = (val: string) => {
     setSearchTerm(val);
   };
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sessionsPage, setSessionsPage] = useState<number>(1);
   const [sessionsPageSize, setSessionsPageSize] = useState<number>(20);
   const [rulesPage, setRulesPage] = useState<number>(1);
@@ -519,109 +556,125 @@ export const ClassesWorkspace: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
   const [sessionFromDate, setSessionFromDate] = useState<string>(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
   const [sessionToDate, setSessionToDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
-  const [ruleDateFilterMode, setRuleDateFilterMode] = useState<'all' | 'today' | 'custom' | 'range'>('all');
+  const [ruleDateFilterMode, setRuleDateFilterMode] = useState<
+    "all" | "today" | "custom" | "range"
+  >("all");
   const [ruleSelectedDate, setRuleSelectedDate] = useState<string>(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
   const [ruleFromDate, setRuleFromDate] = useState<string>(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
-  const [ruleToDate, setRuleToDate] = useState<string>('');
-  const [ruleDayOfWeek, setRuleDayOfWeek] = useState<string>('ALL');
-  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
-  const [selectedTrainerFilter, setSelectedTrainerFilter] = useState<string>('ALL');
-  const [sessionStartTime, setSessionStartTime] = useState<string>('');
-  const [sessionEndTime, setSessionEndTime] = useState<string>('');
+  const [ruleToDate, setRuleToDate] = useState<string>("");
+  const [ruleDayOfWeek, setRuleDayOfWeek] = useState<string>("ALL");
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
+  const [selectedTrainerFilter, setSelectedTrainerFilter] = useState<string>("ALL");
+  const [sessionStartTime, setSessionStartTime] = useState<string>("");
+  const [sessionEndTime, setSessionEndTime] = useState<string>("");
   const isTimeRangeInvalid = Boolean(
-    sessionStartTime && sessionEndTime && sessionEndTime <= sessionStartTime
+    sessionStartTime && sessionEndTime && sessionEndTime <= sessionStartTime,
   );
   const isDateRangeInvalid = Boolean(
-    dateFilterMode === 'range' && sessionFromDate && sessionToDate && sessionFromDate > sessionToDate
+    dateFilterMode === "range" &&
+    sessionFromDate &&
+    sessionToDate &&
+    sessionFromDate > sessionToDate,
   );
 
   const CATEGORY_COLOR_PALETTES = [
     {
-      badge: 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30',
-      dot: 'bg-violet-500',
-      selected: 'bg-violet-600 text-white border-violet-600',
-      unselected: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/20',
+      badge: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30",
+      dot: "bg-violet-500",
+      selected: "bg-violet-600 text-white border-violet-600",
+      unselected:
+        "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/20",
     },
     {
-      badge: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30',
-      dot: 'bg-orange-500',
-      selected: 'bg-orange-600 text-white border-orange-600',
-      unselected: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/20',
+      badge: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+      dot: "bg-orange-500",
+      selected: "bg-orange-600 text-white border-orange-600",
+      unselected:
+        "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/20",
     },
     {
-      badge: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-      dot: 'bg-emerald-500',
-      selected: 'bg-emerald-600 text-white border-emerald-600',
-      unselected: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20',
+      badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+      dot: "bg-emerald-500",
+      selected: "bg-emerald-600 text-white border-emerald-600",
+      unselected:
+        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
     },
     {
-      badge: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
-      dot: 'bg-blue-500',
-      selected: 'bg-blue-600 text-white border-blue-600',
-      unselected: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20',
+      badge: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+      dot: "bg-blue-500",
+      selected: "bg-blue-600 text-white border-blue-600",
+      unselected:
+        "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20",
     },
     {
-      badge: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
-      dot: 'bg-rose-500',
-      selected: 'bg-rose-600 text-white border-rose-600',
-      unselected: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/20',
+      badge: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+      dot: "bg-rose-500",
+      selected: "bg-rose-600 text-white border-rose-600",
+      unselected:
+        "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/20",
     },
     {
-      badge: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
-      dot: 'bg-amber-500',
-      selected: 'bg-amber-600 text-white border-amber-600',
-      unselected: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20',
+      badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+      dot: "bg-amber-500",
+      selected: "bg-amber-600 text-white border-amber-600",
+      unselected:
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20",
     },
     {
-      badge: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
-      dot: 'bg-cyan-500',
-      selected: 'bg-cyan-600 text-white border-cyan-600',
-      unselected: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20',
+      badge: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+      dot: "bg-cyan-500",
+      selected: "bg-cyan-600 text-white border-cyan-600",
+      unselected:
+        "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20",
     },
     {
-      badge: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30',
-      dot: 'bg-fuchsia-500',
-      selected: 'bg-fuchsia-600 text-white border-fuchsia-600',
-      unselected: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/20',
+      badge: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30",
+      dot: "bg-fuchsia-500",
+      selected: "bg-fuchsia-600 text-white border-fuchsia-600",
+      unselected:
+        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/20",
     },
   ];
 
-  const getCategoryPalette = (categoryName?: string, categoryCode?: string): (typeof CATEGORY_COLOR_PALETTES)[number] => {
-    const token = `${categoryCode || ''} ${categoryName || ''}`.toUpperCase().trim();
-    if (token.includes('PILATES')) return CATEGORY_COLOR_PALETTES[0]!;
-    if (token.includes('BOOTCAMP')) return CATEGORY_COLOR_PALETTES[1]!;
+  const getCategoryPalette = (
+    categoryName?: string,
+    categoryCode?: string,
+  ): (typeof CATEGORY_COLOR_PALETTES)[number] => {
+    const token = `${categoryCode || ""} ${categoryName || ""}`.toUpperCase().trim();
+    if (token.includes("PILATES")) return CATEGORY_COLOR_PALETTES[0]!;
+    if (token.includes("BOOTCAMP")) return CATEGORY_COLOR_PALETTES[1]!;
     let hash = 0;
     for (let i = 0; i < token.length; i++) {
       hash = (hash << 5) - hash + token.charCodeAt(i);
@@ -673,7 +726,7 @@ export const ClassesWorkspace: React.FC = () => {
 
   // Reset local branch filter when global location changes
   React.useEffect(() => {
-    setSelectedBranchFilter('');
+    setSelectedBranchFilter("");
   }, [locationId]);
 
   const effectiveBranchFilter = selectedBranchFilter || globalBranchId || undefined;
@@ -681,48 +734,48 @@ export const ClassesWorkspace: React.FC = () => {
   const todayStr = React.useMemo(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }, []);
 
   const todayLabel = React.useMemo(() => {
     const d = new Date();
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }, []);
 
   const weekEndStr = React.useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }, []);
 
   const hasActiveFilters = Boolean(
     searchTerm ||
     selectedBranchFilter ||
-    selectedCategoryFilter !== 'ALL' ||
-    selectedStatusFilter !== 'ALL' ||
-    selectedCheckInFilter !== 'ALL' ||
-    (selectedTrainerFilter && selectedTrainerFilter !== 'ALL') ||
+    selectedCategoryFilter !== "ALL" ||
+    selectedStatusFilter !== "ALL" ||
+    selectedCheckInFilter !== "ALL" ||
+    (selectedTrainerFilter && selectedTrainerFilter !== "ALL") ||
     sessionStartTime ||
     sessionEndTime ||
-    dateFilterMode !== 'today'
+    dateFilterMode !== "today",
   );
 
   const handleResetFilters = () => {
-    handleSearchChange('');
-    setDebouncedSearch('');
-    setSelectedBranchFilter('');
-    setSelectedCategoryFilter('ALL');
-    setSelectedStatusFilter('ALL');
-    setSelectedCheckInFilter('ALL');
-    setSelectedTrainerFilter('ALL');
-    setSessionStartTime('');
-    setSessionEndTime('');
-    setDateFilterMode('today');
+    handleSearchChange("");
+    setDebouncedSearch("");
+    setSelectedBranchFilter("");
+    setSelectedCategoryFilter("ALL");
+    setSelectedStatusFilter("ALL");
+    setSelectedCheckInFilter("ALL");
+    setSelectedTrainerFilter("ALL");
+    setSessionStartTime("");
+    setSessionEndTime("");
+    setDateFilterMode("today");
     setSelectedDate(todayStr);
     setSessionsPage(1);
   };
@@ -746,7 +799,7 @@ export const ClassesWorkspace: React.FC = () => {
   const [genToDate, setGenToDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0] || '';
+    return d.toISOString().split("T")[0] || "";
   });
 
   const [isCreateOccurrenceOpen, setIsCreateOccurrenceOpen] = useState(false);
@@ -754,43 +807,46 @@ export const ClassesWorkspace: React.FC = () => {
 
   const [isAssignTrainerOpen, setIsAssignTrainerOpen] = useState(false);
   const [selectedOccurrence, setSelectedOccurrence] = useState<ClassOccurrence | null>(null);
-  const [trainerProfileIdInput, setTrainerProfileIdInput] = useState('');
-  const [trainerRoleInput, setTrainerRoleInput] = useState<TrainerOccurrenceRole>('LEAD');
+  const [trainerProfileIdInput, setTrainerProfileIdInput] = useState("");
+  const [trainerRoleInput, setTrainerRoleInput] = useState<TrainerOccurrenceRole>("LEAD");
   const [trainerError, setTrainerError] = useState<string | null>(null);
 
   const [isBranchAvailOpen, setIsBranchAvailOpen] = useState(false);
-  const [selectedTemplateForAvail, setSelectedTemplateForAvail] = useState<ClassTemplate | null>(null);
+  const [selectedTemplateForAvail, setSelectedTemplateForAvail] = useState<ClassTemplate | null>(
+    null,
+  );
 
   const [isPricingOpen, setIsPricingOpen] = useState(false);
-  const [selectedTemplateForPricing, setSelectedTemplateForPricing] = useState<ClassTemplate | null>(null);
+  const [selectedTemplateForPricing, setSelectedTemplateForPricing] =
+    useState<ClassTemplate | null>(null);
 
   const [isCreateContentOpen, setIsCreateContentOpen] = useState(false);
   const [isCreateMappingOpen, setIsCreateMappingOpen] = useState(false);
 
   // Forms state (Tenant-facing Code fields removed)
   const [categoryForm, setCategoryForm] = useState({
-    name: '',
-    description: '',
+    name: "",
+    description: "",
     display_order: 1 as number | string,
-    status: 'ACTIVE',
+    status: "ACTIVE",
   });
 
   const [templateForm, setTemplateForm] = useState({
-    name: '',
-    category: '',
-    program: '',
-    description: '',
-    default_duration_minutes: '60' as number | string,
-    default_capacity: '20' as number | string,
-    default_trial_capacity: '0' as number | string,
-    default_waitlist_capacity: '0' as number | string,
-    default_delivery_mode: 'OFFLINE' as DeliveryMode,
+    name: "",
+    category: "",
+    program: "",
+    description: "",
+    default_duration_minutes: "60" as number | string,
+    default_capacity: "20" as number | string,
+    default_trial_capacity: "0" as number | string,
+    default_waitlist_capacity: "0" as number | string,
+    default_delivery_mode: "OFFLINE" as DeliveryMode,
     allow_booking: true,
     allow_trial: false,
     allow_waitlist: false,
     allow_reschedule: true,
-    image_url: '',
-    status: 'ACTIVE' as ClassTemplateStatus,
+    image_url: "",
+    status: "ACTIVE" as ClassTemplateStatus,
     branch_capacities: [] as Array<{
       branch_id: string;
       branch_name: string;
@@ -802,155 +858,210 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   const [ruleForm, setRuleForm] = useState({
-    class_template: '',
-    branch: '',
+    class_template: "",
+    branch: "",
     branches: [] as string[],
-    recurrence_type: 'WEEKLY',
+    recurrence_type: "WEEKLY",
     days_of_week: [1, 2, 3, 4, 5] as number[],
-    start_time: '08:30',
-    end_time: '09:30',
-    valid_from: new Date().toISOString().split('T')[0],
-    valid_until: '',
-    delivery_mode: 'OFFLINE' as DeliveryMode,
-    capacity_override: '',
-    trial_capacity_override: '',
-    waitlist_capacity_override: '',
-    status: 'ACTIVE',
+    start_time: "08:30",
+    end_time: "09:30",
+    time_slots: [{ id: "1", start_time: "08:30", end_time: "09:30" }] as RuleTimeSlot[],
+    valid_from: new Date().toISOString().split("T")[0],
+    valid_until: "",
+    delivery_mode: "OFFLINE" as DeliveryMode,
+    capacity_override: "",
+    trial_capacity_override: "",
+    waitlist_capacity_override: "",
+    status: "ACTIVE",
     auto_generate_slots: true,
-    generate_from_date: new Date().toISOString().split('T')[0],
+    generate_from_date: new Date().toISOString().split("T")[0],
     generate_to_date: (() => {
       const d = new Date();
       d.setDate(d.getDate() + 30);
-      return d.toISOString().split('T')[0];
+      return d.toISOString().split("T")[0];
     })(),
   });
 
   const [occurrenceForm, setOccurrenceForm] = useState({
-    class_template: '',
-    branch: '',
-    occurrence_date: '',
-    start_time: '',
-    end_time: '',
-    delivery_mode: '',
-    capacity: '',
-    trial_capacity: '',
-    waitlist_capacity: '',
-    video_id: 'AUTO',
+    class_template: "",
+    branch: "",
+    occurrence_date: "",
+    start_time: "",
+    end_time: "",
+    delivery_mode: "",
+    capacity: "",
+    trial_capacity: "",
+    waitlist_capacity: "",
+    video_id: "AUTO",
   });
 
   const [branchAvailForm, setBranchAvailForm] = useState({
-    branch: '',
-    status: 'ENABLED' as 'ENABLED' | 'DISABLED',
-    capacity_override: '',
-    trial_capacity_override: '',
-    waitlist_capacity_override: '',
+    branch: "",
+    status: "ENABLED" as "ENABLED" | "DISABLED",
+    capacity_override: "",
+    trial_capacity_override: "",
+    waitlist_capacity_override: "",
   });
 
   const [pricingForm, setPricingForm] = useState({
-    branch: '',
-    currency: 'INR',
-    price: '',
-    tax_percent: '18.00',
+    branch: "",
+    currency: "INR",
+    price: "",
+    tax_percent: "18.00",
     effective_from: selectedDate,
-    status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
+    status: "ACTIVE" as "ACTIVE" | "INACTIVE",
   });
 
   const [contentForm, setContentForm] = useState({
-    title: '',
-    description: '',
-    content_type: 'VIDEO' as 'VIDEO' | 'VIDEO_LINK' | 'DOCUMENT' | 'IMAGE' | 'OTHER',
-    external_url: '',
+    title: "",
+    description: "",
+    content_type: "VIDEO" as "VIDEO" | "VIDEO_LINK" | "DOCUMENT" | "IMAGE" | "OTHER",
+    external_url: "",
     display_order: 1,
-    status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
+    status: "ACTIVE" as "ACTIVE" | "INACTIVE",
   });
 
   const [mappingForm, setMappingForm] = useState({
-    content_item: '',
-    class_template: '',
-    class_category: '',
-    program: '',
-    delivery_mode: '' as DeliveryMode | '',
-    status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
+    content_item: "",
+    class_template: "",
+    class_category: "",
+    program: "",
+    delivery_mode: "" as DeliveryMode | "",
+    status: "ACTIVE" as "ACTIVE" | "INACTIVE",
   });
 
   // Queries
-  const { data: categories = [], isLoading: loadingCategories, refetch: refetchCategories } = useQuery({
-    queryKey: ['class-categories'],
+  const {
+    data: categories = [],
+    isLoading: loadingCategories,
+    refetch: refetchCategories,
+  } = useQuery({
+    queryKey: ["class-categories"],
     queryFn: () => classesApi.getCategories(),
   });
 
-  const { data: templates = [], isLoading: loadingTemplates, refetch: refetchTemplates } = useQuery({
-    queryKey: ['class-templates'],
+  const {
+    data: templates = [],
+    isLoading: loadingTemplates,
+    refetch: refetchTemplates,
+  } = useQuery({
+    queryKey: ["class-templates"],
     queryFn: () => classesApi.getTemplates(),
   });
 
-  const { data: paginatedRules, isLoading: loadingRules, refetch: refetchRules } = useQuery({
+  const {
+    data: paginatedRules,
+    isLoading: loadingRules,
+    refetch: refetchRules,
+  } = useQuery({
     queryKey: [
-      'class-schedule-rules',
+      "class-schedule-rules",
       effectiveBranchFilter,
       selectedCategoryFilter,
-      primaryTab === 'rules' ? ruleStatusFilter : 'ALL',
-      primaryTab === 'rules' ? debouncedSearch : '',
-      primaryTab === 'rules' ? ruleDateFilterMode : 'all',
-      primaryTab === 'rules' ? ruleSelectedDate : '',
-      primaryTab === 'rules' ? ruleFromDate : '',
-      primaryTab === 'rules' ? ruleToDate : '',
-      primaryTab === 'rules' ? ruleDayOfWeek : 'ALL',
+      primaryTab === "rules" ? ruleStatusFilter : "ALL",
+      primaryTab === "rules" ? debouncedSearch : "",
+      primaryTab === "rules" ? ruleDateFilterMode : "all",
+      primaryTab === "rules" ? ruleSelectedDate : "",
+      primaryTab === "rules" ? ruleFromDate : "",
+      primaryTab === "rules" ? ruleToDate : "",
+      primaryTab === "rules" ? ruleDayOfWeek : "ALL",
       rulesPage,
       rulesPageSize,
     ],
-    queryFn: () => classesApi.getScheduleRulesPaginated({
-      branch_id: effectiveBranchFilter,
-      category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
-      status: primaryTab === 'rules' && ruleStatusFilter !== 'ALL' ? ruleStatusFilter : undefined,
-      date: primaryTab === 'rules'
-        ? (ruleDateFilterMode === 'today' ? todayStr : ruleDateFilterMode === 'custom' ? ruleSelectedDate : undefined)
-        : undefined,
-      from_date: primaryTab === 'rules' && ruleDateFilterMode === 'range' && ruleFromDate ? ruleFromDate : undefined,
-      to_date: primaryTab === 'rules' && ruleDateFilterMode === 'range' && ruleToDate ? ruleToDate : undefined,
-      day_of_week: primaryTab === 'rules' && ruleDayOfWeek !== 'ALL' ? ruleDayOfWeek : undefined,
-      search: primaryTab === 'rules' && debouncedSearch ? debouncedSearch : undefined,
-      page: rulesPage,
-      page_size: rulesPageSize,
-    }),
+    queryFn: () =>
+      classesApi.getScheduleRulesPaginated({
+        branch_id: effectiveBranchFilter,
+        category_id: selectedCategoryFilter !== "ALL" ? selectedCategoryFilter : undefined,
+        status: primaryTab === "rules" && ruleStatusFilter !== "ALL" ? ruleStatusFilter : undefined,
+        date:
+          primaryTab === "rules"
+            ? ruleDateFilterMode === "today"
+              ? todayStr
+              : ruleDateFilterMode === "custom"
+                ? ruleSelectedDate
+                : undefined
+            : undefined,
+        from_date:
+          primaryTab === "rules" && ruleDateFilterMode === "range" && ruleFromDate
+            ? ruleFromDate
+            : undefined,
+        to_date:
+          primaryTab === "rules" && ruleDateFilterMode === "range" && ruleToDate
+            ? ruleToDate
+            : undefined,
+        day_of_week: primaryTab === "rules" && ruleDayOfWeek !== "ALL" ? ruleDayOfWeek : undefined,
+        search: primaryTab === "rules" && debouncedSearch ? debouncedSearch : undefined,
+        page: rulesPage,
+        page_size: rulesPageSize,
+      }),
   });
   const rules = paginatedRules?.results ?? [];
   const totalRulesCount = paginatedRules?.count ?? rules.length;
   const totalRulesPages = Math.max(1, Math.ceil(totalRulesCount / rulesPageSize));
 
-  const { data: paginatedOccurrences, isLoading: loadingOccurrences, refetch: refetchOccurrences, isFetching: fetchingOccurrences } = useQuery({
+  const {
+    data: paginatedOccurrences,
+    isLoading: loadingOccurrences,
+    refetch: refetchOccurrences,
+    isFetching: fetchingOccurrences,
+  } = useQuery({
     queryKey: [
-      'class-occurrences',
+      "class-occurrences",
       dateFilterMode,
       selectedDate,
       sessionFromDate,
       sessionToDate,
       effectiveBranchFilter,
       selectedCategoryFilter,
-      primaryTab === 'sessions' ? selectedStatusFilter : 'ALL',
-      primaryTab === 'sessions' ? selectedCheckInFilter : 'ALL',
-      primaryTab === 'sessions' ? selectedTrainerFilter : 'ALL',
-      primaryTab === 'sessions' ? debouncedSearch : '',
-      primaryTab === 'sessions' ? sessionStartTime : '',
-      primaryTab === 'sessions' ? sessionEndTime : '',
+      primaryTab === "sessions" ? selectedStatusFilter : "ALL",
+      primaryTab === "sessions" ? selectedCheckInFilter : "ALL",
+      primaryTab === "sessions" ? selectedTrainerFilter : "ALL",
+      primaryTab === "sessions" ? debouncedSearch : "",
+      primaryTab === "sessions" ? sessionStartTime : "",
+      primaryTab === "sessions" ? sessionEndTime : "",
       sessionsPage,
       sessionsPageSize,
     ],
-    queryFn: () => classesApi.getOccurrencesPaginated({
-      occurrence_date: dateFilterMode === 'custom' ? selectedDate : (dateFilterMode === 'today' ? todayStr : undefined),
-      from_date: dateFilterMode === 'week' ? todayStr : (dateFilterMode === 'range' && sessionFromDate && !isDateRangeInvalid ? sessionFromDate : undefined),
-      to_date: dateFilterMode === 'week' ? weekEndStr : (dateFilterMode === 'range' && sessionToDate && !isDateRangeInvalid ? sessionToDate : undefined),
-      branch_id: effectiveBranchFilter,
-      category_id: selectedCategoryFilter !== 'ALL' ? selectedCategoryFilter : undefined,
-      status: primaryTab === 'sessions' && selectedStatusFilter !== 'ALL' ? selectedStatusFilter : undefined,
-      check_in_status: primaryTab === 'sessions' && selectedCheckInFilter !== 'ALL' ? selectedCheckInFilter : undefined,
-      trainer_id: primaryTab === 'sessions' && selectedTrainerFilter && selectedTrainerFilter !== 'ALL' ? selectedTrainerFilter : undefined,
-      search: primaryTab === 'sessions' && debouncedSearch ? debouncedSearch : undefined,
-      start_time: primaryTab === 'sessions' && sessionStartTime ? sessionStartTime : undefined,
-      end_time: primaryTab === 'sessions' && sessionEndTime ? sessionEndTime : undefined,
-      page: sessionsPage,
-      page_size: sessionsPageSize,
-    }),
+    queryFn: () =>
+      classesApi.getOccurrencesPaginated({
+        occurrence_date:
+          dateFilterMode === "custom"
+            ? selectedDate
+            : dateFilterMode === "today"
+              ? todayStr
+              : undefined,
+        from_date:
+          dateFilterMode === "week"
+            ? todayStr
+            : dateFilterMode === "range" && sessionFromDate && !isDateRangeInvalid
+              ? sessionFromDate
+              : undefined,
+        to_date:
+          dateFilterMode === "week"
+            ? weekEndStr
+            : dateFilterMode === "range" && sessionToDate && !isDateRangeInvalid
+              ? sessionToDate
+              : undefined,
+        branch_id: effectiveBranchFilter,
+        category_id: selectedCategoryFilter !== "ALL" ? selectedCategoryFilter : undefined,
+        status:
+          primaryTab === "sessions" && selectedStatusFilter !== "ALL"
+            ? selectedStatusFilter
+            : undefined,
+        check_in_status:
+          primaryTab === "sessions" && selectedCheckInFilter !== "ALL"
+            ? selectedCheckInFilter
+            : undefined,
+        trainer_id:
+          primaryTab === "sessions" && selectedTrainerFilter && selectedTrainerFilter !== "ALL"
+            ? selectedTrainerFilter
+            : undefined,
+        search: primaryTab === "sessions" && debouncedSearch ? debouncedSearch : undefined,
+        start_time: primaryTab === "sessions" && sessionStartTime ? sessionStartTime : undefined,
+        end_time: primaryTab === "sessions" && sessionEndTime ? sessionEndTime : undefined,
+        page: sessionsPage,
+        page_size: sessionsPageSize,
+      }),
   });
   const occurrences = paginatedOccurrences?.results ?? [];
   const totalSessionsCount = paginatedOccurrences?.count ?? occurrences.length;
@@ -962,7 +1073,7 @@ export const ClassesWorkspace: React.FC = () => {
     isLoading: loadingTodayOccurrences,
     refetch: refetchTodayOccurrences,
   } = useQuery({
-    queryKey: ['class-occurrences-today', globalBranchId, todayStr],
+    queryKey: ["class-occurrences-today", globalBranchId, todayStr],
     queryFn: () =>
       classesApi.getOccurrences({
         occurrence_date: todayStr,
@@ -975,12 +1086,13 @@ export const ClassesWorkspace: React.FC = () => {
     isLoading: loadingAllRulesForBranch,
     refetch: refetchRulesForBranch,
   } = useQuery({
-    queryKey: ['class-schedule-rules-kpi', globalBranchId],
-    queryFn: () => classesApi.getScheduleRulesPaginated({
-      branch_id: globalBranchId,
-      page: 1,
-      page_size: 1,
-    }),
+    queryKey: ["class-schedule-rules-kpi", globalBranchId],
+    queryFn: () =>
+      classesApi.getScheduleRulesPaginated({
+        branch_id: globalBranchId,
+        page: 1,
+        page_size: 1,
+      }),
   });
 
   const {
@@ -988,7 +1100,7 @@ export const ClassesWorkspace: React.FC = () => {
     isLoading: loadingAllBranchAvailabilities,
     refetch: refetchAllBranchAvailabilities,
   } = useQuery({
-    queryKey: ['all-class-branch-availabilities'],
+    queryKey: ["all-class-branch-availabilities"],
     queryFn: () => classesApi.getBranchAvailabilities(),
   });
 
@@ -996,18 +1108,22 @@ export const ClassesWorkspace: React.FC = () => {
   const todaySessionsCount = todayOccurrences.length;
 
   const activeTemplatesCount = React.useMemo(() => {
-    const active = templates.filter((t) => t.status === 'ACTIVE');
-    if (!globalBranchId || globalBranchId === 'ALL' || globalBranchId.toUpperCase() === 'ALL') {
+    const active = templates.filter((t) => t.status === "ACTIVE");
+    if (!globalBranchId || globalBranchId === "ALL" || globalBranchId.toUpperCase() === "ALL") {
       return active.length;
     }
     return active.filter((t) => {
       const avails = allBranchAvailabilities.filter((ba: any) => ba.class_template === t.id);
       if (avails.length === 0) return true;
-      return avails.some((ba: any) => ba.branch === globalBranchId && (ba.status === 'ENABLED' || ba.status === 'ACTIVE'));
+      return avails.some(
+        (ba: any) =>
+          ba.branch === globalBranchId && (ba.status === "ENABLED" || ba.status === "ACTIVE"),
+      );
     }).length;
   }, [templates, globalBranchId, allBranchAvailabilities]);
 
-  const activeRecurringRulesCount = rulesKpiData?.summary?.active_count ?? paginatedRules?.summary?.active_count ?? 0;
+  const activeRecurringRulesCount =
+    rulesKpiData?.summary?.active_count ?? paginatedRules?.summary?.active_count ?? 0;
 
   const todayConfirmedBookings = React.useMemo(() => {
     return todayOccurrences.reduce((acc, occ) => acc + (occ.booking_count ?? 0), 0);
@@ -1017,25 +1133,26 @@ export const ClassesWorkspace: React.FC = () => {
     return todayOccurrences.reduce((acc, occ) => acc + (occ.waitlist_count ?? 0), 0);
   }, [todayOccurrences]);
 
-  const { data: contentItems = [], isLoading: loadingContent, refetch: refetchContent } = useQuery({
-    queryKey: ['class-content-items'],
+  const {
+    data: contentItems = [],
+    isLoading: loadingContent,
+    refetch: refetchContent,
+  } = useQuery({
+    queryKey: ["class-content-items"],
     queryFn: () => classesApi.getContentItems(),
   });
 
   const { data: contentMappings = [], refetch: refetchMappings } = useQuery({
-    queryKey: ['class-content-mappings'],
+    queryKey: ["class-content-mappings"],
     queryFn: () => classesApi.getContentMappings(),
   });
 
   // Recurring Schedule Rule Audit Query
-  const {
-    data: rawRuleAuditEvents = [],
-    isLoading: isRuleAuditLoading,
-  } = useQuery({
-    queryKey: ['rule-audit-events', auditRule?.id],
+  const { data: rawRuleAuditEvents = [], isLoading: isRuleAuditLoading } = useQuery({
+    queryKey: ["rule-audit-events", auditRule?.id],
     queryFn: () =>
       classesApi.getAuditEvents({
-        entity_type: 'ClassScheduleRule',
+        entity_type: "ClassScheduleRule",
         entity_id: auditRule?.id,
       }),
     enabled: Boolean(auditRule?.id),
@@ -1045,39 +1162,39 @@ export const ClassesWorkspace: React.FC = () => {
     if (!auditRule?.id) return [];
     return rawRuleAuditEvents.filter((evt: any) => {
       if (evt.entity_id && evt.entity_id !== auditRule.id) return false;
-      if (evt.entity_type && evt.entity_type !== 'ClassScheduleRule') return false;
+      if (evt.entity_type && evt.entity_type !== "ClassScheduleRule") return false;
       return true;
     });
   }, [rawRuleAuditEvents, auditRule?.id]);
 
   // Canonical Backend Metadata for zero hardcoded dropdown options
   const { data: metadata, isLoading: loadingMetadata } = useQuery<ClassesMetadata>({
-    queryKey: ['classes-metadata'],
+    queryKey: ["classes-metadata"],
     queryFn: () => classesApi.getClassesMetadata(),
   });
 
   // External dropdown data (Real backend queries)
   const { data: branches = [] } = useQuery({
-    queryKey: ['tenant-branches'],
+    queryKey: ["tenant-branches"],
     queryFn: () => classesApi.getBranches(),
   });
 
   // Real-time Branch Operating Hours & Holiday Exceptions for Recurring Rule
   const { data: ruleBranchWorkingHours = [] } = useQuery({
-    queryKey: ['branch-working-hours', ruleForm.branch],
+    queryKey: ["branch-working-hours", ruleForm.branch],
     queryFn: () => classesApi.getBranchWorkingHours(ruleForm.branch),
     enabled: !!ruleForm.branch,
   });
 
   const { data: ruleBranchExceptions = [] } = useQuery({
-    queryKey: ['branch-operating-exceptions', ruleForm.branch],
+    queryKey: ["branch-operating-exceptions", ruleForm.branch],
     queryFn: () => classesApi.getBranchOperatingExceptions(ruleForm.branch),
     enabled: !!ruleForm.branch,
   });
 
   // Real-time Branch Operating Hours & Holiday Exceptions for One-Off Session Modal
   const { data: occurrenceBranchWorkingHours = [] } = useQuery({
-    queryKey: ['branch-working-hours', occurrenceForm.branch],
+    queryKey: ["branch-working-hours", occurrenceForm.branch],
     queryFn: () => classesApi.getBranchWorkingHours(occurrenceForm.branch),
     enabled: !!occurrenceForm.branch,
   });
@@ -1086,22 +1203,25 @@ export const ClassesWorkspace: React.FC = () => {
     const list = availabilities || [];
     return branches.map((b) => {
       const match = list.find((a: any) => {
-        const branchVal = a.branch_id || (typeof a.branch === 'object' && a.branch ? a.branch.id : a.branch);
+        const branchVal =
+          a.branch_id || (typeof a.branch === "object" && a.branch ? a.branch.id : a.branch);
         return String(branchVal) === String(b.id);
       });
       return {
         branch_id: b.id,
         branch_name: b.name,
-        is_enabled: match ? match.status === 'ENABLED' : true,
-        capacity_override: match?.capacity_override != null ? String(match.capacity_override) : '',
-        trial_capacity_override: match?.trial_capacity_override != null ? String(match.trial_capacity_override) : '',
-        waitlist_capacity_override: match?.waitlist_capacity_override != null ? String(match.waitlist_capacity_override) : '',
+        is_enabled: match ? match.status === "ENABLED" : true,
+        capacity_override: match?.capacity_override != null ? String(match.capacity_override) : "",
+        trial_capacity_override:
+          match?.trial_capacity_override != null ? String(match.trial_capacity_override) : "",
+        waitlist_capacity_override:
+          match?.waitlist_capacity_override != null ? String(match.waitlist_capacity_override) : "",
       };
     });
   };
 
   const { data: occurrenceBranchExceptions = [] } = useQuery({
-    queryKey: ['branch-operating-exceptions', occurrenceForm.branch],
+    queryKey: ["branch-operating-exceptions", occurrenceForm.branch],
     queryFn: () => classesApi.getBranchOperatingExceptions(occurrenceForm.branch),
     enabled: !!occurrenceForm.branch,
   });
@@ -1114,27 +1234,32 @@ export const ClassesWorkspace: React.FC = () => {
   const getDayScheduleText = (dayNum: number) => {
     const wh = ruleBranchWorkingHours.find((w: any) => w.day_of_week === dayNum);
     if (!wh) return null;
-    if (!wh.is_open) return 'Closed';
-    if (wh.is_24_hours) return '24h Open';
+    if (!wh.is_open) return "Closed";
+    if (wh.is_24_hours) return "24h Open";
     return `${formatTime12h(wh.open_time?.substring(0, 5))} – ${formatTime12h(wh.close_time?.substring(0, 5))}`;
   };
 
   const getEffectiveOperatingWindow = () => {
     if (!ruleBranchWorkingHours || ruleBranchWorkingHours.length === 0) {
-      return { minTime: undefined, maxTime: undefined, text: 'Operating schedule not configured for selected branch' };
+      return {
+        minTime: undefined,
+        maxTime: undefined,
+        text: "Operating schedule not configured for selected branch",
+      };
     }
 
     const normalizedFormDays = normalizeDaysOfWeek(ruleForm.days_of_week);
-    const targetDays = normalizedFormDays.length > 0
-      ? normalizedFormDays
-      : ruleBranchWorkingHours.filter((w: any) => w.is_open).map((w: any) => w.day_of_week);
+    const targetDays =
+      normalizedFormDays.length > 0
+        ? normalizedFormDays
+        : ruleBranchWorkingHours.filter((w: any) => w.is_open).map((w: any) => w.day_of_week);
 
     if (targetDays.length === 0) {
-      return { minTime: undefined, maxTime: undefined, text: 'No active operating days selected' };
+      return { minTime: undefined, maxTime: undefined, text: "No active operating days selected" };
     }
 
-    let earliestOpen = '23:59';
-    let latestClose = '00:00';
+    let earliestOpen = "23:59";
+    let latestClose = "00:00";
     let hasOpen = false;
 
     for (const d of targetDays) {
@@ -1142,25 +1267,34 @@ export const ClassesWorkspace: React.FC = () => {
       if (wh && wh.is_open) {
         hasOpen = true;
         if (wh.is_24_hours) {
-          earliestOpen = '00:00';
-          latestClose = '23:59';
+          earliestOpen = "00:00";
+          latestClose = "23:59";
           break;
         }
-        if (wh.open_time && wh.open_time.substring(0, 5) < earliestOpen) earliestOpen = wh.open_time.substring(0, 5);
-        if (wh.close_time && wh.close_time.substring(0, 5) > latestClose) latestClose = wh.close_time.substring(0, 5);
+        if (wh.open_time && wh.open_time.substring(0, 5) < earliestOpen)
+          earliestOpen = wh.open_time.substring(0, 5);
+        if (wh.close_time && wh.close_time.substring(0, 5) > latestClose)
+          latestClose = wh.close_time.substring(0, 5);
       }
     }
 
     if (!hasOpen) {
-      return { minTime: undefined, maxTime: undefined, text: 'Selected days are closed in branch schedule' };
+      return {
+        minTime: undefined,
+        maxTime: undefined,
+        text: "Selected days are closed in branch schedule",
+      };
     }
 
-    const minT = earliestOpen === '23:59' ? undefined : earliestOpen;
-    const maxT = latestClose === '00:00' ? undefined : latestClose;
+    const minT = earliestOpen === "23:59" ? undefined : earliestOpen;
+    const maxT = latestClose === "00:00" ? undefined : latestClose;
     return {
       minTime: minT,
       maxTime: maxT,
-      text: minT && maxT ? `Branch Operating Window: ${formatTime12h(minT)} – ${formatTime12h(maxT)}` : 'Operating schedule pending',
+      text:
+        minT && maxT
+          ? `Branch Operating Window: ${formatTime12h(minT)} – ${formatTime12h(maxT)}`
+          : "Operating schedule pending",
     };
   };
 
@@ -1180,7 +1314,7 @@ export const ClassesWorkspace: React.FC = () => {
         isConfigured: false,
         isOpen: false,
         isException: false,
-        statusText: 'Select a branch to view operating schedule',
+        statusText: "Select a branch to view operating schedule",
         reason: null,
         minTime: undefined,
         maxTime: undefined,
@@ -1191,7 +1325,7 @@ export const ClassesWorkspace: React.FC = () => {
         isConfigured: false,
         isOpen: false,
         isException: false,
-        statusText: 'Select session date to view operating schedule',
+        statusText: "Select session date to view operating schedule",
         reason: null,
         minTime: undefined,
         maxTime: undefined,
@@ -1200,7 +1334,7 @@ export const ClassesWorkspace: React.FC = () => {
 
     // 1. Date-specific operating exception / holiday (Rule 2: Exceptions override weekly hours)
     const exception = occurrenceBranchExceptions.find(
-      (ex: any) => ex.exception_date === occurrenceForm.occurrence_date
+      (ex: any) => ex.exception_date === occurrenceForm.occurrence_date,
     );
 
     if (exception) {
@@ -1209,19 +1343,19 @@ export const ClassesWorkspace: React.FC = () => {
           isConfigured: true,
           isOpen: false,
           isException: true,
-          statusText: `Closed for holiday/exception: ${exception.reason || 'Branch Closed'}`,
-          reason: exception.reason || 'Operating Exception / Holiday Closure',
+          statusText: `Closed for holiday/exception: ${exception.reason || "Branch Closed"}`,
+          reason: exception.reason || "Operating Exception / Holiday Closure",
           minTime: undefined,
           maxTime: undefined,
         };
       }
-      const minT = exception.open_time ? exception.open_time.substring(0, 5) : '00:00';
-      const maxT = exception.close_time ? exception.close_time.substring(0, 5) : '23:59';
+      const minT = exception.open_time ? exception.open_time.substring(0, 5) : "00:00";
+      const maxT = exception.close_time ? exception.close_time.substring(0, 5) : "23:59";
       return {
         isConfigured: true,
         isOpen: true,
         isException: true,
-        statusText: `Special holiday hours (${exception.reason || 'Holiday'}): ${formatTime12h(minT)} – ${formatTime12h(maxT)}`,
+        statusText: `Special holiday hours (${exception.reason || "Holiday"}): ${formatTime12h(minT)} – ${formatTime12h(maxT)}`,
         reason: exception.reason,
         minTime: minT,
         maxTime: maxT,
@@ -1229,7 +1363,7 @@ export const ClassesWorkspace: React.FC = () => {
     }
 
     // 2. Weekly schedule: Python isoweekday Mon=1, Sun=7 (Canonical ISO standard)
-    const dateParts = occurrenceForm.occurrence_date.split('-').map(Number);
+    const dateParts = occurrenceForm.occurrence_date.split("-").map(Number);
     const y = dateParts[0] || new Date().getFullYear();
     const m = dateParts[1] || 1;
     const d = dateParts[2] || 1;
@@ -1245,8 +1379,8 @@ export const ClassesWorkspace: React.FC = () => {
           isConfigured: true,
           isOpen: false,
           isException: false,
-          statusText: 'Branch is closed on this day of the week',
-          reason: 'Weekly Closed Day',
+          statusText: "Branch is closed on this day of the week",
+          reason: "Weekly Closed Day",
           minTime: undefined,
           maxTime: undefined,
         };
@@ -1256,14 +1390,14 @@ export const ClassesWorkspace: React.FC = () => {
           isConfigured: true,
           isOpen: true,
           isException: false,
-          statusText: 'Branch is open 24 hours',
+          statusText: "Branch is open 24 hours",
           reason: null,
-          minTime: '00:00',
-          maxTime: '23:59',
+          minTime: "00:00",
+          maxTime: "23:59",
         };
       }
-      const minT = wh.open_time ? wh.open_time.substring(0, 5) : '00:00';
-      const maxT = wh.close_time ? wh.close_time.substring(0, 5) : '23:59';
+      const minT = wh.open_time ? wh.open_time.substring(0, 5) : "00:00";
+      const maxT = wh.close_time ? wh.close_time.substring(0, 5) : "23:59";
       return {
         isConfigured: true,
         isOpen: true,
@@ -1280,7 +1414,7 @@ export const ClassesWorkspace: React.FC = () => {
       isConfigured: false,
       isOpen: true,
       isException: false,
-      statusText: 'Operating schedule pending configuration for this branch',
+      statusText: "Operating schedule pending configuration for this branch",
       reason: null,
       minTime: undefined,
       maxTime: undefined,
@@ -1292,29 +1426,32 @@ export const ClassesWorkspace: React.FC = () => {
   const openNewRuleModal = () => {
     setRuleError(null);
     setEditingRule(null);
-    const initialBranches = selectedBranchFilter ? [selectedBranchFilter] : branches.map((b) => b.id);
-    const defaultBranchId = selectedBranchFilter || (initialBranches[0] || '');
+    const initialBranches = selectedBranchFilter
+      ? [selectedBranchFilter]
+      : branches.map((b) => b.id);
+    const defaultBranchId = selectedBranchFilter || initialBranches[0] || "";
     setRuleForm({
-      class_template: '',
+      class_template: "",
       branch: defaultBranchId,
       branches: initialBranches,
-      recurrence_type: 'WEEKLY',
+      recurrence_type: "WEEKLY",
       days_of_week: [],
-      start_time: '',
-      end_time: '',
-      valid_from: new Date().toISOString().split('T')[0],
-      valid_until: '',
-      delivery_mode: 'OFFLINE',
-      capacity_override: '',
-      trial_capacity_override: '',
-      waitlist_capacity_override: '',
-      status: 'ACTIVE',
+      start_time: "",
+      end_time: "",
+      time_slots: [{ id: "1", start_time: "", end_time: "" }],
+      valid_from: new Date().toISOString().split("T")[0],
+      valid_until: "",
+      delivery_mode: "OFFLINE",
+      capacity_override: "",
+      trial_capacity_override: "",
+      waitlist_capacity_override: "",
+      status: "ACTIVE",
       auto_generate_slots: true,
-      generate_from_date: new Date().toISOString().split('T')[0],
+      generate_from_date: new Date().toISOString().split("T")[0],
       generate_to_date: (() => {
         const d = new Date();
         d.setDate(d.getDate() + 30);
-        return d.toISOString().split('T')[0];
+        return d.toISOString().split("T")[0];
       })(),
     });
     setIsCreateRuleOpen(true);
@@ -1325,80 +1462,199 @@ export const ClassesWorkspace: React.FC = () => {
     setEditingRule(rule);
     const resolvedTemplateId = (() => {
       const raw = rule.class_template as any;
-      if (typeof raw === 'object' && raw !== null) return raw.id || '';
-      if (typeof raw === 'string' && raw) {
+      if (typeof raw === "object" && raw !== null) return raw.id || "";
+      if (typeof raw === "string" && raw) {
         if (templates.some((t) => t.id === raw)) return raw;
-        const matchByName = templates.find((t) => t.name?.trim().toLowerCase() === raw.trim().toLowerCase());
+        const matchByName = templates.find(
+          (t) => t.name?.trim().toLowerCase() === raw.trim().toLowerCase(),
+        );
         if (matchByName) return matchByName.id;
         return raw;
       }
       if ((rule as any).class_template_id) return (rule as any).class_template_id;
       if (rule.class_name || (rule as any).template_name) {
-        const nameToFind = (rule.class_name || (rule as any).template_name || '').trim().toLowerCase();
+        const nameToFind = (rule.class_name || (rule as any).template_name || "")
+          .trim()
+          .toLowerCase();
         const match = templates.find((t) => t.name?.trim().toLowerCase() === nameToFind);
         if (match) return match.id;
       }
-      return '';
+      return "";
     })();
+    const initialSlotStart = rule.start_time ? rule.start_time.substring(0, 5) : "";
+    const initialSlotEnd = rule.end_time ? rule.end_time.substring(0, 5) : "";
     setRuleForm({
       class_template: resolvedTemplateId,
-      branch: rule.branch || '',
+      branch: rule.branch || "",
       branches: rule.branch ? [rule.branch] : [],
-      recurrence_type: (rule as any).recurrence_type || 'WEEKLY',
+      recurrence_type: (rule as any).recurrence_type || "WEEKLY",
       days_of_week: normalizeDaysOfWeek(rule.days_of_week),
-      start_time: rule.start_time ? rule.start_time.substring(0, 5) : '',
-      end_time: rule.end_time ? rule.end_time.substring(0, 5) : '',
-      valid_from: rule.valid_from || new Date().toISOString().split('T')[0],
-      valid_until: rule.valid_until || '',
-      delivery_mode: rule.delivery_mode || 'OFFLINE',
-      capacity_override: rule.capacity_override != null ? String(rule.capacity_override) : '',
-      trial_capacity_override: rule.trial_capacity_override != null ? String(rule.trial_capacity_override) : '',
-      waitlist_capacity_override: rule.waitlist_capacity_override != null ? String(rule.waitlist_capacity_override) : '',
-      status: rule.status || 'ACTIVE',
+      start_time: initialSlotStart,
+      end_time: initialSlotEnd,
+      time_slots: [{ id: "1", start_time: initialSlotStart, end_time: initialSlotEnd }],
+      valid_from: rule.valid_from || new Date().toISOString().split("T")[0],
+      valid_until: rule.valid_until || "",
+      delivery_mode: rule.delivery_mode || "OFFLINE",
+      capacity_override: rule.capacity_override != null ? String(rule.capacity_override) : "",
+      trial_capacity_override:
+        rule.trial_capacity_override != null ? String(rule.trial_capacity_override) : "",
+      waitlist_capacity_override:
+        rule.waitlist_capacity_override != null ? String(rule.waitlist_capacity_override) : "",
+      status: rule.status || "ACTIVE",
       auto_generate_slots: false,
-      generate_from_date: rule.valid_from || new Date().toISOString().split('T')[0],
-      generate_to_date: rule.valid_until || '',
+      generate_from_date: rule.valid_from || new Date().toISOString().split("T")[0],
+      generate_to_date: rule.valid_until || "",
     });
     setIsCreateRuleOpen(true);
   };
 
+  const addTimeSlot = () => {
+    setRuleForm((prev) => {
+      const lastSlot = prev.time_slots[prev.time_slots.length - 1];
+      const selTpl = templates.find((t) => t.id === prev.class_template);
+      const dur = selTpl?.default_duration_minutes || 60;
+      let nextStart = "";
+      let nextEnd = "";
+
+      if (lastSlot && lastSlot.end_time) {
+        nextStart = lastSlot.end_time;
+        const parts = nextStart.split(":");
+        const h = parseInt(parts[0] || "0", 10);
+        const m = parseInt(parts[1] || "0", 10);
+        const endM = Math.min(1439, h * 60 + m + dur);
+        const eh = Math.floor(endM / 60) % 24;
+        const em = endM % 60;
+        nextEnd = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
+      }
+
+      const newSlots: RuleTimeSlot[] = [
+        ...prev.time_slots,
+        {
+          id: String(Date.now() + Math.random()),
+          start_time: nextStart,
+          end_time: nextEnd,
+        },
+      ];
+
+      return {
+        ...prev,
+        time_slots: newSlots,
+        start_time: newSlots[0]?.start_time || "",
+        end_time: newSlots[0]?.end_time || "",
+      };
+    });
+  };
+
+  const removeTimeSlot = (indexToRemove: number) => {
+    setRuleForm((prev) => {
+      if (prev.time_slots.length <= 1) return prev;
+      const newSlots = prev.time_slots.filter((_, idx) => idx !== indexToRemove);
+      return {
+        ...prev,
+        time_slots: newSlots,
+        start_time: newSlots[0]?.start_time || "",
+        end_time: newSlots[0]?.end_time || "",
+      };
+    });
+  };
+
+  const updateTimeSlot = (
+    indexToUpdate: number,
+    field: "start_time" | "end_time",
+    value: string,
+  ) => {
+    setRuleForm((prev) => {
+      const selTpl = templates.find((t) => t.id === prev.class_template);
+      const dur = selTpl?.default_duration_minutes || 60;
+      const newSlots = prev.time_slots.map((slot, idx) => {
+        if (idx !== indexToUpdate) return slot;
+        const updated = { ...slot, [field]: value };
+        if (field === "start_time" && value) {
+          const parts = value.split(":");
+          const h = parseInt(parts[0] || "0", 10);
+          const m = parseInt(parts[1] || "0", 10);
+          const endM = Math.min(1439, h * 60 + m + dur);
+          const eh = Math.floor(endM / 60) % 24;
+          const em = endM % 60;
+          updated.end_time = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
+        }
+        return updated;
+      });
+
+      return {
+        ...prev,
+        time_slots: newSlots,
+        start_time: newSlots[0]?.start_time || "",
+        end_time: newSlots[0]?.end_time || "",
+      };
+    });
+  };
+
+  const handleRuleTemplateChange = (val: string) => {
+    const tpl = templates.find((t) => t.id === val);
+    const dur = tpl?.default_duration_minutes || 60;
+    setRuleForm((prev) => {
+      const updatedSlots = prev.time_slots.map((s) => {
+        if (!s.start_time) return s;
+        const parts = s.start_time.split(":");
+        const h = parseInt(parts[0] || "0", 10);
+        const m = parseInt(parts[1] || "0", 10);
+        const endM = Math.min(1439, h * 60 + m + dur);
+        const eh = Math.floor(endM / 60) % 24;
+        const em = endM % 60;
+        return {
+          ...s,
+          end_time: `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`,
+        };
+      });
+      return {
+        ...prev,
+        class_template: val,
+        time_slots: updatedSlots,
+        start_time: updatedSlots[0]?.start_time || "",
+        end_time: updatedSlots[0]?.end_time || "",
+      };
+    });
+  };
+
   const openNewOccurrenceModal = () => {
     setOccurrenceError(null);
-    const defaultBranchId = selectedBranchFilter || (branches.length === 1 ? branches[0]?.id || '' : '');
-    const defaultDate = selectedDate || new Date().toISOString().split('T')[0] || '';
+    const defaultBranchId =
+      selectedBranchFilter || (branches.length === 1 ? branches[0]?.id || "" : "");
+    const defaultDate = selectedDate || new Date().toISOString().split("T")[0] || "";
     setOccurrenceForm({
-      class_template: '',
+      class_template: "",
       branch: defaultBranchId,
       occurrence_date: defaultDate,
-      start_time: '',
-      end_time: '',
-      delivery_mode: 'OFFLINE',
-      capacity: '',
-      trial_capacity: '',
-      waitlist_capacity: '',
-      video_id: 'AUTO',
+      start_time: "",
+      end_time: "",
+      delivery_mode: "OFFLINE",
+      capacity: "",
+      trial_capacity: "",
+      waitlist_capacity: "",
+      video_id: "AUTO",
     });
     setIsCreateOccurrenceOpen(true);
   };
 
   const { data: trainers = [] } = useQuery({
-    queryKey: ['tenant-trainers'],
+    queryKey: ["tenant-trainers"],
     queryFn: () => classesApi.getTrainers(),
   });
 
   const { data: programs = [] } = useQuery({
-    queryKey: ['tenant-programs'],
+    queryKey: ["tenant-programs"],
     queryFn: () => classesApi.getPrograms(),
   });
 
   const { data: branchAvailabilities = [], refetch: refetchAvailabilities } = useQuery({
-    queryKey: ['class-branch-availabilities', selectedTemplateForAvail?.id],
+    queryKey: ["class-branch-availabilities", selectedTemplateForAvail?.id],
     queryFn: () => classesApi.getBranchAvailabilities(selectedTemplateForAvail?.id),
     enabled: !!selectedTemplateForAvail,
   });
 
   const { data: classPrices = [], refetch: refetchPrices } = useQuery({
-    queryKey: ['class-prices', selectedTemplateForPricing?.id],
+    queryKey: ["class-prices", selectedTemplateForPricing?.id],
     queryFn: () => classesApi.getClassPrices(selectedTemplateForPricing?.id),
     enabled: !!selectedTemplateForPricing,
   });
@@ -1419,9 +1675,9 @@ export const ClassesWorkspace: React.FC = () => {
     mutationFn: (data: typeof categoryForm) => {
       const payload: any = {
         name: data.name,
-        description: data.description || '',
+        description: data.description || "",
         display_order: data.display_order ? Number(data.display_order) : 1,
-        status: (data.status as 'ACTIVE' | 'INACTIVE') || 'ACTIVE',
+        status: (data.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
       };
       if (editingCategory) {
         return classesApi.updateCategory(editingCategory.id, payload);
@@ -1429,27 +1685,29 @@ export const ClassesWorkspace: React.FC = () => {
       return classesApi.createCategory(payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['class-categories'] });
+      queryClient.invalidateQueries({ queryKey: ["class-categories"] });
       setIsCreateCategoryOpen(false);
       setEditingCategory(null);
-      setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' });
-      toast.success(editingCategory ? 'Category updated' : 'Category created');
+      setCategoryForm({ name: "", description: "", display_order: 1, status: "ACTIVE" });
+      toast.success(editingCategory ? "Category updated" : "Category created");
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save category');
+      toast.error(
+        err?.response?.data?.error || err?.response?.data?.detail || "Failed to save category",
+      );
     },
   });
 
   const toggleCategoryStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) => {
+    mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "INACTIVE" }) => {
       return classesApi.updateCategory(id, { status });
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['class-categories'] });
-      toast.success(vars.status === 'ACTIVE' ? 'Category activated' : 'Category deactivated');
+      queryClient.invalidateQueries({ queryKey: ["class-categories"] });
+      toast.success(vars.status === "ACTIVE" ? "Category activated" : "Category deactivated");
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || 'Failed to update category status');
+      toast.error(err?.response?.data?.error || "Failed to update category status");
     },
   });
 
@@ -1457,28 +1715,43 @@ export const ClassesWorkspace: React.FC = () => {
     mutationFn: (data: typeof templateForm) => {
       const selectedCat = categories.find((c) => c.id === data.category);
       const payload: any = {
-        name: data.name || selectedCat?.name || '',
+        name: data.name || selectedCat?.name || "",
         category: data.category || null,
         program: data.program || null,
-        description: data.description || '',
-        default_duration_minutes: data.default_duration_minutes ? Number(data.default_duration_minutes) : 60,
+        description: data.description || "",
+        default_duration_minutes: data.default_duration_minutes
+          ? Number(data.default_duration_minutes)
+          : 60,
         default_capacity: data.default_capacity ? Number(data.default_capacity) : 20,
-        default_trial_capacity: data.default_trial_capacity ? Number(data.default_trial_capacity) : 0,
-        default_waitlist_capacity: data.default_waitlist_capacity ? Number(data.default_waitlist_capacity) : 0,
-        default_delivery_mode: (data.default_delivery_mode as DeliveryMode) || 'OFFLINE',
+        default_trial_capacity: data.default_trial_capacity
+          ? Number(data.default_trial_capacity)
+          : 0,
+        default_waitlist_capacity: data.default_waitlist_capacity
+          ? Number(data.default_waitlist_capacity)
+          : 0,
+        default_delivery_mode: (data.default_delivery_mode as DeliveryMode) || "OFFLINE",
         allow_booking: data.allow_booking,
         allow_trial: data.allow_trial,
         allow_waitlist: data.allow_waitlist,
         allow_reschedule: data.allow_reschedule,
         image_url: data.image_url || null,
-        status: (data.status as ClassTemplateStatus) || 'ACTIVE',
+        status: (data.status as ClassTemplateStatus) || "ACTIVE",
         branch_capacities: (data.branch_capacities || []).map((bc: any) => ({
           branch_id: bc.branch_id,
           is_enabled: bc.is_enabled !== false,
-          status: bc.is_enabled === false ? 'DISABLED' : 'ENABLED',
-          capacity_override: bc.capacity_override !== '' && bc.capacity_override != null ? Number(bc.capacity_override) : null,
-          trial_capacity_override: bc.trial_capacity_override !== '' && bc.trial_capacity_override != null ? Number(bc.trial_capacity_override) : null,
-          waitlist_capacity_override: bc.waitlist_capacity_override !== '' && bc.waitlist_capacity_override != null ? Number(bc.waitlist_capacity_override) : null,
+          status: bc.is_enabled === false ? "DISABLED" : "ENABLED",
+          capacity_override:
+            bc.capacity_override !== "" && bc.capacity_override != null
+              ? Number(bc.capacity_override)
+              : null,
+          trial_capacity_override:
+            bc.trial_capacity_override !== "" && bc.trial_capacity_override != null
+              ? Number(bc.trial_capacity_override)
+              : null,
+          waitlist_capacity_override:
+            bc.waitlist_capacity_override !== "" && bc.waitlist_capacity_override != null
+              ? Number(bc.waitlist_capacity_override)
+              : null,
         })),
       };
       if (editingTemplate) {
@@ -1487,16 +1760,18 @@ export const ClassesWorkspace: React.FC = () => {
       return classesApi.createTemplate(payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['class-templates'] });
-      queryClient.invalidateQueries({ queryKey: ['class-templates-all'] });
-      queryClient.invalidateQueries({ queryKey: ['all-class-branch-availabilities'] });
+      queryClient.invalidateQueries({ queryKey: ["class-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["class-templates-all"] });
+      queryClient.invalidateQueries({ queryKey: ["all-class-branch-availabilities"] });
       setIsCreateTemplateOpen(false);
       setEditingTemplate(null);
       resetTemplateForm();
-      toast.success(editingTemplate ? 'Template updated' : 'Template created');
+      toast.success(editingTemplate ? "Template updated" : "Template created");
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to save template');
+      toast.error(
+        err?.response?.data?.error || err?.response?.data?.detail || "Failed to save template",
+      );
     },
   });
 
@@ -1505,92 +1780,155 @@ export const ClassesWorkspace: React.FC = () => {
       return classesApi.updateTemplate(id, { status });
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['class-templates'] });
-      toast.success(vars.status === 'ACTIVE' ? 'Template activated' : 'Template deactivated');
+      queryClient.invalidateQueries({ queryKey: ["class-templates"] });
+      toast.success(vars.status === "ACTIVE" ? "Template activated" : "Template deactivated");
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.error || 'Failed to update template status');
+      toast.error(err?.response?.data?.error || "Failed to update template status");
     },
   });
 
   const resetTemplateForm = () => {
     setTemplateForm({
-      name: '',
-      category: '',
-      program: '',
-      description: '',
-      default_duration_minutes: '60',
-      default_capacity: '20',
-      default_trial_capacity: '0',
-      default_waitlist_capacity: '0',
-      default_delivery_mode: 'OFFLINE',
+      name: "",
+      category: "",
+      program: "",
+      description: "",
+      default_duration_minutes: "60",
+      default_capacity: "20",
+      default_trial_capacity: "0",
+      default_waitlist_capacity: "0",
+      default_delivery_mode: "OFFLINE",
       allow_booking: true,
       allow_trial: false,
       allow_waitlist: false,
       allow_reschedule: true,
-      image_url: '',
-      status: 'ACTIVE',
+      image_url: "",
+      status: "ACTIVE",
       branch_capacities: buildInitialBranchCapacities(),
     });
   };
   const saveRuleMutation = useMutation({
     mutationFn: (data: typeof ruleForm) => {
+      const selectedBranches =
+        data.branches && data.branches.length > 0
+          ? data.branches
+          : data.branch
+            ? [data.branch]
+            : [];
+      const slotsToSubmit =
+        data.time_slots && data.time_slots.length > 0
+          ? data.time_slots.map((s) => ({ start_time: s.start_time, end_time: s.end_time }))
+          : [{ start_time: data.start_time, end_time: data.end_time }];
+
       if (editingRule) {
-        const selectedBranches = data.branches && data.branches.length > 0 ? data.branches : (data.branch ? [data.branch] : []);
-        const primaryBranch = selectedBranches.includes(editingRule.branch) ? editingRule.branch : (selectedBranches[0] || editingRule.branch);
+        const primaryBranch = selectedBranches.includes(editingRule.branch)
+          ? editingRule.branch
+          : selectedBranches[0] || editingRule.branch;
+        const primarySlot = slotsToSubmit[0] || {
+          start_time: data.start_time,
+          end_time: data.end_time,
+        };
         const payload: any = {
           class_template: data.class_template,
           branch: primaryBranch,
-          recurrence_type: data.recurrence_type || 'WEEKLY',
+          recurrence_type: data.recurrence_type || "WEEKLY",
           days_of_week: data.days_of_week,
-          start_time: data.start_time,
-          end_time: data.end_time,
+          start_time: primarySlot.start_time,
+          end_time: primarySlot.end_time,
           valid_from: data.valid_from,
           valid_until: data.valid_until || null,
-          delivery_mode: data.delivery_mode || 'OFFLINE',
+          delivery_mode: data.delivery_mode || "OFFLINE",
           capacity_override: data.capacity_override ? Number(data.capacity_override) : null,
-          trial_capacity_override: data.trial_capacity_override ? Number(data.trial_capacity_override) : null,
-          waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
-          status: data.status || 'ACTIVE',
+          trial_capacity_override: data.trial_capacity_override
+            ? Number(data.trial_capacity_override)
+            : null,
+          waitlist_capacity_override: data.waitlist_capacity_override
+            ? Number(data.waitlist_capacity_override)
+            : null,
+          status: data.status || "ACTIVE",
         };
         const updatePromise = classesApi.updateScheduleRule(editingRule.id, payload);
 
         const additionalBranches = selectedBranches.filter((bId) => bId !== primaryBranch);
-        if (additionalBranches.length > 0) {
-          const createPayload: any = {
-            ...payload,
-            branches: additionalBranches,
-            branch: additionalBranches[0],
-            generate_slots: data.auto_generate_slots !== false,
-            generate_from_date: data.generate_from_date || data.valid_from,
-            generate_to_date: data.generate_to_date || data.valid_until || null,
-          };
-          return Promise.all([updatePromise, classesApi.createScheduleRule(createPayload)]).then(([upd, crt]) => ({
-            ...upd,
-            count: 1 + ((crt as any)?.count || additionalBranches.length),
-            occurrences_generated: (crt as any)?.occurrences_generated || 0,
-          }));
+        const additionalSlots = slotsToSubmit.slice(1);
+
+        if (additionalBranches.length > 0 || additionalSlots.length > 0) {
+          const promises: Promise<any>[] = [updatePromise];
+
+          if (additionalSlots.length > 0 && additionalSlots[0]) {
+            promises.push(
+              classesApi.createScheduleRule({
+                ...payload,
+                branches: [primaryBranch],
+                branch: primaryBranch,
+                time_slots: additionalSlots,
+                start_time: additionalSlots[0].start_time,
+                end_time: additionalSlots[0].end_time,
+                generate_slots: data.auto_generate_slots !== false,
+                generate_from_date: data.generate_from_date || data.valid_from,
+                generate_to_date: data.generate_to_date || data.valid_until || null,
+              } as any),
+            );
+          }
+
+          if (additionalBranches.length > 0 && slotsToSubmit[0]) {
+            promises.push(
+              classesApi.createScheduleRule({
+                ...payload,
+                branches: additionalBranches,
+                branch: additionalBranches[0],
+                time_slots: slotsToSubmit,
+                start_time: slotsToSubmit[0].start_time,
+                end_time: slotsToSubmit[0].end_time,
+                generate_slots: data.auto_generate_slots !== false,
+                generate_from_date: data.generate_from_date || data.valid_from,
+                generate_to_date: data.generate_to_date || data.valid_until || null,
+              } as any),
+            );
+          }
+
+          return Promise.all(promises).then((results) => {
+            let totalOccs = 0;
+            let totalCreated = 1;
+            for (const r of results.slice(1)) {
+              if (r && typeof r === "object") {
+                totalOccs += (r as any).occurrences_generated || 0;
+                totalCreated += (r as any).count || 1;
+              }
+            }
+            return {
+              ...results[0],
+              count: totalCreated,
+              occurrences_generated: totalOccs,
+              message: `Rule updated and ${totalCreated - 1} additional rule(s) created with ${totalOccs} slot(s) generated!`,
+            };
+          });
         }
 
         return updatePromise;
       }
 
-      const selectedBranches = data.branches && data.branches.length > 0 ? data.branches : (data.branch ? [data.branch] : []);
       const payload: any = {
         class_template: data.class_template,
         branch: selectedBranches[0] || data.branch,
         branches: selectedBranches,
-        recurrence_type: data.recurrence_type || 'WEEKLY',
+        time_slots: slotsToSubmit,
+        start_time: slotsToSubmit[0]?.start_time || data.start_time,
+        end_time: slotsToSubmit[0]?.end_time || data.end_time,
+        recurrence_type: data.recurrence_type || "WEEKLY",
         days_of_week: data.days_of_week,
-        start_time: data.start_time,
-        end_time: data.end_time,
         valid_from: data.valid_from,
         valid_until: data.valid_until || null,
-        delivery_mode: data.delivery_mode || 'OFFLINE',
+        delivery_mode: data.delivery_mode || "OFFLINE",
         capacity_override: data.capacity_override ? Number(data.capacity_override) : null,
-        trial_capacity_override: data.trial_capacity_override ? Number(data.trial_capacity_override) : null,
-        waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : null,
-        status: data.status || 'ACTIVE',
+        trial_capacity_override: data.trial_capacity_override
+          ? Number(data.trial_capacity_override)
+          : null,
+        waitlist_capacity_override: data.waitlist_capacity_override
+          ? Number(data.waitlist_capacity_override)
+          : null,
+        status: data.status || "ACTIVE",
         generate_slots: data.auto_generate_slots !== false,
         generate_from_date: data.generate_from_date || data.valid_from,
         generate_to_date: data.generate_to_date || data.valid_until || null,
@@ -1598,90 +1936,93 @@ export const ClassesWorkspace: React.FC = () => {
       return classesApi.createScheduleRule(payload);
     },
     onSuccess: (resp: any) => {
-      queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
-      queryClient.invalidateQueries({ queryKey: ['class-schedule-rules-kpi'] });
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-      queryClient.invalidateQueries({ queryKey: ['today-class-occurrences'] });
-      queryClient.invalidateQueries({ queryKey: ['classes-occurrences-kpi'] });
+      queryClient.invalidateQueries({ queryKey: ["class-schedule-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["class-schedule-rules-kpi"] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+      queryClient.invalidateQueries({ queryKey: ["today-class-occurrences"] });
+      queryClient.invalidateQueries({ queryKey: ["classes-occurrences-kpi"] });
       setIsCreateRuleOpen(false);
       setEditingRule(null);
       setRuleError(null);
-      if (resp?.occurrences_generated != null && resp.occurrences_generated > 0) {
-        toast.success(`Recurring rule created for ${resp.count || 'all'} branch(es) & ${resp.occurrences_generated} slots generated!`);
+      if (resp?.message) {
+        toast.success(resp.message);
+      } else if (resp?.occurrences_generated != null && resp.occurrences_generated > 0) {
+        toast.success(`Recurring rule(s) created & ${resp.occurrences_generated} slots generated!`);
       } else if (resp?.count) {
-        toast.success(`Recurring rule created across ${resp.count} branch(es)`);
+        toast.success(`${resp.count} recurring schedule rule(s) created!`);
       } else {
-        toast.success(editingRule ? 'Schedule rule updated' : 'Schedule rule created');
+        toast.success(editingRule ? "Schedule rule updated" : "Schedule rule created");
       }
     },
     onError: (err: any) => {
       const resp = err?.response?.data;
-      let errorMsg = 'Failed to save schedule rule.';
-      if (typeof resp === 'string') {
+      let errorMsg = "Failed to save schedule rule.";
+      if (typeof resp === "string") {
         errorMsg = resp;
-      } else if (resp && typeof resp === 'object') {
+      } else if (resp && typeof resp === "object") {
         if (resp.detail) {
           errorMsg = resp.detail;
         } else if (resp.error) {
           errorMsg = resp.error;
         } else {
           const messages = Object.entries(resp).map(([field, errs]) => {
-            const text = Array.isArray(errs) ? errs.join(', ') : String(errs);
-            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const text = Array.isArray(errs) ? errs.join(", ") : String(errs);
+            const fieldLabel = field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
             return `${fieldLabel}: ${text}`;
           });
           if (messages.length > 0) {
-            errorMsg = messages.join(' | ');
+            errorMsg = messages.join(" | ");
           }
         }
       }
       setRuleError(errorMsg);
+      toast.error(errorMsg);
     },
   });
 
   const toggleRuleStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) => {
+    mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "INACTIVE" }) => {
       return classesApi.updateScheduleRule(id, { status });
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-      toast.success(vars.status === 'ACTIVE' ? 'Rule activated' : 'Rule deactivated');
+      queryClient.invalidateQueries({ queryKey: ["class-schedule-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+      toast.success(vars.status === "ACTIVE" ? "Rule activated" : "Rule deactivated");
     },
     onError: (err: any) => {
       const apiError =
         err?.response?.data?.error ||
         err?.response?.data?.detail ||
-        (typeof err?.response?.data === 'object'
+        (typeof err?.response?.data === "object"
           ? Object.entries(err.response.data)
-              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
-              .join(' | ')
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(" ") : v}`)
+              .join(" | ")
           : null) ||
-        'Failed to update rule status';
+        "Failed to update rule status";
       toast.error(apiError);
     },
   });
 
   const generateOccurrencesMutation = useMutation({
     mutationFn: () => {
-      if (!selectedRuleForGen) throw new Error('No rule selected');
+      if (!selectedRuleForGen) throw new Error("No rule selected");
       return classesApi.generateOccurrencesFromRule(selectedRuleForGen.id, genFromDate, genToDate);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
       setIsGenerateOccurrencesOpen(false);
       setSelectedRuleForGen(null);
     },
   });
 
   const { data: availableVideosForCreate } = useQuery({
-    queryKey: ['available-workout-videos', 'FOR_CREATE'],
+    queryKey: ["available-workout-videos", "FOR_CREATE"],
     queryFn: () => classesApi.getAvailableWorkoutVideos({ limit: 100 }),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: availableTagsData } = useQuery({
-    queryKey: ['available-wod-tags'],
+    queryKey: ["available-wod-tags"],
     queryFn: () => classesApi.getAvailableTags(),
     staleTime: 5 * 60 * 1000,
   });
@@ -1694,50 +2035,63 @@ export const ClassesWorkspace: React.FC = () => {
         occurrence_date: data.occurrence_date,
         start_time: data.start_time,
         end_time: data.end_time,
-        delivery_mode: data.delivery_mode || 'OFFLINE',
+        delivery_mode: data.delivery_mode || "OFFLINE",
       };
-      if (data.capacity !== '' && data.capacity !== null && data.capacity !== undefined) {
+      if (data.capacity !== "" && data.capacity !== null && data.capacity !== undefined) {
         payload.capacity = Number(data.capacity);
       }
-      if (data.trial_capacity !== '' && data.trial_capacity !== null && data.trial_capacity !== undefined) {
+      if (
+        data.trial_capacity !== "" &&
+        data.trial_capacity !== null &&
+        data.trial_capacity !== undefined
+      ) {
         payload.trial_capacity = Number(data.trial_capacity);
       }
-      if (data.waitlist_capacity !== '' && data.waitlist_capacity !== null && data.waitlist_capacity !== undefined) {
+      if (
+        data.waitlist_capacity !== "" &&
+        data.waitlist_capacity !== null &&
+        data.waitlist_capacity !== undefined
+      ) {
         payload.waitlist_capacity = Number(data.waitlist_capacity);
       }
       const createdOcc = await classesApi.createOccurrence(payload);
-      if (data.video_id && data.video_id !== 'AUTO' && data.video_id !== 'NONE' && (createdOcc as any)?.id) {
+      if (
+        data.video_id &&
+        data.video_id !== "AUTO" &&
+        data.video_id !== "NONE" &&
+        (createdOcc as any)?.id
+      ) {
         try {
           await classesApi.assignOccurrenceVideo((createdOcc as any).id, data.video_id);
         } catch (e) {
-          console.warn('Could not assign video to new occurrence', e);
+          console.warn("Could not assign video to new occurrence", e);
         }
       }
       return createdOcc;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
       setIsCreateOccurrenceOpen(false);
       setOccurrenceError(null);
     },
     onError: (err: any) => {
       const resp = err?.response?.data;
-      let errorMsg = 'Failed to schedule occurrence.';
-      if (typeof resp === 'string') {
+      let errorMsg = "Failed to schedule occurrence.";
+      if (typeof resp === "string") {
         errorMsg = resp;
-      } else if (resp && typeof resp === 'object') {
+      } else if (resp && typeof resp === "object") {
         if (resp.detail) {
           errorMsg = resp.detail;
         } else if (resp.error) {
-          errorMsg = typeof resp.error === 'string' ? resp.error : JSON.stringify(resp.error);
+          errorMsg = typeof resp.error === "string" ? resp.error : JSON.stringify(resp.error);
         } else {
           const messages = Object.entries(resp).map(([field, errs]) => {
-            const text = Array.isArray(errs) ? errs.join(', ') : String(errs);
-            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const text = Array.isArray(errs) ? errs.join(", ") : String(errs);
+            const fieldLabel = field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
             return `${fieldLabel}: ${text}`;
           });
           if (messages.length > 0) {
-            errorMsg = messages.join(' | ');
+            errorMsg = messages.join(" | ");
           }
         }
       }
@@ -1756,64 +2110,77 @@ export const ClassesWorkspace: React.FC = () => {
       role: TrainerOccurrenceRole;
     }) => classesApi.assignTrainer(occurrenceId, trainerId, role),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
       setIsAssignTrainerOpen(false);
       setSelectedOccurrence(null);
-      setTrainerProfileIdInput('');
+      setTrainerProfileIdInput("");
       setTrainerError(null);
       toast.success(
         data?.trainer_name
-          ? `Assigned ${data.trainer_name} (${data.trainer_role || 'Lead'}) successfully!`
-          : 'Trainer assigned to class occurrence successfully!'
+          ? `Assigned ${data.trainer_name} (${data.trainer_role || "Lead"}) successfully!`
+          : "Trainer assigned to class occurrence successfully!",
       );
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.error || 'Validation failed. Trainer may have conflict or lack specialty.';
+      const msg =
+        err?.response?.data?.error ||
+        "Validation failed. Trainer may have conflict or lack specialty.";
       setTrainerError(msg);
-      toast.error('Failed to assign trainer', { description: msg });
+      toast.error("Failed to assign trainer", { description: msg });
     },
   });
 
   const assignContentMutation = useMutation({
     mutationFn: (occurrenceId: string) => classesApi.rotateContent(occurrenceId),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
       toast.success(
         data?.content_title
           ? `Workout content rotated to: "${data.content_title}" (Cycle #${data.rotation_cycle_number})`
-          : 'Workout content rotated successfully!'
+          : "Workout content rotated successfully!",
       );
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.error || 'Failed to rotate workout content.';
+      const msg = err?.response?.data?.error || "Failed to rotate workout content.";
       toast.error(msg, {
-        description: 'No workout items are in this template’s mapping pool yet. Go to "Content Studio" tab to create content items and map them.',
+        description:
+          'No workout items are in this template’s mapping pool yet. Go to "Content Studio" tab to create content items and map them.',
       });
     },
   });
 
   const createBranchAvailMutation = useMutation({
     mutationFn: (data: typeof branchAvailForm) => {
-      if (!selectedTemplateForAvail) throw new Error('No template selected');
+      if (!selectedTemplateForAvail) throw new Error("No template selected");
       return classesApi.createBranchAvailability({
         class_template: selectedTemplateForAvail.id,
         branch: data.branch,
         status: data.status,
         capacity_override: data.capacity_override ? Number(data.capacity_override) : undefined,
-        trial_capacity_override: data.trial_capacity_override ? Number(data.trial_capacity_override) : undefined,
-        waitlist_capacity_override: data.waitlist_capacity_override ? Number(data.waitlist_capacity_override) : undefined,
+        trial_capacity_override: data.trial_capacity_override
+          ? Number(data.trial_capacity_override)
+          : undefined,
+        waitlist_capacity_override: data.waitlist_capacity_override
+          ? Number(data.waitlist_capacity_override)
+          : undefined,
       });
     },
     onSuccess: () => {
       refetchAvailabilities();
-      queryClient.invalidateQueries({ queryKey: ['all-class-branch-availabilities'] });
-      setBranchAvailForm({ branch: '', status: 'ENABLED', capacity_override: '', trial_capacity_override: '', waitlist_capacity_override: '' });
+      queryClient.invalidateQueries({ queryKey: ["all-class-branch-availabilities"] });
+      setBranchAvailForm({
+        branch: "",
+        status: "ENABLED",
+        capacity_override: "",
+        trial_capacity_override: "",
+        waitlist_capacity_override: "",
+      });
     },
   });
 
   const createPricingMutation = useMutation({
     mutationFn: (data: typeof pricingForm) => {
-      if (!selectedTemplateForPricing) throw new Error('No template selected');
+      if (!selectedTemplateForPricing) throw new Error("No template selected");
       return classesApi.createClassPrice({
         class_template: selectedTemplateForPricing.id,
         branch: data.branch || undefined,
@@ -1826,7 +2193,14 @@ export const ClassesWorkspace: React.FC = () => {
     },
     onSuccess: () => {
       refetchPrices();
-      setPricingForm({ branch: '', currency: 'INR', price: '', tax_percent: '18.00', effective_from: selectedDate, status: 'ACTIVE' });
+      setPricingForm({
+        branch: "",
+        currency: "INR",
+        price: "",
+        tax_percent: "18.00",
+        effective_from: selectedDate,
+        status: "ACTIVE",
+      });
     },
   });
 
@@ -1842,9 +2216,16 @@ export const ClassesWorkspace: React.FC = () => {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['class-content-items'] });
+      queryClient.invalidateQueries({ queryKey: ["class-content-items"] });
       setIsCreateContentOpen(false);
-      setContentForm({ title: '', description: '', content_type: 'VIDEO', external_url: '', display_order: 1, status: 'ACTIVE' });
+      setContentForm({
+        title: "",
+        description: "",
+        content_type: "VIDEO",
+        external_url: "",
+        display_order: 1,
+        status: "ACTIVE",
+      });
     },
   });
 
@@ -1862,15 +2243,25 @@ export const ClassesWorkspace: React.FC = () => {
     onSuccess: () => {
       refetchMappings();
       setIsCreateMappingOpen(false);
-      setMappingForm({ content_item: '', class_template: '', class_category: '', program: '', delivery_mode: '', status: 'ACTIVE' });
+      setMappingForm({
+        content_item: "",
+        class_template: "",
+        class_category: "",
+        program: "",
+        delivery_mode: "",
+        status: "ACTIVE",
+      });
     },
   });
 
   // Filter helpers
   const filteredCategories = categories.filter((c) => {
     const term = searchTerm.toLowerCase();
-    const matchesSearch = !term || c.name.toLowerCase().includes(term) || (c.description || '').toLowerCase().includes(term);
-    const matchesStatus = selectedStatusFilter === 'ALL' || c.status === selectedStatusFilter;
+    const matchesSearch =
+      !term ||
+      c.name.toLowerCase().includes(term) ||
+      (c.description || "").toLowerCase().includes(term);
+    const matchesStatus = selectedStatusFilter === "ALL" || c.status === selectedStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -1879,10 +2270,11 @@ export const ClassesWorkspace: React.FC = () => {
     const matchesSearch =
       !term ||
       tpl.name.toLowerCase().includes(term) ||
-      (tpl.category_name || '').toLowerCase().includes(term) ||
-      (tpl.program_name || '').toLowerCase().includes(term);
-    const matchesStatus = selectedStatusFilter === 'ALL' || tpl.status === selectedStatusFilter;
-    const matchesCategory = selectedCategoryFilter === 'ALL' || tpl.category === selectedCategoryFilter;
+      (tpl.category_name || "").toLowerCase().includes(term) ||
+      (tpl.program_name || "").toLowerCase().includes(term);
+    const matchesStatus = selectedStatusFilter === "ALL" || tpl.status === selectedStatusFilter;
+    const matchesCategory =
+      selectedCategoryFilter === "ALL" || tpl.category === selectedCategoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
@@ -1892,7 +2284,10 @@ export const ClassesWorkspace: React.FC = () => {
 
   const filteredContent = contentItems.filter((item) => {
     const term = searchTerm.toLowerCase();
-    return item.title.toLowerCase().includes(term) || (item.description || '').toLowerCase().includes(term);
+    return (
+      item.title.toLowerCase().includes(term) ||
+      (item.description || "").toLowerCase().includes(term)
+    );
   });
 
   // Non-admin / Trainer view: Only show Allotted Classes & Attendance
@@ -1922,9 +2317,12 @@ export const ClassesWorkspace: React.FC = () => {
               Operations · Classes
             </span>
             <span className="text-muted-foreground text-xs">
-              {primaryTab === 'sessions' && `${totalSessionsCount} Session${totalSessionsCount === 1 ? '' : 's'} Scheduled`}
-              {primaryTab === 'setup' && `${templates.length} Templates · ${categories.length} Categories`}
-              {primaryTab === 'rules' && `${totalRulesCount} Recurring Rule${totalRulesCount === 1 ? '' : 's'}`}
+              {primaryTab === "sessions" &&
+                `${totalSessionsCount} Session${totalSessionsCount === 1 ? "" : "s"} Scheduled`}
+              {primaryTab === "setup" &&
+                `${templates.length} Templates · ${categories.length} Categories`}
+              {primaryTab === "rules" &&
+                `${totalRulesCount} Recurring Rule${totalRulesCount === 1 ? "" : "s"}`}
             </span>
           </div>
         }
@@ -1935,21 +2333,26 @@ export const ClassesWorkspace: React.FC = () => {
               size="sm"
               onClick={async () => {
                 await Promise.allSettled([
-                  queryClient.invalidateQueries({ queryKey: ['class-occurrences'] }),
-                  queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] }),
-                  queryClient.invalidateQueries({ queryKey: ['class-categories'] }),
-                  queryClient.invalidateQueries({ queryKey: ['class-templates'] }),
-                  queryClient.invalidateQueries({ queryKey: ['class-occurrences-today'] }),
+                  queryClient.invalidateQueries({ queryKey: ["class-occurrences"] }),
+                  queryClient.invalidateQueries({ queryKey: ["class-schedule-rules"] }),
+                  queryClient.invalidateQueries({ queryKey: ["class-categories"] }),
+                  queryClient.invalidateQueries({ queryKey: ["class-templates"] }),
+                  queryClient.invalidateQueries({ queryKey: ["class-occurrences-today"] }),
                   refetchOccurrences(),
                   refetchRules(),
                 ]);
-                toast.success('Classes refreshed');
+                toast.success("Classes refreshed");
               }}
               disabled={fetchingOccurrences}
               className="gap-1.5 h-8 text-xs font-semibold"
               title="Refresh classes data"
             >
-              <RefreshCw className={cn("size-3.5 transition-transform", fetchingOccurrences && "animate-spin")} />
+              <RefreshCw
+                className={cn(
+                  "size-3.5 transition-transform",
+                  fetchingOccurrences && "animate-spin",
+                )}
+              />
               <span>Refresh</span>
             </Button>
             <Button
@@ -1962,29 +2365,58 @@ export const ClassesWorkspace: React.FC = () => {
               <FileSpreadsheet className="size-3.5 text-emerald-600" />
               <span>Upload Excel</span>
             </Button>
-            {primaryTab === 'sessions' && canCreate && (
-              <Button size="sm" onClick={openNewOccurrenceModal} className="gap-1.5 h-8 text-xs font-semibold">
+            {primaryTab === "sessions" && canCreate && (
+              <Button
+                size="sm"
+                onClick={openNewOccurrenceModal}
+                className="gap-1.5 h-8 text-xs font-semibold"
+              >
                 <Plus className="size-3.5" />
                 <span>Schedule One-Off Session</span>
               </Button>
             )}
 
-            {primaryTab === 'setup' && setupSubTab === 'templates' && canCreate && (
-              <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }} className="gap-1.5 h-8 text-xs font-semibold">
+            {primaryTab === "setup" && setupSubTab === "templates" && canCreate && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingTemplate(null);
+                  resetTemplateForm();
+                  setIsCreateTemplateOpen(true);
+                }}
+                className="gap-1.5 h-8 text-xs font-semibold"
+              >
                 <Plus className="size-3.5" />
                 <span>New Class Template</span>
               </Button>
             )}
 
-            {primaryTab === 'setup' && setupSubTab === 'categories' && canCreate && (
-              <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: categories.length + 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }} className="gap-1.5 h-8 text-xs font-semibold">
+            {primaryTab === "setup" && setupSubTab === "categories" && canCreate && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingCategory(null);
+                  setCategoryForm({
+                    name: "",
+                    description: "",
+                    display_order: categories.length + 1,
+                    status: "ACTIVE",
+                  });
+                  setIsCreateCategoryOpen(true);
+                }}
+                className="gap-1.5 h-8 text-xs font-semibold"
+              >
                 <Plus className="size-3.5" />
                 <span>New Class Category</span>
               </Button>
             )}
 
-            {primaryTab === 'rules' && canCreate && (
-              <Button size="sm" onClick={openNewRuleModal} className="gap-1.5 h-8 text-xs font-semibold">
+            {primaryTab === "rules" && canCreate && (
+              <Button
+                size="sm"
+                onClick={openNewRuleModal}
+                className="gap-1.5 h-8 text-xs font-semibold"
+              >
                 <Plus className="size-3.5" />
                 <span>New Recurring Rule</span>
               </Button>
@@ -2055,12 +2487,12 @@ export const ClassesWorkspace: React.FC = () => {
               onClick={() => {
                 setShowTrainerCheckins((prev) => !prev);
                 setShowContentStudio(false);
-                setPrimaryTab('sessions');
+                setPrimaryTab("sessions");
               }}
               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                showTrainerCheckins && primaryTab === 'sessions'
-                  ? 'bg-primary/10 border-primary/40 text-primary shadow-2xs'
-                  : 'bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs'
+                showTrainerCheckins && primaryTab === "sessions"
+                  ? "bg-primary/10 border-primary/40 text-primary shadow-2xs"
+                  : "bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs"
               }`}
             >
               <Award className="size-3.5 text-primary shrink-0" />
@@ -2073,12 +2505,12 @@ export const ClassesWorkspace: React.FC = () => {
               onClick={() => {
                 setShowContentStudio((prev) => !prev);
                 setShowTrainerCheckins(false);
-                setPrimaryTab('sessions');
+                setPrimaryTab("sessions");
               }}
               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                showContentStudio && primaryTab === 'sessions'
-                  ? 'bg-primary/10 border-primary/40 text-primary shadow-2xs'
-                  : 'bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs'
+                showContentStudio && primaryTab === "sessions"
+                  ? "bg-primary/10 border-primary/40 text-primary shadow-2xs"
+                  : "bg-card border-border/70 text-foreground hover:bg-muted/60 hover:border-border shadow-2xs"
               }`}
             >
               <Sparkles className="size-3.5 text-primary shrink-0" />
@@ -2092,17 +2524,17 @@ export const ClassesWorkspace: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setPrimaryTab('sessions');
+              setPrimaryTab("sessions");
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
-              setSearchTerm('');
-              setSelectedStatusFilter('ALL');
-              setSelectedBranchFilter('');
+              setSearchTerm("");
+              setSelectedStatusFilter("ALL");
+              setSelectedBranchFilter("");
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              primaryTab === 'sessions' && !showTrainerCheckins && !showContentStudio
-                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              primaryTab === "sessions" && !showTrainerCheckins && !showContentStudio
+                ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             }`}
           >
             <Calendar className="size-3.5" />
@@ -2112,17 +2544,17 @@ export const ClassesWorkspace: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setPrimaryTab('setup');
+              setPrimaryTab("setup");
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
-              setSearchTerm('');
-              setSelectedStatusFilter('ALL');
-              setSelectedBranchFilter('');
+              setSearchTerm("");
+              setSelectedStatusFilter("ALL");
+              setSelectedBranchFilter("");
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              primaryTab === 'setup'
-                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              primaryTab === "setup"
+                ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             }`}
           >
             <LayoutGrid className="size-3.5" />
@@ -2132,17 +2564,17 @@ export const ClassesWorkspace: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setPrimaryTab('rules');
+              setPrimaryTab("rules");
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
-              setSearchTerm('');
-              setRuleStatusFilter('ACTIVE');
-              setSelectedBranchFilter('');
+              setSearchTerm("");
+              setRuleStatusFilter("ACTIVE");
+              setSelectedBranchFilter("");
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-              primaryTab === 'rules'
-                ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              primaryTab === "rules"
+                ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             }`}
           >
             <RotateCw className="size-3.5" />
@@ -2151,76 +2583,81 @@ export const ClassesWorkspace: React.FC = () => {
         </div>
 
         {/* Class Type Quick Filter Bar (Pilates vs Bootcamp differentiation) */}
-        {!showTrainerCheckins && !showContentStudio && !(primaryTab === 'setup' && setupSubTab === 'categories') && categories.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 px-3.5 py-2.5 bg-card border border-border rounded-xl shadow-2xs">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1.5 flex items-center gap-1">
-                <Filter className="size-3 text-primary" />
-                Class Type:
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedCategoryFilter('ALL')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
-                  selectedCategoryFilter === 'ALL'
-                    ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
-                    : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted'
-                }`}
-              >
-                All Types
-              </button>
-              {categories
-                .filter((cat) => cat.status === 'ACTIVE')
-                .map((cat) => {
-                  const isSelected = selectedCategoryFilter === cat.id;
-                  const palette = getCategoryPalette(cat.name, cat.code);
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategoryFilter(isSelected ? 'ALL' : cat.id)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 ${
-                        isSelected
-                          ? `${palette.selected} shadow-2xs`
-                          : `${palette.unselected}`
-                      }`}
-                    >
-                      <span
-                        className={`size-2 rounded-full ${
-                          isSelected
-                            ? 'bg-white'
-                            : palette.dot
+        {!showTrainerCheckins &&
+          !showContentStudio &&
+          !(primaryTab === "setup" && setupSubTab === "categories") &&
+          categories.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-3 px-3.5 py-2.5 bg-card border border-border rounded-xl shadow-2xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1.5 flex items-center gap-1">
+                  <Filter className="size-3 text-primary" />
+                  Class Type:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter("ALL")}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                    selectedCategoryFilter === "ALL"
+                      ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                      : "bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  All Types
+                </button>
+                {categories
+                  .filter((cat) => cat.status === "ACTIVE")
+                  .map((cat) => {
+                    const isSelected = selectedCategoryFilter === cat.id;
+                    const palette = getCategoryPalette(cat.name, cat.code);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCategoryFilter(isSelected ? "ALL" : cat.id)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                          isSelected ? `${palette.selected} shadow-2xs` : `${palette.unselected}`
                         }`}
-                      />
-                      <span>{cat.name}</span>
-                    </button>
-                  );
-                })}
+                      >
+                        <span
+                          className={`size-2 rounded-full ${isSelected ? "bg-white" : palette.dot}`}
+                        />
+                        <span>{cat.name}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+              {selectedCategoryFilter !== "ALL" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter("ALL")}
+                  className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline cursor-pointer"
+                >
+                  Clear Type Filter
+                </button>
+              )}
             </div>
-            {selectedCategoryFilter !== 'ALL' && (
-              <button
-                type="button"
-                onClick={() => setSelectedCategoryFilter('ALL')}
-                className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline cursor-pointer"
-              >
-                Clear Type Filter
-              </button>
-            )}
-          </div>
-        )}
+          )}
 
         {/* VIEW: TRAINER ATTENDANCE & CHECK-INS (Exposed from Sessions) */}
-        {primaryTab === 'sessions' && showTrainerCheckins && (
+        {primaryTab === "sessions" && showTrainerCheckins && (
           <div className="space-y-4 mt-4">
             <div className="flex items-center justify-between p-3.5 bg-muted/40 border border-border rounded-xl shadow-xs">
               <div className="flex items-center gap-2.5">
                 <Award className="size-4 text-primary" />
                 <div>
                   <h4 className="font-semibold text-sm text-foreground">Trainer Attendance View</h4>
-                  <p className="text-xs text-muted-foreground">Session-level trainer assignments, biometric verification, and check-in compliance.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Session-level trainer assignments, biometric verification, and check-in
+                    compliance.
+                  </p>
                 </div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setShowTrainerCheckins(false)} className="text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTrainerCheckins(false)}
+                className="text-xs"
+              >
                 Back to Sessions
               </Button>
             </div>
@@ -2229,21 +2666,21 @@ export const ClassesWorkspace: React.FC = () => {
         )}
 
         {/* TAB: CLASS SETUP (Templates & Categories) */}
-        {primaryTab === 'setup' && (
+        {primaryTab === "setup" && (
           <div className="space-y-4 mt-4">
             {/* Secondary Navigation */}
             <div className="flex items-center gap-2 border-b border-border pb-3 overflow-x-auto scrollbar-none">
               <button
                 type="button"
                 onClick={() => {
-                  setSetupSubTab('templates');
-                  setSearchTerm('');
-                  setSelectedStatusFilter('ALL');
+                  setSetupSubTab("templates");
+                  setSearchTerm("");
+                  setSelectedStatusFilter("ALL");
                 }}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  setupSubTab === 'templates'
-                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  setupSubTab === "templates"
+                    ? "bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 Class Templates ({templates.length})
@@ -2251,14 +2688,14 @@ export const ClassesWorkspace: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setSetupSubTab('categories');
-                  setSearchTerm('');
-                  setSelectedStatusFilter('ALL');
+                  setSetupSubTab("categories");
+                  setSearchTerm("");
+                  setSelectedStatusFilter("ALL");
                 }}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  setupSubTab === 'categories'
-                    ? 'bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  setupSubTab === "categories"
+                    ? "bg-primary/10 text-primary border border-primary/20 shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 Class Categories ({categories.length})
@@ -2267,13 +2704,13 @@ export const ClassesWorkspace: React.FC = () => {
 
             {/* Helper Info below sub-tabs */}
             <p className="text-xs text-muted-foreground">
-              {setupSubTab === 'templates'
-                ? 'Define reusable class types under Sweat Pilates or Sweat Bootcamp.'
-                : 'Group classes into categories such as Sweat Pilates or Sweat Bootcamp.'}
+              {setupSubTab === "templates"
+                ? "Define reusable class types under Sweat Pilates or Sweat Bootcamp."
+                : "Group classes into categories such as Sweat Pilates or Sweat Bootcamp."}
             </p>
 
             {/* Sub-tab: Categories */}
-            {setupSubTab === 'categories' && (
+            {setupSubTab === "categories" && (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
                   <div className="relative min-w-[200px] flex-1 max-w-xs">
@@ -2293,9 +2730,16 @@ export const ClassesWorkspace: React.FC = () => {
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
+                      {(metadata?.statuses || [])
+                        .filter(
+                          (s: ClassesMetadataOption<string>) =>
+                            s.value === "ACTIVE" || s.value === "INACTIVE",
+                        )
+                        .map((s: ClassesMetadataOption<string>) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -2310,80 +2754,114 @@ export const ClassesWorkspace: React.FC = () => {
                     <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                       <Tag className="size-6" />
                     </div>
-                    <h3 className="text-base font-semibold text-foreground">No Class Categories Found</h3>
+                    <h3 className="text-base font-semibold text-foreground">
+                      No Class Categories Found
+                    </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      Create categories like HIIT, Mobility, Strength, or Recovery to organize class templates.
+                      Create categories like HIIT, Mobility, Strength, or Recovery to organize class
+                      templates.
                     </p>
                     {canCreate && (
-                      <Button size="sm" onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', display_order: 1, status: 'ACTIVE' }); setIsCreateCategoryOpen(true); }}>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setEditingCategory(null);
+                          setCategoryForm({
+                            name: "",
+                            description: "",
+                            display_order: 1,
+                            status: "ACTIVE",
+                          });
+                          setIsCreateCategoryOpen(true);
+                        }}
+                      >
                         <Plus className="size-3.5 mr-1" /> Add Category
                       </Button>
                     )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredCategories.map((cat) => (
-                  <div key={cat.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(cat.name, cat.code)}`}>
-                          {cat.name}
-                        </Badge>
-                        <Badge variant={cat.status === 'ACTIVE' ? 'default' : 'secondary'} className={cat.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : ''}>
-                          {cat.status}
-                        </Badge>
+                    {filteredCategories.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <Badge
+                              variant="outline"
+                              className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(cat.name, cat.code)}`}
+                            >
+                              {cat.name}
+                            </Badge>
+                            <Badge
+                              variant={cat.status === "ACTIVE" ? "default" : "secondary"}
+                              className={
+                                cat.status === "ACTIVE"
+                                  ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                  : ""
+                              }
+                            >
+                              {cat.status}
+                            </Badge>
+                          </div>
+                          <h3 className="text-base font-semibold text-foreground mt-2.5">
+                            {cat.name}
+                          </h3>
+                          {cat.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {cat.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Order: #{cat.display_order}</span>
+                          <div className="flex items-center gap-1">
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingCategory(cat);
+                                  setCategoryForm({
+                                    name: cat.name,
+                                    description: cat.description || "",
+                                    display_order: cat.display_order,
+                                    status: cat.status,
+                                  });
+                                  setIsCreateCategoryOpen(true);
+                                }}
+                                className="text-xs gap-1 h-7"
+                              >
+                                <Edit2 className="size-3" /> Edit
+                              </Button>
+                            )}
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  toggleCategoryStatusMutation.mutate({
+                                    id: cat.id,
+                                    status: cat.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+                                  })
+                                }
+                                className={`text-xs h-7 ${cat.status === "ACTIVE" ? "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10" : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"}`}
+                              >
+                                {cat.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mt-2.5">{cat.name}</h3>
-                      {cat.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cat.description}</p>
-                      )}
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Order: #{cat.display_order}</span>
-                      <div className="flex items-center gap-1">
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingCategory(cat);
-                              setCategoryForm({
-                                name: cat.name,
-                                description: cat.description || '',
-                                display_order: cat.display_order,
-                                status: cat.status,
-                              });
-                              setIsCreateCategoryOpen(true);
-                            }}
-                            className="text-xs gap-1 h-7"
-                          >
-                            <Edit2 className="size-3" /> Edit
-                          </Button>
-                        )}
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => toggleCategoryStatusMutation.mutate({
-                              id: cat.id,
-                              status: cat.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                            })}
-                            className={`text-xs h-7 ${cat.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10'}`}
-                          >
-                            {cat.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
               </div>
             )}
 
             {/* Sub-tab: Templates */}
-            {setupSubTab === 'templates' && (
+            {setupSubTab === "templates" && (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
                   <div className="relative min-w-[200px] flex-1 max-w-xs">
@@ -2404,7 +2882,9 @@ export const ClassesWorkspace: React.FC = () => {
                     >
                       <option value="ALL">All Class Types</option>
                       {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
                       ))}
                     </select>
                     <select
@@ -2413,11 +2893,19 @@ export const ClassesWorkspace: React.FC = () => {
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
-                      {(metadata?.statuses?.length ? metadata.statuses.filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE') : [
-                        { value: 'ACTIVE', label: 'Active' },
-                        { value: 'INACTIVE', label: 'Inactive' },
-                      ]).map((s: { value: string; label: string }) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
+                      {(metadata?.statuses?.length
+                        ? metadata.statuses.filter(
+                            (s: ClassesMetadataOption<string>) =>
+                              s.value === "ACTIVE" || s.value === "INACTIVE",
+                          )
+                        : [
+                            { value: "ACTIVE", label: "Active" },
+                            { value: "INACTIVE", label: "Inactive" },
+                          ]
+                      ).map((s: { value: string; label: string }) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -2434,633 +2922,727 @@ export const ClassesWorkspace: React.FC = () => {
                       <Award className="size-6" />
                     </div>
                     <h3 className="text-base font-semibold text-foreground">
-                      {selectedStatusFilter === 'INACTIVE' ? 'No Inactive Class Templates' : 'No Class Templates Found'}
+                      {selectedStatusFilter === "INACTIVE"
+                        ? "No Inactive Class Templates"
+                        : "No Class Templates Found"}
                     </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      {selectedStatusFilter === 'INACTIVE'
-                        ? 'There are currently no deactivated or inactive class templates.'
-                        : 'Create high-intensity, mobility, or strength workout templates to schedule group classes.'}
+                      {selectedStatusFilter === "INACTIVE"
+                        ? "There are currently no deactivated or inactive class templates."
+                        : "Create high-intensity, mobility, or strength workout templates to schedule group classes."}
                     </p>
-                    {canCreate && selectedStatusFilter !== 'INACTIVE' && (
-                      <Button size="sm" onClick={() => { setEditingTemplate(null); resetTemplateForm(); setIsCreateTemplateOpen(true); }}>
+                    {canCreate && selectedStatusFilter !== "INACTIVE" && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setEditingTemplate(null);
+                          resetTemplateForm();
+                          setIsCreateTemplateOpen(true);
+                        }}
+                      >
                         <Plus className="size-3.5 mr-1" /> New Template
                       </Button>
                     )}
                   </div>
                 ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredTemplates.map((tpl) => (
-                  <div key={tpl.id} className={`bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs overflow-hidden ${tpl.status === 'INACTIVE' ? 'opacity-85 bg-muted/15 border-dashed' : ''}`}>
-                    <div>
-                      {tpl.image_url && (
-                        <div className="-mx-4 -mt-4 sm:-mx-5 sm:-mt-5 mb-3.5 h-36 w-[calc(100%+2rem)] sm:w-[calc(100%+2.5rem)] overflow-hidden bg-muted/30 border-b border-border">
-                          <img
-                            src={tpl.image_url}
-                            alt={tpl.name}
-                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between gap-2">
-                        {tpl.category_name ? (
-                          <Badge
-                            variant="outline"
-                            className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(tpl.category_name, tpl.category_code)}`}
-                          >
-                            {tpl.category_name}
-                          </Badge>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                            <Award className="size-3.5 text-primary" />
-                            <span>Class Template</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredTemplates.map((tpl) => (
+                      <div
+                        key={tpl.id}
+                        className={`bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs overflow-hidden ${tpl.status === "INACTIVE" ? "opacity-85 bg-muted/15 border-dashed" : ""}`}
+                      >
+                        <div>
+                          {tpl.image_url && (
+                            <div className="-mx-4 -mt-4 sm:-mx-5 sm:-mt-5 mb-3.5 h-36 w-[calc(100%+2rem)] sm:w-[calc(100%+2.5rem)] overflow-hidden bg-muted/30 border-b border-border">
+                              <img
+                                src={tpl.image_url}
+                                alt={tpl.name}
+                                className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                              />
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between gap-2">
+                            {tpl.category_name ? (
+                              <Badge
+                                variant="outline"
+                                className={`text-[11px] px-2.5 py-0.5 ${getCategoryBadgeStyle(tpl.category_name, tpl.category_code)}`}
+                              >
+                                {tpl.category_name}
+                              </Badge>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                                <Award className="size-3.5 text-primary" />
+                                <span>Class Template</span>
+                              </div>
+                            )}
+                            <Badge
+                              variant={tpl.status === "ACTIVE" ? "default" : "secondary"}
+                              className={
+                                tpl.status === "ACTIVE"
+                                  ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                  : "bg-zinc-500/10 text-zinc-600 border border-zinc-500/20 dark:text-zinc-400"
+                              }
+                            >
+                              {tpl.status}
+                            </Badge>
                           </div>
-                        )}
-                        <Badge variant={tpl.status === 'ACTIVE' ? 'default' : 'secondary'} className={tpl.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-zinc-500/10 text-zinc-600 border border-zinc-500/20 dark:text-zinc-400'}>
-                          {tpl.status}
-                        </Badge>
-                      </div>
-                      <h3 className="text-base font-semibold text-foreground mt-2.5">{tpl.name}</h3>
-                      {tpl.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tpl.description}</p>
-                      )}
+                          <h3 className="text-base font-semibold text-foreground mt-2.5">
+                            {tpl.name}
+                          </h3>
+                          {tpl.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {tpl.description}
+                            </p>
+                          )}
 
-                      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                        {tpl.program_name && (
-                          <span className="bg-muted px-2 py-0.5 rounded text-foreground font-medium border border-border">
-                            Program: {tpl.program_name}
-                          </span>
-                        )}
-                        <span className="bg-muted px-2 py-0.5 rounded text-muted-foreground border border-border">
-                          Mode: {tpl.default_delivery_mode}
-                        </span>
-                      </div>
+                          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+                            {tpl.program_name && (
+                              <span className="bg-muted px-2 py-0.5 rounded text-foreground font-medium border border-border">
+                                Program: {tpl.program_name}
+                              </span>
+                            )}
+                            <span className="bg-muted px-2 py-0.5 rounded text-muted-foreground border border-border">
+                              Mode: {tpl.default_delivery_mode}
+                            </span>
+                          </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
-                          <span className="text-muted-foreground block text-[11px]">Duration</span>
-                          <span className="font-semibold text-foreground">{tpl.default_duration_minutes} mins</span>
-                        </div>
-                        <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
-                          <span className="text-muted-foreground block text-[11px]">Capacity</span>
-                          <span className="font-semibold text-foreground">
-                            {tpl.default_capacity} (WL: {tpl.default_waitlist_capacity ?? 0} · Trial: {tpl.default_trial_capacity ?? 0})
-                          </span>
-                        </div>
-                      </div>
+                          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                              <span className="text-muted-foreground block text-[11px]">
+                                Duration
+                              </span>
+                              <span className="font-semibold text-foreground">
+                                {tpl.default_duration_minutes} mins
+                              </span>
+                            </div>
+                            <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                              <span className="text-muted-foreground block text-[11px]">
+                                Capacity
+                              </span>
+                              <span className="font-semibold text-foreground">
+                                {tpl.default_capacity} (WL: {tpl.default_waitlist_capacity ?? 0} ·
+                                Trial: {tpl.default_trial_capacity ?? 0})
+                              </span>
+                            </div>
+                          </div>
 
-                      {tpl.branch_availabilities && tpl.branch_availabilities.filter((a: any) => a.capacity_override != null).length > 0 && (
-                        <div className="mt-2.5 p-2 bg-primary/5 rounded-lg border border-primary/15 text-[11px]">
-                          <span className="text-muted-foreground font-medium block mb-1">Branch Capacities (Beds):</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {tpl.branch_availabilities
-                              .filter((a: any) => a.capacity_override != null)
-                              .map((a: any) => (
-                                <span key={a.id || a.branch} className="bg-background/80 border border-border px-1.5 py-0.5 rounded text-[10px] font-medium text-foreground">
-                                  {a.branch_name || 'Branch'}: <strong className="text-primary">{a.capacity_override} beds</strong>
+                          {tpl.branch_availabilities &&
+                            tpl.branch_availabilities.filter(
+                              (a: any) => a.capacity_override != null,
+                            ).length > 0 && (
+                              <div className="mt-2.5 p-2 bg-primary/5 rounded-lg border border-primary/15 text-[11px]">
+                                <span className="text-muted-foreground font-medium block mb-1">
+                                  Branch Capacities (Beds):
                                 </span>
-                              ))}
+                                <div className="flex flex-wrap gap-1.5">
+                                  {tpl.branch_availabilities
+                                    .filter((a: any) => a.capacity_override != null)
+                                    .map((a: any) => (
+                                      <span
+                                        key={a.id || a.branch}
+                                        className="bg-background/80 border border-border px-1.5 py-0.5 rounded text-[10px] font-medium text-foreground"
+                                      >
+                                        {a.branch_name || "Branch"}:{" "}
+                                        <strong className="text-primary">
+                                          {a.capacity_override} beds
+                                        </strong>
+                                      </span>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedTemplateForAvail(tpl);
+                                setIsBranchAvailOpen(true);
+                              }}
+                              className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
+                            >
+                              <Building2 className="size-3" /> Branches
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedTemplateForPricing(tpl);
+                                setIsPricingOpen(true);
+                              }}
+                              className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
+                            >
+                              <DollarSign className="size-3" /> Pricing
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const tplAvails =
+                                    tpl.branch_availabilities &&
+                                    tpl.branch_availabilities.length > 0
+                                      ? tpl.branch_availabilities
+                                      : allBranchAvailabilities.filter((ba: any) => {
+                                          const tplId =
+                                            ba.class_template_id ||
+                                            (typeof ba.class_template === "object" &&
+                                            ba.class_template
+                                              ? ba.class_template.id
+                                              : ba.class_template);
+                                          return String(tplId) === String(tpl.id);
+                                        });
+                                  setEditingTemplate(tpl);
+                                  setTemplateForm({
+                                    name: tpl.name,
+                                    category: tpl.category || "",
+                                    program: tpl.program || "",
+                                    description: tpl.description || "",
+                                    default_duration_minutes: tpl.default_duration_minutes,
+                                    default_capacity: tpl.default_capacity,
+                                    default_trial_capacity: tpl.default_trial_capacity || 0,
+                                    default_waitlist_capacity: tpl.default_waitlist_capacity || 0,
+                                    default_delivery_mode: tpl.default_delivery_mode,
+                                    allow_booking: tpl.allow_booking,
+                                    allow_trial: tpl.allow_trial,
+                                    allow_waitlist: tpl.allow_waitlist,
+                                    allow_reschedule: tpl.allow_reschedule,
+                                    image_url: tpl.image_url || "",
+                                    status: tpl.status,
+                                    branch_capacities: buildInitialBranchCapacities(tplAvails),
+                                  });
+                                  setIsCreateTemplateOpen(true);
+                                }}
+                                className="text-xs gap-1 h-7"
+                              >
+                                <Edit2 className="size-3" /> Edit
+                              </Button>
+                            )}
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                variant={tpl.status === "ACTIVE" ? "ghost" : "outline"}
+                                onClick={() =>
+                                  toggleTemplateStatusMutation.mutate({
+                                    id: tpl.id,
+                                    status: tpl.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+                                  })
+                                }
+                                className={`text-xs h-7 ${tpl.status === "ACTIVE" ? "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10" : "text-emerald-600 hover:text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"}`}
+                              >
+                                {tpl.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-border flex flex-wrap items-center justify-between gap-1.5 text-xs">
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedTemplateForAvail(tpl);
-                            setIsBranchAvailOpen(true);
-                          }}
-                          className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
-                        >
-                          <Building2 className="size-3" /> Branches
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedTemplateForPricing(tpl);
-                            setIsPricingOpen(true);
-                          }}
-                          className="text-xs gap-1 h-7 text-muted-foreground hover:text-foreground"
-                        >
-                          <DollarSign className="size-3" /> Pricing
-                        </Button>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              const tplAvails = (tpl.branch_availabilities && tpl.branch_availabilities.length > 0)
-                                ? tpl.branch_availabilities
-                                : allBranchAvailabilities.filter((ba: any) => {
-                                    const tplId = ba.class_template_id || (typeof ba.class_template === 'object' && ba.class_template ? ba.class_template.id : ba.class_template);
-                                    return String(tplId) === String(tpl.id);
-                                  });
-                              setEditingTemplate(tpl);
-                              setTemplateForm({
-                                name: tpl.name,
-                                category: tpl.category || '',
-                                program: tpl.program || '',
-                                description: tpl.description || '',
-                                default_duration_minutes: tpl.default_duration_minutes,
-                                default_capacity: tpl.default_capacity,
-                                default_trial_capacity: tpl.default_trial_capacity || 0,
-                                default_waitlist_capacity: tpl.default_waitlist_capacity || 0,
-                                default_delivery_mode: tpl.default_delivery_mode,
-                                allow_booking: tpl.allow_booking,
-                                allow_trial: tpl.allow_trial,
-                                allow_waitlist: tpl.allow_waitlist,
-                                allow_reschedule: tpl.allow_reschedule,
-                                image_url: tpl.image_url || '',
-                                status: tpl.status,
-                                branch_capacities: buildInitialBranchCapacities(tplAvails),
-                              });
-                              setIsCreateTemplateOpen(true);
-                            }}
-                            className="text-xs gap-1 h-7"
-                          >
-                            <Edit2 className="size-3" /> Edit
-                          </Button>
-                        )}
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            variant={tpl.status === 'ACTIVE' ? 'ghost' : 'outline'}
-                            onClick={() => toggleTemplateStatusMutation.mutate({
-                              id: tpl.id,
-                              status: tpl.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                            })}
-                            className={`text-xs h-7 ${tpl.status === 'ACTIVE' ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10' : 'text-emerald-600 hover:text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10 font-medium'}`}
-                          >
-                            {tpl.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
               </div>
             )}
           </div>
         )}
 
         {/* TAB: RECURRING RULES */}
-        {primaryTab === 'rules' && (
+        {primaryTab === "rules" && (
           <div className="space-y-4 mt-4">
             <div className="space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
-                  <div className="flex flex-wrap items-center gap-2 flex-1">
-                    <div className="relative min-w-[200px] flex-1 max-w-xs">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search rules by class, type, or branch..."
+                      value={searchTerm}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+
+                  {/* Date Filter Mode Tabs for Recurring Rules */}
+                  <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setRuleDateFilterMode("all")}
+                      className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                        ruleDateFilterMode === "all"
+                          ? "bg-background text-foreground shadow-2xs font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      All Dates
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRuleDateFilterMode("today")}
+                      className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                        ruleDateFilterMode === "today"
+                          ? "bg-background text-foreground shadow-2xs font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRuleDateFilterMode("custom")}
+                      className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                        ruleDateFilterMode === "custom"
+                          ? "bg-background text-foreground shadow-2xs font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Pick Date
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRuleDateFilterMode("range")}
+                      className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                        ruleDateFilterMode === "range"
+                          ? "bg-background text-foreground shadow-2xs font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Date Range
+                    </button>
+                  </div>
+
+                  {/* Single Date Picker (checks validity window + weekday recurrence) */}
+                  {ruleDateFilterMode === "custom" && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
                       <Input
-                        type="text"
-                        placeholder="Search rules by class, type, or branch..."
-                        value={searchTerm}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                        className="h-8 pl-8 text-xs bg-background"
+                        type="date"
+                        value={ruleSelectedDate}
+                        onChange={(e) => setRuleSelectedDate(e.target.value)}
+                        className="h-8 bg-background w-auto text-xs"
+                        title="Filter recurring rules active on this date & weekday"
                       />
                     </div>
+                  )}
 
-                    {/* Date Filter Mode Tabs for Recurring Rules */}
-                    <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setRuleDateFilterMode('all')}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          ruleDateFilterMode === 'all'
-                            ? 'bg-background text-foreground shadow-2xs font-semibold'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        All Dates
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRuleDateFilterMode('today')}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          ruleDateFilterMode === 'today'
-                            ? 'bg-background text-foreground shadow-2xs font-semibold'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        Today
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRuleDateFilterMode('custom')}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          ruleDateFilterMode === 'custom'
-                            ? 'bg-background text-foreground shadow-2xs font-semibold'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        Pick Date
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRuleDateFilterMode('range')}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                          ruleDateFilterMode === 'range'
-                            ? 'bg-background text-foreground shadow-2xs font-semibold'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        Date Range
-                      </button>
+                  {/* Date Range Pickers */}
+                  {ruleDateFilterMode === "range" && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Input
+                        type="date"
+                        value={ruleFromDate}
+                        onChange={(e) => setRuleFromDate(e.target.value)}
+                        className="h-8 bg-background w-auto text-xs"
+                        title="Valid From"
+                      />
+                      <span className="text-xs text-muted-foreground">to</span>
+                      <Input
+                        type="date"
+                        value={ruleToDate}
+                        onChange={(e) => setRuleToDate(e.target.value)}
+                        className="h-8 bg-background w-auto text-xs"
+                        title="Valid Until"
+                      />
                     </div>
-
-                    {/* Single Date Picker (checks validity window + weekday recurrence) */}
-                    {ruleDateFilterMode === 'custom' && (
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
-                        <Input
-                          type="date"
-                          value={ruleSelectedDate}
-                          onChange={(e) => setRuleSelectedDate(e.target.value)}
-                          className="h-8 bg-background w-auto text-xs"
-                          title="Filter recurring rules active on this date & weekday"
-                        />
-                      </div>
-                    )}
-
-                    {/* Date Range Pickers */}
-                    {ruleDateFilterMode === 'range' && (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Input
-                          type="date"
-                          value={ruleFromDate}
-                          onChange={(e) => setRuleFromDate(e.target.value)}
-                          className="h-8 bg-background w-auto text-xs"
-                          title="Valid From"
-                        />
-                        <span className="text-xs text-muted-foreground">to</span>
-                        <Input
-                          type="date"
-                          value={ruleToDate}
-                          onChange={(e) => setRuleToDate(e.target.value)}
-                          className="h-8 bg-background w-auto text-xs"
-                          title="Valid Until"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Class Type Filter */}
-                    <select
-                      value={selectedCategoryFilter}
-                      onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                      title="Filter by class type (Pilates / Bootcamp)"
-                    >
-                      <option value="ALL">All Class Types</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-
-                    {/* Day of Week Filter */}
-                    <select
-                      value={ruleDayOfWeek}
-                      onChange={(e) => setRuleDayOfWeek(e.target.value)}
-                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                      title="Filter by recurring weekday"
-                    >
-                      <option value="ALL">All Days</option>
-                      <option value="1">Monday</option>
-                      <option value="2">Tuesday</option>
-                      <option value="3">Wednesday</option>
-                      <option value="4">Thursday</option>
-                      <option value="5">Friday</option>
-                      <option value="6">Saturday</option>
-                      <option value="7">Sunday</option>
-                    </select>
-
-                    <select
-                      value={selectedBranchFilter}
-                      onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                    >
-                      <option value="">All Branches</option>
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={ruleStatusFilter}
-                      onChange={(e) => setRuleStatusFilter(e.target.value)}
-                      className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                      <option value="ALL">All Statuses</option>
-                    </select>
-                  </div>
+                  )}
                 </div>
 
-                {loadingRules ? (
-                  <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
-                    <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
-                    Loading recurring schedule rules...
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Class Type Filter */}
+                  <select
+                    value={selectedCategoryFilter}
+                    onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    title="Filter by class type (Pilates / Bootcamp)"
+                  >
+                    <option value="ALL">All Class Types</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Day of Week Filter */}
+                  <select
+                    value={ruleDayOfWeek}
+                    onChange={(e) => setRuleDayOfWeek(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                    title="Filter by recurring weekday"
+                  >
+                    <option value="ALL">All Days</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="7">Sunday</option>
+                  </select>
+
+                  <select
+                    value={selectedBranchFilter}
+                    onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={ruleStatusFilter}
+                    onChange={(e) => setRuleStatusFilter(e.target.value)}
+                    className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="ALL">All Statuses</option>
+                  </select>
+                </div>
+              </div>
+
+              {loadingRules ? (
+                <div className="p-12 text-center text-muted-foreground text-sm bg-card border border-border rounded-xl">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                  Loading recurring schedule rules...
+                </div>
+              ) : filteredRules.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
+                  <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                    <RotateCw className="size-6" />
                   </div>
-                ) : filteredRules.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border bg-card p-8 sm:p-12 text-center shadow-xs">
-                    <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
-                      <RotateCw className="size-6" />
-                    </div>
-                    <h3 className="text-base font-semibold text-foreground">
-                      {ruleStatusFilter === 'INACTIVE' ? 'No Inactive Schedule Rules' : 'No Recurring Schedule Rules'}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      {ruleStatusFilter === 'INACTIVE'
-                        ? 'There are currently no deactivated or inactive recurring schedule rules.'
-                        : 'Configure recurring weekly timetable patterns to automatically populate occurrence slots.'}
-                    </p>
-                    {canCreate && ruleStatusFilter !== 'INACTIVE' && (
-                      <Button size="sm" onClick={openNewRuleModal}>
-                        <Plus className="size-3.5 mr-1" /> New Recurring Rule
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredRules.map((rule) => {
-                  const matchedTpl = templates.find((t) => t.id === rule.class_template);
-                  const className = rule.class_name || rule.template_name || matchedTpl?.name || 'Class Schedule';
-                  const branchName = rule.branch_name || (branches.find((b) => b.id === rule.branch)?.name) || 'Studio Branch';
-                  const categoryName = rule.category_name || matchedTpl?.category_name;
-                  const categoryCode = rule.category_code || matchedTpl?.category_code;
-                  const programName = rule.program_name || matchedTpl?.program_name;
+                  <h3 className="text-base font-semibold text-foreground">
+                    {ruleStatusFilter === "INACTIVE"
+                      ? "No Inactive Schedule Rules"
+                      : "No Recurring Schedule Rules"}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                    {ruleStatusFilter === "INACTIVE"
+                      ? "There are currently no deactivated or inactive recurring schedule rules."
+                      : "Configure recurring weekly timetable patterns to automatically populate occurrence slots."}
+                  </p>
+                  {canCreate && ruleStatusFilter !== "INACTIVE" && (
+                    <Button size="sm" onClick={openNewRuleModal}>
+                      <Plus className="size-3.5 mr-1" /> New Recurring Rule
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredRules.map((rule) => {
+                    const matchedTpl = templates.find((t) => t.id === rule.class_template);
+                    const className =
+                      rule.class_name || rule.template_name || matchedTpl?.name || "Class Schedule";
+                    const branchName =
+                      rule.branch_name ||
+                      branches.find((b) => b.id === rule.branch)?.name ||
+                      "Studio Branch";
+                    const categoryName = rule.category_name || matchedTpl?.category_name;
+                    const categoryCode = rule.category_code || matchedTpl?.category_code;
+                    const programName = rule.program_name || matchedTpl?.program_name;
 
-                  return (
-                    <div
-                      key={rule.id}
-                      className="bg-card border border-border/70 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs transition"
-                    >
-                      <div className="space-y-2.5">
-                        {/* Card Header */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                              {categoryName && (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] px-2 py-0 ${getCategoryBadgeStyle(categoryName, categoryCode)}`}
-                                >
-                                  {categoryName}
-                                </Badge>
-                              )}
-                              {programName && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/60 truncate max-w-[160px]">
-                                  {programName}
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-sm font-bold text-foreground truncate" title={className}>
-                              {className}
-                            </h4>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                              <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                              <span className="truncate font-medium text-foreground/80">{branchName}</span>
-                            </div>
-                          </div>
-                          <Badge
-                            variant={rule.status === 'ACTIVE' ? 'default' : 'secondary'}
-                            className={rule.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] shrink-0' : 'text-[10px] shrink-0'}
-                          >
-                            {rule.status}
-                          </Badge>
-                        </div>
-
-                        {/* Details Block */}
-                        <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 space-y-2 text-xs">
-                          {/* Time Window */}
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span className="flex items-center gap-1.5 font-semibold text-foreground font-mono">
-                              <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
-                              {rule.start_time ? formatTime12h(rule.start_time) : '--'} – {rule.end_time ? formatTime12h(rule.end_time) : '--'}
-                            </span>
-                          </div>
-
-                          {/* Weekdays */}
-                          <div className="pt-0.5">
-                            <div className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Schedule Days</div>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {(() => {
-                                const ruleDays = normalizeDaysOfWeek(rule.days_of_week);
-                                return [1, 2, 3, 4, 5, 6, 7].map((d) => {
-                                  const isActive = ruleDays.includes(d);
-                                  return (
-                                    <span
-                                      key={d}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                        isActive
-                                          ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                                          : 'bg-muted/30 text-muted-foreground/40 border border-transparent'
-                                      }`}
-                                    >
-                                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]}
-                                    </span>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Validity & Capacity */}
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
-                            <span className="flex items-center gap-1 truncate">
-                              <Calendar className="w-3 h-3 shrink-0" />
-                              {rule.valid_from} to {rule.valid_until || 'Ongoing'}
-                            </span>
-                            {rule.capacity_override ? (
-                              <span className="font-mono flex items-center gap-1 shrink-0">
-                                <Users className="w-3 h-3" />
-                                {rule.capacity_override} Cap
-                                {(rule.waitlist_capacity_override != null || rule.trial_capacity_override != null) && (
-                                  <span className="text-[10px] text-muted-foreground font-normal">
-                                    ({[
-                                      rule.waitlist_capacity_override != null ? `WL: ${rule.waitlist_capacity_override}` : null,
-                                      rule.trial_capacity_override != null ? `Trial: ${rule.trial_capacity_override}` : null,
-                                    ].filter(Boolean).join(' · ')})
+                    return (
+                      <div
+                        key={rule.id}
+                        className="bg-card border border-border/70 hover:border-primary/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs transition"
+                      >
+                        <div className="space-y-2.5">
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                                {categoryName && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-2 py-0 ${getCategoryBadgeStyle(categoryName, categoryCode)}`}
+                                  >
+                                    {categoryName}
+                                  </Badge>
+                                )}
+                                {programName && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/60 truncate max-w-[160px]">
+                                    {programName}
                                   </span>
                                 )}
+                              </div>
+                              <h4
+                                className="text-sm font-bold text-foreground truncate"
+                                title={className}
+                              >
+                                {className}
+                              </h4>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                                <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                                <span className="truncate font-medium text-foreground/80">
+                                  {branchName}
+                                </span>
+                              </div>
+                            </div>
+                            <Badge
+                              variant={rule.status === "ACTIVE" ? "default" : "secondary"}
+                              className={
+                                rule.status === "ACTIVE"
+                                  ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] shrink-0"
+                                  : "text-[10px] shrink-0"
+                              }
+                            >
+                              {rule.status}
+                            </Badge>
+                          </div>
+
+                          {/* Details Block */}
+                          <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 space-y-2 text-xs">
+                            {/* Time Window */}
+                            <div className="flex items-center justify-between text-muted-foreground">
+                              <span className="flex items-center gap-1.5 font-semibold text-foreground font-mono">
+                                <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+                                {rule.start_time ? formatTime12h(rule.start_time) : "--"} –{" "}
+                                {rule.end_time ? formatTime12h(rule.end_time) : "--"}
                               </span>
-                            ) : null}
+                            </div>
+
+                            {/* Weekdays */}
+                            <div className="pt-0.5">
+                              <div className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">
+                                Schedule Days
+                              </div>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {(() => {
+                                  const ruleDays = normalizeDaysOfWeek(rule.days_of_week);
+                                  return [1, 2, 3, 4, 5, 6, 7].map((d) => {
+                                    const isActive = ruleDays.includes(d);
+                                    return (
+                                      <span
+                                        key={d}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                          isActive
+                                            ? "bg-primary/15 text-primary font-semibold border border-primary/30"
+                                            : "bg-muted/30 text-muted-foreground/40 border border-transparent"
+                                        }`}
+                                      >
+                                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][d - 1]}
+                                      </span>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+
+                            {/* Validity & Capacity */}
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                              <span className="flex items-center gap-1 truncate">
+                                <Calendar className="w-3 h-3 shrink-0" />
+                                {rule.valid_from} to {rule.valid_until || "Ongoing"}
+                              </span>
+                              {rule.capacity_override ? (
+                                <span className="font-mono flex items-center gap-1 shrink-0">
+                                  <Users className="w-3 h-3" />
+                                  {rule.capacity_override} Cap
+                                  {(rule.waitlist_capacity_override != null ||
+                                    rule.trial_capacity_override != null) && (
+                                    <span className="text-[10px] text-muted-foreground font-normal">
+                                      (
+                                      {[
+                                        rule.waitlist_capacity_override != null
+                                          ? `WL: ${rule.waitlist_capacity_override}`
+                                          : null,
+                                        rule.trial_capacity_override != null
+                                          ? `Trial: ${rule.trial_capacity_override}`
+                                          : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                      )
+                                    </span>
+                                  )}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Card Actions Bar */}
-                      <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1 flex-wrap">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setAuditRule(rule)}
-                            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
-                            title="View audit logs"
-                          >
-                            <Activity className="w-3 h-3 text-indigo-500" />
-                            <span>Audit</span>
-                          </Button>
-
-                          {canCreate && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedRuleForGen(rule);
-                                setGenFromDate(selectedDate);
-                                setIsGenerateOccurrencesOpen(true);
-                              }}
-                              className="h-6 text-[11px] px-2 text-primary hover:text-primary/80 gap-1 font-medium"
-                              title="Generate sessions"
-                            >
-                              <Calendar className="w-3 h-3" />
-                              <span>Generate</span>
-                            </Button>
-                          )}
-                        </div>
-
-                        {canEdit && (
+                        {/* Card Actions Bar */}
+                        <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1 flex-wrap">
                           <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
-                              size="icon"
-                              onClick={() => openEditRuleModal(rule)}
-                              className="w-6 h-6 text-muted-foreground hover:text-foreground"
-                              title="Edit schedule rule"
+                              size="sm"
+                              onClick={() => setAuditRule(rule)}
+                              className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground gap-1"
+                              title="View audit logs"
                             >
-                              <Pencil className="w-3.5 h-3.5" />
+                              <Activity className="w-3 h-3 text-indigo-500" />
+                              <span>Audit</span>
                             </Button>
 
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={rule.status === 'ACTIVE'}
-                              onClick={() => toggleRuleStatusMutation.mutate({
-                                id: rule.id,
-                                status: rule.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                              })}
-                              className={`group relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs select-none h-5 w-11 ${
-                                rule.status === 'ACTIVE' ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-rose-600 dark:bg-rose-500'
-                              }`}
-                              title={rule.status === 'ACTIVE' ? 'Active (ON) - click to deactivate' : 'Inactive (OFF) - click to activate'}
-                            >
-                              <span className="sr-only">{rule.status === 'ACTIVE' ? 'Active' : 'Inactive'}</span>
-                              <span
-                                aria-hidden="true"
-                                className={`pointer-events-none inline-flex items-center justify-center transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out font-black text-[8px] uppercase tracking-tighter h-4 w-4 ${
-                                  rule.status === 'ACTIVE' ? 'translate-x-6 text-emerald-700' : 'translate-x-0 text-rose-700'
-                                }`}
+                            {canCreate && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedRuleForGen(rule);
+                                  setGenFromDate(selectedDate);
+                                  setIsGenerateOccurrencesOpen(true);
+                                }}
+                                className="h-6 text-[11px] px-2 text-primary hover:text-primary/80 gap-1 font-medium"
+                                title="Generate sessions"
                               >
-                                {rule.status === 'ACTIVE' ? 'ON' : 'OFF'}
-                              </span>
-                            </button>
+                                <Calendar className="w-3 h-3" />
+                                <span>Generate</span>
+                              </Button>
+                            )}
                           </div>
-                        )}
+
+                          {canEdit && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditRuleModal(rule)}
+                                className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                                title="Edit schedule rule"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={rule.status === "ACTIVE"}
+                                onClick={() =>
+                                  toggleRuleStatusMutation.mutate({
+                                    id: rule.id,
+                                    status: rule.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+                                  })
+                                }
+                                className={`group relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs select-none h-5 w-11 ${
+                                  rule.status === "ACTIVE"
+                                    ? "bg-emerald-600 dark:bg-emerald-500"
+                                    : "bg-rose-600 dark:bg-rose-500"
+                                }`}
+                                title={
+                                  rule.status === "ACTIVE"
+                                    ? "Active (ON) - click to deactivate"
+                                    : "Inactive (OFF) - click to activate"
+                                }
+                              >
+                                <span className="sr-only">
+                                  {rule.status === "ACTIVE" ? "Active" : "Inactive"}
+                                </span>
+                                <span
+                                  aria-hidden="true"
+                                  className={`pointer-events-none inline-flex items-center justify-center transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out font-black text-[8px] uppercase tracking-tighter h-4 w-4 ${
+                                    rule.status === "ACTIVE"
+                                      ? "translate-x-6 text-emerald-700"
+                                      : "translate-x-0 text-rose-700"
+                                  }`}
+                                >
+                                  {rule.status === "ACTIVE" ? "ON" : "OFF"}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
 
-            {/* Recurring Rules Pagination Controls */}
-            {!loadingRules && totalRulesCount > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card px-4 py-3 rounded-xl border border-border shadow-xs">
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span>
-                    Showing{' '}
-                    <span className="font-semibold text-foreground">
-                      {Math.min((rulesPage - 1) * rulesPageSize + 1, totalRulesCount)}
+              {/* Recurring Rules Pagination Controls */}
+              {!loadingRules && totalRulesCount > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card px-4 py-3 rounded-xl border border-border shadow-xs">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span>
+                      Showing{" "}
+                      <span className="font-semibold text-foreground">
+                        {Math.min((rulesPage - 1) * rulesPageSize + 1, totalRulesCount)}
+                      </span>
+                      –
+                      <span className="font-semibold text-foreground">
+                        {Math.min(rulesPage * rulesPageSize, totalRulesCount)}
+                      </span>{" "}
+                      of <span className="font-semibold text-foreground">{totalRulesCount}</span>{" "}
+                      rules
                     </span>
-                    –
-                    <span className="font-semibold text-foreground">
-                      {Math.min(rulesPage * rulesPageSize, totalRulesCount)}
-                    </span>{' '}
-                    of <span className="font-semibold text-foreground">{totalRulesCount}</span> rules
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span>Per page:</span>
-                    <select
-                      value={rulesPageSize}
-                      onChange={(e) => {
-                        setRulesPageSize(Number(e.target.value));
-                        setRulesPage(1);
-                      }}
-                      className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      {[9, 18, 36, 72].map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <span>Per page:</span>
+                      <select
+                        value={rulesPageSize}
+                        onChange={(e) => {
+                          setRulesPageSize(Number(e.target.value));
+                          setRulesPage(1);
+                        }}
+                        className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        {[9, 18, 36, 72].map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRulesPage((p) => Math.max(1, p - 1))}
-                    disabled={rulesPage <= 1 || loadingRules}
-                    className="h-7 px-2.5 text-xs gap-1"
-                  >
-                    <ChevronLeft className="size-3.5" />
-                    Prev
-                  </Button>
-                  <div className="flex items-center gap-1 px-1">
-                    {Array.from({ length: Math.min(5, totalRulesPages) }, (_, idx) => {
-                      let pageNum = idx + 1;
-                      if (totalRulesPages > 5) {
-                        const start = Math.max(1, Math.min(rulesPage - 2, totalRulesPages - 4));
-                        pageNum = start + idx;
-                      }
-                      return (
-                        <button
-                          key={pageNum}
-                          type="button"
-                          onClick={() => setRulesPage(pageNum)}
-                          className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                            rulesPage === pageNum
-                              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRulesPage((p) => Math.max(1, p - 1))}
+                      disabled={rulesPage <= 1 || loadingRules}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Prev
+                    </Button>
+                    <div className="flex items-center gap-1 px-1">
+                      {Array.from({ length: Math.min(5, totalRulesPages) }, (_, idx) => {
+                        let pageNum = idx + 1;
+                        if (totalRulesPages > 5) {
+                          const start = Math.max(1, Math.min(rulesPage - 2, totalRulesPages - 4));
+                          pageNum = start + idx;
+                        }
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setRulesPage(pageNum)}
+                            className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                              rulesPage === pageNum
+                                ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRulesPage((p) => Math.min(totalRulesPages, p + 1))}
+                      disabled={rulesPage >= totalRulesPages || loadingRules}
+                      className="h-7 px-2.5 text-xs gap-1"
+                    >
+                      Next
+                      <ChevronRight className="size-3.5" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRulesPage((p) => Math.min(totalRulesPages, p + 1))}
-                    disabled={rulesPage >= totalRulesPages || loadingRules}
-                    className="h-7 px-2.5 text-xs gap-1"
-                  >
-                    Next
-                    <ChevronRight className="size-3.5" />
-                  </Button>
                 </div>
-              </div>
-            )}
+              )}
             </div>
           </div>
         )}
 
         {/* TAB: SESSIONS (Class Occurrences) */}
-        {primaryTab === 'sessions' && !showTrainerCheckins && !showContentStudio && (
+        {primaryTab === "sessions" && !showTrainerCheckins && !showContentStudio && (
           <div className="space-y-4 mt-4">
             {/* Filter & Control Bar */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
@@ -3079,8 +3661,8 @@ export const ClassesWorkspace: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        handleSearchChange('');
-                        setDebouncedSearch('');
+                        handleSearchChange("");
+                        setDebouncedSearch("");
                       }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
                       title="Clear search"
@@ -3095,55 +3677,55 @@ export const ClassesWorkspace: React.FC = () => {
                 <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs overflow-x-auto no-scrollbar max-w-full shrink-0">
                   <button
                     type="button"
-                    onClick={() => setDateFilterMode('today')}
+                    onClick={() => setDateFilterMode("today")}
                     className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
-                      dateFilterMode === 'today'
-                        ? 'bg-background text-foreground shadow-2xs font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
+                      dateFilterMode === "today"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     Today ({todayLabel})
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDateFilterMode('week')}
+                    onClick={() => setDateFilterMode("week")}
                     className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
-                      dateFilterMode === 'week'
-                        ? 'bg-background text-foreground shadow-2xs font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
+                      dateFilterMode === "week"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     Next 7 Days
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDateFilterMode('custom')}
+                    onClick={() => setDateFilterMode("custom")}
                     className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
-                      dateFilterMode === 'custom'
-                        ? 'bg-background text-foreground shadow-2xs font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
+                      dateFilterMode === "custom"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     Custom Date
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDateFilterMode('range')}
+                    onClick={() => setDateFilterMode("range")}
                     className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
-                      dateFilterMode === 'range'
-                        ? 'bg-background text-foreground shadow-2xs font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
+                      dateFilterMode === "range"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     Date Range
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDateFilterMode('all')}
+                    onClick={() => setDateFilterMode("all")}
                     className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer whitespace-nowrap ${
-                      dateFilterMode === 'all'
-                        ? 'bg-background text-foreground shadow-2xs font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
+                      dateFilterMode === "all"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     All Dates
@@ -3151,7 +3733,7 @@ export const ClassesWorkspace: React.FC = () => {
                 </div>
 
                 {/* Custom Date Input */}
-                {dateFilterMode === 'custom' && (
+                {dateFilterMode === "custom" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Calendar className="w-3.5 h-3.5 text-primary shrink-0 hidden sm:block" />
                     <Input
@@ -3164,13 +3746,13 @@ export const ClassesWorkspace: React.FC = () => {
                 )}
 
                 {/* Date Range Inputs */}
-                {dateFilterMode === 'range' && (
+                {dateFilterMode === "range" && (
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <Input
                       type="date"
                       value={sessionFromDate}
                       onChange={(e) => setSessionFromDate(e.target.value)}
-                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? 'border-destructive ring-1 ring-destructive/40' : ''}`}
+                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? "border-destructive ring-1 ring-destructive/40" : ""}`}
                       title="From Date"
                     />
                     <span className="text-xs text-muted-foreground">to</span>
@@ -3178,7 +3760,7 @@ export const ClassesWorkspace: React.FC = () => {
                       type="date"
                       value={sessionToDate}
                       onChange={(e) => setSessionToDate(e.target.value)}
-                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? 'border-destructive ring-1 ring-destructive/40' : ''}`}
+                      className={`h-8 bg-background w-auto text-xs ${isDateRangeInvalid ? "border-destructive ring-1 ring-destructive/40" : ""}`}
                       title="To Date"
                     />
                     {isDateRangeInvalid && (
@@ -3198,7 +3780,9 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="ALL">All Class Types</option>
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
 
@@ -3210,7 +3794,9 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="">All Branches</option>
                   {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
                   ))}
                 </select>
 
@@ -3224,7 +3810,8 @@ export const ClassesWorkspace: React.FC = () => {
                   <option value="ALL">All Trainers</option>
                   {trainers.map((tr: any) => {
                     const trId = tr.id || tr.trainer_profile_id;
-                    const trName = tr.trainer_name || tr.full_name || tr.name || tr.employee_name || 'Trainer';
+                    const trName =
+                      tr.trainer_name || tr.full_name || tr.name || tr.employee_name || "Trainer";
                     return (
                       <option key={trId} value={trId}>
                         {trName}
@@ -3252,16 +3839,20 @@ export const ClassesWorkspace: React.FC = () => {
                   className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium shrink-0"
                 >
                   <option value="ALL">All Statuses</option>
-                  {(metadata?.occurrence_statuses || [
-                    { value: 'SCHEDULED', label: 'Scheduled' },
-                    { value: 'OPEN', label: 'Open' },
-                    { value: 'FULL', label: 'Full' },
-                    { value: 'IN_PROGRESS', label: 'In Progress' },
-                    { value: 'COMPLETED', label: 'Completed' },
-                    { value: 'CANCELLED', label: 'Cancelled' },
-                    { value: 'DEACTIVATED', label: 'Deactivated' },
-                  ]).map((s: ClassesMetadataOption<string>) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
+                  {(
+                    metadata?.occurrence_statuses || [
+                      { value: "SCHEDULED", label: "Scheduled" },
+                      { value: "OPEN", label: "Open" },
+                      { value: "FULL", label: "Full" },
+                      { value: "IN_PROGRESS", label: "In Progress" },
+                      { value: "COMPLETED", label: "Completed" },
+                      { value: "CANCELLED", label: "Cancelled" },
+                      { value: "DEACTIVATED", label: "Deactivated" },
+                    ]
+                  ).map((s: ClassesMetadataOption<string>) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
                   ))}
                 </select>
 
@@ -3269,22 +3860,28 @@ export const ClassesWorkspace: React.FC = () => {
                 <div
                   className={`inline-flex items-center gap-1.5 bg-background border rounded-lg px-2.5 h-8 transition-colors shrink-0 ${
                     isTimeRangeInvalid
-                      ? 'border-destructive/60 bg-destructive/5 text-destructive ring-1 ring-destructive/40'
-                      : (sessionStartTime || sessionEndTime)
-                      ? 'border-primary/50 ring-1 ring-primary/20 bg-primary/[0.02]'
-                      : 'border-border hover:border-border/80'
+                      ? "border-destructive/60 bg-destructive/5 text-destructive ring-1 ring-destructive/40"
+                      : sessionStartTime || sessionEndTime
+                        ? "border-primary/50 ring-1 ring-primary/20 bg-primary/[0.02]"
+                        : "border-border hover:border-border/80"
                   }`}
                   title={
                     isTimeRangeInvalid
-                      ? 'End time must be after start time'
-                      : 'Filter classes by scheduled time window'
+                      ? "End time must be after start time"
+                      : "Filter classes by scheduled time window"
                   }
                 >
                   <button
                     type="button"
                     onClick={() => {
-                      const el = document.getElementById('session-start-time-input') as HTMLInputElement | null;
-                      try { el?.showPicker?.(); } catch { el?.focus(); }
+                      const el = document.getElementById(
+                        "session-start-time-input",
+                      ) as HTMLInputElement | null;
+                      try {
+                        el?.showPicker?.();
+                      } catch {
+                        el?.focus();
+                      }
                     }}
                     className="flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors"
                     title="Click to select start time"
@@ -3292,17 +3889,21 @@ export const ClassesWorkspace: React.FC = () => {
                     <Clock
                       className={`w-3.5 h-3.5 shrink-0 ${
                         isTimeRangeInvalid
-                          ? 'text-destructive'
-                          : (sessionStartTime || sessionEndTime)
-                          ? 'text-primary'
-                          : 'text-muted-foreground'
+                          ? "text-destructive"
+                          : sessionStartTime || sessionEndTime
+                            ? "text-primary"
+                            : "text-muted-foreground"
                       }`}
                     />
-                    <span className="text-[11px] font-medium hidden sm:inline text-muted-foreground">Time</span>
+                    <span className="text-[11px] font-medium hidden sm:inline text-muted-foreground">
+                      Time
+                    </span>
                   </button>
 
                   <div className="flex items-center gap-1 text-xs">
-                    <span className="text-[11px] text-muted-foreground font-medium select-none">From</span>
+                    <span className="text-[11px] text-muted-foreground font-medium select-none">
+                      From
+                    </span>
                     <input
                       id="session-start-time-input"
                       type="time"
@@ -3317,7 +3918,9 @@ export const ClassesWorkspace: React.FC = () => {
                       title="Filter Start Time (e.g. 06:00 AM)"
                       aria-label="Filter Start Time"
                     />
-                    <span className="text-[11px] text-muted-foreground font-medium select-none px-0.5">To</span>
+                    <span className="text-[11px] text-muted-foreground font-medium select-none px-0.5">
+                      To
+                    </span>
                     <input
                       id="session-end-time-input"
                       type="time"
@@ -3339,8 +3942,8 @@ export const ClassesWorkspace: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSessionStartTime('');
-                        setSessionEndTime('');
+                        setSessionStartTime("");
+                        setSessionEndTime("");
                       }}
                       className="text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
                       title="Clear time filter"
@@ -3378,9 +3981,9 @@ export const ClassesWorkspace: React.FC = () => {
                 <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
                   <Button
                     type="button"
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    variant={viewMode === "list" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => setViewMode('list')}
+                    onClick={() => setViewMode("list")}
                     className="h-7 px-2.5 text-xs font-semibold gap-1"
                     title="List View"
                   >
@@ -3389,9 +3992,9 @@ export const ClassesWorkspace: React.FC = () => {
                   </Button>
                   <Button
                     type="button"
-                    variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                    variant={viewMode === "cards" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => setViewMode('cards')}
+                    onClick={() => setViewMode("cards")}
                     className="h-7 px-2.5 text-xs font-semibold gap-1"
                     title="Cards View"
                   >
@@ -3432,15 +4035,19 @@ export const ClassesWorkspace: React.FC = () => {
                   )}
                 </div>
               </div>
-            ) : viewMode === 'list' ? (
+            ) : viewMode === "list" ? (
               /* ==================== LIST / TABLE VIEW ==================== */
               <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-border bg-muted/50 font-bold text-foreground">
-                        <th className="py-3 px-3 text-center w-20 min-w-[80px] whitespace-nowrap sticky left-0 z-20 bg-muted/95 backdrop-blur-xs">Actions</th>
-                        <th className="py-3 px-4 min-w-[150px] sticky left-20 z-20 bg-muted/95 backdrop-blur-xs">Class Session</th>
+                        <th className="py-3 px-3 text-center w-20 min-w-[80px] whitespace-nowrap sticky left-0 z-20 bg-muted/95 backdrop-blur-xs">
+                          Actions
+                        </th>
+                        <th className="py-3 px-4 min-w-[150px] sticky left-20 z-20 bg-muted/95 backdrop-blur-xs">
+                          Class Session
+                        </th>
                         <th className="py-3 px-4">Class Type</th>
                         <th className="py-3 px-4">Branch</th>
                         <th className="py-3 px-4">Date & Time</th>
@@ -3458,33 +4065,43 @@ export const ClassesWorkspace: React.FC = () => {
                         const categoryName = occ.category_name || matchedTpl?.category_name;
                         const categoryCode = occ.category_code || matchedTpl?.category_code;
                         const programName = occ.program_name || matchedTpl?.program_name;
-                        const isCompleted = occ.status === 'COMPLETED';
-                        const isCancelled = occ.status === 'CANCELLED';
-                        const isDeactivated = occ.status === 'DEACTIVATED';
-                        const isInProgress = occ.status === 'IN_PROGRESS';
-                        const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
+                        const isCompleted = occ.status === "COMPLETED";
+                        const isCancelled = occ.status === "CANCELLED";
+                        const isDeactivated = occ.status === "DEACTIVATED";
+                        const isInProgress = occ.status === "IN_PROGRESS";
+                        const isFull =
+                          occ.status === "FULL" || (occ.booking_count ?? 0) >= occ.capacity;
 
-                        const isCheckedIn = !isCancelled && !isDeactivated && Boolean(
-                          occ.trainer_checked_in ||
-                          occ.trainer_check_in_details?.checked_in ||
-                          (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
-                          (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
-                        );
+                        const isCheckedIn =
+                          !isCancelled &&
+                          !isDeactivated &&
+                          Boolean(
+                            occ.trainer_checked_in ||
+                            occ.trainer_check_in_details?.checked_in ||
+                            (occ.trainers &&
+                              occ.trainers.some((t: any) => t.status === "CONFIRMED")) ||
+                            (occ.assigned_trainers &&
+                              occ.assigned_trainers.some((t: any) => t.status === "CONFIRMED")),
+                          );
 
-                        const allTrainers = (isCancelled || isDeactivated)
-                          ? []
-                          : [
-                              ...(occ.trainers || []),
-                              ...(occ.assigned_trainers || []),
-                            ].filter((t: any) => t.status !== 'CANCELLED');
+                        const allTrainers =
+                          isCancelled || isDeactivated
+                            ? []
+                            : [...(occ.trainers || []), ...(occ.assigned_trainers || [])].filter(
+                                (t: any) => t.status !== "CANCELLED",
+                              );
                         const hasTrainer = allTrainers.length > 0;
 
                         const startTimeFormatted = occ.start_time
                           ? formatTime12h(occ.start_time)
-                          : (occ.start_at ? formatTime12h(occ.start_at) : '');
+                          : occ.start_at
+                            ? formatTime12h(occ.start_at)
+                            : "";
                         const endTimeFormatted = occ.end_time
                           ? formatTime12h(occ.end_time)
-                          : (occ.end_at ? formatTime12h(occ.end_at) : '');
+                          : occ.end_at
+                            ? formatTime12h(occ.end_at)
+                            : "";
 
                         const bookedCount = occ.booking_count ?? 0;
                         const waitlistCount = occ.waitlist_count ?? 0;
@@ -3495,17 +4112,20 @@ export const ClassesWorkspace: React.FC = () => {
                             onClick={() => setAttendanceModalOccurrence(occ)}
                             className={`transition-colors cursor-pointer group ${
                               isCancelled
-                                ? 'bg-rose-500/[0.04] dark:bg-rose-950/20 hover:bg-rose-500/10 border-l-4 border-l-rose-500'
+                                ? "bg-rose-500/[0.04] dark:bg-rose-950/20 hover:bg-rose-500/10 border-l-4 border-l-rose-500"
                                 : isDeactivated
-                                ? 'bg-amber-500/[0.04] dark:bg-amber-950/20 hover:bg-amber-500/10 border-l-4 border-l-amber-500'
-                                : isInProgress
-                                ? 'bg-blue-500/[0.04] dark:bg-blue-950/20 hover:bg-blue-500/10 border-l-4 border-l-blue-500'
-                                : 'hover:bg-muted/60'
+                                  ? "bg-amber-500/[0.04] dark:bg-amber-950/20 hover:bg-amber-500/10 border-l-4 border-l-amber-500"
+                                  : isInProgress
+                                    ? "bg-blue-500/[0.04] dark:bg-blue-950/20 hover:bg-blue-500/10 border-l-4 border-l-blue-500"
+                                    : "hover:bg-muted/60"
                             }`}
                             title="Click row to view class details, workout video, and roster"
                           >
                             {/* Column 1: Upfront Cancel/Reactivate Toggle and Edit Actions */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap sticky left-0 z-10 bg-card group-hover:bg-muted/90 transition-colors" onClick={(e) => e.stopPropagation()}>
+                            <td
+                              className="py-3 px-3 text-center whitespace-nowrap sticky left-0 z-10 bg-card group-hover:bg-muted/90 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <div className="flex items-center justify-center gap-1.5">
                                 {/* Class Active / Cancel Toggle Switch - Placed upfront on the far left before Edit */}
                                 {canCancel && (
@@ -3514,12 +4134,12 @@ export const ClassesWorkspace: React.FC = () => {
                                     onClick={(e) => e.stopPropagation()}
                                     title={
                                       isCompleted
-                                        ? 'Class session completed'
+                                        ? "Class session completed"
                                         : isCancelled
-                                        ? 'Class cancelled — Toggle to reactivate'
-                                        : isDeactivated
-                                        ? 'Class deactivated — Toggle to reactivate'
-                                        : 'Class active — Toggle to cancel'
+                                          ? "Class cancelled — Toggle to reactivate"
+                                          : isDeactivated
+                                            ? "Class deactivated — Toggle to reactivate"
+                                            : "Class active — Toggle to cancel"
                                     }
                                   >
                                     <Switch
@@ -3534,7 +4154,11 @@ export const ClassesWorkspace: React.FC = () => {
                                         }
                                       }}
                                       className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-rose-500/80 cursor-pointer h-4 w-7 sm:h-5 sm:w-9"
-                                      aria-label={isCancelled ? 'Cancelled class - toggle to reactivate' : 'Active class - toggle to cancel'}
+                                      aria-label={
+                                        isCancelled
+                                          ? "Cancelled class - toggle to reactivate"
+                                          : "Active class - toggle to cancel"
+                                      }
                                     />
                                   </div>
                                 )}
@@ -3558,11 +4182,16 @@ export const ClassesWorkspace: React.FC = () => {
                             {/* Class Session Info */}
                             <td className="py-3 px-4 min-w-[150px] sticky left-20 z-10 bg-card group-hover:bg-muted/90 transition-colors">
                               <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
-                                <span>{occ.template_name || occ.class_name || 'Class Session'}</span>
+                                <span>
+                                  {occ.template_name || occ.class_name || "Class Session"}
+                                </span>
                               </div>
                               <div className="flex items-center gap-1.5 mt-1">
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium bg-primary/5 text-primary border-primary/20">
-                                  {occ.delivery_mode || 'OFFLINE'}
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1.5 py-0 font-medium bg-primary/5 text-primary border-primary/20"
+                                >
+                                  {occ.delivery_mode || "OFFLINE"}
                                 </Badge>
                                 {(occ as any).active_content?.title && (
                                   <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate max-w-[140px]">
@@ -3598,7 +4227,9 @@ export const ClassesWorkspace: React.FC = () => {
                             <td className="py-3 px-4">
                               <span className="inline-flex items-center gap-1 font-medium text-foreground text-xs">
                                 <MapPin className="size-3 text-primary shrink-0" />
-                                <span className="truncate max-w-[150px]">{occ.branch_name || 'Main Branch'}</span>
+                                <span className="truncate max-w-[150px]">
+                                  {occ.branch_name || "Main Branch"}
+                                </span>
                               </span>
                             </td>
 
@@ -3619,24 +4250,40 @@ export const ClassesWorkspace: React.FC = () => {
                               {hasTrainer ? (
                                 <div className="space-y-0.5">
                                   {allTrainers.slice(0, 2).map((t, idx) => {
-                                    const displayName = t.trainer_name && t.trainer_name.toLowerCase() !== 'sweat' ? t.trainer_name : (t.trainer_code || 'Trainer');
+                                    const displayName =
+                                      t.trainer_name && t.trainer_name.toLowerCase() !== "sweat"
+                                        ? t.trainer_name
+                                        : t.trainer_code || "Trainer";
                                     return (
-                                      <div key={t.id || idx} className="flex items-center gap-1 text-xs">
-                                        <span className="font-semibold text-foreground truncate max-w-[130px]" title={displayName}>
+                                      <div
+                                        key={t.id || idx}
+                                        className="flex items-center gap-1 text-xs"
+                                      >
+                                        <span
+                                          className="font-semibold text-foreground truncate max-w-[130px]"
+                                          title={displayName}
+                                        >
                                           {displayName}
                                         </span>
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
-                                          {t.trainer_role || 'Lead'}
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[9px] px-1 py-0 text-muted-foreground"
+                                        >
+                                          {t.trainer_role || "Lead"}
                                         </Badge>
                                       </div>
                                     );
                                   })}
                                   {allTrainers.length > 2 && (
-                                    <span className="text-[10px] text-muted-foreground">+{allTrainers.length - 2} more</span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      +{allTrainers.length - 2} more
+                                    </span>
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-muted-foreground italic text-[11px]">Unassigned</span>
+                                <span className="text-muted-foreground italic text-[11px]">
+                                  Unassigned
+                                </span>
                               )}
                             </td>
 
@@ -3659,7 +4306,10 @@ export const ClassesWorkspace: React.FC = () => {
                                   <span>Pending Check-in</span>
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-muted-foreground bg-muted/40 text-[10px] px-1.5 py-0.5">
+                                <Badge
+                                  variant="outline"
+                                  className="text-muted-foreground bg-muted/40 text-[10px] px-1.5 py-0.5"
+                                >
                                   No Trainer
                                 </Badge>
                               )}
@@ -3671,11 +4321,13 @@ export const ClassesWorkspace: React.FC = () => {
                                 variant="outline"
                                 className={`text-xs font-bold px-2 py-0.5 ${
                                   isFull
-                                    ? 'bg-rose-500/10 text-rose-600 border-rose-500/30'
-                                    : 'bg-primary/10 text-primary border-primary/20'
+                                    ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                                    : "bg-primary/10 text-primary border-primary/20"
                                 }`}
                               >
-                                {isFull ? `FULL (${bookedCount}/${occ.capacity})` : `${bookedCount} / ${occ.capacity} Booked`}
+                                {isFull
+                                  ? `FULL (${bookedCount}/${occ.capacity})`
+                                  : `${bookedCount} / ${occ.capacity} Booked`}
                               </Badge>
                               <ClassBookingBreakdown
                                 memberCount={occ.member_booking_count}
@@ -3706,29 +4358,41 @@ export const ClassesWorkspace: React.FC = () => {
                                 variant="outline"
                                 className={`text-[10px] font-bold px-2 py-0.5 inline-flex items-center gap-1 ${
                                   isCancelled
-                                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40'
+                                    ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40"
                                     : isDeactivated
-                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40'
-                                    : isInProgress
-                                    ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/40 animate-pulse'
-                                    : isCompleted
-                                    ? 'bg-muted text-muted-foreground border-border'
-                                    : occ.status === 'OPEN'
-                                    ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
-                                    : 'bg-muted text-muted-foreground border-border'
+                                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                                      : isInProgress
+                                        ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/40 animate-pulse"
+                                        : isCompleted
+                                          ? "bg-muted text-muted-foreground border-border"
+                                          : occ.status === "OPEN"
+                                            ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                                            : "bg-muted text-muted-foreground border-border"
                                 }`}
                               >
                                 {isCancelled && <Ban className="size-2.5 text-rose-500 shrink-0" />}
-                                {isDeactivated && <XCircle className="size-2.5 text-amber-500 shrink-0" />}
-                                {isInProgress && <Clock className="size-2.5 text-blue-500 shrink-0" />}
-                                {isCompleted && <CheckCircle2 className="size-2.5 text-muted-foreground shrink-0" />}
-                                <span>{occ.status || 'SCHEDULED'}</span>
+                                {isDeactivated && (
+                                  <XCircle className="size-2.5 text-amber-500 shrink-0" />
+                                )}
+                                {isInProgress && (
+                                  <Clock className="size-2.5 text-blue-500 shrink-0" />
+                                )}
+                                {isCompleted && (
+                                  <CheckCircle2 className="size-2.5 text-muted-foreground shrink-0" />
+                                )}
+                                <span>{occ.status || "SCHEDULED"}</span>
                               </Badge>
                             </td>
 
                             {/* Actions */}
-                            <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <td
+                              className="py-3 px-4 text-right whitespace-nowrap"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div
+                                className="flex items-center justify-end gap-1.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <Button
                                   size="sm"
                                   onClick={(e) => {
@@ -3772,7 +4436,6 @@ export const ClassesWorkspace: React.FC = () => {
                                   <Film className="size-3" />
                                   <span>Video</span>
                                 </Button>
-
                               </div>
                             </td>
                           </tr>
@@ -3791,32 +4454,40 @@ export const ClassesWorkspace: React.FC = () => {
                   const categoryCode = occ.category_code || matchedTpl?.category_code;
                   const programName = occ.program_name || matchedTpl?.program_name;
 
-                  const isCompleted = occ.status === 'COMPLETED';
-                  const isCancelled = occ.status === 'CANCELLED';
-                  const isDeactivated = occ.status === 'DEACTIVATED';
-                  const isInProgress = occ.status === 'IN_PROGRESS';
+                  const isCompleted = occ.status === "COMPLETED";
+                  const isCancelled = occ.status === "CANCELLED";
+                  const isDeactivated = occ.status === "DEACTIVATED";
+                  const isInProgress = occ.status === "IN_PROGRESS";
 
-                  const isCheckedIn = !isCancelled && !isDeactivated && Boolean(
-                    occ.trainer_checked_in ||
-                    occ.trainer_check_in_details?.checked_in ||
-                    (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
-                    (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
-                  );
+                  const isCheckedIn =
+                    !isCancelled &&
+                    !isDeactivated &&
+                    Boolean(
+                      occ.trainer_checked_in ||
+                      occ.trainer_check_in_details?.checked_in ||
+                      (occ.trainers && occ.trainers.some((t: any) => t.status === "CONFIRMED")) ||
+                      (occ.assigned_trainers &&
+                        occ.assigned_trainers.some((t: any) => t.status === "CONFIRMED")),
+                    );
 
-                  const allTrainers = (isCancelled || isDeactivated)
-                    ? []
-                    : [
-                        ...(occ.trainers || []),
-                        ...(occ.assigned_trainers || []),
-                      ].filter((t: any) => t.status !== 'CANCELLED');
+                  const allTrainers =
+                    isCancelled || isDeactivated
+                      ? []
+                      : [...(occ.trainers || []), ...(occ.assigned_trainers || [])].filter(
+                          (t: any) => t.status !== "CANCELLED",
+                        );
                   const hasTrainer = allTrainers.length > 0;
 
                   const startTimeFormatted = occ.start_time
                     ? formatTime12h(occ.start_time)
-                    : (occ.start_at ? formatTime12h(occ.start_at) : '');
+                    : occ.start_at
+                      ? formatTime12h(occ.start_at)
+                      : "";
                   const endTimeFormatted = occ.end_time
                     ? formatTime12h(occ.end_time)
-                    : (occ.end_at ? formatTime12h(occ.end_at) : '');
+                    : occ.end_at
+                      ? formatTime12h(occ.end_at)
+                      : "";
 
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;
@@ -3826,12 +4497,12 @@ export const ClassesWorkspace: React.FC = () => {
                       key={occ.id}
                       className={`bg-card border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition-all shadow-xs ${
                         isCancelled
-                          ? 'border-rose-500/40 bg-rose-500/[0.03] dark:bg-rose-950/20'
+                          ? "border-rose-500/40 bg-rose-500/[0.03] dark:bg-rose-950/20"
                           : isDeactivated
-                          ? 'border-amber-500/40 bg-amber-500/[0.03] dark:bg-amber-950/20'
-                          : isInProgress
-                          ? 'border-blue-500/40 bg-blue-500/[0.03] dark:bg-blue-950/20'
-                          : 'border-border hover:border-primary/40'
+                            ? "border-amber-500/40 bg-amber-500/[0.03] dark:bg-amber-950/20"
+                            : isInProgress
+                              ? "border-blue-500/40 bg-blue-500/[0.03] dark:bg-blue-950/20"
+                              : "border-border hover:border-primary/40"
                       }`}
                     >
                       <div>
@@ -3852,13 +4523,17 @@ export const ClassesWorkspace: React.FC = () => {
                               </span>
                             </div>
                             <h3 className="text-base font-semibold text-foreground mt-2">
-                              {occ.template_name || occ.class_name || 'Class Session'}
+                              {occ.template_name || occ.class_name || "Class Session"}
                             </h3>
                             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                               <MapPin className="size-3 text-primary shrink-0" />
-                              <span className="font-medium text-foreground/80">{occ.branch_name || 'Branch Session'}</span>
+                              <span className="font-medium text-foreground/80">
+                                {occ.branch_name || "Branch Session"}
+                              </span>
                               {programName && (
-                                <span className="text-[11px] text-muted-foreground">· {programName}</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  · {programName}
+                                </span>
                               )}
                             </p>
                           </div>
@@ -3866,14 +4541,14 @@ export const ClassesWorkspace: React.FC = () => {
                             <span
                               className={`text-xs px-2 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
                                 isCancelled
-                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                                   : isDeactivated
-                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                                  : isInProgress
-                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 animate-pulse'
-                                  : isCompleted
-                                  ? 'bg-muted text-muted-foreground border border-border'
-                                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                    : isInProgress
+                                      ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 animate-pulse"
+                                      : isCompleted
+                                        ? "bg-muted text-muted-foreground border border-border"
+                                        : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                               }`}
                             >
                               {isCancelled && <Ban className="size-2.5 text-rose-500" />}
@@ -3882,15 +4557,24 @@ export const ClassesWorkspace: React.FC = () => {
                               {occ.status}
                             </span>
                             {isCheckedIn ? (
-                              <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1"
+                              >
                                 <CheckCircle2 className="size-2.5" /> Checked In
                               </Badge>
                             ) : hasTrainer ? (
-                              <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1"
+                              >
                                 <Clock className="size-2.5" /> Pending Check-in
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] text-muted-foreground bg-muted/40">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-muted-foreground bg-muted/40"
+                              >
                                 Unassigned
                               </Badge>
                             )}
@@ -3902,31 +4586,47 @@ export const ClassesWorkspace: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <Clock className="size-3.5 text-primary shrink-0" />
                             <span className="font-semibold text-foreground">
-                              {formatOccurrenceDate(occ.occurrence_date, occ.start_at)} · {startTimeFormatted} – {endTimeFormatted}
+                              {formatOccurrenceDate(occ.occurrence_date, occ.start_at)} ·{" "}
+                              {startTimeFormatted} – {endTimeFormatted}
                             </span>
                           </div>
                           <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50">
                             <span className="font-semibold text-foreground">
-                              Bookings: <strong className="text-primary">{bookedCount} / {occ.capacity}</strong>
+                              Bookings:{" "}
+                              <strong className="text-primary">
+                                {bookedCount} / {occ.capacity}
+                              </strong>
                             </span>
                             <span className="font-semibold text-foreground">
-                              Waitlist: <strong className={waitlistCount > 0 ? 'text-purple-600' : 'text-muted-foreground'}>{waitlistCount}</strong>
+                              Waitlist:{" "}
+                              <strong
+                                className={
+                                  waitlistCount > 0 ? "text-purple-600" : "text-muted-foreground"
+                                }
+                              >
+                                {waitlistCount}
+                              </strong>
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
                             <span>
-                              Trainers:{' '}
+                              Trainers:{" "}
                               {hasTrainer
-                                ? allTrainers.map((t: any) => `${t.trainer_name || 'Trainer'} (${t.trainer_role || 'Lead'})`).join(', ')
-                                : 'Unassigned'}
+                                ? allTrainers
+                                    .map(
+                                      (t: any) =>
+                                        `${t.trainer_name || "Trainer"} (${t.trainer_role || "Lead"})`,
+                                    )
+                                    .join(", ")
+                                : "Unassigned"}
                             </span>
                           </div>
                           {(occ as any).active_content && (
                             <div className="flex items-center gap-2">
                               <Sparkles className="size-3.5 text-primary shrink-0" />
                               <span>
-                                Workout Content:{' '}
+                                Workout Content:{" "}
                                 <span className="font-semibold text-foreground">
                                   {(occ as any).active_content.title}
                                 </span>
@@ -3994,25 +4694,31 @@ export const ClassesWorkspace: React.FC = () => {
                             onClick={(e) => e.stopPropagation()}
                             title={
                               isCompleted
-                                ? 'Class session completed'
+                                ? "Class session completed"
                                 : isCancelled || isDeactivated
-                                ? 'Class is Cancelled — Toggle to reactivate'
-                                : 'Class is Active — Toggle to cancel'
+                                  ? "Class is Cancelled — Toggle to reactivate"
+                                  : "Class is Active — Toggle to cancel"
                             }
                           >
                             <span
                               className={cn(
-                                'text-[11px] font-semibold',
+                                "text-[11px] font-semibold",
                                 isCancelled
-                                  ? 'text-rose-600 dark:text-rose-400'
+                                  ? "text-rose-600 dark:text-rose-400"
                                   : isDeactivated
-                                  ? 'text-amber-600 dark:text-amber-400'
-                                  : isCompleted
-                                  ? 'text-muted-foreground'
-                                  : 'text-emerald-600 dark:text-emerald-400'
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : isCompleted
+                                      ? "text-muted-foreground"
+                                      : "text-emerald-600 dark:text-emerald-400",
                               )}
                             >
-                              {isCancelled ? 'Cancelled' : isDeactivated ? 'Deactivated' : isCompleted ? 'Completed' : 'Active'}
+                              {isCancelled
+                                ? "Cancelled"
+                                : isDeactivated
+                                  ? "Deactivated"
+                                  : isCompleted
+                                    ? "Completed"
+                                    : "Active"}
                             </span>
                             <Switch
                               checked={!isCancelled && !isDeactivated}
@@ -4042,15 +4748,16 @@ export const ClassesWorkspace: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card px-4 py-3 rounded-xl border border-border shadow-xs">
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>
-                    Showing{' '}
+                    Showing{" "}
                     <span className="font-semibold text-foreground">
                       {Math.min((sessionsPage - 1) * sessionsPageSize + 1, totalSessionsCount)}
                     </span>
                     –
                     <span className="font-semibold text-foreground">
                       {Math.min(sessionsPage * sessionsPageSize, totalSessionsCount)}
-                    </span>{' '}
-                    of <span className="font-semibold text-foreground">{totalSessionsCount}</span> sessions
+                    </span>{" "}
+                    of <span className="font-semibold text-foreground">{totalSessionsCount}</span>{" "}
+                    sessions
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span>Per page:</span>
@@ -4086,7 +4793,10 @@ export const ClassesWorkspace: React.FC = () => {
                     {Array.from({ length: Math.min(5, totalSessionsPages) }, (_, idx) => {
                       let pageNum = idx + 1;
                       if (totalSessionsPages > 5) {
-                        const start = Math.max(1, Math.min(sessionsPage - 2, totalSessionsPages - 4));
+                        const start = Math.max(
+                          1,
+                          Math.min(sessionsPage - 2, totalSessionsPages - 4),
+                        );
                         pageNum = start + idx;
                       }
                       return (
@@ -4096,8 +4806,8 @@ export const ClassesWorkspace: React.FC = () => {
                           onClick={() => setSessionsPage(pageNum)}
                           className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                             sessionsPage === pageNum
-                              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
                           }`}
                         >
                           {pageNum}
@@ -4122,26 +4832,36 @@ export const ClassesWorkspace: React.FC = () => {
         )}
 
         {/* VIEW: CONTENT STUDIO (Exposed from Sessions) */}
-        {primaryTab === 'sessions' && showContentStudio && (
+        {primaryTab === "sessions" && showContentStudio && (
           <div className="space-y-4 mt-4">
             <div className="flex items-center justify-between p-3.5 bg-muted/40 border border-border rounded-xl shadow-xs">
               <div className="flex items-center gap-2.5">
                 <Sparkles className="size-4 text-primary" />
                 <div>
                   <h4 className="font-semibold text-sm text-foreground">Content Studio</h4>
-                  <p className="text-xs text-muted-foreground">Workout instructional media, rotation engines, and class mapping.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Workout instructional media, rotation engines, and class mapping.
+                  </p>
                 </div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setShowContentStudio(false)} className="text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowContentStudio(false)}
+                className="text-xs"
+              >
                 Back to Sessions
               </Button>
             </div>
             <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
               <Sparkles className="size-5 text-primary shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground block">NO_REPEAT_UNTIL_EXHAUSTED Engine</span>
-                Content rotation strictly serves workout media and session plans in deterministic sequence by display order.
-                Items repeat only after the complete pool for a class template has been exhausted.
+                <span className="font-semibold text-foreground block">
+                  NO_REPEAT_UNTIL_EXHAUSTED Engine
+                </span>
+                Content rotation strictly serves workout media and session plans in deterministic
+                sequence by display order. Items repeat only after the complete pool for a class
+                template has been exhausted.
               </div>
             </div>
 
@@ -4168,9 +4888,12 @@ export const ClassesWorkspace: React.FC = () => {
                 <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                   <Video className="size-6" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No Content Items Registered</h3>
+                <h3 className="text-base font-semibold text-foreground">
+                  No Content Items Registered
+                </h3>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                  Upload workout playlists, video instructions, and workout cards for the Content Studio.
+                  Upload workout playlists, video instructions, and workout cards for the Content
+                  Studio.
                 </p>
                 {canCreate && (
                   <Button size="sm" onClick={() => setIsCreateContentOpen(true)}>
@@ -4181,17 +4904,24 @@ export const ClassesWorkspace: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredContent.map((item) => (
-                  <div key={item.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs">
+                  <div
+                    key={item.id}
+                    className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col justify-between hover:border-primary/40 transition-all shadow-xs"
+                  >
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-semibold text-muted-foreground">Order #{item.display_order}</span>
+                        <span className="text-xs font-mono font-semibold text-muted-foreground">
+                          Order #{item.display_order}
+                        </span>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
                           {item.content_type}
                         </span>
                       </div>
                       <h3 className="text-base font-semibold text-foreground mt-2">{item.title}</h3>
                       {item.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {item.description}
+                        </p>
                       )}
                     </div>
 
@@ -4220,7 +4950,9 @@ export const ClassesWorkspace: React.FC = () => {
       <Dialog open={isCreateCategoryOpen} onOpenChange={setIsCreateCategoryOpen}>
         <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCategory ? 'Edit Class Category' : 'Create Class Category'}</DialogTitle>
+            <DialogTitle>
+              {editingCategory ? "Edit Class Category" : "Create Class Category"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2 text-xs sm:text-sm">
             <div>
@@ -4247,7 +4979,9 @@ export const ClassesWorkspace: React.FC = () => {
                 <Input
                   type="number"
                   value={categoryForm.display_order}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, display_order: e.target.value })}
+                  onChange={(e) =>
+                    setCategoryForm({ ...categoryForm, display_order: e.target.value })
+                  }
                   placeholder="e.g. 1"
                 />
               </div>
@@ -4255,24 +4989,35 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1 block">Status</Label>
                 <select
                   value={categoryForm.status}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, status: e.target.value as any })}
+                  onChange={(e) =>
+                    setCategoryForm({ ...categoryForm, status: e.target.value as any })
+                  }
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Status...</option>
-                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  {(metadata?.statuses || [])
+                    .filter(
+                      (s: ClassesMetadataOption<string>) =>
+                        s.value === "ACTIVE" || s.value === "INACTIVE",
+                    )
+                    .map((s: ClassesMetadataOption<string>) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateCategoryOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateCategoryOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveCategoryMutation.mutate(categoryForm)}
               disabled={!categoryForm.name || saveCategoryMutation.isPending}
             >
-              {saveCategoryMutation.isPending ? 'Saving...' : 'Save Category'}
+              {saveCategoryMutation.isPending ? "Saving..." : "Save Category"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4282,12 +5027,16 @@ export const ClassesWorkspace: React.FC = () => {
       <Dialog open={isCreateTemplateOpen} onOpenChange={setIsCreateTemplateOpen}>
         <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingTemplate ? 'Edit Class Template' : 'Create Class Template'}</DialogTitle>
+            <DialogTitle>
+              {editingTemplate ? "Edit Class Template" : "Create Class Template"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2 text-xs sm:text-sm">
             {/* BASIC SECTION */}
             <div className="border-b border-border pb-3">
-              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">Basic Information</h4>
+              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">
+                Basic Information
+              </h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label className="mb-1 block">Template Name *</Label>
@@ -4308,14 +5057,16 @@ export const ClassesWorkspace: React.FC = () => {
                       setTemplateForm((prev) => ({
                         ...prev,
                         category: catId,
-                        name: prev.name.trim() ? prev.name : (cat ? cat.name : ''),
+                        name: prev.name.trim() ? prev.name : cat ? cat.name : "",
                       }));
                     }}
                     className="w-full h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Category...</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -4328,7 +5079,9 @@ export const ClassesWorkspace: React.FC = () => {
                   >
                     <option value="">No Program Bound</option>
                     {programs.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -4337,7 +5090,9 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1 block">Description</Label>
                 <textarea
                   value={templateForm.description}
-                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setTemplateForm({ ...templateForm, description: e.target.value })
+                  }
                   placeholder="Template description..."
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-h-[50px]"
                 />
@@ -4350,7 +5105,7 @@ export const ClassesWorkspace: React.FC = () => {
                   {templateForm.image_url && (
                     <button
                       type="button"
-                      onClick={() => setTemplateForm((prev) => ({ ...prev, image_url: '' }))}
+                      onClick={() => setTemplateForm((prev) => ({ ...prev, image_url: "" }))}
                       className="text-[11px] text-rose-500 hover:text-rose-600 font-medium transition-colors"
                     >
                       Remove Image
@@ -4379,12 +5134,12 @@ export const ClassesWorkspace: React.FC = () => {
                             reader.onload = (event) => {
                               setTemplateForm((prev) => ({
                                 ...prev,
-                                image_url: String(event.target?.result || ''),
+                                image_url: String(event.target?.result || ""),
                               }));
                             };
                             reader.readAsDataURL(file);
                           }
-                          e.target.value = '';
+                          e.target.value = "";
                         }}
                       />
                     </label>
@@ -4395,8 +5150,12 @@ export const ClassesWorkspace: React.FC = () => {
                       <Upload className="size-4" />
                     </div>
                     <div className="text-center">
-                      <span className="text-xs font-semibold text-primary">Click to upload cover image</span>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">PNG, JPG, or WEBP from your device</p>
+                      <span className="text-xs font-semibold text-primary">
+                        Click to upload cover image
+                      </span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        PNG, JPG, or WEBP from your device
+                      </p>
                     </div>
                     <input
                       type="file"
@@ -4409,12 +5168,12 @@ export const ClassesWorkspace: React.FC = () => {
                           reader.onload = (event) => {
                             setTemplateForm((prev) => ({
                               ...prev,
-                              image_url: String(event.target?.result || ''),
+                              image_url: String(event.target?.result || ""),
                             }));
                           };
                           reader.readAsDataURL(file);
                         }
-                        e.target.value = '';
+                        e.target.value = "";
                       }}
                     />
                   </label>
@@ -4424,14 +5183,18 @@ export const ClassesWorkspace: React.FC = () => {
 
             {/* DEFAULT SESSION SETTINGS */}
             <div className="border-b border-border pb-3">
-              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">Default Session Settings</h4>
+              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">
+                Default Session Settings
+              </h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <Label className="mb-1 block">Duration (min)</Label>
                   <Input
                     type="number"
                     value={templateForm.default_duration_minutes}
-                    onChange={(e) => setTemplateForm({ ...templateForm, default_duration_minutes: e.target.value })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, default_duration_minutes: e.target.value })
+                    }
                     placeholder="e.g. 60"
                   />
                 </div>
@@ -4440,7 +5203,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <Input
                     type="number"
                     value={templateForm.default_capacity}
-                    onChange={(e) => setTemplateForm({ ...templateForm, default_capacity: e.target.value })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, default_capacity: e.target.value })
+                    }
                     placeholder="e.g. 20 (Total studio capacity)"
                   />
                 </div>
@@ -4449,7 +5214,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <Input
                     type="number"
                     value={templateForm.default_trial_capacity}
-                    onChange={(e) => setTemplateForm({ ...templateForm, default_trial_capacity: e.target.value })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, default_trial_capacity: e.target.value })
+                    }
                     placeholder="e.g. 4 (Max trial spots)"
                   />
                 </div>
@@ -4458,134 +5225,155 @@ export const ClassesWorkspace: React.FC = () => {
                   <Input
                     type="number"
                     value={templateForm.default_waitlist_capacity}
-                    onChange={(e) => setTemplateForm({ ...templateForm, default_waitlist_capacity: e.target.value })}
+                    onChange={(e) =>
+                      setTemplateForm({
+                        ...templateForm,
+                        default_waitlist_capacity: e.target.value,
+                      })
+                    }
                     placeholder="e.g. 5"
                   />
                 </div>
               </div>
 
-            {/* BRANCH-WISE CAPACITY CONFIGURATION */}
-            <div className="border-b border-border pb-3.5">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider text-primary">
-                    Branch-wise Studio Capacity Setup
-                  </h4>
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
-                    Reformer Beds & Space per Branch
-                  </span>
+              {/* BRANCH-WISE CAPACITY CONFIGURATION */}
+              <div className="border-b border-border pb-3.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider text-primary">
+                      Branch-wise Studio Capacity Setup
+                    </h4>
+                    <span className="text-[10px] font-medium px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
+                      Reformer Beds & Space per Branch
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  Different studio branches have different reformer beds and room setups. Configure
+                  branch-specific booking capacities below. If left blank, the branch uses the
+                  general default capacity ({templateForm.default_capacity || 20}) set above.
+                </p>
+
+                <div className="space-y-2">
+                  {branches.map((b) => {
+                    const bItem = templateForm.branch_capacities?.find(
+                      (bc) => bc.branch_id === b.id,
+                    ) || {
+                      branch_id: b.id,
+                      branch_name: b.name,
+                      is_enabled: true,
+                      capacity_override: "",
+                      trial_capacity_override: "",
+                      waitlist_capacity_override: "",
+                    };
+
+                    const updateBranchItem = (patch: Partial<typeof bItem>) => {
+                      const existingIdx = (templateForm.branch_capacities || []).findIndex(
+                        (bc) => bc.branch_id === b.id,
+                      );
+                      let updated = [...(templateForm.branch_capacities || [])];
+                      if (existingIdx >= 0) {
+                        updated[existingIdx] = { ...updated[existingIdx], ...patch } as any;
+                      } else {
+                        updated.push({ ...bItem, ...patch } as any);
+                      }
+                      setTemplateForm({ ...templateForm, branch_capacities: updated });
+                    };
+
+                    return (
+                      <div
+                        key={b.id}
+                        className={`p-2.5 rounded-lg border transition-all ${
+                          bItem.is_enabled
+                            ? "bg-muted/30 border-border"
+                            : "bg-muted/10 border-border/40 opacity-60"
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`branch-avail-${b.id}`}
+                              checked={bItem.is_enabled}
+                              onChange={(e) => updateBranchItem({ is_enabled: e.target.checked })}
+                              className="rounded border-border text-primary focus:ring-primary size-3.5"
+                            />
+                            <label
+                              htmlFor={`branch-avail-${b.id}`}
+                              className="text-xs font-semibold text-foreground cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Building2 className="size-3 text-muted-foreground" />
+                              {b.name}
+                            </label>
+                          </div>
+
+                          {bItem.is_enabled && (
+                            <div className="grid grid-cols-3 gap-2 w-full sm:w-auto">
+                              <div>
+                                <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                  Beds / Booking Cap
+                                </span>
+                                <Input
+                                  type="number"
+                                  className="h-7 text-xs w-full sm:w-28 bg-background"
+                                  value={bItem.capacity_override}
+                                  onChange={(e) =>
+                                    updateBranchItem({ capacity_override: e.target.value })
+                                  }
+                                  placeholder={`Default (${templateForm.default_capacity || 20})`}
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                  Trial Cap
+                                </span>
+                                <Input
+                                  type="number"
+                                  className="h-7 text-xs w-full sm:w-24 bg-background"
+                                  value={bItem.trial_capacity_override}
+                                  onChange={(e) =>
+                                    updateBranchItem({ trial_capacity_override: e.target.value })
+                                  }
+                                  placeholder={`Default (${templateForm.default_trial_capacity || 0})`}
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-muted-foreground block mb-0.5">
+                                  Waitlist
+                                </span>
+                                <Input
+                                  type="number"
+                                  className="h-7 text-xs w-full sm:w-24 bg-background"
+                                  value={bItem.waitlist_capacity_override}
+                                  onChange={(e) =>
+                                    updateBranchItem({ waitlist_capacity_override: e.target.value })
+                                  }
+                                  placeholder={`Default (${templateForm.default_waitlist_capacity || 0})`}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <p className="text-[11px] text-muted-foreground mb-3">
-                Different studio branches have different reformer beds and room setups. Configure branch-specific booking capacities below. If left blank, the branch uses the general default capacity ({templateForm.default_capacity || 20}) set above.
-              </p>
-
-              <div className="space-y-2">
-                {branches.map((b) => {
-                  const bItem = templateForm.branch_capacities?.find((bc) => bc.branch_id === b.id) || {
-                    branch_id: b.id,
-                    branch_name: b.name,
-                    is_enabled: true,
-                    capacity_override: '',
-                    trial_capacity_override: '',
-                    waitlist_capacity_override: '',
-                  };
-
-                  const updateBranchItem = (patch: Partial<typeof bItem>) => {
-                    const existingIdx = (templateForm.branch_capacities || []).findIndex((bc) => bc.branch_id === b.id);
-                    let updated = [...(templateForm.branch_capacities || [])];
-                    if (existingIdx >= 0) {
-                      updated[existingIdx] = { ...updated[existingIdx], ...patch } as any;
-                    } else {
-                      updated.push({ ...bItem, ...patch } as any);
-                    }
-                    setTemplateForm({ ...templateForm, branch_capacities: updated });
-                  };
-
-                  return (
-                    <div
-                      key={b.id}
-                      className={`p-2.5 rounded-lg border transition-all ${
-                        bItem.is_enabled
-                          ? 'bg-muted/30 border-border'
-                          : 'bg-muted/10 border-border/40 opacity-60'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`branch-avail-${b.id}`}
-                            checked={bItem.is_enabled}
-                            onChange={(e) => updateBranchItem({ is_enabled: e.target.checked })}
-                            className="rounded border-border text-primary focus:ring-primary size-3.5"
-                          />
-                          <label
-                            htmlFor={`branch-avail-${b.id}`}
-                            className="text-xs font-semibold text-foreground cursor-pointer flex items-center gap-1.5"
-                          >
-                            <Building2 className="size-3 text-muted-foreground" />
-                            {b.name}
-                          </label>
-                        </div>
-
-                        {bItem.is_enabled && (
-                          <div className="grid grid-cols-3 gap-2 w-full sm:w-auto">
-                            <div>
-                              <span className="text-[10px] text-muted-foreground block mb-0.5">
-                                Beds / Booking Cap
-                              </span>
-                              <Input
-                                type="number"
-                                className="h-7 text-xs w-full sm:w-28 bg-background"
-                                value={bItem.capacity_override}
-                                onChange={(e) => updateBranchItem({ capacity_override: e.target.value })}
-                                placeholder={`Default (${templateForm.default_capacity || 20})`}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-muted-foreground block mb-0.5">
-                                Trial Cap
-                              </span>
-                              <Input
-                                type="number"
-                                className="h-7 text-xs w-full sm:w-24 bg-background"
-                                value={bItem.trial_capacity_override}
-                                onChange={(e) => updateBranchItem({ trial_capacity_override: e.target.value })}
-                                placeholder={`Default (${templateForm.default_trial_capacity || 0})`}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-muted-foreground block mb-0.5">
-                                Waitlist
-                              </span>
-                              <Input
-                                type="number"
-                                className="h-7 text-xs w-full sm:w-24 bg-background"
-                                value={bItem.waitlist_capacity_override}
-                                onChange={(e) => updateBranchItem({ waitlist_capacity_override: e.target.value })}
-                                placeholder={`Default (${templateForm.default_waitlist_capacity || 0})`}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
             </div>
 
             {/* BOOKING RULE FLAGS */}
             <div className="border-b border-border pb-3">
-              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">Booking Rule Flags</h4>
+              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2 text-primary">
+                Booking Rule Flags
+              </h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs">
                   <input
                     type="checkbox"
                     checked={templateForm.allow_booking}
-                    onChange={(e) => setTemplateForm({ ...templateForm, allow_booking: e.target.checked })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, allow_booking: e.target.checked })
+                    }
                     className="rounded border-border"
                   />
                   <span>Allow Booking</span>
@@ -4594,7 +5382,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={templateForm.allow_trial}
-                    onChange={(e) => setTemplateForm({ ...templateForm, allow_trial: e.target.checked })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, allow_trial: e.target.checked })
+                    }
                     className="rounded border-border"
                   />
                   <span>Allow Trial</span>
@@ -4603,7 +5393,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={templateForm.allow_waitlist}
-                    onChange={(e) => setTemplateForm({ ...templateForm, allow_waitlist: e.target.checked })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, allow_waitlist: e.target.checked })
+                    }
                     className="rounded border-border"
                   />
                   <span>Allow Waitlist</span>
@@ -4612,7 +5404,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={templateForm.allow_reschedule}
-                    onChange={(e) => setTemplateForm({ ...templateForm, allow_reschedule: e.target.checked })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, allow_reschedule: e.target.checked })
+                    }
                     className="rounded border-border"
                   />
                   <span>Allow Reschedule</span>
@@ -4627,25 +5421,38 @@ export const ClassesWorkspace: React.FC = () => {
                   <Label className="mb-1 block">Delivery Mode</Label>
                   <select
                     value={templateForm.default_delivery_mode}
-                    onChange={(e) => setTemplateForm({ ...templateForm, default_delivery_mode: e.target.value as any })}
+                    onChange={(e) =>
+                      setTemplateForm({
+                        ...templateForm,
+                        default_delivery_mode: e.target.value as any,
+                      })
+                    }
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Delivery Mode...</option>
-                    {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
+                    {(metadata?.delivery_modes || []).map(
+                      (m: ClassesMetadataOption<DeliveryMode>) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </div>
                 <div>
                   <Label className="mb-1 block">Status</Label>
                   <select
                     value={templateForm.status}
-                    onChange={(e) => setTemplateForm({ ...templateForm, status: e.target.value as any })}
+                    onChange={(e) =>
+                      setTemplateForm({ ...templateForm, status: e.target.value as any })
+                    }
                     className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Select Status...</option>
                     {(metadata?.statuses || []).map((s: ClassesMetadataOption<string>) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -4653,12 +5460,18 @@ export const ClassesWorkspace: React.FC = () => {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateTemplateOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateTemplateOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveTemplateMutation.mutate(templateForm)}
-              disabled={!templateForm.category || !templateForm.name.trim() || saveTemplateMutation.isPending}
+              disabled={
+                !templateForm.category ||
+                !templateForm.name.trim() ||
+                saveTemplateMutation.isPending
+              }
             >
-              {saveTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
+              {saveTemplateMutation.isPending ? "Saving..." : "Save Template"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4669,7 +5482,9 @@ export const ClassesWorkspace: React.FC = () => {
         <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span>{editingRule ? 'Edit Recurring Schedule Rule' : 'Create Recurring Schedule Rule'}</span>
+              <span>
+                {editingRule ? "Edit Recurring Schedule Rule" : "Create Recurring Schedule Rule"}
+              </span>
               <span className="text-[10px] px-2 py-0.5 font-normal bg-primary/10 text-primary border border-primary/20 rounded-full">
                 Branch Hours Aware
               </span>
@@ -4692,30 +5507,18 @@ export const ClassesWorkspace: React.FC = () => {
                 <Label className="mb-1 block font-medium">Class Template *</Label>
                 <select
                   value={ruleForm.class_template}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const tpl = templates.find((t) => t.id === val);
-                    const dur = tpl?.default_duration_minutes || 60;
-                    setRuleForm((prev) => {
-                      const next = { ...prev, class_template: val };
-                      if (next.start_time) {
-                        const parts = next.start_time.split(':');
-                        const h = parseInt(parts[0] || '0', 10);
-                        const m = parseInt(parts[1] || '0', 10);
-                        const endM = h * 60 + m + dur;
-                        const eh = Math.floor(endM / 60) % 24;
-                        const em = endM % 60;
-                        next.end_time = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
-                      }
-                      return next;
-                    });
-                  }}
+                  onChange={(e) => handleRuleTemplateChange(e.target.value)}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Template</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id} disabled={t.status === 'INACTIVE' && ruleForm.class_template !== t.id}>
-                      {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
+                    <option
+                      key={t.id}
+                      value={t.id}
+                      disabled={t.status === "INACTIVE" && ruleForm.class_template !== t.id}
+                    >
+                      {t.name}
+                      {t.status === "INACTIVE" ? " (Inactive)" : ""}
                     </option>
                   ))}
                 </select>
@@ -4725,7 +5528,7 @@ export const ClassesWorkspace: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Label className="font-medium text-xs">
-                      {editingRule ? 'Branches (Current & Additional) *' : 'Select Branches *'}
+                      {editingRule ? "Branches (Current & Additional) *" : "Select Branches *"}
                     </Label>
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
                       {ruleForm.branches.length} of {branches.length} Selected
@@ -4753,7 +5556,7 @@ export const ClassesWorkspace: React.FC = () => {
                         setRuleForm((prev) => ({
                           ...prev,
                           branches: [],
-                          branch: '',
+                          branch: "",
                         }));
                       }}
                       className="text-[11px] font-semibold text-muted-foreground hover:underline hover:text-foreground transition-colors cursor-pointer"
@@ -4778,24 +5581,24 @@ export const ClassesWorkspace: React.FC = () => {
                             return {
                               ...prev,
                               branches: newBranches,
-                              branch: newBranches[0] || '',
+                              branch: newBranches[0] || "",
                             };
                           });
                         }}
                         className={`flex items-center gap-2 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-primary/10 border-primary text-foreground font-semibold shadow-2xs'
-                            : 'bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30'
+                            ? "bg-primary/10 border-primary text-foreground font-semibold shadow-2xs"
+                            : "bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30"
                         }`}
                       >
                         <div
                           className={`size-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
                             isSelected
-                              ? 'bg-primary border-primary text-primary-foreground'
-                              : 'border-muted-foreground/40 bg-background'
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/40 bg-background"
                           }`}
                         >
-                          {isSelected && '✓'}
+                          {isSelected && "✓"}
                         </div>
                         <span className="truncate flex-1" title={b.name}>
                           {b.name}
@@ -4814,15 +5617,22 @@ export const ClassesWorkspace: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <Clock className="size-3.5 text-primary" />
                     <span className="font-semibold text-foreground">
-                      Duration: <span className="text-primary">{selRuleTpl.default_duration_minutes} mins</span>
+                      Duration:{" "}
+                      <span className="text-primary">
+                        {selRuleTpl.default_duration_minutes} mins
+                      </span>
                     </span>
-                    <span className="text-muted-foreground text-[11px]">(Auto-fetched from {selRuleTpl.name})</span>
+                    <span className="text-muted-foreground text-[11px]">
+                      (Auto-fetched from {selRuleTpl.name})
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px]">
                     <Building2 className="size-3 text-primary" />
                     <span className="text-muted-foreground">Capacity:</span>
                     <strong className="text-primary font-semibold">
-                      {ruleForm.capacity_override ? `${ruleForm.capacity_override} beds (Rule Override)` : 'Branch-Specific (From Template Setup)'}
+                      {ruleForm.capacity_override
+                        ? `${ruleForm.capacity_override} beds (Rule Override)`
+                        : "Branch-Specific (From Template Setup)"}
                     </strong>
                   </div>
                 </div>
@@ -4852,13 +5662,13 @@ export const ClassesWorkspace: React.FC = () => {
               </div>
               <div className="grid grid-cols-7 gap-1">
                 {[
-                  { num: 1, label: 'Mon' },
-                  { num: 2, label: 'Tue' },
-                  { num: 3, label: 'Wed' },
-                  { num: 4, label: 'Thu' },
-                  { num: 5, label: 'Fri' },
-                  { num: 6, label: 'Sat' },
-                  { num: 7, label: 'Sun' },
+                  { num: 1, label: "Mon" },
+                  { num: 2, label: "Tue" },
+                  { num: 3, label: "Wed" },
+                  { num: 4, label: "Thu" },
+                  { num: 5, label: "Fri" },
+                  { num: 6, label: "Sat" },
+                  { num: 7, label: "Sun" },
                 ].map((d) => {
                   const currentDays = normalizeDaysOfWeek(ruleForm.days_of_week);
                   const isSelected = currentDays.includes(d.num);
@@ -4870,7 +5680,7 @@ export const ClassesWorkspace: React.FC = () => {
                       key={d.num}
                       type="button"
                       disabled={closed}
-                      title={closed ? 'Branch is closed on this day' : scheduleText || ''}
+                      title={closed ? "Branch is closed on this day" : scheduleText || ""}
                       onClick={() => {
                         if (closed) return;
                         const next = isSelected
@@ -4880,15 +5690,15 @@ export const ClassesWorkspace: React.FC = () => {
                       }}
                       className={`py-2 px-1 flex flex-col items-center justify-center rounded-lg border transition-all ${
                         closed
-                          ? 'bg-rose-500/5 text-rose-500/70 border-rose-500/20 cursor-not-allowed opacity-75'
+                          ? "bg-rose-500/5 text-rose-500/70 border-rose-500/20 cursor-not-allowed opacity-75"
                           : isSelected
-                          ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold cursor-pointer'
-                          : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted cursor-pointer'
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold cursor-pointer"
+                            : "bg-muted/40 text-muted-foreground border-border hover:bg-muted cursor-pointer"
                       }`}
                     >
                       <span className="text-xs font-semibold">{d.label}</span>
                       <span className="text-[9px] mt-0.5 leading-none">
-                        {closed ? 'Closed' : isSelected ? 'Active' : ''}
+                        {closed ? "Closed" : isSelected ? "Active" : ""}
                       </span>
                     </button>
                   );
@@ -4904,59 +5714,128 @@ export const ClassesWorkspace: React.FC = () => {
               )}
             </div>
 
-            {/* TIME SELECTORS (BRANCH OPERATING WINDOW RESTRICTED) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-medium">Start Time (Branch Local) *</Label>
-                <BranchScheduleTimePicker
-                  value={ruleForm.start_time}
-                  onChange={(val) => {
-                    setRuleForm({ ...ruleForm, start_time: val });
-                    // Auto-bump end time if needed
-                    if (ruleForm.end_time && val >= ruleForm.end_time) {
-                      const sParts = val.split(':');
-                      const h = parseInt(sParts[0] || '0', 10);
-                      const m = parseInt(sParts[1] || '0', 10);
-                      const bumpMins = Math.min(1320, h * 60 + m + 60);
-                      const bh = Math.floor(bumpMins / 60) % 24;
-                      const bm = bumpMins % 60;
-                      setRuleForm((prev) => ({
-                        ...prev,
-                        start_time: val,
-                        end_time: `${bh.toString().padStart(2, '0')}:${bm.toString().padStart(2, '0')}`,
-                      }));
-                    }
-                  }}
-                  minTime={getEffectiveOperatingWindow().minTime}
-                  maxTime={getEffectiveOperatingWindow().maxTime}
-                  operatingWindowText={getEffectiveOperatingWindow().text}
-                  label="Class Start Time"
-                  disabled={!ruleForm.branch}
-                />
+            {/* TIME SLOTS SECTION (SUPPORTS MULTIPLE TIME SLOTS WITH PLUS ICON) */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Label className="font-medium text-xs">Time Slots (Branch Local) *</Label>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
+                    {ruleForm.time_slots.length} Slot{ruleForm.time_slots.length > 1 ? "s" : ""}{" "}
+                    Configured
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addTimeSlot}
+                  className="h-7 text-xs px-2.5 gap-1.5 border-primary/30 hover:bg-primary/10 text-primary font-medium"
+                  title="Add another time slot for this recurring class"
+                >
+                  <Plus className="size-3.5" />
+                  <span>Add Time Slot</span>
+                </Button>
               </div>
-              <div>
-                <Label className="mb-1 block font-medium">End Time (Branch Local) *</Label>
-                <BranchScheduleTimePicker
-                  value={ruleForm.end_time}
-                  onChange={(val) => setRuleForm({ ...ruleForm, end_time: val })}
-                  minTime={ruleForm.start_time || getEffectiveOperatingWindow().minTime}
-                  maxTime={getEffectiveOperatingWindow().maxTime}
-                  operatingWindowText={getEffectiveOperatingWindow().text}
-                  label="Class End Time"
-                  isEndTime={true}
-                  startTime={ruleForm.start_time}
-                  disabled={!ruleForm.branch}
-                />
+
+              <div className="space-y-2.5">
+                {ruleForm.time_slots.map((slot, index) => {
+                  const isInvalid = Boolean(
+                    slot.start_time && slot.end_time && slot.end_time <= slot.start_time,
+                  );
+                  const isDuplicate = ruleForm.time_slots.some(
+                    (s, i) =>
+                      i !== index &&
+                      s.start_time &&
+                      s.start_time === slot.start_time &&
+                      s.end_time === slot.end_time,
+                  );
+
+                  return (
+                    <div
+                      key={slot.id || index}
+                      className={`p-2.5 rounded-xl border transition-all ${
+                        isInvalid || isDuplicate
+                          ? "border-rose-400 bg-rose-500/5"
+                          : "border-border/80 bg-muted/20 hover:border-primary/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">
+                            Slot #{index + 1}
+                          </span>
+                          {slot.start_time && slot.end_time && !isInvalid && !isDuplicate && (
+                            <span className="text-[11px] font-semibold text-primary">
+                              {formatTime12h(slot.start_time)} – {formatTime12h(slot.end_time)}
+                            </span>
+                          )}
+                        </div>
+                        {ruleForm.time_slots.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeTimeSlot(index)}
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                            title={`Remove Slot #${index + 1}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                            Start Time *
+                          </Label>
+                          <BranchScheduleTimePicker
+                            value={slot.start_time}
+                            onChange={(val) => updateTimeSlot(index, "start_time", val)}
+                            minTime={getEffectiveOperatingWindow().minTime}
+                            maxTime={getEffectiveOperatingWindow().maxTime}
+                            operatingWindowText={getEffectiveOperatingWindow().text}
+                            label={`Slot #${index + 1} Start Time`}
+                            disabled={ruleForm.branches.length === 0}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                            End Time *
+                          </Label>
+                          <BranchScheduleTimePicker
+                            value={slot.end_time}
+                            onChange={(val) => updateTimeSlot(index, "end_time", val)}
+                            minTime={slot.start_time || getEffectiveOperatingWindow().minTime}
+                            maxTime={getEffectiveOperatingWindow().maxTime}
+                            operatingWindowText={getEffectiveOperatingWindow().text}
+                            label={`Slot #${index + 1} End Time`}
+                            isEndTime={true}
+                            startTime={slot.start_time}
+                            disabled={ruleForm.branches.length === 0}
+                          />
+                        </div>
+                      </div>
+
+                      {isInvalid && (
+                        <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium mt-1.5">
+                          <AlertCircle className="size-3 shrink-0" />
+                          End Time ({formatTime12h(slot.end_time)}) must be strictly later than
+                          Start Time ({formatTime12h(slot.start_time)}).
+                        </p>
+                      )}
+                      {isDuplicate && (
+                        <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium mt-1.5">
+                          <AlertCircle className="size-3 shrink-0" />
+                          Duplicate time slot! Another slot in this rule has the exact same start
+                          and end time.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            {/* TIME LOGIC VALIDATION FEEDBACK */}
-            {ruleForm.start_time && ruleForm.end_time && ruleForm.end_time <= ruleForm.start_time && (
-              <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
-                <AlertCircle className="size-3" />
-                End Time ({formatTime12h(ruleForm.end_time)}) must be strictly later than Start Time ({formatTime12h(ruleForm.start_time)}).
-              </p>
-            )}
 
             {/* VALIDITY DATES */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4979,12 +5858,14 @@ export const ClassesWorkspace: React.FC = () => {
               </div>
             </div>
 
-            {ruleForm.valid_from && ruleForm.valid_until && ruleForm.valid_until < ruleForm.valid_from && (
-              <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
-                <AlertCircle className="size-3" />
-                Valid Until date cannot be earlier than Valid From date.
-              </p>
-            )}
+            {ruleForm.valid_from &&
+              ruleForm.valid_until &&
+              ruleForm.valid_until < ruleForm.valid_from && (
+                <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
+                  <AlertCircle className="size-3" />
+                  Valid Until date cannot be earlier than Valid From date.
+                </p>
+              )}
 
             {/* HOLIDAY / OPERATING EXCEPTION NOTICES */}
             {activeHolidayClosures.length > 0 && (
@@ -4996,7 +5877,8 @@ export const ClassesWorkspace: React.FC = () => {
                 <ul className="space-y-1 text-[11px] pl-5 list-disc">
                   {activeHolidayClosures.map((h: any) => (
                     <li key={h.id}>
-                      <span className="font-semibold">{h.exception_date}</span>: {h.reason || 'Closed for Branch Exception'} (occurrences will be skipped)
+                      <span className="font-semibold">{h.exception_date}</span>:{" "}
+                      {h.reason || "Closed for Branch Exception"} (occurrences will be skipped)
                     </li>
                   ))}
                 </ul>
@@ -5020,25 +5902,38 @@ export const ClassesWorkspace: React.FC = () => {
               <div>
                 <Label className="mb-1 block font-medium">Delivery Mode</Label>
                 <select
-                  value={ruleForm.delivery_mode || 'OFFLINE'}
-                  onChange={(e) => setRuleForm({ ...ruleForm, delivery_mode: e.target.value as any })}
+                  value={ruleForm.delivery_mode || "OFFLINE"}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, delivery_mode: e.target.value as any })
+                  }
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
+                  {(metadata?.delivery_modes || []).map(
+                    (m: ClassesMetadataOption<DeliveryMode>) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
               <div>
                 <Label className="mb-1 block font-medium">Status</Label>
                 <select
-                  value={ruleForm.status || 'ACTIVE'}
+                  value={ruleForm.status || "ACTIVE"}
                   onChange={(e) => setRuleForm({ ...ruleForm, status: e.target.value })}
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  {(metadata?.statuses || [])
+                    .filter(
+                      (s: ClassesMetadataOption<string>) =>
+                        s.value === "ACTIVE" || s.value === "INACTIVE",
+                    )
+                    .map((s: ClassesMetadataOption<string>) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -5051,15 +5946,21 @@ export const ClassesWorkspace: React.FC = () => {
                     type="checkbox"
                     id="auto_generate_slots"
                     checked={ruleForm.auto_generate_slots}
-                    onChange={(e) => setRuleForm({ ...ruleForm, auto_generate_slots: e.target.checked })}
+                    onChange={(e) =>
+                      setRuleForm({ ...ruleForm, auto_generate_slots: e.target.checked })
+                    }
                     className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
                   />
                   <div className="flex-1 text-xs">
-                    <label htmlFor="auto_generate_slots" className="font-semibold text-foreground cursor-pointer block">
+                    <label
+                      htmlFor="auto_generate_slots"
+                      className="font-semibold text-foreground cursor-pointer block"
+                    >
                       Generate Class Slots Immediately
                     </label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Automatically generates scheduled class occurrence slots across all {ruleForm.branches.length || 0} selected branch(es) for the date window below.
+                      Automatically generates scheduled class occurrence slots across all{" "}
+                      {ruleForm.branches.length || 0} selected branch(es) for the date window below.
                     </p>
                   </div>
                 </div>
@@ -5067,20 +5968,28 @@ export const ClassesWorkspace: React.FC = () => {
                 {ruleForm.auto_generate_slots && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
                     <div>
-                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Generate From Date</Label>
+                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                        Generate From Date
+                      </Label>
                       <input
                         type="date"
                         value={ruleForm.generate_from_date}
-                        onChange={(e) => setRuleForm({ ...ruleForm, generate_from_date: e.target.value })}
+                        onChange={(e) =>
+                          setRuleForm({ ...ruleForm, generate_from_date: e.target.value })
+                        }
                         className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
                     <div>
-                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Generate To Date</Label>
+                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                        Generate To Date
+                      </Label>
                       <input
                         type="date"
                         value={ruleForm.generate_to_date}
-                        onChange={(e) => setRuleForm({ ...ruleForm, generate_to_date: e.target.value })}
+                        onChange={(e) =>
+                          setRuleForm({ ...ruleForm, generate_to_date: e.target.value })
+                        }
                         className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -5091,29 +6000,45 @@ export const ClassesWorkspace: React.FC = () => {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateRuleOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateRuleOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveRuleMutation.mutate(ruleForm)}
               disabled={
                 !ruleForm.class_template ||
                 ruleForm.branches.length === 0 ||
                 normalizeDaysOfWeek(ruleForm.days_of_week).length === 0 ||
-                !ruleForm.start_time ||
-                !ruleForm.end_time ||
-                ruleForm.end_time <= ruleForm.start_time ||
-                Boolean(ruleForm.valid_until && ruleForm.valid_from && ruleForm.valid_until < ruleForm.valid_from) ||
+                ruleForm.time_slots.length === 0 ||
+                ruleForm.time_slots.some(
+                  (s) => !s.start_time || !s.end_time || s.end_time <= s.start_time,
+                ) ||
+                ruleForm.time_slots.some((s, idx) =>
+                  ruleForm.time_slots.some(
+                    (o, oi) =>
+                      oi !== idx &&
+                      s.start_time &&
+                      s.start_time === o.start_time &&
+                      s.end_time === o.end_time,
+                  ),
+                ) ||
+                Boolean(
+                  ruleForm.valid_until &&
+                  ruleForm.valid_from &&
+                  ruleForm.valid_until < ruleForm.valid_from,
+                ) ||
                 saveRuleMutation.isPending
               }
             >
               {saveRuleMutation.isPending
-                ? 'Validating & Saving...'
+                ? "Validating & Saving..."
                 : editingRule
-                ? ruleForm.branches.length > 1
-                  ? `Update & Add Branches (${ruleForm.branches.length})`
-                  : 'Update Recurring Rule'
-                : ruleForm.auto_generate_slots
-                ? `Save Rule & Generate Slots (${ruleForm.branches.length})`
-                : `Save Recurring Rule (${ruleForm.branches.length})`}
+                  ? ruleForm.branches.length > 1 || ruleForm.time_slots.length > 1
+                    ? `Update & Fan Out (${ruleForm.branches.length} branches × ${ruleForm.time_slots.length} slots)`
+                    : "Update Recurring Rule"
+                  : ruleForm.auto_generate_slots
+                    ? `Save Rule & Generate Slots (${ruleForm.branches.length} branches × ${ruleForm.time_slots.length} slots)`
+                    : `Save Recurring Rules (${ruleForm.branches.length * ruleForm.time_slots.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5127,8 +6052,11 @@ export const ClassesWorkspace: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4 py-2 text-xs sm:text-sm">
             <p className="text-xs text-muted-foreground">
-              Rule: <strong className="text-foreground">{selectedRuleForGen?.class_name || selectedRuleForGen?.template_name}</strong> at{' '}
-              <strong className="text-foreground">{selectedRuleForGen?.branch_name}</strong>
+              Rule:{" "}
+              <strong className="text-foreground">
+                {selectedRuleForGen?.class_name || selectedRuleForGen?.template_name}
+              </strong>{" "}
+              at <strong className="text-foreground">{selectedRuleForGen?.branch_name}</strong>
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -5150,12 +6078,14 @@ export const ClassesWorkspace: React.FC = () => {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsGenerateOccurrencesOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsGenerateOccurrencesOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => generateOccurrencesMutation.mutate()}
               disabled={!genFromDate || !genToDate || generateOccurrencesMutation.isPending}
             >
-              {generateOccurrencesMutation.isPending ? 'Generating...' : 'Generate Sessions'}
+              {generateOccurrencesMutation.isPending ? "Generating..." : "Generate Sessions"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5168,7 +6098,9 @@ export const ClassesWorkspace: React.FC = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-indigo-500" />
-                <span>Audit Trail — {auditRule.class_name || auditRule.template_name || 'Schedule Rule'}</span>
+                <span>
+                  Audit Trail — {auditRule.class_name || auditRule.template_name || "Schedule Rule"}
+                </span>
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Chronological record of who modified this schedule rule and when.
@@ -5179,31 +6111,41 @@ export const ClassesWorkspace: React.FC = () => {
               {isRuleAuditLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-16 bg-muted/40 rounded-xl border border-border/50 animate-pulse" />
+                    <div
+                      key={i}
+                      className="h-16 bg-muted/40 rounded-xl border border-border/50 animate-pulse"
+                    />
                   ))}
                 </div>
               ) : ruleAuditEvents.length === 0 ? (
                 <div className="p-8 text-center bg-card border border-dashed border-border/80 rounded-xl">
                   <Activity className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No audit events recorded yet for this schedule rule.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No audit events recorded yet for this schedule rule.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2.5">
                   {ruleAuditEvents.map((evt: any) => {
-                    const actionRaw = evt.action || evt.action_code || evt.event_type || '';
-                    const actionTitle = actionRaw
-                      .replace(/_/g, ' ')
-                      .toLowerCase()
-                      .replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Schedule Rule Updated';
-                    const isCreate = actionRaw.toUpperCase().includes('CREATE');
-                    const actorDisplay = evt.actor_email || evt.actor_name || evt.actor || 'Administrator';
+                    const actionRaw = evt.action || evt.action_code || evt.event_type || "";
+                    const actionTitle =
+                      actionRaw
+                        .replace(/_/g, " ")
+                        .toLowerCase()
+                        .replace(/\b\w/g, (c: string) => c.toUpperCase()) ||
+                      "Schedule Rule Updated";
+                    const isCreate = actionRaw.toUpperCase().includes("CREATE");
+                    const actorDisplay =
+                      evt.actor_email || evt.actor_name || evt.actor || "Administrator";
                     const data = evt.after_data || evt.metadata || {};
 
                     const formatDays = (days: any): string => {
-                      if (!days) return '';
+                      if (!days) return "";
                       if (Array.isArray(days)) {
-                        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                        return days.map((d) => (typeof d === 'number' ? dayNames[d - 1] || d : d)).join(', ');
+                        const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                        return days
+                          .map((d) => (typeof d === "number" ? dayNames[d - 1] || d : d))
+                          .join(", ");
                       }
                       return String(days);
                     };
@@ -5215,21 +6157,28 @@ export const ClassesWorkspace: React.FC = () => {
                       >
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
-                            <span className={`size-2 rounded-full shrink-0 ${isCreate ? 'bg-emerald-500' : 'bg-primary'}`} />
+                            <span
+                              className={`size-2 rounded-full shrink-0 ${isCreate ? "bg-emerald-500" : "bg-primary"}`}
+                            />
                             <span className="font-semibold text-foreground text-xs sm:text-sm">
                               {actionTitle}
                             </span>
                           </div>
                           <span className="text-[11px] text-muted-foreground font-medium">
-                            {new Date(evt.created_at || evt.occurred_at || evt.timestamp).toLocaleString()}
+                            {new Date(
+                              evt.created_at || evt.occurred_at || evt.timestamp,
+                            ).toLocaleString()}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-muted-foreground text-[11px] flex-wrap gap-1">
                           <span>
-                            Modified by: <strong className="text-foreground font-medium">{actorDisplay}</strong>
+                            Modified by:{" "}
+                            <strong className="text-foreground font-medium">{actorDisplay}</strong>
                           </span>
-                          {evt.ip_address && <span className="text-muted-foreground/60">IP: {evt.ip_address}</span>}
+                          {evt.ip_address && (
+                            <span className="text-muted-foreground/60">IP: {evt.ip_address}</span>
+                          )}
                         </div>
 
                         {evt.event_description && (
@@ -5239,14 +6188,16 @@ export const ClassesWorkspace: React.FC = () => {
                         )}
 
                         {/* Client-friendly attribute summary badges with ZERO raw code/JSON */}
-                        {data && typeof data === 'object' && Object.keys(data).length > 0 && (
+                        {data && typeof data === "object" && Object.keys(data).length > 0 && (
                           <div className="pt-0.5 flex items-center gap-1.5 flex-wrap">
                             {data.status && (
-                              <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
-                                data.status === 'ACTIVE'
-                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                  : 'bg-muted text-muted-foreground border-border'
-                              }`}>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                  data.status === "ACTIVE"
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                    : "bg-muted text-muted-foreground border-border"
+                                }`}
+                              >
                                 Status: {data.status}
                               </span>
                             )}
@@ -5257,7 +6208,8 @@ export const ClassesWorkspace: React.FC = () => {
                             )}
                             {(data.time_window || (data.start_time && data.end_time)) && (
                               <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground border border-border/60 font-mono">
-                                Time Window: {data.time_window || `${data.start_time} – ${data.end_time}`}
+                                Time Window:{" "}
+                                {data.time_window || `${data.start_time} – ${data.end_time}`}
                               </span>
                             )}
                             {data.capacity_override && (
@@ -5292,8 +6244,12 @@ export const ClassesWorkspace: React.FC = () => {
                 <Calendar className="size-5" />
               </div>
               <div>
-                <DialogTitle className="text-base sm:text-lg font-bold text-foreground">Schedule One-Off Class Session</DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Configure session schedule, operating window, and capacity</p>
+                <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
+                  Schedule One-Off Class Session
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Configure session schedule, operating window, and capacity
+                </p>
               </div>
             </div>
           </DialogHeader>
@@ -5317,19 +6273,22 @@ export const ClassesWorkspace: React.FC = () => {
                       const next = {
                         ...prev,
                         class_template: val,
-                        delivery_mode: tpl?.default_delivery_mode || prev.delivery_mode || 'OFFLINE',
+                        delivery_mode:
+                          tpl?.default_delivery_mode || prev.delivery_mode || "OFFLINE",
                       };
                       if (next.start_time && tpl?.default_duration_minutes) {
-                        const parts = next.start_time.split(':');
-                        const h = parseInt(parts[0] || '0', 10);
-                        const m = parseInt(parts[1] || '0', 10);
+                        const parts = next.start_time.split(":");
+                        const h = parseInt(parts[0] || "0", 10);
+                        const m = parseInt(parts[1] || "0", 10);
                         const endM = h * 60 + m + tpl.default_duration_minutes;
                         const eh = Math.floor(endM / 60) % 24;
                         const em = endM % 60;
-                        next.end_time = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
+                        next.end_time = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
                       }
                       if (next.branch && tpl) {
-                        const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === next.branch);
+                        const bAvail = tpl.branch_availabilities?.find(
+                          (a: any) => a.branch === next.branch,
+                        );
                         if (bAvail?.capacity_override != null) {
                           next.capacity = String(bAvail.capacity_override);
                         } else if (tpl.default_capacity != null) {
@@ -5350,13 +6309,19 @@ export const ClassesWorkspace: React.FC = () => {
                     });
                   }}
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
->
-<option value="">Select Template</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id} disabled={t.status === 'INACTIVE' && occurrenceForm.class_template !== t.id}>
-                      {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
-                    </option>
-                  ))}
+                >
+                  <option value="">Select Template</option>
+                  {templates
+                    .filter(
+                      (t) =>
+                        (t.status || "").toUpperCase() === "ACTIVE" ||
+                        (!t.status && (t as any).is_active !== false),
+                    )
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div>
@@ -5370,7 +6335,9 @@ export const ClassesWorkspace: React.FC = () => {
                       if (next.class_template) {
                         const tpl = templates.find((t) => t.id === next.class_template);
                         if (tpl) {
-                          const bAvail = tpl.branch_availabilities?.find((a: any) => a.branch === branchId);
+                          const bAvail = tpl.branch_availabilities?.find(
+                            (a: any) => a.branch === branchId,
+                          );
                           if (bAvail?.capacity_override != null) {
                             next.capacity = String(bAvail.capacity_override);
                           } else if (tpl.default_capacity != null) {
@@ -5395,7 +6362,9 @@ export const ClassesWorkspace: React.FC = () => {
                 >
                   <option value="">Select Branch</option>
                   {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -5403,16 +6372,26 @@ export const ClassesWorkspace: React.FC = () => {
 
             {(() => {
               const selectedTpl = templates.find((t) => t.id === occurrenceForm.class_template);
-              const branchAvail = selectedTpl?.branch_availabilities?.find((a: any) => a.branch === occurrenceForm.branch);
-              const effectiveCap = branchAvail?.capacity_override != null ? branchAvail.capacity_override : selectedTpl?.default_capacity;
+              const branchAvail = selectedTpl?.branch_availabilities?.find(
+                (a: any) => a.branch === occurrenceForm.branch,
+              );
+              const effectiveCap =
+                branchAvail?.capacity_override != null
+                  ? branchAvail.capacity_override
+                  : selectedTpl?.default_capacity;
               return selectedTpl ? (
                 <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Clock className="size-3.5 text-primary" />
                     <span className="font-semibold text-foreground">
-                      Duration: <span className="text-primary">{selectedTpl.default_duration_minutes} mins</span>
+                      Duration:{" "}
+                      <span className="text-primary">
+                        {selectedTpl.default_duration_minutes} mins
+                      </span>
                     </span>
-                    <span className="text-muted-foreground text-[11px]">(Auto-fetched from {selectedTpl.name})</span>
+                    <span className="text-muted-foreground text-[11px]">
+                      (Auto-fetched from {selectedTpl.name})
+                    </span>
                   </div>
                   {occurrenceForm.branch && effectiveCap != null && (
                     <div className="flex items-center gap-1.5 text-[11px]">
@@ -5420,9 +6399,13 @@ export const ClassesWorkspace: React.FC = () => {
                       <span className="text-muted-foreground">Studio Capacity:</span>
                       <strong className="text-primary font-semibold">{effectiveCap} beds</strong>
                       {branchAvail?.capacity_override != null ? (
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">Branch Override</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded">
+                          Branch Override
+                        </span>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">Template Default</span>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">
+                          Template Default
+                        </span>
                       )}
                     </div>
                   )}
@@ -5431,22 +6414,26 @@ export const ClassesWorkspace: React.FC = () => {
             })()}
 
             <div>
-<Label className="mb-1.5 block font-medium">Session Date *</Label>
+              <Label className="mb-1.5 block font-medium">Session Date *</Label>
               <Input
                 type="date"
                 value={occurrenceForm.occurrence_date}
-                onChange={(e) => setOccurrenceForm({ ...occurrenceForm, occurrence_date: e.target.value })}
+                onChange={(e) =>
+                  setOccurrenceForm({ ...occurrenceForm, occurrence_date: e.target.value })
+                }
                 className="bg-background text-xs"
               />
               {/* Dynamic Status / Operating Window / Holiday Feedback */}
               {occurrenceForm.branch && occurrenceForm.occurrence_date && (
-                <div className={`mt-2 p-2.5 rounded-lg text-xs flex items-center gap-2 border ${
-                  !occurrenceSchedule.isOpen
-                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 font-medium'
-                    : occurrenceSchedule.isException
-                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 font-medium'
-                    : 'bg-primary/5 border-primary/20 text-primary font-medium'
-                }`}>
+                <div
+                  className={`mt-2 p-2.5 rounded-lg text-xs flex items-center gap-2 border ${
+                    !occurrenceSchedule.isOpen
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 font-medium"
+                      : occurrenceSchedule.isException
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 font-medium"
+                        : "bg-primary/5 border-primary/20 text-primary font-medium"
+                  }`}
+                >
                   {!occurrenceSchedule.isOpen ? (
                     <AlertTriangle className="size-4 shrink-0" />
                   ) : occurrenceSchedule.isException ? (
@@ -5468,13 +6455,13 @@ export const ClassesWorkspace: React.FC = () => {
                   onChange={(val) => {
                     const selTpl = templates.find((t) => t.id === occurrenceForm.class_template);
                     const dur = selTpl?.default_duration_minutes || 60;
-                    const parts = val.split(':');
-                    const h = parseInt(parts[0] || '0', 10);
-                    const m = parseInt(parts[1] || '0', 10);
+                    const parts = val.split(":");
+                    const h = parseInt(parts[0] || "0", 10);
+                    const m = parseInt(parts[1] || "0", 10);
                     const endM = h * 60 + m + dur;
                     const eh = Math.floor(endM / 60) % 24;
                     const em = endM % 60;
-                    const autoEnd = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
+                    const autoEnd = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
 
                     setOccurrenceForm((prev) => ({
                       ...prev,
@@ -5506,93 +6493,129 @@ export const ClassesWorkspace: React.FC = () => {
             </div>
 
             {/* TIME LOGIC VALIDATION FEEDBACK */}
-            {occurrenceForm.start_time && occurrenceForm.end_time && occurrenceForm.end_time <= occurrenceForm.start_time && (
-              <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
-                <AlertCircle className="size-3" />
-                End Time ({formatTime12h(occurrenceForm.end_time)}) must be strictly later than Start Time ({formatTime12h(occurrenceForm.start_time)}).
-              </p>
-            )}
+            {occurrenceForm.start_time &&
+              occurrenceForm.end_time &&
+              occurrenceForm.end_time <= occurrenceForm.start_time && (
+                <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
+                  <AlertCircle className="size-3" />
+                  End Time ({formatTime12h(occurrenceForm.end_time)}) must be strictly later than
+                  Start Time ({formatTime12h(occurrenceForm.start_time)}).
+                </p>
+              )}
 
             {(() => {
               const selectedTpl = templates.find((t) => t.id === occurrenceForm.class_template);
               return (
                 <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <Label className="mb-1.5 block font-medium">Capacity</Label>
-                    <Input
-                      type="number"
-                      value={occurrenceForm.capacity}
-                      onChange={(e) => setOccurrenceForm({ ...occurrenceForm, capacity: e.target.value })}
-                      placeholder={selectedTpl ? `Default (${selectedTpl.default_capacity})` : 'Default'}
-                      className="bg-background text-xs"
-                    />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <Label className="mb-1.5 block font-medium">Capacity</Label>
+                      <Input
+                        type="number"
+                        value={occurrenceForm.capacity}
+                        onChange={(e) =>
+                          setOccurrenceForm({ ...occurrenceForm, capacity: e.target.value })
+                        }
+                        placeholder={
+                          selectedTpl ? `Default (${selectedTpl.default_capacity})` : "Default"
+                        }
+                        className="bg-background text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block font-medium">Trial Cap</Label>
+                      <Input
+                        type="number"
+                        value={occurrenceForm.trial_capacity}
+                        onChange={(e) =>
+                          setOccurrenceForm({ ...occurrenceForm, trial_capacity: e.target.value })
+                        }
+                        placeholder={
+                          selectedTpl ? `Default (${selectedTpl.default_trial_capacity})` : "0"
+                        }
+                        className="bg-background text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block font-medium">Waitlist Cap</Label>
+                      <Input
+                        type="number"
+                        value={occurrenceForm.waitlist_capacity}
+                        onChange={(e) =>
+                          setOccurrenceForm({
+                            ...occurrenceForm,
+                            waitlist_capacity: e.target.value,
+                          })
+                        }
+                        placeholder={
+                          selectedTpl
+                            ? `Default (${selectedTpl.default_waitlist_capacity})`
+                            : "Default"
+                        }
+                        className="bg-background text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block font-medium">Delivery Mode</Label>
+                      <select
+                        value={occurrenceForm.delivery_mode || "OFFLINE"}
+                        onChange={(e) =>
+                          setOccurrenceForm({
+                            ...occurrenceForm,
+                            delivery_mode: e.target.value as any,
+                          })
+                        }
+                        className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                      >
+                        {(metadata?.delivery_modes || []).map(
+                          (m: ClassesMetadataOption<DeliveryMode>) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="mb-1.5 block font-medium">Trial Cap</Label>
-                    <Input
-                      type="number"
-                      value={occurrenceForm.trial_capacity}
-                      onChange={(e) => setOccurrenceForm({ ...occurrenceForm, trial_capacity: e.target.value })}
-                      placeholder={selectedTpl ? `Default (${selectedTpl.default_trial_capacity})` : '0'}
-                      className="bg-background text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1.5 block font-medium">Waitlist Cap</Label>
-                    <Input
-                      type="number"
-                      value={occurrenceForm.waitlist_capacity}
-                      onChange={(e) => setOccurrenceForm({ ...occurrenceForm, waitlist_capacity: e.target.value })}
-                      placeholder={selectedTpl ? `Default (${selectedTpl.default_waitlist_capacity})` : 'Default'}
-                      className="bg-background text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1.5 block font-medium">Delivery Mode</Label>
+
+                  <div className="pt-2">
+                    <Label className="mb-1.5 block font-medium flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Film className="size-3.5 text-primary" />
+                        <span>Class Workout Video</span>
+                      </span>
+                      <span className="text-2xs text-muted-foreground font-normal">
+                        Auto-syncs by class date or select a specific flow
+                      </span>
+                    </Label>
                     <select
-                      value={occurrenceForm.delivery_mode || 'OFFLINE'}
-                      onChange={(e) => setOccurrenceForm({ ...occurrenceForm, delivery_mode: e.target.value as any })}
+                      value={occurrenceForm.video_id || "AUTO"}
+                      onChange={(e) =>
+                        setOccurrenceForm({ ...occurrenceForm, video_id: e.target.value })
+                      }
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
                     >
-                      {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
+                      <option value="AUTO">
+                        ✨ Auto-Sync from Daily WOD Library (Recommended)
+                      </option>
+                      <option value="NONE">No Workout Video</option>
+                      {(availableVideosForCreate?.results || []).map((vid: any) => (
+                        <option key={vid.id} value={vid.id}>
+                          {vid.title} {vid.category_code ? `(${vid.category_code})` : ""} -{" "}
+                          {vid.date || "WOD"}
+                        </option>
                       ))}
                     </select>
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <Label className="mb-1.5 block font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Film className="size-3.5 text-primary" />
-                      <span>Class Workout Video</span>
-                    </span>
-                    <span className="text-2xs text-muted-foreground font-normal">
-                      Auto-syncs by class date or select a specific flow
-                    </span>
-                  </Label>
-                  <select
-                    value={occurrenceForm.video_id || 'AUTO'}
-                    onChange={(e) => setOccurrenceForm({ ...occurrenceForm, video_id: e.target.value })}
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-9"
-                  >
-                    <option value="AUTO">✨ Auto-Sync from Daily WOD Library (Recommended)</option>
-                    <option value="NONE">No Workout Video</option>
-                    {(availableVideosForCreate?.results || []).map((vid: any) => (
-                      <option key={vid.id} value={vid.id}>
-                        {vid.title} {vid.category_code ? `(${vid.category_code})` : ''} - {vid.date || 'WOD'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 </>
               );
             })()}
           </div>
 
           <DialogFooter className="px-6 py-3.5 border-t border-border/60 bg-muted/20 shrink-0 gap-2 sm:gap-3 flex items-center justify-end">
-            <Button variant="outline" size="sm" onClick={() => setIsCreateOccurrenceOpen(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => setIsCreateOccurrenceOpen(false)}>
+              Cancel
+            </Button>
             <Button
               size="sm"
               onClick={() => createOccurrenceMutation.mutate(occurrenceForm)}
@@ -5608,7 +6631,7 @@ export const ClassesWorkspace: React.FC = () => {
               }
               className="px-4 font-semibold"
             >
-              {createOccurrenceMutation.isPending ? 'Verifying...' : 'Schedule Session'}
+              {createOccurrenceMutation.isPending ? "Verifying..." : "Schedule Session"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5628,7 +6651,10 @@ export const ClassesWorkspace: React.FC = () => {
       />
 
       {/* BRANCH AVAILABILITY MODAL */}
-      <Dialog open={isBranchAvailOpen && !!selectedTemplateForAvail} onOpenChange={setIsBranchAvailOpen}>
+      <Dialog
+        open={isBranchAvailOpen && !!selectedTemplateForAvail}
+        onOpenChange={setIsBranchAvailOpen}
+      >
         <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Branch Availability: {selectedTemplateForAvail?.name}</DialogTitle>
@@ -5655,7 +6681,7 @@ export const ClassesWorkspace: React.FC = () => {
                       <tr key={ba.id}>
                         <td className="p-2.5 font-medium">{ba.branch_name || ba.branch}</td>
                         <td className="p-2.5">{ba.status}</td>
-                        <td className="p-2.5">{ba.capacity_override || 'Default'}</td>
+                        <td className="p-2.5">{ba.capacity_override || "Default"}</td>
                       </tr>
                     ))
                   )}
@@ -5665,18 +6691,24 @@ export const ClassesWorkspace: React.FC = () => {
 
             {canEdit && (
               <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
-                <h5 className="font-semibold text-foreground text-xs">Add / Override Branch Availability</h5>
+                <h5 className="font-semibold text-foreground text-xs">
+                  Add / Override Branch Availability
+                </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <Label className="mb-1 block">Branch</Label>
                     <select
                       value={branchAvailForm.branch}
-                      onChange={(e) => setBranchAvailForm({ ...branchAvailForm, branch: e.target.value })}
+                      onChange={(e) =>
+                        setBranchAvailForm({ ...branchAvailForm, branch: e.target.value })
+                      }
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
                       <option value="">Select Branch</option>
                       {branches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -5684,12 +6716,18 @@ export const ClassesWorkspace: React.FC = () => {
                     <Label className="mb-1 block">Status</Label>
                     <select
                       value={branchAvailForm.status}
-                      onChange={(e) => setBranchAvailForm({ ...branchAvailForm, status: e.target.value as any })}
+                      onChange={(e) =>
+                        setBranchAvailForm({ ...branchAvailForm, status: e.target.value as any })
+                      }
                       className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      {(metadata?.branch_avail_statuses || []).map((s: ClassesMetadataOption<string>) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
+                      {(metadata?.branch_avail_statuses || []).map(
+                        (s: ClassesMetadataOption<string>) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
                 </div>
@@ -5705,7 +6743,9 @@ export const ClassesWorkspace: React.FC = () => {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsBranchAvailOpen(false)}>Close</Button>
+            <Button variant="outline" onClick={() => setIsBranchAvailOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5737,8 +6777,11 @@ export const ClassesWorkspace: React.FC = () => {
                   ) : (
                     classPrices.map((cp) => (
                       <tr key={cp.id}>
-                        <td className="p-2.5">{cp.branch_name || 'All Branches'}</td>
-                        <td className="p-2.5 font-semibold">{cp.currency} {cp.price} (+{Math.round(parseFloat(String(cp.tax_percent || 0)))}%)</td>
+                        <td className="p-2.5">{cp.branch_name || "All Branches"}</td>
+                        <td className="p-2.5 font-semibold">
+                          {cp.currency} {cp.price} (+
+                          {Math.round(parseFloat(String(cp.tax_percent || 0)))}%)
+                        </td>
                         <td className="p-2.5">{cp.effective_from}</td>
                         <td className="p-2.5">{cp.status}</td>
                       </tr>
@@ -5750,7 +6793,9 @@ export const ClassesWorkspace: React.FC = () => {
 
             {canEdit && (
               <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
-                <h5 className="font-semibold text-foreground text-xs">Add Standalone / Pay-Per-Use Price</h5>
+                <h5 className="font-semibold text-foreground text-xs">
+                  Add Standalone / Pay-Per-Use Price
+                </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <Label className="mb-1 block">Branch (Optional)</Label>
@@ -5761,7 +6806,9 @@ export const ClassesWorkspace: React.FC = () => {
                     >
                       <option value="">All Branches</option>
                       {branches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -5787,7 +6834,9 @@ export const ClassesWorkspace: React.FC = () => {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPricingOpen(false)}>Close</Button>
+            <Button variant="outline" onClick={() => setIsPricingOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5812,11 +6861,15 @@ export const ClassesWorkspace: React.FC = () => {
               <Label className="mb-1 block">Content Type</Label>
               <select
                 value={contentForm.content_type}
-                onChange={(e) => setContentForm({ ...contentForm, content_type: e.target.value as any })}
+                onChange={(e) =>
+                  setContentForm({ ...contentForm, content_type: e.target.value as any })
+                }
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {(metadata?.content_types || []).map((c: ClassesMetadataOption<string>) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -5844,30 +6897,43 @@ export const ClassesWorkspace: React.FC = () => {
                 <Input
                   type="number"
                   value={contentForm.display_order}
-                  onChange={(e) => setContentForm({ ...contentForm, display_order: parseInt(e.target.value) || 1 })}
+                  onChange={(e) =>
+                    setContentForm({ ...contentForm, display_order: parseInt(e.target.value) || 1 })
+                  }
                 />
               </div>
               <div>
                 <Label className="mb-1 block">Status</Label>
                 <select
                   value={contentForm.status}
-                  onChange={(e) => setContentForm({ ...contentForm, status: e.target.value as any })}
+                  onChange={(e) =>
+                    setContentForm({ ...contentForm, status: e.target.value as any })
+                  }
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(metadata?.statuses || []).filter((s: ClassesMetadataOption<string>) => s.value === 'ACTIVE' || s.value === 'INACTIVE').map((s: ClassesMetadataOption<string>) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  {(metadata?.statuses || [])
+                    .filter(
+                      (s: ClassesMetadataOption<string>) =>
+                        s.value === "ACTIVE" || s.value === "INACTIVE",
+                    )
+                    .map((s: ClassesMetadataOption<string>) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateContentOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateContentOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveContentMutation.mutate(contentForm)}
               disabled={!contentForm.title || saveContentMutation.isPending}
             >
-              {saveContentMutation.isPending ? 'Saving...' : 'Register Content'}
+              {saveContentMutation.isPending ? "Saving..." : "Register Content"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5889,7 +6955,9 @@ export const ClassesWorkspace: React.FC = () => {
               >
                 <option value="">Select Content Item</option>
                 {contentItems.map((ci) => (
-                  <option key={ci.id} value={ci.id}>{ci.title} (#{ci.display_order})</option>
+                  <option key={ci.id} value={ci.id}>
+                    {ci.title} (#{ci.display_order})
+                  </option>
                 ))}
               </select>
             </div>
@@ -5903,7 +6971,8 @@ export const ClassesWorkspace: React.FC = () => {
                 <option value="">Any / None</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name}{t.status === 'INACTIVE' ? ' (Inactive)' : ''}
+                    {t.name}
+                    {t.status === "INACTIVE" ? " (Inactive)" : ""}
                   </option>
                 ))}
               </select>
@@ -5917,7 +6986,9 @@ export const ClassesWorkspace: React.FC = () => {
               >
                 <option value="">Any / None</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -5925,23 +6996,29 @@ export const ClassesWorkspace: React.FC = () => {
               <Label className="mb-1 block">Delivery Mode (Optional)</Label>
               <select
                 value={mappingForm.delivery_mode}
-                onChange={(e) => setMappingForm({ ...mappingForm, delivery_mode: e.target.value as any })}
+                onChange={(e) =>
+                  setMappingForm({ ...mappingForm, delivery_mode: e.target.value as any })
+                }
                 className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="">All Modes</option>
                 {(metadata?.delivery_modes || []).map((m: ClassesMetadataOption<DeliveryMode>) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateMappingOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateMappingOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveMappingMutation.mutate(mappingForm)}
               disabled={!mappingForm.content_item || saveMappingMutation.isPending}
             >
-              {saveMappingMutation.isPending ? 'Mapping...' : 'Save Mapping'}
+              {saveMappingMutation.isPending ? "Mapping..." : "Save Mapping"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5953,17 +7030,20 @@ export const ClassesWorkspace: React.FC = () => {
         onClose={() => setIsExcelImportOpen(false)}
         defaultEntityType="CLASS_SCHEDULE"
         onImportComplete={() => {
-          queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
-          queryClient.invalidateQueries({ queryKey: ['class-schedule-rules'] });
-          queryClient.invalidateQueries({ queryKey: ['class-categories'] });
-          queryClient.invalidateQueries({ queryKey: ['class-templates'] });
-          queryClient.invalidateQueries({ queryKey: ['calendar-occurrences'] });
-          toast.success('Classes schedule updated from Excel!');
+          queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+          queryClient.invalidateQueries({ queryKey: ["class-schedule-rules"] });
+          queryClient.invalidateQueries({ queryKey: ["class-categories"] });
+          queryClient.invalidateQueries({ queryKey: ["class-templates"] });
+          queryClient.invalidateQueries({ queryKey: ["calendar-occurrences"] });
+          toast.success("Classes schedule updated from Excel!");
         }}
       />
 
-{/* Edit Class Slot Modal */}
-      <Dialog open={Boolean(editOccurrence)} onOpenChange={(open) => !open && setEditOccurrence(null)}>
+      {/* Edit Class Slot Modal */}
+      <Dialog
+        open={Boolean(editOccurrence)}
+        onOpenChange={(open) => !open && setEditOccurrence(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -5971,8 +7051,11 @@ export const ClassesWorkspace: React.FC = () => {
               <span>Edit Class Slot</span>
             </DialogTitle>
             <p className="text-xs text-muted-foreground">
-              Update schedule time, assigned trainer, capacity, and workout video URL for{' '}
-              <strong className="text-foreground">{editOccurrence?.template_name || editOccurrence?.class_name || 'Class'}</strong>.
+              Update schedule time, assigned trainer, capacity, and workout video URL for{" "}
+              <strong className="text-foreground">
+                {editOccurrence?.template_name || editOccurrence?.class_name || "Class"}
+              </strong>
+              .
             </p>
           </DialogHeader>
 
@@ -6019,7 +7102,8 @@ export const ClassesWorkspace: React.FC = () => {
                 <option value="">-- No Trainer Assigned --</option>
                 {trainers.map((tr: any) => {
                   const trId = tr.id || tr.trainer_profile_id;
-                  const trName = tr.trainer_name || tr.full_name || tr.name || tr.employee_name || 'Trainer';
+                  const trName =
+                    tr.trainer_name || tr.full_name || tr.name || tr.employee_name || "Trainer";
                   return (
                     <option key={trId} value={trId}>
                       {trName}
@@ -6065,7 +7149,9 @@ export const ClassesWorkspace: React.FC = () => {
                   <Video className="size-3.5 text-primary" />
                   <span>Workout Video URL</span>
                 </Label>
-                <span className="text-[10px] text-muted-foreground font-mono">YouTube, Vimeo, MP4</span>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  YouTube, Vimeo, MP4
+                </span>
               </div>
               <Input
                 type="url"
@@ -6078,30 +7164,41 @@ export const ClassesWorkspace: React.FC = () => {
                   // Auto-detect if this video exists in Content Studio (WOD Library)
                   if (val.trim()) {
                     const normYt = (url: string) => {
-                      const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                      const m = url.match(
+                        /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
+                      );
                       return m ? m[1] : url.trim().toLowerCase();
                     };
                     const searchKey = normYt(val);
                     const matchedVid = (availableVideosForCreate?.results || []).find((v: any) => {
                       if (!v.video_url) return false;
-                      return normYt(v.video_url) === searchKey || v.video_url.toLowerCase().includes(searchKey);
+                      return (
+                        normYt(v.video_url) === searchKey ||
+                        v.video_url.toLowerCase().includes(searchKey)
+                      );
                     });
 
                     if (matchedVid) {
                       if (matchedVid.targeted_muscles && editMuscles.length === 0) {
                         const mList = Array.isArray(matchedVid.targeted_muscles)
                           ? matchedVid.targeted_muscles
-                          : typeof matchedVid.targeted_muscles === 'string'
-                          ? matchedVid.targeted_muscles.split(/[,|&/]/).map((s: string) => s.trim()).filter(Boolean)
-                          : [];
+                          : typeof matchedVid.targeted_muscles === "string"
+                            ? matchedVid.targeted_muscles
+                                .split(/[,|&/]/)
+                                .map((s: string) => s.trim())
+                                .filter(Boolean)
+                            : [];
                         setEditMuscles(mList);
                       }
                       if (matchedVid.equipment_required && editEquipment.length === 0) {
                         const eList = Array.isArray(matchedVid.equipment_required)
                           ? matchedVid.equipment_required
-                          : typeof matchedVid.equipment_required === 'string'
-                          ? matchedVid.equipment_required.split(/[,+/&|]/).map((s: string) => s.trim()).filter(Boolean)
-                          : [];
+                          : typeof matchedVid.equipment_required === "string"
+                            ? matchedVid.equipment_required
+                                .split(/[,+/&|]/)
+                                .map((s: string) => s.trim())
+                                .filter(Boolean)
+                            : [];
                         setEditEquipment(eList);
                       }
                     }
@@ -6114,13 +7211,18 @@ export const ClassesWorkspace: React.FC = () => {
               {(() => {
                 if (!editVideoUrl.trim()) return null;
                 const normYt = (url: string) => {
-                  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                  const m = url.match(
+                    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
+                  );
                   return m ? m[1] : url.trim().toLowerCase();
                 };
                 const searchKey = normYt(editVideoUrl);
                 const matchedVid = (availableVideosForCreate?.results || []).find((v: any) => {
                   if (!v.video_url) return false;
-                  return normYt(v.video_url) === searchKey || v.video_url.toLowerCase().includes(searchKey);
+                  return (
+                    normYt(v.video_url) === searchKey ||
+                    v.video_url.toLowerCase().includes(searchKey)
+                  );
                 });
 
                 if (matchedVid) {
@@ -6131,15 +7233,21 @@ export const ClassesWorkspace: React.FC = () => {
                         <span>Matched in Content Studio: {matchedVid.title}</span>
                       </div>
                       <div className="text-[10px] opacity-90 flex flex-wrap gap-x-3 gap-y-1">
-                        <span><strong>Muscles:</strong> {matchedVid.targeted_muscles || 'None'}</span>
-                        <span><strong>Equipment:</strong> {matchedVid.equipment_required || 'None (Bodyweight)'}</span>
+                        <span>
+                          <strong>Muscles:</strong> {matchedVid.targeted_muscles || "None"}
+                        </span>
+                        <span>
+                          <strong>Equipment:</strong>{" "}
+                          {matchedVid.equipment_required || "None (Bodyweight)"}
+                        </span>
                       </div>
                     </div>
                   );
                 }
                 return (
                   <p className="text-[10px] text-muted-foreground">
-                    Video not yet in Content Studio. It will be <strong>auto-registered</strong> with the muscle and equipment tags specified below.
+                    Video not yet in Content Studio. It will be <strong>auto-registered</strong>{" "}
+                    with the muscle and equipment tags specified below.
                   </p>
                 );
               })()}
@@ -6176,7 +7284,11 @@ export const ClassesWorkspace: React.FC = () => {
               onClick={handleSaveSlotEdit}
               className="gap-1.5 text-xs font-semibold"
             >
-              {isSavingEdit ? <RefreshCw className="size-3 animate-spin" /> : <Save className="size-3" />}
+              {isSavingEdit ? (
+                <RefreshCw className="size-3 animate-spin" />
+              ) : (
+                <Save className="size-3" />
+              )}
               Save Changes
             </Button>
           </DialogFooter>

@@ -101,7 +101,7 @@ export function getProgramIcon(name: string) {
 
 // Presentation metadata for supported payment providers
 const PROVIDER_METADATA: Record<string, { label: string; icon: string; description?: string }> = {
-  CASH: { label: 'Centre Cash', icon: '💵', description: 'Handed over at reception desk (requires manager review)' },
+  CASH: { label: 'Centre Cash', icon: '💵', description: 'Handed over at reception desk (immediate activation for admins)' },
   RAZORPAY: { label: 'Razorpay Online', icon: '💳', description: 'UPI · Debit/Credit Cards · Netbanking · Instant Activation' },
 };
 
@@ -529,6 +529,7 @@ function PricingStep({
   couponCode,
   packageId,
   branchId,
+  memberId,
   onCouponChange,
   onApplyCoupon,
   onRemoveCoupon,
@@ -538,6 +539,7 @@ function PricingStep({
   couponCode: string;
   packageId?: string | undefined;
   branchId?: string | undefined;
+  memberId?: string | undefined;
   onCouponChange: (c: string) => void;
   onApplyCoupon: (code?: string) => void;
   onRemoveCoupon?: (() => void) | undefined;
@@ -616,6 +618,7 @@ function PricingStep({
             branchId={branchId}
             subtotal={Number(p.subtotal)}
             orderType="NEW_MEMBERSHIP"
+            memberId={memberId}
             appliedCoupon={
               quote.coupon && quote.coupon.is_valid
                 ? {
@@ -705,6 +708,20 @@ function PaymentStep({
   const isShort = entered < quoted && entered > 0;
   const exceedsTotal = entered > quoted;
 
+  const currentUser = getCurrentUser();
+  const roleStr = (currentUser?.role || '').toLowerCase();
+  const isAdmin = Boolean(
+    currentUser?.isSuperAdmin ||
+    roleStr.includes('admin') ||
+    roleStr.includes('manager') ||
+    roleStr.includes('owner') ||
+    currentUser?.userType === 'platform' ||
+    (currentUser?.roles && currentUser.roles.some((r: any) => {
+      const code = (r.code || '').toUpperCase();
+      return code.includes('ADMIN') || code.includes('MANAGER') || code.includes('OWNER');
+    }))
+  );
+
   // STRICT BACKEND-DRIVEN: Only render providers present in backend response. Zero fallback!
   const backendProviders = quote.payment_providers || [];
   const availableOptions = backendProviders.map((code) => ({
@@ -764,8 +781,8 @@ function PaymentStep({
                             Instant
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                            Approval Req.
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${isAdmin ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'}`}>
+                            {isAdmin ? 'Direct Activation' : 'Approval Req.'}
                           </span>
                         )}
                       </div>
@@ -809,15 +826,27 @@ function PaymentStep({
 
       {/* 2. Contextual Workflow Alerts */}
       {paymentProvider === 'CASH' && (
-        <div className="p-3.5 sm:p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs space-y-1.5 shadow-xs">
-          <div className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-100 text-xs sm:text-sm">
-            <ShieldCheck size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>Cash Collection & Approval Workflow</span>
+        isAdmin ? (
+          <div className="p-3.5 sm:p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 text-xs space-y-1.5 shadow-xs">
+            <div className="font-bold flex items-center gap-1.5 text-emerald-950 dark:text-emerald-100 text-xs sm:text-sm">
+              <ShieldCheck size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Admin Cash Direct Activation</span>
+            </div>
+            <p className="leading-relaxed text-emerald-800 dark:text-emerald-300">
+              Admin Authorization Detected: Cash payment is recorded and verified directly. The membership and full package entitlements will activate immediately upon conversion without requiring secondary approval.
+            </p>
           </div>
-          <p className="leading-relaxed text-amber-800 dark:text-amber-300">
-            Segregation of Duties Enforced: Cash collections are submitted for manager review under <strong>Automation → Approvals</strong>. The recording agent cannot self-approve. The membership activates once verified.
-          </p>
-        </div>
+        ) : (
+          <div className="p-3.5 sm:p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs space-y-1.5 shadow-xs">
+            <div className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-100 text-xs sm:text-sm">
+              <ShieldCheck size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>Cash Collection & Approval Workflow</span>
+            </div>
+            <p className="leading-relaxed text-amber-800 dark:text-amber-300">
+              Segregation of Duties Enforced: Cash collections recorded by front-desk staff are submitted for manager review under <strong>Automation → Approvals</strong>. The membership activates once verified.
+            </p>
+          </div>
+        )
       )}
 
       {paymentProvider === 'RAZORPAY' && (
@@ -2367,6 +2396,7 @@ const handleCancelRazorpay = useCallback(() => {
                     couponCode={couponCode}
                     packageId={(quote as any).package?.id || (quote.package_version as any)?.package_id}
                     branchId={selectedBranchId}
+                    memberId={lead.id}
                     onCouponChange={setCouponCode}
                     onApplyCoupon={handleApplyCoupon}
                     onRemoveCoupon={handleRemoveCoupon}
