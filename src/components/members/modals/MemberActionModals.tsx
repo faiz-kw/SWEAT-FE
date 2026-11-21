@@ -359,6 +359,7 @@ export const RenewModal: React.FC<{
               subtotal={priceEstimate}
               orderType="RENEWAL"
               branchId={selectedContract?.purchase_branch_id || (member as any)?.branch_id}
+              memberId={member.id}
               appliedCoupon={appliedCoupon}
               onApplyCoupon={(c) => setAppliedCoupon(c)}
               onRemoveCoupon={() => setAppliedCoupon(null)}
@@ -796,6 +797,7 @@ export const UpgradeModal: React.FC<{
                 subtotal={rawDifference > 0 ? rawDifference : targetPrice}
                 orderType="UPGRADE"
                 branchId={selectedContract?.purchase_branch_id || (member as any)?.branch_id}
+                memberId={member.id}
                 appliedCoupon={appliedCoupon}
                 onApplyCoupon={(c) => setAppliedCoupon(c)}
                 onRemoveCoupon={() => setAppliedCoupon(null)}
@@ -2635,8 +2637,9 @@ export const RejoinModal: React.FC<{
               <ApplicableOffersSelector
                 packageId={selectedPlan.package_id || selectedPlan.id}
                 branchId={(member as any).branch_id || (member as any).branch || undefined}
+                memberId={member.id}
                 subtotal={Number(selectedPlan.price || 0)}
-                orderType="RENEWAL"
+                orderType="REJOIN"
                 appliedCoupon={appliedCoupon}
                 onApplyCoupon={(c) => {
                   setAppliedCoupon(c);
@@ -3588,6 +3591,7 @@ export const PurchaseProgramPackageModal: React.FC<{
                 <ApplicableOffersSelector
                   packageId={selectedPkg.id}
                   branchId={selectedBranchId}
+                  memberId={member.id}
                   subtotal={priceEstimate}
                   orderType="NEW_PACKAGE"
                   appliedCoupon={appliedCoupon}

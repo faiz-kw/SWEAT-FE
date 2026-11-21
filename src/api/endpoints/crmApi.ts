@@ -1103,6 +1103,7 @@ export const crmApi = {
       package_version_id: string;
       branch_id: string;
       coupon_code?: string;
+      order_type?: string;
     }
   ): Promise<import('@/types/crm').ConversionQuote> => {
     const res = await api.post<import('@/types/crm').ConversionQuote>(

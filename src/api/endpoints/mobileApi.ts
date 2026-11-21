@@ -607,6 +607,8 @@ export const mobileApi = {
     package_id?: string | undefined;
     order_type?: string | undefined;
     branch_id?: string | undefined;
+    subtotal?: number | string | undefined;
+    member_id?: string | undefined;
   }) => api.get<MobileCoupon[]>('/mobile/coupons/', params ? { params } : undefined),
 
   validateCoupon: (data: {
@@ -615,5 +617,6 @@ export const mobileApi = {
     subtotal: number | string;
     order_type?: string | undefined;
     branch_id?: string | undefined;
+    member_id?: string | undefined;
   }) => api.post<CouponValidationResultMobile>('/mobile/coupons/validate/', data),
 };

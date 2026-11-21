@@ -681,24 +681,47 @@ export function UsersWorkspace() {
       const trimmedPhone = editPhone.trim();
       const phoneChanged = trimmedPhone !== (editingUser.phone || "").trim();
 
+      const originalRoleId =
+        roles.find((role) => role.name === editingUser.role || role.code === editingUser.role)?.id ||
+        editingUser.branch_access?.[0]?.role_id ||
+        "";
+      const roleChanged = Boolean(editRole && editRole !== originalRoleId);
+
       const selectedRoleScope = roles.find((role) => role.id === editRole || role.code === editRole || role.name === editRole)?.scope;
       const isBranchScopedRole = selectedRoleScope === "BRANCH";
 
-      // 1. Prepare profile & home branch update payload (strictly WITHOUT branch_access to respect backend decoupling)
+      const originalPrimaryBranchId =
+        editingUser.assigned_branches?.find((b) => b.is_primary)?.id ||
+        editingUser.active_location_id ||
+        (editingUser as any).home_branch ||
+        "";
+      const branchChanged = Boolean(editPrimaryBranchId && editPrimaryBranchId !== originalPrimaryBranchId);
+
+      const userDeptVal = (editingUser as any)["department"];
+      const currentDept = departments.find(
+        (d) => d.name === userDeptVal || d.id === (editingUser as any)["department_id"]
+      );
+      const originalDeptId = currentDept?.id || "";
+      const departmentChanged = editDepartmentId !== originalDeptId;
+
+      const originalReportsToId = editingUser.reports_to_id || "";
+      const reportsToChanged = editReportsToId !== originalReportsToId;
+      const statusChanged = editStatus.toUpperCase() !== String(editingUser.status).toUpperCase();
+
+      // 1. Prepare profile & home branch update payload (send only modified fields to avoid redundant DB collisions)
       const basePayload: Record<string, any> = {
         ...(firstNameChanged ? { first_name: trimmedFirstName } : {}),
         ...(lastNameChanged ? { last_name: trimmedLastName } : {}),
         ...(emailChanged ? { email: trimmedEmail } : {}),
         ...(phoneChanged ? { phone: trimmedPhone } : {}),
-        ...(editRole ? { role_id: editRole } : {}),
+        ...(roleChanged || editRole ? { role_id: editRole } : {}),
         ...(usernameChanged ? { username: trimmedUsername } : {}),
-        ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
-        is_active: editStatus === "Active",
-        department_id: editDepartmentId || undefined,
-        reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null),
+        ...(statusChanged ? { status: editStatus.toUpperCase() } : {}),
+        ...(departmentChanged ? { department_id: editDepartmentId || null } : {}),
+        ...(reportsToChanged ? { reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null) } : {}),
       };
 
-      if (editPrimaryBranchId) {
+      if (branchChanged && editPrimaryBranchId) {
         basePayload.primary_branch_id = editPrimaryBranchId;
         basePayload.home_branch = editPrimaryBranchId;
       }

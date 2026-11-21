@@ -31,6 +31,7 @@ import {
   Phone,
   Mail,
   RotateCcw,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { classesApi } from '@/api/endpoints/classesApi';
@@ -113,6 +114,8 @@ export const CancelClassModal: React.FC<CancelClassModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
       queryClient.invalidateQueries({ queryKey: ['class-roster'] });
       queryClient.invalidateQueries({ queryKey: ['mobile-schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-trainers'] });
+      queryClient.invalidateQueries({ queryKey: ['trainer-availability'] });
       onSuccess?.();
       onClose();
     },
@@ -320,11 +323,48 @@ export const CancelClassModal: React.FC<CancelClassModalProps> = ({
             )}
           </div>
 
-          {/* Section 2: Cancellation Action & Mode */}
+          {/* Section 2: Assigned Trainer Release */}
+          <div>
+            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <UserCheck className="size-3.5 text-primary" />
+              <span>2. Assigned Trainer Release</span>
+            </h4>
+            {preview?.assigned_trainers && preview.assigned_trainers.length > 0 ? (
+              <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-foreground">
+                    {preview.assigned_trainers.map((t) => `${t.trainer_name} (${t.role || 'Lead'})`).join(', ')}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Assigned trainer will be automatically released immediately and made 100% available for reassignment to other group classes or personal training appointments.
+                  </p>
+                </div>
+              </div>
+            ) : (occurrence.trainers && occurrence.trainers.length > 0) ? (
+              <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-foreground">
+                    {occurrence.trainers.map((t: any) => `${t.trainer_name || 'Trainer'} (${t.trainer_role || 'Lead'})`).join(', ')}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Assigned trainer will be automatically released immediately and made 100% available for reassignment.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground flex items-center gap-2">
+                <span>No trainer is currently assigned to this session.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Cancellation Action & Mode */}
           <div>
             <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Ban className="size-3.5 text-primary" />
-              <span>2. Action & Status</span>
+              <span>3. Action & Status</span>
             </h4>
             <div className="grid grid-cols-2 gap-2">
               <button

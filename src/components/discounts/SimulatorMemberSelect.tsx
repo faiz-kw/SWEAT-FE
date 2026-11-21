@@ -35,7 +35,7 @@ export const SimulatorMemberSelect: React.FC<SimulatorMemberSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'INACTIVE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'INACTIVE'>('ACTIVE');
   const [page, setPage] = useState(1);
   const [accumulatedMembers, setAccumulatedMembers] = useState<Member[]>([]);
 

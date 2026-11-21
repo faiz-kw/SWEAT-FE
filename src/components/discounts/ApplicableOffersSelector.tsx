@@ -18,8 +18,9 @@ export interface AppliedCouponState {
 interface ApplicableOffersSelectorProps {
   packageId?: string | undefined;
   subtotal: number;
-  orderType?: 'RENEWAL' | 'UPGRADE' | 'NEW_MEMBERSHIP' | 'PACKAGE_PURCHASE' | string | undefined;
+  orderType?: 'RENEWAL' | 'UPGRADE' | 'NEW_MEMBERSHIP' | 'PACKAGE_PURCHASE' | 'REJOIN' | string | undefined;
   branchId?: string | undefined;
+  memberId?: string | undefined;
   appliedCoupon: AppliedCouponState | null;
   onApplyCoupon: (result: AppliedCouponState) => void;
   onRemoveCoupon: () => void;
@@ -32,6 +33,7 @@ export const ApplicableOffersSelector: React.FC<ApplicableOffersSelectorProps> =
   subtotal,
   orderType = 'RENEWAL',
   branchId,
+  memberId,
   appliedCoupon,
   onApplyCoupon,
   onRemoveCoupon,
@@ -42,14 +44,16 @@ export const ApplicableOffersSelector: React.FC<ApplicableOffersSelectorProps> =
   const [validating, setValidating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Fetch applicable coupons dynamically for this package and order type
+  // Fetch applicable coupons dynamically for this package, order type, and member lifecycle
   const { data: availableCoupons = [], isLoading } = useQuery<MobileCoupon[]>({
-    queryKey: ['available-coupons', packageId, orderType, branchId],
+    queryKey: ['available-coupons', packageId, orderType, branchId, subtotal, memberId],
     queryFn: async () => {
       const res = await mobileApi.getAvailableCoupons({
         package_id: packageId,
         order_type: orderType,
         branch_id: branchId,
+        subtotal: subtotal,
+        member_id: memberId,
       });
       return Array.isArray(res.data) ? res.data : [];
     },
@@ -73,6 +77,7 @@ export const ApplicableOffersSelector: React.FC<ApplicableOffersSelectorProps> =
         subtotal: subtotal,
         order_type: orderType,
         branch_id: branchId,
+        member_id: memberId,
       });
 
       const data = res.data;

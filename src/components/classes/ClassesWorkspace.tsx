@@ -378,8 +378,15 @@ export const ClassesWorkspace: React.FC = () => {
       setEditEquipment([]);
     }
 
-    const currentTrainer = (occ.trainers && occ.trainers[0]) || (occ.assigned_trainers && occ.assigned_trainers[0]);
-    const currentTrId = currentTrainer?.trainer_profile || currentTrainer?.trainer_profile_id || '';
+    const isCancelledOrDeactivated = occ.status === 'CANCELLED' || occ.status === 'DEACTIVATED';
+    const activeTrainers = isCancelledOrDeactivated
+      ? []
+      : [
+          ...(occ.trainers || []),
+          ...(occ.assigned_trainers || []),
+        ].filter((t: any) => t.status === 'ASSIGNED' || t.status === 'CONFIRMED');
+    const leadTrainer = activeTrainers.find((t: any) => t.trainer_role === 'LEAD') || activeTrainers[0];
+    const currentTrId = leadTrainer?.trainer_profile || leadTrainer?.trainer_profile_id || '';
     setEditTrainerId(currentTrId);
     setInitialTrainerId(currentTrId);
 
@@ -391,10 +398,10 @@ export const ClassesWorkspace: React.FC = () => {
             setEditVideoUrl((prev) => prev || vInfo.video_url || '');
           }
           if (Array.isArray(vInfo.targeted_muscles) && vInfo.targeted_muscles.length > 0) {
-            setEditMuscles((prev) => prev.length > 0 ? prev : vInfo.targeted_muscles!);
+            setEditMuscles((prev) => (prev.length > 0 ? prev : (vInfo.targeted_muscles as string[])));
           }
           if (Array.isArray(vInfo.equipment_required) && vInfo.equipment_required.length > 0) {
-            setEditEquipment((prev) => prev.length > 0 ? prev : vInfo.equipment_required!);
+            setEditEquipment((prev) => (prev.length > 0 ? prev : (vInfo.equipment_required as string[])));
           }
         }
       }).catch(() => {});
@@ -421,19 +428,36 @@ export const ClassesWorkspace: React.FC = () => {
         });
       }
 
-      // Only reassign trainer if trainer was genuinely changed by user
+      // Reassign trainer if genuinely changed, or unassign if set to empty
+      let trainerWarning: string | null = null;
+      let trainerAssignedSuccess = false;
       if (editTrainerId && editTrainerId !== initialTrainerId) {
         try {
           await classesApi.assignTrainer(editOccurrence.id, editTrainerId, 'LEAD');
+          trainerAssignedSuccess = true;
         } catch (trainerErr: any) {
           console.warn('Trainer assignment warning:', trainerErr);
-          toast.warning(trainerErr?.response?.data?.error || 'Class slot updated, but trainer could not be assigned.');
+          trainerWarning = trainerErr?.response?.data?.error || trainerErr?.response?.data?.detail || 'Trainer could not be assigned.';
+        }
+      } else if (!editTrainerId && initialTrainerId) {
+        try {
+          await classesApi.unassignTrainer(editOccurrence.id, initialTrainerId);
+        } catch (unassignErr: any) {
+          console.warn('Trainer unassign warning:', unassignErr);
         }
       }
 
-      toast.success('Class slot updated successfully!');
+      if (trainerWarning) {
+        toast.warning(`Class slot updated, but trainer assignment warning: ${trainerWarning}`);
+      } else if (trainerAssignedSuccess) {
+        toast.success('Class slot and trainer assigned successfully!');
+      } else {
+        toast.success('Class slot updated successfully!');
+      }
+
       queryClient.invalidateQueries({ queryKey: ['class-occurrences'] });
       queryClient.invalidateQueries({ queryKey: ['classes-calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-trainers'] });
       refetchOccurrences();
       setEditOccurrence(null);
     } catch (err: any) {
@@ -3440,17 +3464,19 @@ export const ClassesWorkspace: React.FC = () => {
                         const isInProgress = occ.status === 'IN_PROGRESS';
                         const isFull = occ.status === 'FULL' || (occ.booking_count ?? 0) >= occ.capacity;
 
-                        const isCheckedIn = Boolean(
+                        const isCheckedIn = !isCancelled && !isDeactivated && Boolean(
                           occ.trainer_checked_in ||
                           occ.trainer_check_in_details?.checked_in ||
                           (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
                           (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
                         );
 
-                        const allTrainers = [
-                          ...(occ.trainers || []),
-                          ...(occ.assigned_trainers || []),
-                        ];
+                        const allTrainers = (isCancelled || isDeactivated)
+                          ? []
+                          : [
+                              ...(occ.trainers || []),
+                              ...(occ.assigned_trainers || []),
+                            ].filter((t: any) => t.status !== 'CANCELLED');
                         const hasTrainer = allTrainers.length > 0;
 
                         const startTimeFormatted = occ.start_time
@@ -3765,17 +3791,24 @@ export const ClassesWorkspace: React.FC = () => {
                   const categoryCode = occ.category_code || matchedTpl?.category_code;
                   const programName = occ.program_name || matchedTpl?.program_name;
 
-                  const isCheckedIn = Boolean(
+                  const isCompleted = occ.status === 'COMPLETED';
+                  const isCancelled = occ.status === 'CANCELLED';
+                  const isDeactivated = occ.status === 'DEACTIVATED';
+                  const isInProgress = occ.status === 'IN_PROGRESS';
+
+                  const isCheckedIn = !isCancelled && !isDeactivated && Boolean(
                     occ.trainer_checked_in ||
                     occ.trainer_check_in_details?.checked_in ||
                     (occ.trainers && occ.trainers.some((t: any) => t.status === 'CONFIRMED')) ||
                     (occ.assigned_trainers && occ.assigned_trainers.some((t: any) => t.status === 'CONFIRMED'))
                   );
 
-                  const allTrainers = [
-                    ...(occ.trainers || []),
-                    ...(occ.assigned_trainers || []),
-                  ];
+                  const allTrainers = (isCancelled || isDeactivated)
+                    ? []
+                    : [
+                        ...(occ.trainers || []),
+                        ...(occ.assigned_trainers || []),
+                      ].filter((t: any) => t.status !== 'CANCELLED');
                   const hasTrainer = allTrainers.length > 0;
 
                   const startTimeFormatted = occ.start_time
@@ -3787,11 +3820,6 @@ export const ClassesWorkspace: React.FC = () => {
 
                   const bookedCount = occ.booking_count ?? 0;
                   const waitlistCount = occ.waitlist_count ?? 0;
-
-                  const isCompleted = occ.status === 'COMPLETED';
-                  const isCancelled = occ.status === 'CANCELLED';
-                  const isDeactivated = occ.status === 'DEACTIVATED';
-                  const isInProgress = occ.status === 'IN_PROGRESS';
 
                   return (
                     <div

@@ -405,7 +405,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<'campaigns' | 'rules' | 'redemptions' | 'simulator'>(defaultTab);
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
 
   const displayTitle =
     title ||
@@ -1389,10 +1389,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               searchPlaceholder="Search campaigns or promo codes..."
               onReset={() => {
                 setSearchTerm('');
-                setStatusFilter('ALL');
+                setStatusFilter('ACTIVE');
               }}
-              hasActiveFilters={Boolean(searchTerm || statusFilter !== 'ALL')}
-              activeFiltersCount={(searchTerm ? 1 : 0) + (statusFilter !== 'ALL' ? 1 : 0)}
+              hasActiveFilters={Boolean(searchTerm || statusFilter !== 'ACTIVE')}
+              activeFiltersCount={(searchTerm ? 1 : 0) + (statusFilter !== 'ACTIVE' ? 1 : 0)}
             >
               <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 shrink-0">
                 <button
@@ -1459,20 +1459,31 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     : 'No Campaigns Found'
                 }
                 description={
-                  statusFilter !== 'ALL' || searchTerm
-                    ? `No discount campaigns or promo codes match your current filter (${statusFilter === 'ACTIVE' ? 'Active only' : statusFilter === 'INACTIVE' ? 'Inactive only' : ''}${searchTerm ? ` "${searchTerm}"` : ''}). Try resetting your filters.`
+                  searchTerm
+                    ? `No discount campaigns or promo codes match "${searchTerm}". Try adjusting your search term.`
+                    : statusFilter === 'ACTIVE'
+                    ? 'No active discount campaigns right now. Create a new campaign or view inactive campaigns.'
+                    : statusFilter === 'INACTIVE'
+                    ? 'No inactive discount campaigns found.'
                     : 'No discount campaigns match your current filters. Create a promotional voucher campaign to reward prospects and members.'
                 }
-                actionLabel={statusFilter !== 'ALL' || searchTerm ? 'Reset Filters' : canCreate ? '+ Create Campaign' : undefined}
+                actionLabel={
+                  searchTerm
+                    ? 'Clear Search'
+                    : statusFilter !== 'ACTIVE'
+                    ? 'Reset to Active'
+                    : canCreate
+                    ? '+ Create Campaign'
+                    : undefined
+                }
                 onAction={
-                  statusFilter !== 'ALL' || searchTerm
-                    ? () => {
-                        setSearchTerm('');
-                        setStatusFilter('ALL');
-                      }
+                  searchTerm
+                    ? () => setSearchTerm('')
+                    : statusFilter !== 'ACTIVE'
+                    ? () => setStatusFilter('ACTIVE')
                     : openCreateCampaignModal
                 }
-                canAction={Boolean(statusFilter !== 'ALL' || searchTerm || canCreate)}
+                canAction={Boolean(statusFilter !== 'ACTIVE' || searchTerm || canCreate)}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

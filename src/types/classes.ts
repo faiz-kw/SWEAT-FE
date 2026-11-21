@@ -36,6 +36,13 @@ export interface ClassCancellationPreview {
   waitlist_count: number;
   is_recurring: boolean;
   affected_bookings: AffectedBooking[];
+  assigned_trainers?: Array<{
+    id: string;
+    trainer_id: string;
+    trainer_name: string;
+    trainer_code: string;
+    role: string;
+  }>;
 }
 
 export interface ClassCategory {

@@ -612,14 +612,14 @@ function PricingStep({
         {/* Left: Applicable Offers & Coupons Card */}
         <div className="p-4 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
           <ApplicableOffersSelector
-            packageId={packageId || (pv as any).package_id || (quote as any).package?.id}
+            packageId={packageId || (quote as any).package?.id || (pv as any).package_id}
             branchId={branchId}
             subtotal={Number(p.subtotal)}
             orderType="NEW_MEMBERSHIP"
             appliedCoupon={
               quote.coupon && quote.coupon.is_valid
                 ? {
-                    code: quote.coupon.coupon_code || couponCode,
+                    code: quote.coupon.code || (quote.coupon as any).coupon_code || couponCode,
                     discount_amount: parseFloat(quote.coupon.discount_amount || '0'),
                     discount_type: (quote.coupon as any).discount_type || 'PERCENTAGE',
                   }
@@ -1978,9 +1978,10 @@ const handleCancelRazorpay = useCallback(() => {
     setError(null);
     setIsFetchingQuote(true);
     try {
-      const quotePayload: { package_version_id: string; branch_id: string; coupon_code?: string } = {
+      const quotePayload: { package_version_id: string; branch_id: string; coupon_code?: string; order_type?: string } = {
         package_version_id: versionId,
         branch_id: selectedBranchId,
+        order_type: 'NEW_MEMBERSHIP',
       };
       if (coupon) quotePayload.coupon_code = coupon;
       const q = await crmApi.getConversionQuote(lead.id, quotePayload);
@@ -2364,7 +2365,7 @@ const handleCancelRazorpay = useCallback(() => {
                   <PricingStep
                     quote={quote}
                     couponCode={couponCode}
-                    packageId={(quote.package_version as any)?.package_id || (quote as any).package?.id}
+                    packageId={(quote as any).package?.id || (quote.package_version as any)?.package_id}
                     branchId={selectedBranchId}
                     onCouponChange={setCouponCode}
                     onApplyCoupon={handleApplyCoupon}

@@ -8712,6 +8712,7 @@ function WebMemberPortalWorkspaceInner() {
                   }
                   orderType="RENEWAL"
                   branchId={selectedRenewBranchId || membershipActions?.active_membership?.branch_id}
+                  memberId={user?.id}
                   appliedCoupon={renewAppliedCoupon}
                   onApplyCoupon={(c) => setRenewAppliedCoupon(c)}
                   onRemoveCoupon={() => setRenewAppliedCoupon(null)}
@@ -9109,6 +9110,7 @@ function WebMemberPortalWorkspaceInner() {
                   }
                   orderType="UPGRADE"
                   branchId={selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id}
+                  memberId={user?.id}
                   appliedCoupon={upgradeAppliedCoupon}
                   onApplyCoupon={(c) => setUpgradeAppliedCoupon(c)}
                   onRemoveCoupon={() => setUpgradeAppliedCoupon(null)}
