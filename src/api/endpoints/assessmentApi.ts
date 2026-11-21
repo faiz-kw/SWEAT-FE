@@ -246,9 +246,7 @@ export const assessmentApi = {
   },
 
   async pairDisplayScreen(code: string): Promise<any> {
-    const res = await api.get<any>('/tenant/assessments/pair/', {
-      params: { code },
-    });
+    const res = await api.post<any>('/tenant/assessments/pair/', { code });
     return res.data;
   },
 };
