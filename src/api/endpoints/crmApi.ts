@@ -848,6 +848,11 @@ export const crmApi = {
     return res.data;
   },
 
+  getTrialFollowup: async (id: string): Promise<SalesFollowupTask> => {
+    const res = await api.get<SalesFollowupTask>(`/tenant/trial-bookings/${id}/followup/`);
+    return res.data;
+  },
+
   getTrialReminderSchedule: async (id: string): Promise<TrialReminderSchedulePoint[]> => {
     const res = await api.get<{ reminder_schedule: TrialReminderSchedulePoint[] }>(`/tenant/trial-bookings/${id}/reminder_schedule/`);
     return res.data.reminder_schedule || [];

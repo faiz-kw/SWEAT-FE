@@ -5511,16 +5511,19 @@ export const ClassesWorkspace: React.FC = () => {
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Template</option>
-                  {templates.map((t) => (
-                    <option
-                      key={t.id}
-                      value={t.id}
-                      disabled={t.status === "INACTIVE" && ruleForm.class_template !== t.id}
-                    >
-                      {t.name}
-                      {t.status === "INACTIVE" ? " (Inactive)" : ""}
-                    </option>
-                  ))}
+                  {templates
+                    .filter(
+                      (t) =>
+                        (t.status || "").toUpperCase() === "ACTIVE" ||
+                        (!t.status && (t as any).is_active !== false) ||
+                        (editingRule && ruleForm.class_template === t.id),
+                    )
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.status === "INACTIVE" ? " (Inactive)" : ""}
+                      </option>
+                    ))}
                 </select>
               </div>
 

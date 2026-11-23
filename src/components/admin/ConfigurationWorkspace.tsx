@@ -62,6 +62,7 @@ export function ConfigurationWorkspace() {
     no_show_cooling_off_days: 7,
     restricted_max_advance_bookings: 1,
     qr_activation_minutes_before_class: 20,
+    qr_scan_grace_period_minutes: 20,
     notify_unpaid_auto_cancellation: true,
     notify_unconfirmed_auto_cancellation: true,
     notify_late_cancellation: true,
@@ -1031,6 +1032,40 @@ export function ConfigurationWorkspace() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
                       <span>Default: <strong>20 minutes</strong> (Currently saved: <strong>{bookingPolicy.qr_activation_minutes_before_class ?? 20}m</strong>)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="qr_scan_grace_period_min" className="text-sm font-semibold text-foreground">
+                      Member Attendance QR Scan Grace Period
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Configure how many minutes after a scheduled class starts a member is allowed to scan their QR code at the turnstile and still have their attendance marked. If a member scans within this grace period, attendance is recorded successfully as Present. Scans after this grace period will follow the configured late attendance policy.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Input
+                        id="qr_scan_grace_period_min"
+                        type="number"
+                        min="0"
+                        max="180"
+                        value={bookingPolicy.qr_scan_grace_period_minutes ?? 20}
+                        onChange={(e) => {
+                          const rawVal = e.target.value;
+                          const num = Number(rawVal);
+                          updateBooking("qr_scan_grace_period_minutes", isNaN(num) || num < 0 ? 0 : num);
+                        }}
+                        className="h-9 w-28 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs font-medium text-muted-foreground shrink-0">minutes after class start</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span>Default: <strong>20 minutes</strong> (Currently saved: <strong>{bookingPolicy.qr_scan_grace_period_minutes ?? 20}m</strong>)</span>
                     </div>
                   </div>
                 </div>

@@ -548,14 +548,22 @@ export function LeadDetailModal({
 
   const markAttendedMutation = useMutation({
     mutationFn: (trialId: string) => crmApi.markTrialAttended(trialId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
-      toast.success('Trial marked as Attended! Follow-up generated if enabled.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = currentLead?.first_name || 'the prospect';
+      const msg = task
+        ? `Trial marked as Attended! Post-trial follow-up created and assigned to ${assignedToName}. Expected next action: Contact ${leadName} to collect workout feedback and explore membership plans.`
+        : `Trial marked as Attended! Status successfully updated in CRM.`;
+      toast.success(msg, { duration: 8000 });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark attended');
@@ -564,14 +572,22 @@ export function LeadDetailModal({
 
   const markNoShowMutation = useMutation({
     mutationFn: (trialId: string) => crmApi.markTrialNoShow(trialId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
-      toast.success('Trial marked as No-Show! Recovery task created if enabled.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = currentLead?.first_name || 'the prospect';
+      const msg = task
+        ? `Trial marked as No-Show! Recovery follow-up created and assigned to ${assignedToName}. Expected next action: Reach out to ${leadName} to understand reason for missing and reschedule.`
+        : `Trial marked as No-Show! Status successfully updated in CRM.`;
+      toast.success(msg, { duration: 8000 });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark no-show');

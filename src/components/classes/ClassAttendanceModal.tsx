@@ -899,7 +899,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
                 const isCompleted = booking.status === 'COMPLETED' || booking.status === 'ATTENDED' || booking.attendance_record?.status === 'PRESENT' || booking.attendance_record?.status === 'LATE' || booking.attendance_record?.status === 'LATE_SHOW';
                 const isCancelled = booking.status === 'CANCELLED';
                 const isWaitlisted = booking.status === 'WAITLISTED' || booking.status === 'WAITLIST';
-                const isTrial = booking.booking_type === 'TRIAL';
+                const isTrial = booking.booking_type === 'TRIAL' || Boolean(booking.is_trial) || booking.booking_source === 'TRIAL';
                 const attStatus = booking.attendance_record?.status;
                 const displayName = booking.member_name || booking.user_profile_name || booking.user_profile?.full_name || 'Member';
                 const displayEmail = booking.member_email || booking.user_profile_email || booking.user_profile?.email;
