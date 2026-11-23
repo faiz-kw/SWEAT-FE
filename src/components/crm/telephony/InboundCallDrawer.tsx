@@ -4,6 +4,8 @@ import { PhoneCall, User, MapPin, FileText, ExternalLink, X, Headphones, UserChe
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWebRTCPhone } from "./WebRTCPhoneContext";
+import { usePermissions } from "@/lib/permissions";
+import { formatDisplayPhone } from "@/lib/phonePrivacy";
 import { PhoneOff } from "lucide-react";
 
 export interface InboundCallPopupData {
@@ -40,6 +42,7 @@ export function InboundCallDrawer({
 }: InboundCallDrawerProps) {
   // ⚠️ All hooks MUST be called before any early return (React Rules of Hooks)
   const { callState, answerCall, declineCall, hangupCall, activeCall } = useWebRTCPhone();
+  const { canViewPhoneNumber } = usePermissions();
   const [isAnswering, setIsAnswering] = React.useState(false);
 
   React.useEffect(() => {
@@ -127,7 +130,7 @@ export function InboundCallDrawer({
               <span className="truncate" title={call.lead_name}>{call.lead_name}</span>
             </div>
             <div className="text-xs font-mono text-muted-foreground tracking-wider mt-0.5">
-              {call.masked_phone}
+              {formatDisplayPhone(call.caller_phone || call.masked_phone, canViewPhoneNumber)}
             </div>
           </div>
           <Badge

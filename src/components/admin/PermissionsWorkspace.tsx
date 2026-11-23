@@ -45,6 +45,7 @@ import {
   type RoleDefRow,
   type PermissionDefRow,
 } from "@/api/endpoints/api-admin";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts";
 
 const isUuid = (val?: string | null): boolean => {
@@ -110,6 +111,10 @@ const SUBMODULE_FRIENDLY_NAMES: Record<string, string> = {
 };
 
 export const EXPLICIT_PERMISSION_LABELS: Record<string, { label: string; description?: string }> = {
+  "core.privacy.view_phone_number": {
+    label: "View Complete Phone Numbers",
+    description: "Show full customer and lead phone numbers instead of masked (******7890).",
+  },
   "crm.telephony.access": {
     label: "Telephony & Outbound Calling (WebPhone)",
     description: "Enables in-browser WebRTC WebPhone dialer, outbound calling to leads and members, and live call handling.",
@@ -240,7 +245,8 @@ export const getFriendlyPermissionDescription = (perm: PermissionDefRow): string
 };
 
 export function PermissionsWorkspace() {
-  const { user } = useAuth();
+  const { user, refreshUserProfile } = useAuth();
+  const queryClient = useQueryClient();
   const isPlatformAdmin =
     user?.userType === "platform" ||
     (!user?.tenantId && (!!user?.isSuperAdmin || user?.role === "Super Admin"));
@@ -420,6 +426,8 @@ export function PermissionsWorkspace() {
       });
 
       await Promise.all(promises);
+      await refreshUserProfile();
+      await queryClient.invalidateQueries();
       toast.success("Permission rules saved to tenant database successfully.");
       setInitialMatrix(matrix);
       setHasChanges(false);

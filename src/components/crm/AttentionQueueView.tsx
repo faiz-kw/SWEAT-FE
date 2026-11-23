@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  RefreshCw,
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
@@ -22,6 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CRMEmptyState } from './common/CRMEmptyState';
 import { CRMErrorState } from './common/CRMErrorState';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -50,6 +51,7 @@ export function AttentionQueueView({
   onBookTrialClick,
   onStatusTransitionClick,
 }: AttentionQueueViewProps) {
+  const { canViewPhoneNumber } = usePermissions();
   const [page, setPage] = React.useState(1);
   const [reasonFilter, setReasonFilter] = React.useState<string>('ALL');
   const [severityFilter, setSeverityFilter] = React.useState<string>('ALL');
@@ -145,16 +147,6 @@ export function AttentionQueueView({
           <span className="text-xs text-muted-foreground">
             {isLoading ? 'Counting...' : `${totalCount} leads require attention`}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="h-8 px-2 text-xs"
-            title="Refresh attention queue"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          </Button>
         </div>
       </div>
 
@@ -209,7 +201,7 @@ export function AttentionQueueView({
                             {lead.first_name} {lead.last_name}
                           </div>
                           <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                            {lead.phone_normalized || lead.email_normalized || 'No direct phone'}
+                            {formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber) || lead.email_normalized || 'No direct phone'}
                           </div>
                         </td>
 

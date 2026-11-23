@@ -22,6 +22,7 @@ import {
   Check,
   X,
   User,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { discountsApi } from '@/api/endpoints/discountsApi';
@@ -63,6 +64,274 @@ import { CRMErrorState } from '@/components/crm/common/CRMErrorState';
 import { CRMLoadingState } from '@/components/crm/common/CRMLoadingState';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercentage } from '@/utils/currencyUtils';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { SimulatorMemberSelect } from './SimulatorMemberSelect';
+
+interface CheckboxMultiSelectProps {
+  label: string;
+  allLabel: string;
+  items: Array<{ id: string; name: string }>;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  emptyMessage?: string;
+  placeholder?: string;
+}
+
+const CheckboxMultiSelect: React.FC<CheckboxMultiSelectProps> = ({
+  label,
+  allLabel,
+  items,
+  selectedIds,
+  onChange,
+  emptyMessage = 'No items available',
+  placeholder = 'Search...',
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredItems = React.useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter((item) => item.name.toLowerCase().includes(q));
+  }, [items, search]);
+
+  const isAllSelected = items.length > 0 && selectedIds.length === items.length;
+
+  const triggerText = React.useMemo(() => {
+    if (items.length === 0) return emptyMessage;
+    if (selectedIds.length === items.length) return allLabel;
+    if (selectedIds.length === 0) return `Select ${label.toLowerCase()}...`;
+    if (selectedIds.length === 1) {
+      const match = items.find((i) => i.id === selectedIds[0]);
+      return match ? match.name : `1 ${label} selected`;
+    }
+    return `${selectedIds.length} ${label} selected`;
+  }, [selectedIds, items, allLabel, label, emptyMessage]);
+
+  const handleToggleAll = () => {
+    if (isAllSelected) {
+      onChange([]);
+    } else {
+      onChange(items.map((i) => i.id));
+    }
+  };
+
+  const handleToggleItem = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground flex items-center justify-between text-left hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
+        >
+          <span className="truncate pr-2">{triggerText}</span>
+          <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[280px] sm:w-[320px] p-2 z-[70] bg-popover text-popover-foreground border shadow-lg rounded-lg"
+        align="start"
+      >
+        {items.length > 5 && (
+          <div className="relative mb-2">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={placeholder}
+              className="h-8 pl-8 text-xs bg-muted/30"
+            />
+          </div>
+        )}
+        <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+          {/* All option toggle */}
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleToggleAll();
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/60 cursor-pointer transition-colors select-none"
+          >
+            <Checkbox
+              checked={isAllSelected}
+              className="pointer-events-none"
+              tabIndex={-1}
+            />
+            <span className="text-xs font-medium select-none text-foreground flex-1">
+              {allLabel}
+            </span>
+          </div>
+
+          <div className="h-px bg-border/60 my-1" />
+
+          {/* Item options */}
+          {filteredItems.length === 0 ? (
+            <div className="py-3 text-center text-xs text-muted-foreground">
+              {emptyMessage}
+            </div>
+          ) : (
+            filteredItems.map((item) => {
+              const isChecked = selectedIds.includes(item.id);
+              return (
+                <div
+                  key={item.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleToggleItem(item.id);
+                  }}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/60 cursor-pointer transition-colors select-none"
+                >
+                  <Checkbox
+                    checked={isChecked}
+                    className="pointer-events-none"
+                    tabIndex={-1}
+                  />
+                  <span
+                    className="text-xs select-none text-foreground flex-1 truncate"
+                    title={item.name}
+                  >
+                    {item.name}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+interface SearchableSingleSelectProps {
+  label: string;
+  allLabel: string;
+  items: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (id: string) => void;
+  emptyMessage?: string;
+  placeholder?: string;
+}
+
+const SearchableSingleSelect: React.FC<SearchableSingleSelectProps> = ({
+  label,
+  allLabel,
+  items,
+  value,
+  onChange,
+  emptyMessage = 'No items available',
+  placeholder = 'Search...',
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredItems = React.useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter((item) => item.name.toLowerCase().includes(q));
+  }, [items, search]);
+
+  const selectedItem = React.useMemo(() => {
+    return items.find((i) => i.id === value);
+  }, [items, value]);
+
+  const triggerText = selectedItem ? selectedItem.name : allLabel;
+
+  const handleSelect = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setSearch('');
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground flex items-center justify-between text-left hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
+        >
+          <span className="truncate pr-2">{triggerText}</span>
+          <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[280px] sm:w-[320px] p-2 z-[70] bg-popover text-popover-foreground border shadow-lg rounded-lg"
+        align="start"
+      >
+        {items.length > 5 && (
+          <div className="relative mb-2">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={placeholder}
+              className="h-8 pl-8 text-xs bg-muted/30"
+              autoFocus
+            />
+          </div>
+        )}
+        <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+          {/* Default / All option */}
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSelect('');
+            }}
+            className={cn(
+              "flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted/60 cursor-pointer transition-colors select-none text-xs",
+              !value ? "bg-muted font-medium text-primary" : "text-foreground"
+            )}
+          >
+            <span>{allLabel}</span>
+            {!value && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+          </div>
+
+          <div className="h-px bg-border/60 my-1" />
+
+          {/* Item options */}
+          {filteredItems.length === 0 ? (
+            <div className="py-3 text-center text-xs text-muted-foreground">
+              {emptyMessage}
+            </div>
+          ) : (
+            filteredItems.map((item) => {
+              const isSelected = item.id === value;
+              return (
+                <div
+                  key={item.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSelect(item.id);
+                  }}
+                  className={cn(
+                    "flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted/60 cursor-pointer transition-colors select-none text-xs",
+                    isSelected ? "bg-muted font-medium text-primary" : "text-foreground"
+                  )}
+                >
+                  <span className="truncate flex-1 pr-2" title={item.name}>
+                    {item.name}
+                  </span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 interface DiscountsWorkspaceProps {
   initialTab?: 'campaigns' | 'rules' | 'redemptions' | 'simulator';
@@ -136,7 +405,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<'campaigns' | 'rules' | 'redemptions' | 'simulator'>(defaultTab);
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
 
   const displayTitle =
     title ||
@@ -178,6 +447,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [campValidUntil, setCampValidUntil] = useState('');
   const [campBranchId, setCampBranchId] = useState('');
   const [campPackageId, setCampPackageId] = useState('');
+  const [campBranchIds, setCampBranchIds] = useState<string[]>([]);
+  const [campProgramIds, setCampProgramIds] = useState<string[]>([]);
+  const [campPackageIds, setCampPackageIds] = useState<string[]>([]);
+  const isCreateInitializedRef = React.useRef(false);
 
   // Code Generation Form State
   const [codeCustomText, setCodeCustomText] = useState('');
@@ -192,8 +465,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [ruleEvaluationMode, setRuleEvaluationMode] = useState<EvaluationMode>('ALL_CONDITIONS');
   const [ruleStatus, setRuleStatus] = useState<'DRAFT' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [ruleBranchId, setRuleBranchId] = useState('');
+  const [ruleProgramId, setRuleProgramId] = useState('');
   const [ruleSourcePackageId, setRuleSourcePackageId] = useState('');
   const [ruleTargetPackageId, setRuleTargetPackageId] = useState('');
+  const [ruleBranchIds, setRuleBranchIds] = useState<string[]>([]);
+  const [ruleProgramIds, setRuleProgramIds] = useState<string[]>([]);
+  const [rulePackageIds, setRulePackageIds] = useState<string[]>([]);
+  const isRuleCreateInitializedRef = React.useRef(false);
   const [ruleConditions, setRuleConditions] = useState<Array<{
     id?: string;
     condition_type: string;
@@ -283,29 +561,139 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch Real Member User Profiles
-  const { data: userProfiles = [], isLoading: loadingProfiles } = useQuery({
-    queryKey: ['simulator-user-profiles'],
-    queryFn: async () => {
-      const res = await api.get<{ results?: any[] } | any[]>('/tenant/user-profiles/?page_size=100');
-      const list = Array.isArray(res.data) ? res.data : res.data?.results || [];
-      return list as Array<{
-        id: string;
-        full_name?: string;
-        email?: string;
-        phone_snapshot?: string;
-        member_status?: string;
-      }>;
-    },
-    staleTime: 60 * 1000,
+  // Fetch Programs dynamically from backend
+  const { data: programs = [] } = useQuery({
+    queryKey: ['discount-programs'],
+    queryFn: () => catalogApi.getPrograms({ status: 'ACTIVE' }),
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Auto-select first profile if none selected
-  React.useEffect(() => {
-    if (!simUserProfileId && userProfiles.length > 0 && userProfiles[0]) {
-      setSimUserProfileId(userProfiles[0].id);
+  // Active Packages only (strictly active packages under active programs)
+  const activePackages = React.useMemo(() => {
+    const activeProgramIdSet = new Set(
+      (programs || []).filter((prog: any) => prog.status === 'ACTIVE').map((prog: any) => prog.id)
+    );
+    return (packages || [])
+      .filter((p: any) => {
+        if (p.status !== 'ACTIVE') return false;
+        const progId = p.program || p.program_id;
+        if (programs.length > 0 && progId && !activeProgramIdSet.has(progId)) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+  }, [packages, programs]);
+
+  // Packages dynamically filtered by selected programs for Campaign Modal
+  const availablePackagesForCampaign = React.useMemo(() => {
+    if (campProgramIds.length === 0 || (programs.length > 0 && campProgramIds.length === programs.length)) {
+      return activePackages;
     }
-  }, [userProfiles, simUserProfileId]);
+    const progIdSet = new Set(campProgramIds);
+    return activePackages.filter((p: any) => {
+      const progId = p.program || p.program_id;
+      return progId && progIdSet.has(progId);
+    });
+  }, [activePackages, campProgramIds, programs.length]);
+
+  // Reactive cleanup: When a program is deselected, prune any packages not belonging to selected programs
+  React.useEffect(() => {
+    if (campProgramIds.length > 0 && campProgramIds.length < programs.length) {
+      const progIdSet = new Set(campProgramIds);
+      setCampPackageIds((prev) =>
+        prev.filter((pkgId) => {
+          const pkg = (packages || []).find((p: any) => p.id === pkgId);
+          if (!pkg) return false;
+          const progId = pkg.program || (pkg as any).program_id;
+          return progId && progIdSet.has(progId);
+        })
+      );
+    }
+  }, [campProgramIds, programs.length, packages]);
+
+  // Packages dynamically filtered by selected programs for Dynamic Rules Modal
+  const availablePackagesForRule = React.useMemo(() => {
+    if (ruleProgramIds.length === 0 || (programs.length > 0 && ruleProgramIds.length === programs.length)) {
+      return activePackages;
+    }
+    const progIdSet = new Set(ruleProgramIds);
+    return activePackages.filter((p: any) => {
+      const progId = p.program || p.program_id;
+      return progId && progIdSet.has(progId);
+    });
+  }, [activePackages, ruleProgramIds, programs.length]);
+
+  // Reactive cleanup: When a program is deselected in Dynamic Rules, prune any packages not belonging to selected programs
+  React.useEffect(() => {
+    if (packages.length > 0 && ruleProgramIds.length > 0 && ruleProgramIds.length < programs.length) {
+      const progIdSet = new Set(ruleProgramIds);
+      setRulePackageIds((prev) =>
+        prev.filter((pkgId) => {
+          const pkg = packages.find((p: any) => p.id === pkgId);
+          if (!pkg) return true;
+          const progId = pkg.program || (pkg as any).program_id;
+          return progId && progIdSet.has(progId);
+        })
+      );
+    }
+  }, [ruleProgramIds, programs.length, packages]);
+
+  // Ensure default selections populate if Dynamic Rule modal opened while lists were loading
+  React.useEffect(() => {
+    if (isRuleModalOpen && !editingRule && !isRuleCreateInitializedRef.current) {
+      let populated = false;
+      if (branches.length > 0 && ruleBranchIds.length === 0) {
+        setRuleBranchIds(branches.map((b) => b.id));
+        populated = true;
+      }
+      if (programs.length > 0 && ruleProgramIds.length === 0) {
+        setRuleProgramIds(programs.map((p) => p.id));
+        populated = true;
+      }
+      if (activePackages.length > 0 && rulePackageIds.length === 0) {
+        setRulePackageIds(activePackages.map((p) => p.id));
+        populated = true;
+      }
+      if (populated) {
+        isRuleCreateInitializedRef.current = true;
+      }
+    }
+  }, [isRuleModalOpen, editingRule, branches, programs, activePackages, ruleBranchIds.length, ruleProgramIds.length, rulePackageIds.length]);
+
+  React.useEffect(() => {
+    if (!isRuleModalOpen) {
+      isRuleCreateInitializedRef.current = false;
+    }
+  }, [isRuleModalOpen]);
+
+  // Ensure default selections populate if modal opened while lists were loading
+  React.useEffect(() => {
+    if (isCampaignModalOpen && !editingCampaign && !isCreateInitializedRef.current) {
+      let populated = false;
+      if (branches.length > 0 && campBranchIds.length === 0) {
+        setCampBranchIds(branches.map((b) => b.id));
+        populated = true;
+      }
+      if (programs.length > 0 && campProgramIds.length === 0) {
+        setCampProgramIds(programs.map((p) => p.id));
+        populated = true;
+      }
+      if (activePackages.length > 0 && campPackageIds.length === 0) {
+        setCampPackageIds(activePackages.map((p) => p.id));
+        populated = true;
+      }
+      if (populated) {
+        isCreateInitializedRef.current = true;
+      }
+    }
+  }, [isCampaignModalOpen, editingCampaign, branches, programs, activePackages, campBranchIds.length, campProgramIds.length, campPackageIds.length]);
+
+  React.useEffect(() => {
+    if (!isCampaignModalOpen) {
+      isCreateInitializedRef.current = false;
+    }
+  }, [isCampaignModalOpen]);
+
+
 
   // Live Authoritative Member Context Query for Simulator
   const {
@@ -438,6 +826,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampValidUntil('');
     setCampBranchId('');
     setCampPackageId('');
+    setCampBranchIds(branches.map((b) => b.id));
+    setCampProgramIds(programs.map((p) => p.id));
+    setCampPackageIds(activePackages.map((p) => p.id));
+    isCreateInitializedRef.current = true;
     setIsCampaignModalOpen(true);
   };
 
@@ -454,13 +846,36 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampStatus(camp.status);
     setCampValidFrom(camp.valid_from ? formatDateForInput(camp.valid_from) : '');
     setCampValidUntil(camp.valid_until ? formatDateForInput(camp.valid_until) : '');
-    setCampBranchId(camp.configuration?.branch_id || '');
-    setCampPackageId(camp.configuration?.package_id || '');
+    const cfg = camp.configuration || {};
+    const bIds = Array.isArray(cfg['branch_ids']) && (cfg['branch_ids'] as string[]).length > 0
+      ? (cfg['branch_ids'] as string[])
+      : cfg['branch_id']
+      ? [cfg['branch_id'] as string]
+      : branches.map((b) => b.id);
+    const progIds = Array.isArray(cfg['program_ids']) && (cfg['program_ids'] as string[]).length > 0
+      ? (cfg['program_ids'] as string[])
+      : cfg['program_id']
+      ? [cfg['program_id'] as string]
+      : programs.map((p) => p.id);
+    const pkgIds = Array.isArray(cfg['package_ids']) && (cfg['package_ids'] as string[]).length > 0
+      ? (cfg['package_ids'] as string[])
+      : cfg['package_id']
+      ? [cfg['package_id'] as string]
+      : activePackages.map((p) => p.id);
+    setCampBranchIds(bIds);
+    setCampProgramIds(progIds);
+    setCampPackageIds(pkgIds);
+    setCampBranchId(bIds[0] || '');
+    setCampPackageId(pkgIds[0] || '');
     setIsCampaignModalOpen(true);
   };
 
   const handleSaveCampaign = (e: React.FormEvent) => {
     e.preventDefault();
+    const isAllBranches = campBranchIds.length === branches.length || campBranchIds.length === 0;
+    const isAllPrograms = campProgramIds.length === programs.length || campProgramIds.length === 0;
+    const isAllPackages = campPackageIds.length === availablePackagesForCampaign.length || campPackageIds.length === 0;
+
     const payload: any = {
       name: campName,
       description: campDesc,
@@ -475,8 +890,11 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       valid_until: campValidUntil ? new Date(campValidUntil).toISOString() : null,
       configuration: {
         ...(editingCampaign?.configuration || {}),
-        branch_id: campBranchId || null,
-        package_id: campPackageId || null,
+        branch_ids: isAllBranches ? [] : campBranchIds,
+        branch_id: isAllBranches ? null : (campBranchIds.length === 1 ? campBranchIds[0] : null),
+        program_ids: isAllPrograms ? [] : campProgramIds,
+        package_ids: isAllPackages ? [] : campPackageIds,
+        package_id: isAllPackages ? null : (campPackageIds.length === 1 ? campPackageIds[0] : null),
       },
     };
     saveCampaignMutation.mutate(payload);
@@ -492,29 +910,22 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setRuleEvaluationMode('ALL_CONDITIONS');
     setRuleStatus('ACTIVE');
     setRuleBranchId('');
+    setRuleProgramId('');
     setRuleSourcePackageId('');
     setRuleTargetPackageId('');
-    setRuleConditions([
-      {
-        condition_type: 'USAGE_PERCENTAGE_GTE',
-        operator: 'GREATER_THAN_OR_EQUAL',
-        numeric_value: '80',
-        text_value: '',
-      },
-    ]);
-    setRuleActionType('APPLY_PERCENTAGE_DISCOUNT');
-    setRuleActionPercent('20');
-    setRuleActionAmount('');
-    setRuleActionMessage('Exclusive renewal privilege: 20% off your renewal package!');
-    setRuleActionAutoApply(false);
-    setRuleActionCampaignId('');
+    setRuleBranchIds(branches.map((b) => b.id));
+    setRuleProgramIds(programs.map((p) => p.id));
+    setRulePackageIds(activePackages.map((p) => p.id));
+    isRuleCreateInitializedRef.current = true;
     setIsRuleModalOpen(true);
   };
 
   const openEditRuleModal = (rule: DiscountEligibilityRule) => {
     setEditingRule(rule);
+
+    const cleanDesc = (rule.description || '').replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim();
     setRuleName(rule.name);
-    setRuleDesc(rule.description || '');
+    setRuleDesc(cleanDesc);
     setRuleType(rule.rule_type);
     setRulePriority(String(rule.priority));
     setRuleEvaluationMode(rule.evaluation_mode);
@@ -522,6 +933,50 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setRuleBranchId(rule.branch || '');
     setRuleSourcePackageId(rule.source_package || '');
     setRuleTargetPackageId(rule.target_package || '');
+
+    const cfg = rule.configuration || {};
+    const legacyPkgId = rule.target_package || rule.source_package;
+    const targetPkg = legacyPkgId ? (packages || []).find((p: any) => p.id === legacyPkgId) : null;
+    const legacyProgId = targetPkg ? (targetPkg.program || (targetPkg as any).program_id) : null;
+
+    // 1. Branch IDs
+    const bIds = Array.isArray(cfg['branch_ids']) && (cfg['branch_ids'] as string[]).length > 0
+      ? (cfg['branch_ids'] as string[])
+      : cfg['branch_id']
+      ? [cfg['branch_id'] as string]
+      : rule.branch
+      ? [rule.branch]
+      : branches.map((b) => b.id);
+
+    // 2. Program IDs
+    const progIds = Array.isArray(cfg['program_ids']) && (cfg['program_ids'] as string[]).length > 0
+      ? (cfg['program_ids'] as string[])
+      : cfg['program_id']
+      ? [cfg['program_id'] as string]
+      : legacyProgId
+      ? [legacyProgId]
+      : programs.map((p) => p.id);
+
+    // 3. Package IDs
+    const availableForProgs = (progIds.length > 0 && progIds.length < programs.length)
+      ? activePackages.filter((p: any) => {
+          const pId = p.program || p.program_id;
+          return progIds.includes(pId);
+        })
+      : activePackages;
+
+    const pkgIds = Array.isArray(cfg['package_ids']) && (cfg['package_ids'] as string[]).length > 0
+      ? (cfg['package_ids'] as string[])
+      : cfg['package_id']
+      ? [cfg['package_id'] as string]
+      : legacyPkgId
+      ? [legacyPkgId]
+      : availableForProgs.map((p) => p.id);
+
+    setRuleBranchIds(bIds);
+    setRuleProgramIds(progIds);
+    setRulePackageIds(pkgIds);
+    setRuleProgramId(progIds[0] || '');
 
     if (rule.conditions && rule.conditions.length > 0) {
       setRuleConditions(
@@ -544,7 +999,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       setRuleActionAmount(act.discount_amount ? String(act.discount_amount) : '');
       setRuleActionMessage(act.message || '');
       setRuleActionAutoApply(act.auto_apply || false);
-      setRuleActionCampaignId((act.configuration as any)?.target_campaign_id || (act as any).target_campaign || '');
+      setRuleActionCampaignId((act.configuration as any)?.target_campaign_id || (act as any).discount_campaign || (act as any).target_campaign || '');
     } else {
       setRuleActionCampaignId('');
       setRuleActionType('APPLY_PERCENTAGE_DISCOUNT');
@@ -560,17 +1015,29 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const handleSaveRule = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const rulePayload: Partial<DiscountEligibilityRule> = {
+      const isAllBranches = ruleBranchIds.length === branches.length || ruleBranchIds.length === 0;
+      const isAllPrograms = ruleProgramIds.length === programs.length || ruleProgramIds.length === 0;
+      const isAllPackages = rulePackageIds.length === availablePackagesForRule.length || rulePackageIds.length === 0;
+
+      const rulePayload: any = {
         name: ruleName,
-        description: ruleDesc,
+        description: ruleDesc.replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim(),
         rule_type: ruleType,
         priority: parseInt(rulePriority) || 10,
         evaluation_mode: ruleEvaluationMode,
         status: ruleStatus,
-        branch: ruleBranchId || null,
-        source_package: ruleSourcePackageId || null,
-        target_package: ruleTargetPackageId || null,
-        valid_from: new Date().toISOString(),
+        branch: isAllBranches ? null : (ruleBranchIds.length === 1 ? ruleBranchIds[0] : null),
+        source_package: null,
+        target_package: isAllPackages ? null : (rulePackageIds.length === 1 ? rulePackageIds[0] : null),
+        valid_from: editingRule?.valid_from || new Date().toISOString(),
+        configuration: {
+          ...(editingRule?.configuration || {}),
+          branch_ids: isAllBranches ? [] : ruleBranchIds,
+          branch_id: isAllBranches ? null : (ruleBranchIds.length === 1 ? ruleBranchIds[0] : null),
+          program_ids: isAllPrograms ? [] : ruleProgramIds,
+          package_ids: isAllPackages ? [] : rulePackageIds,
+          package_id: isAllPackages ? null : (rulePackageIds.length === 1 ? rulePackageIds[0] : null),
+        },
       };
 
       let savedRule: DiscountEligibilityRule;
@@ -589,6 +1056,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               action_type: ruleActionType,
               discount_percentage: ruleActionType === 'APPLY_PERCENTAGE_DISCOUNT' ? ruleActionPercent : null,
               discount_amount: ruleActionType === 'APPLY_FIXED_DISCOUNT' ? ruleActionAmount : null,
+              discount_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
               target_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
               message: ruleActionMessage,
               auto_apply: ruleActionAutoApply,
@@ -616,6 +1084,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
           action_type: ruleActionType,
           discount_percentage: ruleActionType === 'APPLY_PERCENTAGE_DISCOUNT' ? ruleActionPercent : null,
           discount_amount: ruleActionType === 'APPLY_FIXED_DISCOUNT' ? ruleActionAmount : null,
+          discount_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
           target_campaign: (ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') ? ruleActionCampaignId || null : null,
           message: ruleActionMessage,
           auto_apply: ruleActionAutoApply,
@@ -720,9 +1189,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   };
 
   const activeCampaignsCount = safeCampaigns.filter(isCampaignActive).length;
-  const inactiveCampaignsCount = safeCampaigns.filter(
-    (c) => !isCampaignActive(c) || (c.codes && c.codes.some((code: DiscountCode) => !isCodeActive(code)))
-  ).length;
+  const inactiveCampaignsCount = safeCampaigns.filter((c) => !isCampaignActive(c)).length;
 
   // Filter campaigns
   const filteredCampaigns = safeCampaigns.filter((c) => {
@@ -735,12 +1202,11 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     if (!matchesSearch) return false;
 
     if (statusFilter === 'ACTIVE') {
-      const hasActiveCode = !c.codes || c.codes.length === 0 || c.codes.some(isCodeActive);
-      return isCampaignActive(c) && hasActiveCode;
+      return isCampaignActive(c);
     }
 
     if (statusFilter === 'INACTIVE') {
-      return !isCampaignActive(c) || (c.codes && c.codes.some((code: DiscountCode) => !isCodeActive(code)));
+      return !isCampaignActive(c);
     }
 
     return true;
@@ -923,10 +1389,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               searchPlaceholder="Search campaigns or promo codes..."
               onReset={() => {
                 setSearchTerm('');
-                setStatusFilter('ALL');
+                setStatusFilter('ACTIVE');
               }}
-              hasActiveFilters={Boolean(searchTerm || statusFilter !== 'ALL')}
-              activeFiltersCount={(searchTerm ? 1 : 0) + (statusFilter !== 'ALL' ? 1 : 0)}
+              hasActiveFilters={Boolean(searchTerm || statusFilter !== 'ACTIVE')}
+              activeFiltersCount={(searchTerm ? 1 : 0) + (statusFilter !== 'ACTIVE' ? 1 : 0)}
             >
               <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 shrink-0">
                 <button
@@ -993,33 +1459,66 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     : 'No Campaigns Found'
                 }
                 description={
-                  statusFilter !== 'ALL' || searchTerm
-                    ? `No discount campaigns or promo codes match your current filter (${statusFilter === 'ACTIVE' ? 'Active only' : statusFilter === 'INACTIVE' ? 'Inactive only' : ''}${searchTerm ? ` "${searchTerm}"` : ''}). Try resetting your filters.`
+                  searchTerm
+                    ? `No discount campaigns or promo codes match "${searchTerm}". Try adjusting your search term.`
+                    : statusFilter === 'ACTIVE'
+                    ? 'No active discount campaigns right now. Create a new campaign or view inactive campaigns.'
+                    : statusFilter === 'INACTIVE'
+                    ? 'No inactive discount campaigns found.'
                     : 'No discount campaigns match your current filters. Create a promotional voucher campaign to reward prospects and members.'
                 }
-                actionLabel={statusFilter !== 'ALL' || searchTerm ? 'Reset Filters' : canCreate ? '+ Create Campaign' : undefined}
+                actionLabel={
+                  searchTerm
+                    ? 'Clear Search'
+                    : statusFilter !== 'ACTIVE'
+                    ? 'Reset to Active'
+                    : canCreate
+                    ? '+ Create Campaign'
+                    : undefined
+                }
                 onAction={
-                  statusFilter !== 'ALL' || searchTerm
-                    ? () => {
-                        setSearchTerm('');
-                        setStatusFilter('ALL');
-                      }
+                  searchTerm
+                    ? () => setSearchTerm('')
+                    : statusFilter !== 'ACTIVE'
+                    ? () => setStatusFilter('ACTIVE')
                     : openCreateCampaignModal
                 }
-                canAction={Boolean(statusFilter !== 'ALL' || searchTerm || canCreate)}
+                canAction={Boolean(statusFilter !== 'ACTIVE' || searchTerm || canCreate)}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredCampaigns.map((camp) => {
-                  const branchScopeName = branches.find((b) => b.id === camp.configuration?.branch_id)?.name;
-                  const packageScopeName = packages.find((p) => p.id === camp.configuration?.package_id)?.name;
+                  const cCfg = camp.configuration || {};
+                  const cBranchIds: string[] = Array.isArray(cCfg['branch_ids']) && (cCfg['branch_ids'] as string[]).length > 0
+                    ? (cCfg['branch_ids'] as string[])
+                    : cCfg['branch_id'] ? [cCfg['branch_id'] as string] : [];
+                  const cProgIds: string[] = Array.isArray(cCfg['program_ids']) && (cCfg['program_ids'] as string[]).length > 0
+                    ? (cCfg['program_ids'] as string[])
+                    : cCfg['program_id'] ? [cCfg['program_id'] as string] : [];
+                  const cPkgIds: string[] = Array.isArray(cCfg['package_ids']) && (cCfg['package_ids'] as string[]).length > 0
+                    ? (cCfg['package_ids'] as string[])
+                    : cCfg['package_id'] ? [cCfg['package_id'] as string] : [];
+
+                  const branchScopeLabel = cBranchIds.length === 1
+                    ? branches.find((b) => b.id === cBranchIds[0])?.name || '1 Branch'
+                    : cBranchIds.length > 1
+                    ? `${cBranchIds.length} Branches`
+                    : null;
+
+                  const programScopeLabel = cProgIds.length === 1
+                    ? programs.find((p) => p.id === cProgIds[0])?.name || '1 Program'
+                    : cProgIds.length > 1
+                    ? `${cProgIds.length} Programs`
+                    : null;
+
+                  const packageScopeLabel = cPkgIds.length === 1
+                    ? packages.find((p) => p.id === cPkgIds[0])?.name || '1 Package'
+                    : cPkgIds.length > 1
+                    ? `${cPkgIds.length} Packages`
+                    : null;
 
                   const campIsActive = isCampaignActive(camp);
-                  const displayedCodes = (camp.codes || []).filter((c: DiscountCode) => {
-                    if (statusFilter === 'ACTIVE') return isCodeActive(c);
-                    if (statusFilter === 'INACTIVE') return !isCodeActive(c);
-                    return true;
-                  });
+                  const displayedCodes = camp.codes || [];
 
                   return (
                     <div
@@ -1076,18 +1575,24 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         </p>
 
                         {/* Scopes */}
-                        {(branchScopeName || packageScopeName) && (
+                        {(branchScopeLabel || programScopeLabel || packageScopeLabel) && (
                           <div className="mt-3 flex flex-wrap gap-1.5">
-                            {branchScopeName && (
+                            {branchScopeLabel && (
                               <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                 <Building2 className="w-3 h-3 text-muted-foreground" />
-                                {branchScopeName}
+                                {branchScopeLabel}
                               </Badge>
                             )}
-                            {packageScopeName && (
+                            {programScopeLabel && (
+                              <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                <Layers className="w-3 h-3 text-muted-foreground" />
+                                {programScopeLabel}
+                              </Badge>
+                            )}
+                            {packageScopeLabel && (
                               <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                 <PackageIcon className="w-3 h-3 text-muted-foreground" />
-                                {packageScopeName}
+                                {packageScopeLabel}
                               </Badge>
                             )}
                           </div>
@@ -1096,13 +1601,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                           {camp.max_discount && (
                             <div className="flex items-center justify-between">
-                              <span>Max Discount Cap:</span>
+                              <span>Maximum Discount:</span>
                               <span className="font-medium text-foreground">₹{camp.max_discount}</span>
                             </div>
                           )}
                           {camp.minimum_order_amount && (
                             <div className="flex items-center justify-between">
-                              <span>Min Order Amount:</span>
+                              <span>Minimum Order Value:</span>
                               <span className="font-medium text-foreground">₹{camp.minimum_order_amount}</span>
                             </div>
                           )}
@@ -1316,9 +1821,47 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             ) : (
               <div className="divide-y divide-border/60 p-4 sm:p-5 space-y-4">
                 {rules.map((r) => {
-                  const branchName = branches.find((b) => b.id === r.branch)?.name;
+                  const rawDesc = (r.description || '').replace(/<!--\s*SCOPE:\s*\{.*?\}\s*-->/g, '').trim();
+                  const rCfg = r.configuration || {};
+
+                  // Scopes from configuration, falling back to legacy single fields
+                  let scopeBranchIds: string[] = Array.isArray(rCfg['branch_ids']) && (rCfg['branch_ids'] as string[]).length > 0
+                    ? (rCfg['branch_ids'] as string[])
+                    : r.branch ? [r.branch] : [];
+
+                  let scopeProgIds: string[] = Array.isArray(rCfg['program_ids']) && (rCfg['program_ids'] as string[]).length > 0
+                    ? (rCfg['program_ids'] as string[])
+                    : [];
+
+                  let scopePkgIds: string[] = Array.isArray(rCfg['package_ids']) && (rCfg['package_ids'] as string[]).length > 0
+                    ? (rCfg['package_ids'] as string[])
+                    : r.target_package ? [r.target_package] : [];
+
+                  if (scopePkgIds.length > 0 && scopeProgIds.length === 0) {
+                    const targetPkg = packages.find((p) => p.id === scopePkgIds[0]);
+                    const progId = targetPkg ? (targetPkg.program || (targetPkg as any).program_id) : null;
+                    if (progId) scopeProgIds = [progId];
+                  }
+
+                  const branchScopeLabel = scopeBranchIds.length === 1
+                    ? branches.find((b) => b.id === scopeBranchIds[0])?.name || '1 Branch'
+                    : scopeBranchIds.length > 1
+                    ? `${scopeBranchIds.length} Branches`
+                    : null;
+
+                  const programScopeLabel = scopeProgIds.length === 1
+                    ? programs.find((p) => p.id === scopeProgIds[0])?.name || '1 Program'
+                    : scopeProgIds.length > 1
+                    ? `${scopeProgIds.length} Programs`
+                    : null;
+
+                  const packageScopeLabel = scopePkgIds.length === 1
+                    ? packages.find((p) => p.id === scopePkgIds[0])?.name || '1 Package'
+                    : scopePkgIds.length > 1
+                    ? `${scopePkgIds.length} Packages`
+                    : null;
+
                   const srcPkgName = packages.find((p) => p.id === r.source_package)?.name;
-                  const tgtPkgName = packages.find((p) => p.id === r.target_package)?.name;
 
                   return (
                     <div key={r.id} className="pt-4 first:pt-0 space-y-3">
@@ -1353,28 +1896,34 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {r.description || 'No description provided.'}
+                            {rawDesc || 'No description provided.'}
                           </p>
 
                           {/* Scopes */}
-                          {(branchName || srcPkgName || tgtPkgName) && (
+                          {(branchScopeLabel || programScopeLabel || packageScopeLabel || srcPkgName) && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              {branchName && (
+                              {branchScopeLabel && (
                                 <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                   <Building2 className="w-3 h-3 text-muted-foreground" />
-                                  Branch: {branchName}
+                                  {branchScopeLabel}
+                                </Badge>
+                              )}
+                              {programScopeLabel && (
+                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                  <Layers className="w-3 h-3 text-muted-foreground" />
+                                  {programScopeLabel}
+                                </Badge>
+                              )}
+                              {packageScopeLabel && (
+                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                                  <PackageIcon className="w-3 h-3 text-muted-foreground" />
+                                  {packageScopeLabel}
                                 </Badge>
                               )}
                               {srcPkgName && (
                                 <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
                                   <PackageIcon className="w-3 h-3 text-muted-foreground" />
                                   Source Pkg: {srcPkgName}
-                                </Badge>
-                              )}
-                              {tgtPkgName && (
-                                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
-                                  <PackageIcon className="w-3 h-3 text-muted-foreground" />
-                                  Target Pkg: {tgtPkgName}
                                 </Badge>
                               )}
                             </div>
@@ -1598,28 +2147,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 <label className="block text-xs font-semibold text-foreground">
                   1. Select Member User Profile *
                 </label>
-                {loadingProfiles ? (
-                  <div className="h-9 px-3 rounded-md border border-input bg-muted/20 flex items-center text-xs text-muted-foreground">
-                    Loading member profiles...
-                  </div>
-                ) : userProfiles.length === 0 ? (
-                  <div className="text-xs text-amber-500 bg-amber-500/10 p-2.5 rounded-md border border-amber-500/20">
-                    No active member profiles found in database. Create a member to test member-specific discounts.
-                  </div>
-                ) : (
-                  <select
-                    value={simUserProfileId}
-                    onChange={(e) => setSimUserProfileId(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">-- Choose Member Profile --</option>
-                    {userProfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name || 'Member'} ({p.email || p.phone_snapshot || p.id.slice(0, 8)})
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <SimulatorMemberSelect
+                  selectedMemberId={simUserProfileId}
+                  onSelectMember={(memberId) => {
+                    setSimUserProfileId(memberId);
+                    setSelectedMembershipId('');
+                  }}
+                />
               </div>
 
               {/* 2. Live Authoritative Member Context Card */}
@@ -1632,13 +2166,21 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     </span>
                     {loadingMemberContext ? (
                       <span className="text-[10px] text-muted-foreground animate-pulse">Loading context...</span>
-                    ) : liveMemberContext?.metrics_available ? (
+                    ) : liveMemberContext?.membership_status === 'ACTIVE' ? (
                       <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-600">
-                        Entitlement Active
+                        {liveMemberContext?.metrics_available ? 'Active · Entitlement Live' : 'Active Membership'}
+                      </Badge>
+                    ) : liveMemberContext?.membership_status === 'EXPIRED' ? (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 bg-rose-600 text-white">
+                        Expired Membership
+                      </Badge>
+                    ) : liveMemberContext?.membership_status === 'FROZEN' ? (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500 text-white">
+                        Frozen Membership
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                        {liveMemberContext?.has_membership ? 'Membership Active' : 'No Active Membership'}
+                        {liveMemberContext?.has_membership ? (liveMemberContext.membership_status || 'Inactive') : 'No Active Membership'}
                       </Badge>
                     )}
                   </div>
@@ -1647,7 +2189,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   {liveMemberContext?.all_memberships && liveMemberContext.all_memberships.length > 1 && (
                     <div className="pt-2 pb-1 border-t border-border/40">
                       <label className="block text-[11px] font-semibold text-primary mb-1">
-                        Select Active Membership Plan ({liveMemberContext.all_memberships.length} active plans found):
+                        Select Membership Plan ({liveMemberContext.all_memberships.length} plans found):
                       </label>
                       <select
                         value={selectedMembershipId || liveMemberContext.membership_id || ''}
@@ -1664,31 +2206,49 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   )}
 
                   {liveMemberContext && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 border-t border-border/40">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] pt-2 border-t border-border/40">
                       <div>
-                        <span className="text-muted-foreground">Active Package:</span>{' '}
+                        <span className="text-muted-foreground">
+                          {liveMemberContext.membership_status === 'EXPIRED'
+                            ? 'Expired Package:'
+                            : liveMemberContext.membership_status === 'INACTIVE'
+                            ? 'Assigned Package:'
+                            : 'Active Package:'}
+                        </span>{' '}
                         <span className="font-semibold text-foreground">
-                          {liveMemberContext.current_package_name || 'Unavailable'}
+                          {liveMemberContext.current_package_name && liveMemberContext.current_package_name !== 'None'
+                            ? liveMemberContext.current_package_name
+                            : liveMemberContext.membership_status === 'INACTIVE'
+                            ? 'None (No active package)'
+                            : 'None'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Branch:</span>{' '}
+                        <span className="text-muted-foreground">Studio Branch:</span>{' '}
                         <span className="font-semibold text-foreground">
-                          {liveMemberContext.branch_name || 'Unavailable'}
+                          {liveMemberContext.branch_name || 'Main Branch'}
                         </span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Membership Status:</span>{' '}
-                        <span className="font-medium text-foreground">
-                          {liveMemberContext.membership_status || 'Unavailable'}
+                        <span className={cn(
+                          "font-semibold",
+                          liveMemberContext.membership_status === 'ACTIVE' ? "text-emerald-600 dark:text-emerald-400" :
+                          liveMemberContext.membership_status === 'EXPIRED' ? "text-rose-600 dark:text-rose-400" :
+                          liveMemberContext.membership_status === 'FROZEN' ? "text-amber-600 dark:text-amber-400" :
+                          "text-muted-foreground font-medium"
+                        )}>
+                          {liveMemberContext.membership_status || 'INACTIVE'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Package Age:</span>{' '}
+                        <span className="text-muted-foreground">
+                          {liveMemberContext.has_membership ? 'Package Age:' : 'Account Age:'}
+                        </span>{' '}
                         <span className="font-mono text-foreground">
                           {liveMemberContext.package_age_days !== null && liveMemberContext.package_age_days !== undefined
                             ? `${liveMemberContext.package_age_days} days`
-                            : 'Unavailable'}
+                            : '0 days'}
                         </span>
                       </div>
                       <div>
@@ -1696,7 +2256,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <span className="font-mono text-foreground">
                           {liveMemberContext.remaining_days !== null && liveMemberContext.remaining_days !== undefined
                             ? `${liveMemberContext.remaining_days} days`
-                            : 'Unavailable'}
+                            : '0 days'}
                         </span>
                       </div>
                       <div>
@@ -1704,7 +2264,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <span className="font-mono text-foreground font-semibold">
                           {liveMemberContext.usage_percentage !== null && liveMemberContext.usage_percentage !== undefined
                             ? `${formatPercentage(liveMemberContext.usage_percentage)}%`
-                            : 'Unavailable'}
+                            : '0.00%'}
                         </span>
                       </div>
                       <div className="col-span-2 sm:col-span-3">
@@ -1713,18 +2273,34 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           {liveMemberContext.is_unlimited
                             ? 'Unlimited Plan'
                             : liveMemberContext.sessions_allocated !== null && liveMemberContext.sessions_allocated !== undefined
-                            ? `${liveMemberContext.sessions_consumed ?? 'Unavailable'} consumed / ${liveMemberContext.sessions_allocated} allocated (${liveMemberContext.sessions_remaining ?? 'Unavailable'} remaining)`
-                            : 'Unavailable (No session allocation record)'}
+                            ? `${liveMemberContext.sessions_consumed ?? 0} consumed / ${liveMemberContext.sessions_allocated} allocated (${liveMemberContext.sessions_remaining ?? 0} remaining)`
+                            : '0 consumed / 0 allocated (No active plan)'}
                         </span>
                       </div>
                     </div>
                   )}
 
-                  {!liveMemberContext?.has_membership && (
-                    <div className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded border border-amber-500/20">
-                      ℹ️ This member has no active membership record. Rules requiring active package or session usage will fail-closed.
+                  {!liveMemberContext?.has_membership ? (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <span>ℹ️ Inactive Member (No Active Plan)</span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        This member is registered in the database but currently has no active membership package.
+                        To simulate and test retention rules requiring session usage or active packages, check <strong>"Simulate What-If Metrics"</strong> below.
+                        For promo coupons, select a package under <strong>"Target Package (Optional)"</strong> to validate applicability.
+                      </p>
                     </div>
-                  )}
+                  ) : liveMemberContext?.membership_status === 'EXPIRED' ? (
+                    <div className="text-[11px] text-muted-foreground bg-muted/60 p-2.5 rounded-lg border border-border/40 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5 text-foreground">
+                        <span>ℹ️ Expired Member</span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        Member's previous package has ended. Eligible for Win-Back / Rejoin retention rules and new package checkout offers.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -1778,14 +2354,17 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     <select
                       value={simPackageId}
                       onChange={(e) => setSimPackageId(e.target.value)}
-                      className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs text-foreground"
+                      className="w-full h-9 px-2 rounded-md border border-input bg-background text-xs text-foreground font-medium"
                     >
-                      <option value="">Any Package</option>
-                      {packages.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
+                      <option value="">Any Active Package</option>
+                      {activePackages.map((p) => {
+                        const progName = p.program_name || programs.find((pr: any) => pr.id === (p.program || (p as any).program_id))?.name;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {progName ? `${p.name} (${progName})` : p.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -1809,6 +2388,64 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                     Evaluated against live database metrics
                   </span>
                 </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="simHypoToggle"
+                    checked={simUseHypothetical}
+                    onChange={(e) => setSimUseHypothetical(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary w-3.5 h-3.5"
+                  />
+                  <label htmlFor="simHypoToggle" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Simulate What-If Metrics (for testing inactive/new members)
+                  </label>
+                </div>
+
+                {simUseHypothetical && (
+                  <div className="grid grid-cols-2 gap-2 p-3 bg-muted/40 rounded-lg border border-border/60 text-xs">
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Session Usage %</label>
+                      <Input
+                        type="number"
+                        value={simHypoUsagePct}
+                        onChange={(e) => setSimHypoUsagePct(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 85"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Package Age (Days)</label>
+                      <Input
+                        type="number"
+                        value={simHypoAgeDays}
+                        onChange={(e) => setSimHypoAgeDays(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 75"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Sessions Consumed</label>
+                      <Input
+                        type="number"
+                        value={simHypoConsumed}
+                        onChange={(e) => setSimHypoConsumed(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 17"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Sessions Remaining</label>
+                      <Input
+                        type="number"
+                        value={simHypoRemaining}
+                        onChange={(e) => setSimHypoRemaining(e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="e.g. 3"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <Button
                   variant="secondary"
@@ -1903,6 +2540,27 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                           </Badge>
                         </div>
                         <p className="text-amber-700 dark:text-amber-300">{off.message}</p>
+                        {off.campaign_name && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Target Campaign: <span className="font-medium text-foreground">{off.campaign_name}</span>
+                          </div>
+                        )}
+                        {off.coupon_code && (
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-muted-foreground text-[11px]">Associated Code:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimCode(off.coupon_code!);
+                                toast.info(`Coupon '${off.coupon_code}' copied to Section A!`);
+                              }}
+                              className="font-mono font-bold text-xs text-primary hover:underline flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded border border-primary/20"
+                            >
+                              <Tag className="w-3 h-3" />
+                              {off.coupon_code} (Use in Section A)
+                            </button>
+                          </div>
+                        )}
                         <div className="text-amber-800 dark:text-amber-200 font-mono font-bold flex items-center justify-between pt-1 border-t border-amber-500/20">
                           <span>Benefit:</span>
                           <span>
@@ -2001,7 +2659,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Max Discount Cap (₹)</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Maximum Discount (₹)</label>
                 <Input
                   type="number"
                   placeholder="Optional cap"
@@ -2012,7 +2670,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Min Order Amount (₹)</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Minimum Order Value (₹)</label>
                 <Input
                   type="number"
                   placeholder="0.00"
@@ -2061,37 +2719,48 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Branch Scope (Optional)</label>
-                <select
-                  value={campBranchId}
-                  onChange={(e) => setCampBranchId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
-                >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <CheckboxMultiSelect
+                  label="Branches"
+                  allLabel="All Branches"
+                  items={branches.map((b) => ({ id: b.id, name: b.name }))}
+                  selectedIds={campBranchIds}
+                  onChange={setCampBranchIds}
+                  placeholder="Search branches..."
+                  emptyMessage="No branches found"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Program Scope (Optional)</label>
+                <CheckboxMultiSelect
+                  label="Programs"
+                  allLabel="All Programs"
+                  items={programs.map((p) => ({ id: p.id, name: p.name }))}
+                  selectedIds={campProgramIds}
+                  onChange={setCampProgramIds}
+                  placeholder="Search programs..."
+                  emptyMessage="No active programs found"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Package Scope (Optional)</label>
-                <select
-                  value={campPackageId}
-                  onChange={(e) => setCampPackageId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs sm:text-sm text-foreground"
-                >
-                  <option value="">All Packages</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <CheckboxMultiSelect
+                  label="Packages"
+                  allLabel="All Packages"
+                  items={availablePackagesForCampaign.map((p) => ({ id: p.id, name: p.name }))}
+                  selectedIds={campPackageIds}
+                  onChange={setCampPackageIds}
+                  placeholder="Search active packages..."
+                  emptyMessage={
+                    campProgramIds.length > 0 && campProgramIds.length < programs.length
+                      ? 'No active packages for selected program(s)'
+                      : 'No active packages found'
+                  }
+                />
               </div>
             </div>
 
@@ -2224,12 +2893,15 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   onChange={(e) => setCodePackageId(e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
                 >
-                  <option value="">Inherit Campaign / All</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  <option value="">Inherit Campaign / All Active Packages</option>
+                  {activePackages.map((p) => {
+                    const progName = p.program_name || programs.find((pr: any) => pr.id === (p.program || (p as any).program_id))?.name;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {progName ? `${p.name} (${progName})` : p.name}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
@@ -2381,54 +3053,49 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </p>
             </div>
 
-            {/* Scope Filters */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Scope Filters — EXACT SAME 3 DROPDOWNS AS IN CREATE DISCOUNT CAMPAIGN */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Branch Scope</label>
-                <select
-                  value={ruleBranchId}
-                  onChange={(e) => setRuleBranchId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
-                >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-medium text-foreground mb-1">Branch Scope (Optional)</label>
+                <CheckboxMultiSelect
+                  label="Branches"
+                  allLabel="All Branches"
+                  items={branches.map((b) => ({ id: b.id, name: b.name }))}
+                  selectedIds={ruleBranchIds}
+                  onChange={setRuleBranchIds}
+                  placeholder="Search branches..."
+                  emptyMessage="No branches found"
+                />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Source Package</label>
-                <select
-                  value={ruleSourcePackageId}
-                  onChange={(e) => setRuleSourcePackageId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
-                >
-                  <option value="">Any Active Package</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-medium text-foreground mb-1">Program Scope (Optional)</label>
+                <CheckboxMultiSelect
+                  label="Programs"
+                  allLabel="All Programs"
+                  items={programs.map((p) => ({ id: p.id, name: p.name }))}
+                  selectedIds={ruleProgramIds}
+                  onChange={setRuleProgramIds}
+                  placeholder="Search programs..."
+                  emptyMessage="No active programs found"
+                />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Target Package</label>
-                <select
-                  value={ruleTargetPackageId}
-                  onChange={(e) => setRuleTargetPackageId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
-                >
-                  <option value="">Any Renewal Package</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-medium text-foreground mb-1">Package Scope (Optional)</label>
+                <CheckboxMultiSelect
+                  label="Packages"
+                  allLabel="All Packages"
+                  items={availablePackagesForRule.map((p) => ({ id: p.id, name: p.name }))}
+                  selectedIds={rulePackageIds}
+                  onChange={setRulePackageIds}
+                  placeholder="Search active packages..."
+                  emptyMessage={
+                    ruleProgramIds.length > 0 && ruleProgramIds.length < programs.length
+                      ? 'No active packages for selected program(s)'
+                      : 'No active packages found'
+                  }
+                />
               </div>
             </div>
 
@@ -2590,18 +3257,20 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 {(ruleActionType === 'SHOW_COUPON' || ruleActionType === 'APPLY_COUPON' || ruleActionType === 'GENERATE_COUPON') && (
                   <div>
                     <label className="block text-xs font-medium text-foreground mb-1">Target Campaign *</label>
-                    <select
+                    <SearchableSingleSelect
+                      label="Campaign"
+                      allLabel="-- Choose Campaign --"
+                      items={campaigns
+                        .filter((camp) => camp.status === 'ACTIVE' || camp.id === ruleActionCampaignId)
+                        .map((camp) => ({
+                          id: camp.id,
+                          name: `${camp.name} (${camp.discount_type === 'PERCENTAGE' ? `${formatPercentage(camp.discount_value)}%` : formatCurrency(camp.discount_value)})`,
+                        }))}
                       value={ruleActionCampaignId}
-                      onChange={(e) => setRuleActionCampaignId(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs text-foreground"
-                    >
-                      <option value="">-- Choose Campaign --</option>
-                      {campaigns.map((camp) => (
-                        <option key={camp.id} value={camp.id}>
-                          {camp.name} ({camp.discount_type === 'PERCENTAGE' ? `${camp.discount_value}%` : formatCurrency(camp.discount_value)})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setRuleActionCampaignId}
+                      placeholder="Search active campaigns..."
+                      emptyMessage="No active campaigns available"
+                    />
                   </div>
                 )}
 

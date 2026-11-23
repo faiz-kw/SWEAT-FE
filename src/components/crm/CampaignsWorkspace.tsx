@@ -46,9 +46,12 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { formatBranchOptionLabel } from '@/lib/crmLabels';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 export function CampaignsWorkspace() {
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
   const [searchTerm, setSearchTerm] = React.useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [selectedPlatform, setSelectedPlatform] = React.useState('ALL');
@@ -600,7 +603,7 @@ export function CampaignsWorkspace() {
                           {l.first_name} {l.last_name}
                         </td>
                         <td className="py-2.5 px-3 text-muted-foreground font-mono text-[11px]">
-                          <div>{l.phone_normalized || '—'}</div>
+                          <div>{formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || '—'}</div>
                           <div className="text-[10px] text-muted-foreground/70">{l.email_normalized || ''}</div>
                         </td>
                         <td className="py-2.5 px-3">

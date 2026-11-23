@@ -29,6 +29,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type {
@@ -38,6 +39,7 @@ import type {
   EligibleAgent,
 } from '@/types/crm';
 import { LeadDetailModal } from './LeadDetailModal';
+import { LeadCallButton } from './telephony';
 import { CRMPageHeader } from './common/CRMPageHeader';
 import { CRMKpiTile } from './common/CRMKpiTile';
 import { CRMFilterBar } from './common/CRMFilterBar';
@@ -67,7 +69,7 @@ const PRIORITY_BADGES: Record<string, { label: string; className: string }> = {
 
 export function FollowUpsWorkspace() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canEdit = can('crm.leads.edit') || can('crm.leads.create');
 
   // Filters & Tabs state
@@ -628,7 +630,12 @@ export function FollowUpsWorkspace() {
                       </Button>
 
                       {!isCompleted && !isCancelled && canEdit && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <LeadCallButton
+                            leadId={task.lead}
+                            phone={task.lead_phone}
+                            contactName={task.lead_name || 'Prospect'}
+                          />
                           <Button
                             variant="outline"
                             size="sm"
@@ -693,7 +700,7 @@ export function FollowUpsWorkspace() {
                 <option value="">-- Choose Lead --</option>
                 {leadsList.map((l: any) => (
                   <option key={l.id} value={l.id}>
-                    {l.first_name} {l.last_name} ({l.phone_normalized || l.email_normalized || 'No contact'})
+                    {l.first_name} {l.last_name} ({formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || l.email_normalized || 'No contact'})
                   </option>
                 ))}
               </select>

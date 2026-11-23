@@ -112,6 +112,8 @@ import {
 } from './modals/MemberActionModals';
 
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone, isMaskedPhone } from '@/lib/phonePrivacy';
+import { crmApi } from '@/api/endpoints/crmApi';
 import { useAuth } from '@/contexts';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '@/utils/dateTimeUtils';
 
@@ -150,7 +152,7 @@ const resolveInitialTab = (tab?: string): TabKey => {
 export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId, initialTab }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can, isSuperAdmin } = usePermissions();
+  const { can, isSuperAdmin, canViewPhoneNumber } = usePermissions();
   const { user } = useAuth();
 
   const roleStr = (user?.role || '').toLowerCase().trim();
@@ -791,7 +793,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   {member.phone && (
                     <div className="flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-muted-foreground/70" />
-                      <span>{member.phone}</span>
+                      <span>{formatDisplayPhone(member.phone, canViewPhoneNumber)}</span>
                       {isWebPhoneReady && (
                         <Button
                           variant="ghost"
@@ -799,7 +801,19 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                           className="h-5 w-5 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 cursor-pointer"
                           title="Call member directly in browser"
                           disabled={webPhoneCallState !== 'IDLE'}
-                          onClick={() => makeWebPhoneCall(member.phone!, header.name, { memberId: member.id, leadName: header.name })}
+                          onClick={async () => {
+                            const raw = (member.phone || '').trim();
+                            if (raw && !isMaskedPhone(raw) && isWebPhoneReady) {
+                              await makeWebPhoneCall(raw, header.name, { memberId: member.id, leadName: header.name });
+                            } else {
+                              try {
+                                const res = await crmApi.clickToCall({ member_id: member.id });
+                                toast.success(`Calling ${header.name}`, { description: res.message });
+                              } catch (err: any) {
+                                toast.error(err?.response?.data?.error || err?.message || 'Failed to place call.');
+                              }
+                            }
+                          }}
                         >
                           <PhoneCall className="h-3 w-3" />
                         </Button>
@@ -1132,9 +1146,7 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium font-mono text-foreground">
                         {overview.contact.phone
-                          ? (isSalesOrCounselor && overview.contact.phone.length >= 4
-                              ? `+91-XXXXX-${overview.contact.phone.slice(-4)}`
-                              : overview.contact.phone)
+                          ? formatDisplayPhone(overview.contact.phone, canViewPhoneNumber)
                           : '—'}
                       </span>
                       {overview.contact.phone && isWebPhoneReady && (
@@ -1144,7 +1156,20 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                           className="h-5 w-5 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 cursor-pointer"
                           title="Call member directly in browser"
                           disabled={webPhoneCallState !== 'IDLE'}
-                          onClick={() => makeWebPhoneCall(overview.contact.phone, overview.contact.full_name || header.name, { memberId: member.id, leadName: header.name })}
+                          onClick={async () => {
+                            const raw = (overview.contact.phone || '').trim();
+                            const displayName = overview.contact.full_name || header.name;
+                            if (raw && !isMaskedPhone(raw) && isWebPhoneReady) {
+                              await makeWebPhoneCall(raw, displayName, { memberId: member.id, leadName: header.name });
+                            } else {
+                              try {
+                                const res = await crmApi.clickToCall({ member_id: member.id });
+                                toast.success(`Calling ${displayName}`, { description: res.message });
+                              } catch (err: any) {
+                                toast.error(err?.response?.data?.error || err?.message || 'Failed to place call.');
+                              }
+                            }
+                          }}
                         >
                           <PhoneCall className="h-3 w-3" />
                         </Button>

@@ -272,6 +272,14 @@ export function UsersWorkspace() {
   const [editSubmitting, setEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
 
+  // Derived helper: check if the currently edited role is branch-scoped or org-scoped
+  const isBranchScopedRole = React.useMemo(() => {
+    const selectedRole = roles.find(
+      (role) => role.id === editRole || role.code === editRole || role.name === editRole
+    );
+    return selectedRole?.scope === "BRANCH";
+  }, [roles, editRole]);
+
   // Reset Password State & Handlers
   const [resettingUser, setResettingUser] = React.useState<AdminUserRow | null>(null);
   const [resetPasswordVal, setResetPasswordVal] = React.useState("Sweat@2026!");
@@ -330,13 +338,38 @@ export function UsersWorkspace() {
     });
   }, [roles]);
 
+  // Helper to distinguish staff/workforce roles from customer members and prospective leads
+  const isCustomerOrLeadRole = React.useCallback((r: RoleDefRow) => {
+    const code = (r.code || "").trim().toUpperCase();
+    const name = (r.name || "").trim().toUpperCase();
+    // Keep roles that explicitly represent staff, workforce, trainers, coaches, admins, or managers
+    if (code === "STAFF" || name.includes("STAFF") || name.includes("TRAINER") || name.includes("COACH") || name.includes("ADMIN") || name.includes("MANAGER")) {
+      return false;
+    }
+    // Exclude customer members, leads, and client self-service roles from staff provisioning
+    if (code === "MEMBER" || code === "LEAD" || code === "CLIENT" || code === "GUEST") {
+      return true;
+    }
+    if (name === "GYM MEMBER" || name === "MEMBER" || name === "LEAD" || name.startsWith("MEMBER ") || name.endsWith(" MEMBER")) {
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Filtered operational staff roles for user provisioning and management
+  const staffRoles = React.useMemo(() => {
+    return uniqueRoles.filter((r) => !isCustomerOrLeadRole(r));
+  }, [uniqueRoles, isCustomerOrLeadRole]);
+
   // Open Invite Modal helper with safe default initializations
   const handleOpenInviteModal = React.useCallback(() => {
-    if (!inviteRole && roles.length > 0) {
+    if (!inviteRole && staffRoles.length > 0) {
       const defaultRole =
-        roles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
-        roles[0];
-      setInviteRole(defaultRole.id);
+        staffRoles.find((r) => r.code === "STAFF" || r.name.toLowerCase().includes("staff")) ||
+        staffRoles[0];
+      if (defaultRole?.id) {
+        setInviteRole(defaultRole.id);
+      }
     }
     if (!inviteBranchId && branches.length > 0) {
       setInviteBranchId(branches[0].id);
@@ -349,7 +382,7 @@ export function UsersWorkspace() {
     if (!inviteDepartmentId && departments.length > 0) setInviteDepartmentId(departments[0].id);
     setInviteReportsToId("");
     setInviteModalOpen(true);
-  }, [inviteRole, roles, inviteBranchId, branches, inviteDepartmentId, departments]);
+  }, [inviteRole, staffRoles, inviteBranchId, branches, inviteDepartmentId, departments]);
 
   // Branch-scoped user: restrict branch selector once if not org-wide
   const hasInitializedBranchRef = React.useRef(false);
@@ -656,24 +689,48 @@ export function UsersWorkspace() {
       const trimmedPhone = editPhone.trim();
       const phoneChanged = trimmedPhone !== (editingUser.phone || "").trim();
 
-      const selectedRoleScope = roles.find((role) => role.id === editRole || role.code === editRole || role.name === editRole)?.scope;
-      const isBranchScopedRole = selectedRoleScope === "BRANCH";
+      const originalRoleId =
+        roles.find((role) => role.name === editingUser.role || role.code === editingUser.role)?.id ||
+        editingUser.branch_access?.[0]?.role_id ||
+        "";
+      const roleChanged = Boolean(editRole && editRole !== originalRoleId);
 
-      // 1. Prepare profile & home branch update payload (strictly WITHOUT branch_access to respect backend decoupling)
+      const originalPrimaryBranchId =
+        editingUser.assigned_branches?.find((b) => b.is_primary)?.id ||
+        editingUser.active_location_id ||
+        (editingUser as any).home_branch ||
+        "";
+      const branchChanged = editPrimaryBranchId !== originalPrimaryBranchId;
+
+      const userDeptVal = (editingUser as any)["department"];
+      const currentDept = departments.find(
+        (d) => d.name === userDeptVal || d.id === (editingUser as any)["department_id"]
+      );
+      const originalDeptId = currentDept?.id || "";
+      const departmentChanged = editDepartmentId !== originalDeptId;
+
+      const originalReportsToId = editingUser.reports_to_id || "";
+      const reportsToChanged = editReportsToId !== originalReportsToId;
+      const statusChanged = editStatus.toUpperCase() !== String(editingUser.status).toUpperCase();
+
+      // 1. Prepare profile & home branch update payload (send only modified fields to avoid redundant DB collisions)
       const basePayload: Record<string, any> = {
         ...(firstNameChanged ? { first_name: trimmedFirstName } : {}),
         ...(lastNameChanged ? { last_name: trimmedLastName } : {}),
         ...(emailChanged ? { email: trimmedEmail } : {}),
         ...(phoneChanged ? { phone: trimmedPhone } : {}),
-        ...(editRole ? { role_id: editRole } : {}),
+        ...(roleChanged || editRole ? { role_id: editRole } : {}),
         ...(usernameChanged ? { username: trimmedUsername } : {}),
-        ...(editStatus.toUpperCase() !== String(editingUser.status).toUpperCase() ? { status: editStatus.toUpperCase() } : {}),
-        is_active: editStatus === "Active",
-        department_id: editDepartmentId || undefined,
-        reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null),
+        ...(statusChanged ? { status: editStatus.toUpperCase() } : {}),
+        ...(departmentChanged ? { department_id: editDepartmentId || null } : {}),
+        ...(reportsToChanged ? { reports_to_id: isEditOrgAdmin ? null : (editReportsToId || null) } : {}),
       };
 
-      if (editPrimaryBranchId) {
+      if (!editPrimaryBranchId || editPrimaryBranchId === "all") {
+        basePayload.primary_branch_id = null;
+        basePayload.home_branch = null;
+        basePayload.clear_home_branch = true;
+      } else {
         basePayload.primary_branch_id = editPrimaryBranchId;
         basePayload.home_branch = editPrimaryBranchId;
       }
@@ -1132,7 +1189,7 @@ export function UsersWorkspace() {
               <SelectContent className="text-xs">
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="STAFF">Staff (General)</SelectItem>
-                {uniqueRoles.map((r) => (
+                {staffRoles.map((r) => (
                   <SelectItem key={r.id} value={r.name}>
                     {r.name}
                   </SelectItem>
@@ -2009,7 +2066,7 @@ export function UsersWorkspace() {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56">
-                    {roles.map((r) => (
+                    {staffRoles.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         <span className="font-semibold">{r.name}</span>
                         {r.description ? (
@@ -2371,7 +2428,7 @@ export function UsersWorkspace() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="text-xs max-h-56 max-w-sm">
-                    {uniqueRoles.map((r) => (
+                    {staffRoles.map((r) => (
                       <SelectItem key={r.id} value={r.id} className="cursor-pointer py-1.5">
                         <div className="flex flex-col gap-0.5 text-left max-w-[320px]">
                           <div className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
@@ -2412,90 +2469,166 @@ export function UsersWorkspace() {
                 </div>
               )}
 
-              {roles.find((role) => role.id === editRole)?.scope === "BRANCH" ? (
+              <div className="space-y-3">
+                {/* Primary Studio Selector (Available for all roles) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">Branch Access & Primary Studio</Label>
-                    <span className="text-[11px] text-muted-foreground">
-                      {Object.values(editBranchAccess).filter(Boolean).length} authorized
-                    </span>
+                    <Label className="text-xs font-semibold">Primary Studio</Label>
+                    {isBranchScopedRole ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                        Branch Scope
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        Organization Scope (All Branches)
+                      </span>
+                    )}
                   </div>
-                  <div className="max-h-52 overflow-y-auto space-y-1.5 border border-border rounded-xl p-2 bg-muted/10">
-                    {uniqueBranches.map((branch) => {
-                      const displayName = getBranchDisplayName(branch);
-                      const addressDisplay = getBranchAddressDisplay(branch);
-                      const isEnabled = editBranchAccess[branch.id] === true;
-                      const isPrimary = editPrimaryBranchId === branch.id;
-
-                      return (
-                        <div
-                          key={branch.id}
-                          className={cn(
-                            "flex items-center justify-between gap-2.5 rounded-lg border p-2 text-xs transition-colors",
-                            isEnabled ? "border-primary/40 bg-primary/5" : "border-border/60 hover:bg-muted/30"
-                          )}
-                        >
-                          <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
-                            <input
-                              type="checkbox"
-                              aria-label={`Enable access to ${displayName}`}
-                              checked={isEnabled}
-                              disabled={editSubmitting}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                setEditBranchAccess((current) => ({ ...current, [branch.id]: checked }));
-                                if (checked && !editPrimaryBranchId) {
-                                  setEditPrimaryBranchId(branch.id);
-                                } else if (!checked && editPrimaryBranchId === branch.id) {
-                                  const remaining = uniqueBranches.find((b) => b.id !== branch.id && editBranchAccess[b.id]);
-                                  setEditPrimaryBranchId(remaining ? remaining.id : "");
-                                }
-                              }}
-                              className="rounded border-input text-primary focus:ring-primary cursor-pointer shrink-0"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                <Building2 className="size-3.5 text-primary shrink-0" />
-                                <span className="truncate">{displayName}</span>
-                              </span>
-                              {addressDisplay && (
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
-                                  <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
-                                  <span className="truncate">{addressDisplay}</span>
-                                </span>
-                              )}
-                            </div>
-                          </label>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isEnabled && (
-                              isPrimary ? (
-                                <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
-                                  <Check className="size-2.5" /> Primary
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditPrimaryBranchId(branch.id)}
-                                  className="text-[10px] font-medium text-muted-foreground hover:text-primary hover:underline px-1 py-0.5"
-                                >
-                                  Make Primary
-                                </button>
-                              )
-                            )}
-                            <span className={cn("text-[11px] font-medium", isEnabled ? "text-primary" : "text-muted-foreground")}>
-                              {isEnabled ? "Enabled" : "Disabled"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
-                  </div>
+                  <Select
+                    value={editPrimaryBranchId || "all"}
+                    onValueChange={(val) => {
+                      const nextId = val === "all" ? "" : val;
+                      setEditPrimaryBranchId(nextId);
+                      if (nextId) {
+                        setEditBranchAccess((curr) => ({ ...curr, [nextId]: true }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select primary studio" />
+                    </SelectTrigger>
+                    <SelectContent className="text-xs max-h-64">
+                      <SelectItem value="all">🌐 All Branches (Organization-wide / No Primary Studio)</SelectItem>
+                      {uniqueBranches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {getBranchDisplayName(b)} {getBranchAddressDisplay(b) ? `(${getBranchAddressDisplay(b)})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!isBranchScopedRole ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      This user has an Organization-scoped role and has access across all branches. Setting Primary Studio to "All Branches" gives complete unconstrained cross-branch visibility.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      The designated home studio for this branch-scoped staff member.
+                    </p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Organization-scoped roles apply to all branches. Choose a branch-scoped role to manage individual branch access.</p>
-              )}
+
+                {/* Branch Clearances Checklist (For Branch-Scoped Roles) */}
+                {isBranchScopedRole && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Authorized Branch Clearances</Label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allAccess: Record<string, boolean> = {};
+                            uniqueBranches.forEach((b) => { allAccess[b.id] = true; });
+                            setEditBranchAccess(allAccess);
+                            if (!editPrimaryBranchId && uniqueBranches.length > 0) {
+                              setEditPrimaryBranchId(uniqueBranches[0].id);
+                            }
+                          }}
+                          className="text-[10px] font-medium text-primary hover:underline"
+                        >
+                          Enable All
+                        </button>
+                        <span className="text-muted-foreground text-[10px]">•</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditBranchAccess({});
+                            setEditPrimaryBranchId("");
+                          }}
+                          className="text-[10px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          Clear All
+                        </button>
+                        <span className="text-muted-foreground text-[10px]">•</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {Object.values(editBranchAccess).filter(Boolean).length} authorized
+                        </span>
+                      </div>
+                    </div>
+                    <div className="max-h-52 overflow-y-auto space-y-1.5 border border-border rounded-xl p-2 bg-muted/10">
+                      {uniqueBranches.map((branch) => {
+                        const displayName = getBranchDisplayName(branch);
+                        const addressDisplay = getBranchAddressDisplay(branch);
+                        const isEnabled = editBranchAccess[branch.id] === true;
+                        const isPrimary = editPrimaryBranchId === branch.id;
+
+                        return (
+                          <div
+                            key={branch.id}
+                            className={cn(
+                              "flex items-center justify-between gap-2.5 rounded-lg border p-2 text-xs transition-colors",
+                              isEnabled ? "border-primary/40 bg-primary/5" : "border-border/60 hover:bg-muted/30"
+                            )}
+                          >
+                            <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                              <input
+                                type="checkbox"
+                                aria-label={`Enable access to ${displayName}`}
+                                checked={isEnabled}
+                                disabled={editSubmitting}
+                                onChange={(event) => {
+                                  const checked = event.target.checked;
+                                  setEditBranchAccess((current) => ({ ...current, [branch.id]: checked }));
+                                  if (checked && !editPrimaryBranchId) {
+                                    setEditPrimaryBranchId(branch.id);
+                                  } else if (!checked && editPrimaryBranchId === branch.id) {
+                                    const remaining = uniqueBranches.find((b) => b.id !== branch.id && editBranchAccess[b.id]);
+                                    setEditPrimaryBranchId(remaining ? remaining.id : "");
+                                  }
+                                }}
+                                className="rounded border-input text-primary focus:ring-primary cursor-pointer shrink-0"
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                  <Building2 className="size-3.5 text-primary shrink-0" />
+                                  <span className="truncate">{displayName}</span>
+                                </span>
+                                {addressDisplay && (
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 pl-5">
+                                    <MapPin className="size-2.5 shrink-0 text-muted-foreground/70" />
+                                    <span className="truncate">{addressDisplay}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isEnabled && (
+                                isPrimary ? (
+                                  <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Check className="size-2.5" /> Primary
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditPrimaryBranchId(branch.id)}
+                                    className="text-[10px] font-medium text-muted-foreground hover:text-primary hover:underline px-1 py-0.5"
+                                  >
+                                    Make Primary
+                                  </button>
+                                )
+                              )}
+                              <span className={cn("text-[11px] font-medium", isEnabled ? "text-primary" : "text-muted-foreground")}>
+                                {isEnabled ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {uniqueBranches.length === 0 && <p className="text-xs text-muted-foreground">No branches available.</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Reports To (Supervisor / Manager) — Optional for non-Org Admin roles */}
               {(() => {

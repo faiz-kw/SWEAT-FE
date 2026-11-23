@@ -116,7 +116,7 @@ export function CRMSettingsWorkspace() {
   // ==========================================
   // TAB 1: LEAD SOURCES STATE & MUTATIONS
   // ==========================================
-  const [sourceFilter, setSourceFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [sourceFilter, setSourceFilter] = React.useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [isNewSourceModalOpen, setIsNewSourceModalOpen] = React.useState(false);
   const [newSourceName, setNewSourceName] = React.useState('');
   const [newSourceType, setNewSourceType] = React.useState('WALK_IN');
@@ -445,7 +445,7 @@ export function CRMSettingsWorkspace() {
                 className="w-full h-11 px-3.5 pr-9 rounded-xl border border-border bg-card text-foreground font-semibold text-xs appearance-none shadow-xs focus:ring-2 focus:ring-primary/20"
               >
                 <option value="meta">🌐 Meta Lead Ads</option>
-                <option value="sources">🏷️ Lead Sources ({leadSources.length})</option>
+                <option value="sources">🏷️ Lead Sources ({leadSources.filter((s) => s.status === 'ACTIVE').length})</option>
                 <option value="agents">👥 Sales Roles & Assignment</option>
                 <option value="sla">⏱️ Response Time Goals (SLAs)</option>
                 <option value="attention">✨ At-Risk Leads & Alerts</option>
@@ -484,7 +484,7 @@ export function CRMSettingsWorkspace() {
               <Tag className="w-3.5 h-3.5" />
               <span>Lead Sources</span>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                {leadSources.length}
+                {leadSources.filter((s) => s.status === 'ACTIVE').length}
               </Badge>
             </button>
 

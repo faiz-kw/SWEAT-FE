@@ -36,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { usePermissions } from '../../lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { isOrganizationAdmin } from '@/lib/nav';
 import { useApp } from '@/contexts';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
@@ -47,21 +48,12 @@ export interface MembershipsWorkspaceProps {
 export const MembershipsWorkspace: React.FC<MembershipsWorkspaceProps> = ({ initialTab = 'memberships' }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can, user } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const { locationId } = useApp();
   const canEdit = can('members.memberships.edit');
 
   const formatMemberPhone = (phone?: string) => {
-    if (!phone) return '';
-    if (phone.includes('X') || phone.includes('*')) return phone;
-    const isPrivileged = isOrganizationAdmin(user) || user?.isSuperAdmin || can('core.users.view_pii');
-    if (isPrivileged) return phone;
-    const clean = phone.replace(/[^\d]/g, '');
-    if (clean.length >= 4) {
-      const last4 = clean.slice(-4);
-      return `+91-XXXXX-${last4}`;
-    }
-    return '+91-XXXXX-XXXX';
+    return formatDisplayPhone(phone, canViewPhoneNumber);
   };
 
   const [activeTab, setActiveTab] = useState<'memberships' | 'freezes'>(

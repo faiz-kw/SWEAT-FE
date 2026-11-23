@@ -270,6 +270,7 @@ export interface CRMAgentAssignmentUserOption {
     id: string;
     code: string;
     name: string;
+    scope?: string;
     scope_type?: string;
   }>;
 }
@@ -613,6 +614,11 @@ export interface TrialBooking {
   max_reschedules?: number;
   is_active_trial?: boolean;
   available_actions?: TrialAvailableActions;
+  has_followup?: boolean;
+  followup_id?: string | null;
+  followup_task?: SalesFollowupTask | null;
+  followup_created?: boolean;
+  followup_message?: string;
   notes?: string | null;
   created_at: string;
   updated_at: string;

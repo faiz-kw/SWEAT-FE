@@ -36,6 +36,13 @@ export interface ClassCancellationPreview {
   waitlist_count: number;
   is_recurring: boolean;
   affected_bookings: AffectedBooking[];
+  assigned_trainers?: Array<{
+    id: string;
+    trainer_id: string;
+    trainer_name: string;
+    trainer_code: string;
+    role: string;
+  }>;
 }
 
 export interface ClassCategory {
@@ -76,6 +83,12 @@ export interface ClassTemplate {
   updated_at?: string;
 }
 
+export interface RuleTimeSlot {
+  id: string;
+  start_time: string;
+  end_time: string;
+}
+
 export interface ClassScheduleRule {
   id: string;
   class_template: string;
@@ -91,6 +104,7 @@ export interface ClassScheduleRule {
   days_of_week: number[]; // 1=Mon .. 7=Sun
   start_time: string; // HH:MM:SS
   end_time: string; // HH:MM:SS
+  time_slots?: RuleTimeSlot[];
   capacity_override?: number;
   trial_capacity_override?: number;
   waitlist_capacity_override?: number;

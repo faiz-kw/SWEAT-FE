@@ -39,6 +39,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RenewModal } from './modals/MemberActionModals';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 type RenewalTab = 'expiring_soon' | 'expired' | 'all';
 
@@ -46,6 +48,7 @@ export const RenewalsWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { locationId } = useApp();
+  const { canViewPhoneNumber } = usePermissions();
 
   const [activeTab, setActiveTab] = useState<RenewalTab>('expiring_soon');
   const [searchTerm, setSearchTerm] = useState('');
@@ -279,7 +282,7 @@ export const RenewalsWorkspace: React.FC = () => {
                                 )}
                               </div>
                               <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                                {member.phone && <span>{member.phone}</span>}
+                                {member.phone && <span className="font-mono">{formatDisplayPhone(member.phone, canViewPhoneNumber)}</span>}
                                 {member.email && <span className="truncate max-w-[150px]">{member.email}</span>}
                               </div>
                             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserCheck,
   Search,
@@ -11,12 +11,14 @@ import {
   ShieldAlert,
   DoorOpen,
   Sliders,
+  RotateCcw,
 } from 'lucide-react';
 import { attendanceApi } from '@/api/endpoints/attendanceApi';
 import { PageHeader, PageBody, KpiTile } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface AttendanceWorkspaceProps {
@@ -41,9 +43,9 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
   } = useQuery({
     queryKey: ['attendance-records', statusFilter],
     queryFn: () =>
-      attendanceApi.getAttendanceRecords({
-        status: statusFilter === 'ALL' ? undefined : statusFilter,
-      }),
+      attendanceApi.getAttendanceRecords(
+        statusFilter === 'ALL' ? {} : { status: statusFilter }
+      ),
   });
 
   const {
@@ -78,8 +80,31 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
   const presentCount = attendanceRecords.filter((r) => r.status === 'PRESENT' || r.status === 'ATTENDED').length;
   const lateCount = attendanceRecords.filter((r) => r.status === 'LATE' || r.status === 'LATE_ENTRY' || r.status === 'LATE_SHOW').length;
   const noShowCount = attendanceRecords.filter((r) => r.status === 'NO_SHOW').length;
-  const suspendedMembers = memberStates.filter((s) => s.is_booking_suspended).length;
+  const restrictedMembersCount = memberStates.filter((s) => s.booking_mode === 'SINGLE_BOOKING').length;
   const deniedAccessCount = accessEvents.filter((e) => e.status === 'DENIED').length;
+
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const resetRestrictionMutation = useMutation({
+    mutationFn: (stateId: string) => attendanceApi.resetMemberRestriction(stateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['member-attendance-states'] });
+      toast.success("Member booking restrictions reset to NORMAL successfully!");
+    },
+    onError: (err: any) => {
+      toast.error(err?.data?.detail || err?.message || "Failed to reset member restriction");
+    },
+    onSettled: () => {
+      setResettingId(null);
+    },
+  });
+
+  const handleResetRestriction = (stateId: string, memberName: string) => {
+    if (confirm(`Reset no-show strikes and restore full booking privileges for ${memberName}?`)) {
+      setResettingId(stateId);
+      resetRestrictionMutation.mutate(stateId);
+    }
+  };
 
   // Filtered records
   const filteredAttendance = attendanceRecords.filter((r) => {
@@ -140,7 +165,7 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
           <KpiTile label="Present On-Time" value={presentCount} hint="Verified entries" tone="positive" />
           <KpiTile label="Late Arrivals" value={lateCount} hint="Checked in after start" tone="warning" />
           <KpiTile label="No-Shows" value={noShowCount} hint="Penalty strikes logged" tone="negative" />
-          <KpiTile label="Active Suspensions" value={suspendedMembers} hint="Strike lockouts" tone="negative" />
+          <KpiTile label="Booking Restrictions" value={restrictedMembersCount} hint="Restricted to 1 advance slot" tone={restrictedMembersCount > 0 ? "negative" : "positive"} />
           <KpiTile label="Turnstile Denials" value={deniedAccessCount} hint="Blocked access events" tone="negative" />
         </div>
 
@@ -327,12 +352,12 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
                   <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
                     <tr>
                       <th className="px-4 py-3">Member</th>
-                      <th className="px-4 py-3">Total Bookings</th>
-                      <th className="px-4 py-3">Attended</th>
-                      <th className="px-4 py-3">No-Shows</th>
-                      <th className="px-4 py-3">Strikes Count</th>
-                      <th className="px-4 py-3">Booking Status</th>
-                      <th className="px-4 py-3">Suspension Until</th>
+                      <th className="px-4 py-3">Consecutive Strikes</th>
+                      <th className="px-4 py-3">Total No-Shows</th>
+                      <th className="px-4 py-3">Discipline State</th>
+                      <th className="px-4 py-3">Advance Booking Limit</th>
+                      <th className="px-4 py-3">Last No-Show Date</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
@@ -350,45 +375,83 @@ export const AttendanceWorkspace: React.FC<AttendanceWorkspaceProps> = ({
                         </td>
                       </tr>
                     ) : (
-                      memberStates.map((state) => (
-                        <tr key={state.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3.5 font-medium text-foreground">
-                            {state.user_profile_name || 'Member Profile'}
-                          </td>
-                          <td className="px-4 py-3.5">{state.total_bookings}</td>
-                          <td className="px-4 py-3.5 text-emerald-600 dark:text-emerald-400 font-semibold">{state.attended_count}</td>
-                          <td className="px-4 py-3.5 text-rose-600 dark:text-rose-400 font-semibold">{state.no_show_count}</td>
-                          <td className="px-4 py-3.5">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                state.current_strike_count >= 3
-                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                  : state.current_strike_count > 0
-                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                                  : 'bg-muted text-muted-foreground'
-                              }`}
-                            >
-                              {state.current_strike_count} Strikes
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            {state.is_booking_suspended ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                                <Lock className="w-3.5 h-3.5" /> Suspended
+                      memberStates.map((state) => {
+                        const isRestricted = state.booking_mode === 'SINGLE_BOOKING';
+                        const memberDisplayName = state.member_name || (state as any).user_profile_name || 'Member Profile';
+                        return (
+                          <tr key={state.id} className="hover:bg-muted/40 transition-colors">
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-foreground">{memberDisplayName}</div>
+                              {state.member_email && (
+                                <div className="text-[11px] text-muted-foreground font-mono">{state.member_email}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                  (state.consecutive_no_show_count || 0) >= 2
+                                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                    : (state.consecutive_no_show_count || 0) > 0
+                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                {state.consecutive_no_show_count || 0} Strikes
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Good Standing
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                            {state.suspended_until
-                              ? new Date(state.suspended_until).toLocaleDateString()
-                              : '—'}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                              {state.active_no_show_count || 0} recorded
+                            </td>
+                            <td className="px-4 py-3.5">
+                              {isRestricted ? (
+                                <div>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                    <Lock className="w-3 h-3" /> Restricted (Single Slot)
+                                  </span>
+                                  {state.restriction_reason && (
+                                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-xs">
+                                      {state.restriction_reason}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                  <CheckCircle2 className="w-3 h-3" /> Normal (Good Standing)
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-xs font-semibold">
+                              {isRestricted ? (
+                                <span className="text-rose-600 dark:text-rose-400">1 class max</span>
+                              ) : (
+                                <span className="text-foreground">{state.current_max_advance_bookings || 7} classes max</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                              {state.last_no_show_at
+                                ? new Date(state.last_no_show_at).toLocaleDateString()
+                                : '—'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              {(isRestricted || (state.consecutive_no_show_count || 0) > 0) ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resettingId === state.id || resetRestrictionMutation.isPending}
+                                  onClick={() => handleResetRestriction(state.id, memberDisplayName)}
+                                  className="h-8 gap-1.5 text-xs text-primary hover:bg-primary/10 border-primary/30"
+                                  title="Reset no-show strikes and restore full booking allowance"
+                                >
+                                  <RotateCcw className={cn("size-3", resettingId === state.id && "animate-spin")} />
+                                  <span>{resettingId === state.id ? "Resetting..." : "Reset Restriction"}</span>
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground italic">No action needed</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

@@ -58,7 +58,11 @@ export function ConfigurationWorkspace() {
     require_active_membership: true,
     max_upcoming_bookings: 5,
     advance_booking_days_max: 14,
+    no_show_restriction_threshold: 2,
+    no_show_cooling_off_days: 7,
+    restricted_max_advance_bookings: 1,
     qr_activation_minutes_before_class: 20,
+    qr_scan_grace_period_minutes: 20,
     notify_unpaid_auto_cancellation: true,
     notify_unconfirmed_auto_cancellation: true,
     notify_late_cancellation: true,
@@ -899,7 +903,94 @@ export function ConfigurationWorkspace() {
                 </div>
               </div>
 
-              {/* 5. TURNSTILE ACCESS & QR PASS ACTIVATION */}
+              {/* 5. ATTENDANCE DISCIPLINE & NO-SHOW COOLING-OFF RULES */}
+              <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
+                <div className="border-b border-border/40 pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-sm text-foreground">Attendance Discipline & No-Show Cooling-Off Rules</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Control automated penalties when members fail to attend or scan in at turnstiles, and configure how long booking restrictions last before auto-restoring.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="no_show_threshold" className="text-xs font-semibold text-foreground">
+                      No-Show Restriction Threshold
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="no_show_threshold"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={bookingPolicy.no_show_restriction_threshold ?? 2}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          updateBooking("no_show_restriction_threshold", isNaN(num) || num < 1 ? 1 : num);
+                        }}
+                        className="h-9 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">strikes</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Number of consecutive un-scanned no-shows before advance booking is restricted.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="cooling_off_days" className="text-xs font-semibold text-foreground">
+                      Cooling-Off Window Duration
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="cooling_off_days"
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={bookingPolicy.no_show_cooling_off_days ?? 7}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          updateBooking("no_show_cooling_off_days", isNaN(num) || num < 1 ? 1 : num);
+                        }}
+                        className="h-9 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">days</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      After this many days, member restriction automatically lifts and normal advance booking restores.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-background">
+                    <Label htmlFor="restricted_max_advance" className="text-xs font-semibold text-foreground">
+                      Restricted Advance Booking Limit
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="restricted_max_advance"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={bookingPolicy.restricted_max_advance_bookings ?? 1}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          updateBooking("restricted_max_advance_bookings", isNaN(num) || num < 1 ? 1 : num);
+                        }}
+                        className="h-9 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">class at a time</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Max future advance classes allowed while under penalty (e.g. 1 single advance booking).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. TURNSTILE ACCESS & QR PASS ACTIVATION */}
               <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-4">
                 <div className="border-b border-border/40 pb-3">
                   <div className="flex items-center gap-2">
@@ -944,9 +1035,43 @@ export function ConfigurationWorkspace() {
                     </div>
                   </div>
                 </div>
+
+                <div className="p-3.5 sm:p-4 rounded-lg border border-border/60 bg-background space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="qr_scan_grace_period_min" className="text-sm font-semibold text-foreground">
+                      Member Attendance QR Scan Grace Period
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Configure how many minutes after a scheduled class starts a member is allowed to scan their QR code at the turnstile and still have their attendance marked. If a member scans within this grace period, attendance is recorded successfully as Present. Scans after this grace period will follow the configured late attendance policy.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Input
+                        id="qr_scan_grace_period_min"
+                        type="number"
+                        min="0"
+                        max="180"
+                        value={bookingPolicy.qr_scan_grace_period_minutes ?? 20}
+                        onChange={(e) => {
+                          const rawVal = e.target.value;
+                          const num = Number(rawVal);
+                          updateBooking("qr_scan_grace_period_minutes", isNaN(num) || num < 0 ? 0 : num);
+                        }}
+                        className="h-9 w-28 text-xs sm:text-sm font-semibold"
+                      />
+                      <span className="text-xs font-medium text-muted-foreground shrink-0">minutes after class start</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span>Default: <strong>20 minutes</strong> (Currently saved: <strong>{bookingPolicy.qr_scan_grace_period_minutes ?? 20}m</strong>)</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 6. NOTIFICATION CHANNELS */}
+              {/* 7. NOTIFICATION CHANNELS */}
               <div className="rounded-xl border border-border/70 p-4 sm:p-5 bg-card/60 space-y-3">
                 <div className="border-b border-border/40 pb-3">
                   <div className="flex items-center gap-2">

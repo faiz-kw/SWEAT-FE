@@ -777,7 +777,11 @@ export interface BookingPolicyData {
   require_active_membership: boolean;
   max_upcoming_bookings: number;
   advance_booking_days_max: number;
+  no_show_restriction_threshold?: number;
+  no_show_cooling_off_days?: number;
+  restricted_max_advance_bookings?: number;
   qr_activation_minutes_before_class?: number;
+  qr_scan_grace_period_minutes?: number;
   apply_to_existing_bookings?: boolean;
   policy_effective_at?: string;
   notify_unpaid_auto_cancellation: boolean;

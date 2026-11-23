@@ -88,6 +88,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone, isMaskedPhone } from '@/lib/phonePrivacy';
 import { useAuth } from '@/api/auth/AuthProvider';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
@@ -174,7 +175,7 @@ export function LeadDetailModal({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canEdit = can('crm.leads.edit') || can('sales.leads.edit');
   const canConvert = can('crm.leads.convert') || canEdit;
   const canViewCommunications = can('crm.communications.view');
@@ -256,19 +257,31 @@ export function LeadDetailModal({
 
   const handleDirectCall = async () => {
     if (!currentLead) return;
-    const targetPhone = currentLead.phone_normalized || currentLead.phone || '';
+    const targetPhone = (currentLead.phone_normalized || currentLead.phone || '').trim();
     const fullName = [currentLead.first_name, currentLead.last_name].filter(Boolean).join(' ') || 'Prospect';
+    const masked = isMaskedPhone(targetPhone);
 
-    if (isWebPhoneReady) {
+    if (targetPhone && !masked && isWebPhoneReady) {
       toast.info(`Dialing ${fullName} via Vobiz WebPhone...`);
       await makeWebPhoneCall(targetPhone, fullName, {
         leadId: currentLead.id,
         leadName: fullName,
       });
-    } else {
-      toast.error('Vobiz WebPhone Not Ready', {
-        description: 'Please click WebPhone in the top navigation bar to connect before placing calls.',
+      return;
+    }
+
+    try {
+      const res = await crmApi.clickToCall(currentLead.id);
+      toast.success(`Calling ${fullName}`, {
+        description: res.message || 'Ringing your Vobiz WebPhone first, then bridging lead.',
       });
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Failed to initiate call via Vobiz.';
+      toast.error(msg);
     }
   };
 
@@ -535,14 +548,22 @@ export function LeadDetailModal({
 
   const markAttendedMutation = useMutation({
     mutationFn: (trialId: string) => crmApi.markTrialAttended(trialId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
-      toast.success('Trial marked as Attended! Follow-up generated if enabled.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = currentLead?.first_name || 'the prospect';
+      const msg = task
+        ? `Trial marked as Attended! Post-trial follow-up created and assigned to ${assignedToName}. Expected next action: Contact ${leadName} to collect workout feedback and explore membership plans.`
+        : `Trial marked as Attended! Status successfully updated in CRM.`;
+      toast.success(msg, { duration: 8000 });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark attended');
@@ -551,14 +572,22 @@ export function LeadDetailModal({
 
   const markNoShowMutation = useMutation({
     mutationFn: (trialId: string) => crmApi.markTrialNoShow(trialId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['lead-trials', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['lead-detail', currentLead?.id] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
-      toast.success('Trial marked as No-Show! Recovery task created if enabled.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = currentLead?.first_name || 'the prospect';
+      const msg = task
+        ? `Trial marked as No-Show! Recovery follow-up created and assigned to ${assignedToName}. Expected next action: Reach out to ${leadName} to understand reason for missing and reschedule.`
+        : `Trial marked as No-Show! Status successfully updated in CRM.`;
+      toast.success(msg, { duration: 8000 });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark no-show');
@@ -926,9 +955,7 @@ export function LeadDetailModal({
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email_normalized: email.trim() || null,
-      phone_normalized: phone.trim() || null,
       email: email.trim() || null,
-      phone: phone.trim() || null,
       gender: gender || null,
       date_of_birth: dateOfBirth || null,
       country: country || null,
@@ -942,6 +969,10 @@ export function LeadDetailModal({
       gst_number: finalGst || null,
       pan_number: finalPan || null,
     };
+    if (canViewPhoneNumber && !isMaskedPhone(phone)) {
+      payload.phone_normalized = phone.trim() || null;
+      payload.phone = phone.trim() || null;
+    }
 
     updateMutation.mutate(payload);
   };
@@ -1216,8 +1247,9 @@ export function LeadDetailModal({
                         currentLead.do_not_contact ||
                         (currentLead as any).is_opted_out
                       );
-                      const cleanPhoneDigits = (currentLead.phone_normalized || (currentLead as any).phone || '').replace(/\D/g, '');
-                      const hasValidPhone = cleanPhoneDigits.length >= 10;
+                      const rawPhoneValue = currentLead.phone_normalized || (currentLead as any).phone || '';
+                      const cleanPhoneDigits = rawPhoneValue.replace(/\D/g, '');
+                      const hasValidPhone = cleanPhoneDigits.length >= 10 || isMaskedPhone(rawPhoneValue);
                       const isCallInProgress = Boolean(
                         activeCallSession && ['QUEUED', 'INITIATED', 'RINGING', 'CONNECTED'].includes(activeCallSession.status)
                       );
@@ -1622,7 +1654,12 @@ export function LeadDetailModal({
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Phone Number</Label>
-                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                      <Input
+                        value={canViewPhoneNumber ? phone : formatDisplayPhone(phone, false)}
+                        onChange={(e) => setPhone(e.target.value)}
+                        disabled={!canViewPhoneNumber}
+                        title={!canViewPhoneNumber ? 'Phone visibility permission required to edit phone number' : undefined}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Branch</Label>
@@ -1865,7 +1902,7 @@ export function LeadDetailModal({
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between py-1 border-b border-border/40">
                           <span className="text-muted-foreground">Phone</span>
-                          <span className="font-semibold font-mono text-foreground">{currentLead.phone_normalized || '—'}</span>
+                          <span className="font-semibold font-mono text-foreground">{formatDisplayPhone(currentLead.phone_normalized, canViewPhoneNumber) || '—'}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-border/40">
                           <span className="text-muted-foreground">Email</span>
@@ -2830,10 +2867,15 @@ export function LeadDetailModal({
                                   </div>
 
                                   {/* AUDIO RECORDING PLAYER & TRANSCRIPT ACCORDION */}
-                                  {evt.metadata?.recording_url ? (
+                                  {/* Only render the player when the call actually produced audio:
+                                      - turns > 0: Sarvam had a real conversation
+                                      - duration_seconds > 5: enough audio to be meaningful
+                                      Calls with Turns=0 (no answer, carrier fail) produce no audio;
+                                      showing the player for them causes the browser "no supported source" error. */}
+                                  {evt.metadata?.recording_url && (evt.metadata?.turns > 0 || evt.metadata?.duration_seconds > 5) ? (
                                     <CallRecordingPlayer
                                       recordingUrl={evt.metadata?.recording_url}
-                                      durationSeconds={evt.metadata?.duration_seconds || 155}
+                                      durationSeconds={evt.metadata?.duration_seconds || 0}
                                       transcript={evt.metadata?.transcript || evt.metadata?.notes || evt.description}
                                       title={evt.title}
                                       disposition={evt.metadata?.disposition}
@@ -4055,7 +4097,7 @@ export function LeadDetailModal({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!composeRecipient.trim()) {
+                if (!composeRecipient.trim() && !(composeChannel !== 'EMAIL' && currentLead?.id)) {
                   toast.error('Recipient phone or email is required');
                   return;
                 }
@@ -4065,7 +4107,9 @@ export function LeadDetailModal({
                 }
                 const commPayload: SendCommunicationPayload = {
                   channel: composeChannel,
-                  recipient: composeRecipient.trim(),
+                  recipient: (composeChannel !== 'EMAIL' && (!canViewPhoneNumber || isMaskedPhone(composeRecipient)))
+                    ? ''
+                    : composeRecipient.trim(),
                   lead_id: currentLead?.id,
                   purpose: composePurpose,
                   idempotency_key: `MANUAL_SEND:${currentLead?.id}:${composeChannel}:${Date.now()}`,
@@ -4171,11 +4215,12 @@ export function LeadDetailModal({
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Recipient ({composeChannel === 'EMAIL' ? 'Email' : 'Phone'}) *</Label>
                 <Input
-                  value={composeRecipient}
+                  value={composeChannel === 'EMAIL' ? composeRecipient : formatDisplayPhone(composeRecipient, canViewPhoneNumber)}
                   onChange={(e) => setComposeRecipient(e.target.value)}
                   placeholder={composeChannel === 'EMAIL' ? 'member@example.com' : '+91 9876543210'}
-                  className="text-xs h-9"
-                  required
+                  className="text-xs h-9 font-mono"
+                  disabled={composeChannel !== 'EMAIL' && !canViewPhoneNumber}
+                  required={composeChannel === 'EMAIL' || canViewPhoneNumber}
                 />
               </div>
 
@@ -4427,7 +4472,7 @@ export function LeadDetailModal({
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Phone Number</span>
-                    <span className="font-mono font-bold text-foreground">{currentLead.phone_normalized || (currentLead as any).phone || '—'}</span>
+                    <span className="font-mono font-bold text-foreground">{formatDisplayPhone(currentLead.phone_normalized || (currentLead as any).phone, canViewPhoneNumber) || '—'}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Calling Service</span>

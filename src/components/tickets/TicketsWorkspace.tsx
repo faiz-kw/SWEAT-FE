@@ -63,8 +63,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
+
 export const TicketsWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
+  const { canViewPhoneNumber } = usePermissions();
 
   // Filters & Search
   const [activeStatusTab, setActiveStatusTab] = useState<string>('ALL');
@@ -416,7 +420,7 @@ export const TicketsWorkspace: React.FC = () => {
                       <td className="px-4 py-3.5">
                         <div className="font-medium text-foreground">{t.member_name}</div>
                         <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          {t.member_phone && <span>{t.member_phone}</span>}
+                          {t.member_phone && <span className="font-mono">{formatDisplayPhone(t.member_phone, canViewPhoneNumber)}</span>}
                           {t.active_package_name && (
                             <span className="text-[10px] bg-secondary px-1.5 py-0.2 rounded text-secondary-foreground font-medium">
                               {t.active_package_name}
@@ -512,7 +516,7 @@ export const TicketsWorkspace: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Phone</span>
-                    <span>{selectedTicket.member_phone || 'N/A'}</span>
+                    <span className="font-mono">{formatDisplayPhone(selectedTicket.member_phone, canViewPhoneNumber) || 'N/A'}</span>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Email</span>

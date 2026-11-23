@@ -45,6 +45,7 @@ import type {
   TrialReminderSchedulePoint,
   Lead,
   RescheduleTrialPayload,
+  SalesFollowupTask,
 } from '@/types/crm';
 import { usePermissions } from '@/lib/permissions';
 import { formatBranchOptionLabel } from '@/lib/crmLabels';
@@ -77,10 +78,12 @@ import { CRMLoadingState } from './common/CRMLoadingState';
 import { formatCrmLabel } from '@/lib/crmLabels';
 import { BookTrialModal } from './BookTrialModal';
 import { LeadDetailModal } from './LeadDetailModal';
+import { LeadCallButton } from './telephony';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 
 export function TrialManagementWorkspace() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canEdit = can('crm.trials.edit') || can('crm.leads.edit') || can('sales.leads.edit');
 
   // Filters
@@ -132,6 +135,24 @@ export function TrialManagementWorkspace() {
   const [cancelNotes, setCancelNotes] = React.useState('');
 
   const [viewingScheduleTrial, setViewingScheduleTrial] = React.useState<TrialBooking | null>(null);
+  const [viewingFollowupTask, setViewingFollowupTask] = React.useState<SalesFollowupTask | null>(null);
+  const [isLoadingFollowup, setIsLoadingFollowup] = React.useState<boolean>(false);
+
+  const handleShowFollowup = async (trialId: string, fallbackTask?: SalesFollowupTask | null) => {
+    if (fallbackTask) {
+      setViewingFollowupTask(fallbackTask);
+      return;
+    }
+    try {
+      setIsLoadingFollowup(true);
+      const task = await crmApi.getTrialFollowup(trialId);
+      setViewingFollowupTask(task);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'No follow-up task found for this trial booking yet.');
+    } finally {
+      setIsLoadingFollowup(false);
+    }
+  };
 
   // Dynamic filter options query (Branches, Statuses, Confirmations from backend)
   const { data: filterOptions, isLoading: isFilterOptionsLoading } = useQuery({
@@ -320,12 +341,31 @@ export function TrialManagementWorkspace() {
 
   const markAttendedMutation = useMutation({
     mutationFn: (id: string) => crmApi.markTrialAttended(id),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline'] });
-      toast.success('Trial marked as Attended! Follow-up generated if configured.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = data?.lead_name || 'the prospect';
+
+      const userFriendlyMsg = task
+        ? `Trial marked as Attended! Post-trial follow-up created and assigned to ${assignedToName}. Expected next action: Contact ${leadName} to collect workout feedback and explore membership plans.`
+        : `Trial marked as Attended! Status successfully updated in CRM.`;
+
+      toast.success(userFriendlyMsg, {
+        duration: 9000,
+        action: task ? {
+          label: 'Show',
+          onClick: () => {
+            setViewingFollowupTask(task);
+          },
+        } : undefined,
+      });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark attended');
@@ -334,12 +374,31 @@ export function TrialManagementWorkspace() {
 
   const markNoShowMutation = useMutation({
     mutationFn: (id: string) => crmApi.markTrialNoShow(id),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['trial-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['trial-summary-counts'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead-timeline'] });
-      toast.success('Trial marked as No-Show! Recovery task created if configured.');
+      queryClient.invalidateQueries({ queryKey: ['sales-followups'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-followups-counts'] });
+
+      const task = data?.followup_task;
+      const assignedToName = task?.assigned_to_name || 'assigned sales representative';
+      const leadName = data?.lead_name || 'the prospect';
+
+      const userFriendlyMsg = task
+        ? `Trial marked as No-Show! Recovery follow-up created and assigned to ${assignedToName}. Expected next action: Reach out to ${leadName} to understand reason for missing and reschedule.`
+        : `Trial marked as No-Show! Status successfully updated in CRM.`;
+
+      toast.success(userFriendlyMsg, {
+        duration: 9000,
+        action: task ? {
+          label: 'Show',
+          onClick: () => {
+            setViewingFollowupTask(task);
+          },
+        } : undefined,
+      });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to mark no-show');
@@ -807,8 +866,8 @@ export function TrialManagementWorkspace() {
                               </Badge>
                             )}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {trial.lead_phone || trial.lead_email || 'No contact'}
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {formatDisplayPhone(trial.lead_phone, canViewPhoneNumber) || trial.lead_email || 'No contact'}
                           </div>
                         </td>
 
@@ -879,6 +938,12 @@ export function TrialManagementWorkspace() {
                         {/* Actions */}
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <LeadCallButton
+                              leadId={trial.lead}
+                              phone={trial.lead_phone}
+                              contactName={trial.lead_name || 'Prospect'}
+                              compact
+                            />
                             {/* Primary contextual action */}
                             {canEdit && trial.is_active_trial !== false && trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
                               <Button
@@ -892,7 +957,7 @@ export function TrialManagementWorkspace() {
                               </Button>
                             )}
 
-                            {canEdit && trial.is_active_trial !== false && trial.status === 'CONFIRMED' && (
+                            {canEdit && trial.is_active_trial !== false && (trial.status === 'CONFIRMED' || trial.status === 'NO_SHOW' || (trial.status === 'BOOKED' && trial.confirmation_status === 'CONFIRMED')) && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -902,6 +967,21 @@ export function TrialManagementWorkspace() {
                               >
                                 <UserCheck className="w-3 h-3" />
                                 Attended
+                              </Button>
+                            )}
+
+                            {/* Show Follow-up contextual button */}
+                            {(trial.status === 'ATTENDED' || trial.status === 'NO_SHOW' || (trial as any).has_followup) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleShowFollowup(trial.id, (trial as any).followup_task)}
+                                disabled={isLoadingFollowup}
+                                className="h-7 px-2 text-[11px] gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 font-semibold"
+                                title="View generated follow-up task details"
+                              >
+                                <CalendarCheck className="w-3 h-3 text-indigo-500" />
+                                Show Follow-up
                               </Button>
                             )}
 
@@ -933,7 +1013,12 @@ export function TrialManagementWorkspace() {
                                   Reminder Schedule
                                 </DropdownMenuItem>
 
-                                {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && trial.status !== 'ATTENDED' && (
+                                <DropdownMenuItem onClick={() => handleShowFollowup(trial.id, (trial as any).followup_task)}>
+                                  <CalendarCheck className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+                                  Show Follow-up
+                                </DropdownMenuItem>
+
+                                {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && (
                                   <>
                                     <DropdownMenuSeparator />
                                     {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (trial.available_actions ? trial.available_actions.can_request_reschedule : true) && (
@@ -1008,8 +1093,8 @@ export function TrialManagementWorkspace() {
                           </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {trial.lead_phone || trial.lead_email || 'No contact'}
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {formatDisplayPhone(trial.lead_phone, canViewPhoneNumber) || trial.lead_email || 'No contact'}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -1051,8 +1136,14 @@ export function TrialManagementWorkspace() {
 
                   {/* Mobile Action buttons */}
                   {canEdit && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                      <div>
+                    <div className="flex items-center justify-between pt-2 border-t border-border/40 gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <LeadCallButton
+                          leadId={trial.lead}
+                          phone={trial.lead_phone}
+                          contactName={trial.lead_name || 'Prospect'}
+                          compact
+                        />
                         {trial.status === 'BOOKED' && trial.confirmation_status !== 'CONFIRMED' && (
                           <Button
                             size="sm"
@@ -1064,7 +1155,7 @@ export function TrialManagementWorkspace() {
                             Confirm Booking
                           </Button>
                         )}
-                        {trial.status === 'CONFIRMED' && (
+                        {canEdit && trial.is_active_trial !== false && (trial.status === 'CONFIRMED' || trial.status === 'NO_SHOW' || (trial.status === 'BOOKED' && trial.confirmation_status === 'CONFIRMED')) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1074,6 +1165,18 @@ export function TrialManagementWorkspace() {
                           >
                             <UserCheck className="w-3 h-3" />
                             Mark Attended
+                          </Button>
+                        )}
+                        {(trial.status === 'ATTENDED' || trial.status === 'NO_SHOW' || (trial as any).has_followup) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleShowFollowup(trial.id, (trial as any).followup_task)}
+                            disabled={isLoadingFollowup}
+                            className="h-7 text-xs gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-semibold"
+                          >
+                            <CalendarCheck className="w-3 h-3 text-indigo-500" />
+                            Show Follow-up
                           </Button>
                         )}
                       </div>
@@ -1104,7 +1207,11 @@ export function TrialManagementWorkspace() {
                             <Bell className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                             Reminders
                           </DropdownMenuItem>
-                          {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && trial.status !== 'ATTENDED' && (
+                          <DropdownMenuItem onClick={() => handleShowFollowup(trial.id, (trial as any).followup_task)}>
+                            <CalendarCheck className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+                            Show Follow-up
+                          </DropdownMenuItem>
+                          {canEdit && trial.is_active_trial !== false && trial.status !== 'CANCELLED' && trial.status !== 'RESCHEDULED' && (
                             <>
                               <DropdownMenuSeparator />
                               {trial.status === 'BOOKED' && trial.confirmation_status !== 'RESCHEDULE_REQUESTED' && (trial.available_actions ? trial.available_actions.can_request_reschedule : true) && (
@@ -1122,6 +1229,12 @@ export function TrialManagementWorkspace() {
                                 >
                                   <RotateCw className="w-3.5 h-3.5 mr-2 text-primary" />
                                   Reschedule Slot
+                                </DropdownMenuItem>
+                              )}
+                              {(trial.available_actions ? trial.available_actions.can_mark_attended : trial.status !== 'ATTENDED') && (
+                                <DropdownMenuItem onClick={() => markAttendedMutation.mutate(trial.id)}>
+                                  <UserCheck className="w-3.5 h-3.5 mr-2 text-primary" />
+                                  Mark Attended
                                 </DropdownMenuItem>
                               )}
                               {(trial.available_actions ? trial.available_actions.can_mark_no_show : (trial.status !== 'NO_SHOW' && trial.status !== 'ATTENDED')) && (
@@ -1594,6 +1707,153 @@ export function TrialManagementWorkspace() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 5. FOLLOW-UP DETAILS DIALOG (SHOW BUTTON TARGET) */}
+      <Dialog open={!!viewingFollowupTask} onOpenChange={(open) => !open && setViewingFollowupTask(null)}>
+        <DialogContent className="max-w-lg w-full bg-background border border-border p-6 rounded-2xl shadow-xl">
+          <DialogHeader className="pb-3 border-b border-border">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <CalendarCheck className="w-5 h-5 text-indigo-500" />
+                Follow-Up Task Details
+              </DialogTitle>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline" className={cn(
+                  "text-[10px] font-semibold px-2 py-0.5",
+                  viewingFollowupTask?.status === 'COMPLETED' ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10" :
+                  viewingFollowupTask?.status === 'IN_PROGRESS' ? "border-blue-500/40 text-blue-600 bg-blue-500/10" :
+                  "border-amber-500/40 text-amber-600 bg-amber-500/10"
+                )}>
+                  {viewingFollowupTask?.status || 'PENDING'}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 border-purple-500/40 text-purple-600 bg-purple-500/10">
+                  {viewingFollowupTask?.priority || 'HIGH'} PRIORITY
+                </Badge>
+              </div>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Authoritative sales follow-up task dynamically linked to this prospect in the CRM work queue.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingFollowupTask && (
+            <div className="space-y-4 py-3 text-xs">
+              {/* Task Objective / Outcome Banner */}
+              <div className="p-3.5 rounded-xl bg-indigo-500/5 border border-indigo-500/20 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-600 dark:text-indigo-400">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Task Objective & Next Expected Action:</span>
+                </div>
+                <p className="text-foreground leading-relaxed">
+                  {viewingFollowupTask.outcome || 'Contact prospect to follow up regarding their trial workout experience and discuss membership plans.'}
+                </p>
+              </div>
+
+              {/* Lead & Assigned Agent Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Prospect Lead
+                  </span>
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-muted-foreground" />
+                      {viewingFollowupTask.lead_name || 'Prospect'}
+                    </div>
+                    {viewingFollowupTask.lead_phone && (
+                      <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                        <Phone className="w-3 h-3" />
+                        {formatDisplayPhone(viewingFollowupTask.lead_phone, canViewPhoneNumber)}
+                      </div>
+                    )}
+                    {viewingFollowupTask.lead_email && (
+                      <div className="text-muted-foreground flex items-center gap-1.5 text-xs truncate">
+                        <Mail className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{viewingFollowupTask.lead_email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Assigned Representative
+                  </span>
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      {viewingFollowupTask.assigned_to_name || 'Unassigned'}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      Responsible sales agent assigned to this lead in CRM
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule & Due Information */}
+              <div className="p-3 rounded-xl border border-border/70 bg-card/50 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Scheduled Due Time
+                  </span>
+                  <div className="font-medium text-foreground flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    {viewingFollowupTask.due_at
+                      ? new Date(viewingFollowupTask.due_at).toLocaleString('en-IN', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })
+                      : 'Immediate'}
+                  </div>
+                </div>
+                <div>
+                  <Badge variant="outline" className={cn(
+                    "text-xs px-2.5 py-1 font-semibold",
+                    viewingFollowupTask.is_overdue
+                      ? "border-destructive text-destructive bg-destructive/10"
+                      : "border-indigo-500/30 text-indigo-600 bg-indigo-500/10"
+                  )}>
+                    {viewingFollowupTask.is_overdue ? "Overdue" : "Scheduled"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="pt-3 border-t border-border flex justify-between items-center sm:justify-between w-full">
+            <div className="flex items-center gap-2">
+              {viewingFollowupTask?.lead_phone && (
+                <LeadCallButton
+                  leadId={viewingFollowupTask.lead}
+                  phone={viewingFollowupTask.lead_phone}
+                  contactName={viewingFollowupTask.lead_name || 'Prospect'}
+                />
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setViewingFollowupTask(null);
+                  window.location.href = '/crm/follow-ups';
+                }}
+                className="h-8 text-xs font-semibold gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
+              >
+                <CalendarCheck className="w-3.5 h-3.5" />
+                View in Follow-ups Queue
+              </Button>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setViewingFollowupTask(null)}
+              className="h-8 text-xs font-semibold"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* BOOK REAL TRIAL MODAL */}
       <BookTrialModal

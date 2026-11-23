@@ -20,11 +20,12 @@ import { Input } from '@/components/ui/input';
 import { getCurrentUser } from '@/services';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { api } from '@/api/client';
 import { crmApi } from '@/api/endpoints/crmApi';
-import { discountsApi, type ApplicableCoupon } from '@/api/endpoints/discountsApi';
 import type { Lead, ConversionQuote, ConversionPayload, ConversionResult, PaymentProvider } from '@/types/crm';
 import { cleanupRazorpayDOM, loadRazorpayScript } from '@/utils/razorpayCheckout';
+import { ApplicableOffersSelector, AppliedCouponState } from '@/components/discounts/ApplicableOffersSelector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,7 @@ export function getProgramIcon(name: string) {
 
 // Presentation metadata for supported payment providers
 const PROVIDER_METADATA: Record<string, { label: string; icon: string; description?: string }> = {
-  CASH: { label: 'Centre Cash', icon: '💵', description: 'Handed over at reception desk (requires manager review)' },
+  CASH: { label: 'Centre Cash', icon: '💵', description: 'Handed over at reception desk (immediate activation for admins)' },
   RAZORPAY: { label: 'Razorpay Online', icon: '💳', description: 'UPI · Debit/Credit Cards · Netbanking · Instant Activation' },
 };
 
@@ -524,29 +525,28 @@ function PackagePickerStep({
 // ─── Step 2: Pricing Preview ──────────────────────────────────────────────────
 
 function PricingStep({
-  quote, couponCode, onCouponChange, onApplyCoupon, isApplyingCoupon, onSelectCoupon,
+  quote,
+  couponCode,
+  packageId,
+  branchId,
+  memberId,
+  onCouponChange,
+  onApplyCoupon,
+  onRemoveCoupon,
+  isApplyingCoupon,
 }: {
   quote: ConversionQuote;
   couponCode: string;
+  packageId?: string | undefined;
+  branchId?: string | undefined;
+  memberId?: string | undefined;
   onCouponChange: (c: string) => void;
-  onApplyCoupon: () => void;
+  onApplyCoupon: (code?: string) => void;
+  onRemoveCoupon?: (() => void) | undefined;
   isApplyingCoupon: boolean;
-  onSelectCoupon: (code: string) => void;
 }) {
   const p = quote.pricing;
   const pv = quote.package_version;
-  const appliedCode = (quote.coupon?.is_valid && quote.coupon?.coupon_code) ? quote.coupon.coupon_code : '';
-  const { data: applicable } = useQuery({
-    queryKey: ['applicable-coupons', pv?.id, p.subtotal],
-    queryFn: () => discountsApi.getApplicableCoupons({
-      package_version_id: pv?.id,
-      order_type: 'NEW_MEMBERSHIP',
-      order_subtotal: p.subtotal,
-    }),
-    enabled: !!pv?.id,
-    staleTime: 60_000,
-  });
-  const availableCoupons: ApplicableCoupon[] = applicable?.coupons ?? [];
   const isUnlimited = quote.entitlements.some((e: any) => e.is_unlimited);
   const totalSessions = quote.entitlements.reduce((acc: number, e: any) => {
     if (e.is_unlimited) return acc;
@@ -609,87 +609,39 @@ function PricingStep({
         )}
       </div>
 
-      {/* 2 & 3: Coupon on Left, Price Breakdown on Right */}
+      {/* 2 & 3: Offers Selector on Left, Price Breakdown on Right */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        {/* Left: Coupon Code Card */}
-        <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-xs flex flex-col justify-between">
-          <div>
-            <Label className="text-xs font-bold text-foreground uppercase tracking-wider block mb-2">
-              Coupon Code (Optional)
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                value={couponCode}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onCouponChange(e.target.value.toUpperCase())}
-                placeholder="PROMO CODE"
-                className="bg-background border-border font-mono uppercase text-xs sm:text-sm h-10 tracking-wider"
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={onApplyCoupon}
-                disabled={!couponCode.trim() || isApplyingCoupon}
-                className="h-10 px-4 shrink-0 font-semibold rounded-xl bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 active:scale-95 transition-all shadow-xs gap-1.5 cursor-pointer"
-              >
-                {isApplyingCoupon ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles size={13} className="text-amber-400" />
-                    <span>Apply</span>
-                  </>
-                )}
-              </Button>
-            </div>
-            {quote.coupon && (
-              <div className={`mt-2 flex items-center gap-2 text-xs px-3 py-2 rounded-xl border ${quote.coupon.is_valid ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-medium' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 font-medium'}`}>
-                {quote.coupon.is_valid ? <Check size={13} strokeWidth={2.5} /> : <X size={13} strokeWidth={2.5} />}
-                <span className="text-[11px] leading-tight">
-                  {quote.coupon.is_valid
-                    ? `Discount applied: ${formatCurrency(quote.coupon.discount_amount ?? '0', p.currency)}`
-                    : quote.coupon.reason ?? 'Invalid coupon code'}
-                </span>
-              </div>
-            )}
-            {availableCoupons.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Tag size={11} /> Available Coupons ({availableCoupons.length})
-                </div>
-                {availableCoupons.map((c) => {
-                  const isApplied = appliedCode.toUpperCase() === c.code.toUpperCase();
-                  return (
-                    <button
-                      key={c.code}
-                      type="button"
-                      onClick={() => onSelectCoupon(c.code)}
-                      disabled={isApplyingCoupon}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer disabled:opacity-60 ${isApplied ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-background border-border hover:border-primary/40 hover:bg-muted/40'}`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-xs tracking-wider">{c.code}</span>
-                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                            {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `${formatCurrency(c.discount_value, p.currency)} OFF`}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground truncate">
-                          Save {formatCurrency(c.discount_amount, p.currency)}{c.name ? ` · ${c.name}` : ''}
-                        </div>
-                      </div>
-                      <span className={`text-[11px] font-bold shrink-0 ${isApplied ? 'text-emerald-600' : 'text-primary'}`}>
-                        {isApplied ? 'Applied' : 'Apply'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div className="p-2.5 rounded-xl bg-muted/30 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <Tag size={13} className="text-primary shrink-0" />
-            <span>Promotional discounts automatically adjust final payable amount.</span>
-          </div>
+        {/* Left: Applicable Offers & Coupons Card */}
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+          <ApplicableOffersSelector
+            packageId={packageId || (quote as any).package?.id || (pv as any).package_id}
+            branchId={branchId}
+            subtotal={Number(p.subtotal)}
+            orderType="NEW_MEMBERSHIP"
+            memberId={memberId}
+            appliedCoupon={
+              quote.coupon && quote.coupon.is_valid
+                ? {
+                    code: quote.coupon.code || (quote.coupon as any).coupon_code || couponCode,
+                    discount_amount: parseFloat(quote.coupon.discount_amount || '0'),
+                    discount_type: (quote.coupon as any).discount_type || 'PERCENTAGE',
+                  }
+                : null
+            }
+            onApplyCoupon={(c) => {
+              onCouponChange(c.code);
+              onApplyCoupon(c.code);
+            }}
+            onRemoveCoupon={() => {
+              if (onRemoveCoupon) {
+                onRemoveCoupon();
+              } else {
+                onCouponChange('');
+                onApplyCoupon('');
+              }
+            }}
+            disabled={isApplyingCoupon}
+          />
         </div>
 
         {/* Right: Price Breakdown Card */}
@@ -756,6 +708,20 @@ function PaymentStep({
   const isShort = entered < quoted && entered > 0;
   const exceedsTotal = entered > quoted;
 
+  const currentUser = getCurrentUser();
+  const roleStr = (currentUser?.role || '').toLowerCase();
+  const isAdmin = Boolean(
+    currentUser?.isSuperAdmin ||
+    roleStr.includes('admin') ||
+    roleStr.includes('manager') ||
+    roleStr.includes('owner') ||
+    currentUser?.userType === 'platform' ||
+    (currentUser?.roles && currentUser.roles.some((r: any) => {
+      const code = (r.code || '').toUpperCase();
+      return code.includes('ADMIN') || code.includes('MANAGER') || code.includes('OWNER');
+    }))
+  );
+
   // STRICT BACKEND-DRIVEN: Only render providers present in backend response. Zero fallback!
   const backendProviders = quote.payment_providers || [];
   const availableOptions = backendProviders.map((code) => ({
@@ -815,8 +781,8 @@ function PaymentStep({
                             Instant
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                            Approval Req.
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${isAdmin ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'}`}>
+                            {isAdmin ? 'Direct Activation' : 'Approval Req.'}
                           </span>
                         )}
                       </div>
@@ -860,15 +826,27 @@ function PaymentStep({
 
       {/* 2. Contextual Workflow Alerts */}
       {paymentProvider === 'CASH' && (
-        <div className="p-3.5 sm:p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs space-y-1.5 shadow-xs">
-          <div className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-100 text-xs sm:text-sm">
-            <ShieldCheck size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>Cash Collection & Approval Workflow</span>
+        isAdmin ? (
+          <div className="p-3.5 sm:p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 text-xs space-y-1.5 shadow-xs">
+            <div className="font-bold flex items-center gap-1.5 text-emerald-950 dark:text-emerald-100 text-xs sm:text-sm">
+              <ShieldCheck size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Admin Cash Direct Activation</span>
+            </div>
+            <p className="leading-relaxed text-emerald-800 dark:text-emerald-300">
+              Admin Authorization Detected: Cash payment is recorded and verified directly. The membership and full package entitlements will activate immediately upon conversion without requiring secondary approval.
+            </p>
           </div>
-          <p className="leading-relaxed text-amber-800 dark:text-amber-300">
-            Segregation of Duties Enforced: Cash collections are submitted for manager review under <strong>Automation → Approvals</strong>. The recording agent cannot self-approve. The membership activates once verified.
-          </p>
-        </div>
+        ) : (
+          <div className="p-3.5 sm:p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs space-y-1.5 shadow-xs">
+            <div className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-100 text-xs sm:text-sm">
+              <ShieldCheck size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>Cash Collection & Approval Workflow</span>
+            </div>
+            <p className="leading-relaxed text-amber-800 dark:text-amber-300">
+              Segregation of Duties Enforced: Cash collections recorded by front-desk staff are submitted for manager review under <strong>Automation → Approvals</strong>. The membership activates once verified.
+            </p>
+          </div>
+        )
       )}
 
       {paymentProvider === 'RAZORPAY' && (
@@ -1257,7 +1235,7 @@ function parseClausesFromContent(
           });
           currentBodyLines = [];
         }
-        currentTitle = match[2].trim();
+        currentTitle = (match[2] ?? '').trim();
       }
     } else if (currentTitle) {
       if (trimmed !== '---') {
@@ -1458,6 +1436,7 @@ function ReviewStep({
   signatureData: string | null;
   onEditTerms?: () => void;
 }) {
+  const { canViewPhoneNumber } = usePermissions();
   const p = quote.pricing;
   const providerLabel = PROVIDER_METADATA[paymentProvider]?.label ?? paymentProvider;
   const isUnlimited = quote.entitlements.some((e: any) => e.is_unlimited);
@@ -1472,7 +1451,7 @@ function ReviewStep({
 
   const rows: { label: string; value: string; highlight?: boolean }[] = [
     { label: 'Member / Prospect', value: `${lead.first_name} ${lead.last_name}` },
-    { label: 'Phone', value: lead.phone_normalized ?? '—' },
+    { label: 'Phone', value: formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber) || '—' },
     { label: 'Program', value: quote.program.name },
     { label: 'Selected Package', value: pkgName },
     ...(sessionsBadge ? [{ label: 'Sessions Included', value: sessionsBadge, highlight: true }] : []),
@@ -1892,7 +1871,7 @@ export function ConversionWizard(props: ConversionWizardProps) {
 
 function ConversionWizardInner({ lead, open, onOpenChange, onConverted }: ConversionWizardProps) {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canRecordPayment = can('finance.payments.create') || can('core.settings.edit');
   const [step, setStep] = useState(1);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(lead.branch ?? '');
@@ -2028,9 +2007,10 @@ const handleCancelRazorpay = useCallback(() => {
     setError(null);
     setIsFetchingQuote(true);
     try {
-      const quotePayload: { package_version_id: string; branch_id: string; coupon_code?: string } = {
+      const quotePayload: { package_version_id: string; branch_id: string; coupon_code?: string; order_type?: string } = {
         package_version_id: versionId,
         branch_id: selectedBranchId,
+        order_type: 'NEW_MEMBERSHIP',
       };
       if (coupon) quotePayload.coupon_code = coupon;
       const q = await crmApi.getConversionQuote(lead.id, quotePayload);
@@ -2053,24 +2033,32 @@ const handleCancelRazorpay = useCallback(() => {
     }
   }, [lead.id, selectedBranchId, paymentProvider]);
 
-  const handleApplyCoupon = useCallback(async () => {
-    if (!selectedVersionId || !couponCode.trim()) return;
+  const handleApplyCoupon = useCallback(async (codeToApply?: string) => {
+    const code = (codeToApply || couponCode).trim();
+    if (!selectedVersionId || !code) return;
     setIsApplyingCoupon(true);
     try {
-      await fetchQuote(selectedVersionId, couponCode.trim());
-      setAppliedCoupon(couponCode.trim());
+      const q = await fetchQuote(selectedVersionId, code);
+      if (q?.coupon?.is_valid) {
+        setAppliedCoupon(code);
+        setCouponCode(code);
+        toast.success(`Coupon ${code} applied successfully!`);
+      } else if (q?.coupon && !q.coupon.is_valid) {
+        toast.error(q.coupon.reason || 'Coupon is not eligible for this package');
+      }
     } finally {
       setIsApplyingCoupon(false);
     }
   }, [selectedVersionId, couponCode, fetchQuote]);
 
-  const handleSelectCoupon = useCallback(async (code: string) => {
-    if (!selectedVersionId || !code) return;
-    setCouponCode(code);
+  const handleRemoveCoupon = useCallback(async () => {
+    if (!selectedVersionId) return;
     setIsApplyingCoupon(true);
     try {
-      await fetchQuote(selectedVersionId, code);
-      setAppliedCoupon(code);
+      await fetchQuote(selectedVersionId, undefined);
+      setAppliedCoupon('');
+      setCouponCode('');
+      toast.info('Coupon removed');
     } finally {
       setIsApplyingCoupon(false);
     }
@@ -2353,7 +2341,7 @@ const handleCancelRazorpay = useCallback(() => {
                 {lead.phone_normalized && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 border border-border/50 text-[11px] text-muted-foreground">
                     <Phone size={10} className="text-muted-foreground/70 shrink-0" />
-                    <span className="font-mono tracking-tight">{lead.phone_normalized}</span>
+                    <span className="font-mono tracking-tight">{formatDisplayPhone(lead.phone_normalized, canViewPhoneNumber)}</span>
                   </span>
                 )}
 
@@ -2406,10 +2394,13 @@ const handleCancelRazorpay = useCallback(() => {
                   <PricingStep
                     quote={quote}
                     couponCode={couponCode}
+                    packageId={(quote as any).package?.id || (quote.package_version as any)?.package_id}
+                    branchId={selectedBranchId}
+                    memberId={lead.id}
                     onCouponChange={setCouponCode}
                     onApplyCoupon={handleApplyCoupon}
+                    onRemoveCoupon={handleRemoveCoupon}
                     isApplyingCoupon={isApplyingCoupon}
-                    onSelectCoupon={handleSelectCoupon}
                   />
                 )}
                 {step === 3 && quote && (

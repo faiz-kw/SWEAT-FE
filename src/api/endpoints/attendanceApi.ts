@@ -1,3 +1,4 @@
+import { api } from '../client';
 import { bookingsApi } from './bookingsApi';
 import type {
   AttendanceRecord,
@@ -5,7 +6,7 @@ import type {
   AccessEvent,
   AttendancePolicySet,
   AttendancePenaltyRule,
-} from '../types/bookings';
+} from '../../types/bookings';
 
 export const attendanceApi = {
   getAttendanceRecords: bookingsApi.getAttendanceRecords,
@@ -13,6 +14,8 @@ export const attendanceApi = {
   getTurnstileAccessEvents: bookingsApi.getAccessEvents,
   getAttendancePolicies: bookingsApi.getAttendancePolicySets,
   getAttendancePenaltyRules: bookingsApi.getAttendancePenaltyRules,
+  resetMemberRestriction: (stateId: string, reason: string = 'Administrative reset') =>
+    api.post<MemberAttendanceState>(`/tenant/member-attendance-states/${stateId}/reset-restriction/`, { reason }),
 };
 
 export type {

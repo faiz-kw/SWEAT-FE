@@ -30,6 +30,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
 import { crmApi } from '@/api/endpoints/crmApi';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import type { ActivityType, Lead } from '@/types/crm';
@@ -59,7 +60,7 @@ const ACTIVITY_TYPE_CONFIG: Record<
 
 export function SalesActivitiesWorkspace() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, canViewPhoneNumber } = usePermissions();
   const canCreate = can('crm.leads.create') || can('crm.leads.edit');
 
   // Filters state
@@ -412,7 +413,7 @@ export function SalesActivitiesWorkspace() {
                             </button>
                             {act.lead_phone && (
                               <span className="font-mono text-[11px] text-muted-foreground block">
-                                {act.lead_phone}
+                                {formatDisplayPhone(act.lead_phone, canViewPhoneNumber)}
                               </span>
                             )}
                           </td>
@@ -474,7 +475,7 @@ export function SalesActivitiesWorkspace() {
                           </button>
                           {act.lead_phone && (
                             <span className="font-mono text-xs text-muted-foreground block">
-                              {act.lead_phone}
+                              {formatDisplayPhone(act.lead_phone, canViewPhoneNumber)}
                             </span>
                           )}
                         </div>
@@ -536,7 +537,7 @@ export function SalesActivitiesWorkspace() {
                 <option value="">-- Choose Lead --</option>
                 {leadsList.map((l: any) => (
                   <option key={l.id} value={l.id}>
-                    {l.first_name} {l.last_name} ({l.phone_normalized || l.email_normalized || 'No contact'})
+                    {l.first_name} {l.last_name} ({formatDisplayPhone(l.phone_normalized, canViewPhoneNumber) || l.email_normalized || 'No contact'})
                   </option>
                 ))}
               </select>

@@ -111,21 +111,34 @@ export const membersApi = {
   // --------------------------------------------------------------------------
 
   async renewMembership(id: string, data: {
-    months?: number;
-    package_id?: string;
-    package_version_id?: string;
-    payment_provider?: string;
-    payment_method?: string;
-    payment_amount?: number;
-    carry_forward?: boolean;
-    reason?: string;
-    coupon_code?: string;
-  }): Promise<{ success: boolean; message: string; member: Member; status?: string; approval_request_id?: string }> {
+    months?: number | undefined;
+    package_id?: string | undefined;
+    package_version_id?: string | undefined;
+    start_schedule?: string | undefined;
+    custom_start_date?: string | undefined;
+    payment_provider?: string | undefined;
+    payment_method?: string | undefined;
+    payment_amount?: number | undefined;
+    carry_forward?: boolean | undefined;
+    reason?: string | undefined;
+    coupon_code?: string | undefined;
+  }): Promise<{ success: boolean; message: string; member: Member; status?: string; approval_request_id?: string; payment_url?: string; order_id?: string; order_number?: string; amount?: string }> {
     const res = await api.post<any>(`/tenant/members/${id}/renew/`, data);
     return res.data;
   },
 
-  async upgradeMembership(id: string, data: { package_id: string; package_version_id?: string; reason?: string; coupon_code?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async upgradeMembership(id: string, data: {
+    package_id: string;
+    package_version_id?: string | undefined;
+    reason?: string | undefined;
+    payment_method?: string | undefined;
+    payment_amount?: number | undefined;
+    coupon_code?: string | undefined;
+    membership_id?: string | undefined;
+    difference_amount?: number | undefined;
+    razorpay_payment_id?: string | undefined;
+    razorpay_signature?: string | undefined;
+  }): Promise<{ success: boolean; message: string; member: Member; change_request_id?: string; additional_amount?: number }> {
     const res = await api.post<any>(`/tenant/members/${id}/upgrade/`, data);
     return res.data;
   },
@@ -156,12 +169,27 @@ export const membersApi = {
     return res.data;
   },
 
-  async freezeMembership(id: string, data: { freeze_from: string; freeze_until: string; reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async freezeMembership(id: string, data: {
+    freeze_from: string;
+    freeze_until: string;
+    reason?: string;
+    membership_id?: string;
+    charge_fee?: boolean;
+    fee_amount?: number | string;
+    payment_method?: 'PAYMENT_LINK' | 'CARD' | 'ONLINE' | 'CASH';
+  }): Promise<{
+    success: boolean;
+    message: string;
+    member: Member;
+    order_id?: string;
+    order_number?: string;
+    payment_url?: string;
+  }> {
     const res = await api.post<any>(`/tenant/members/${id}/freeze/`, data);
     return res.data;
   },
 
-  async unfreezeMembership(id: string, data?: { reason?: string }): Promise<{ success: boolean; message: string; member: Member }> {
+  async unfreezeMembership(id: string, data?: { reason?: string; membership_id?: string }): Promise<{ success: boolean; message: string; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/unfreeze/`, data || {});
     return res.data;
   },
@@ -178,12 +206,13 @@ export const membersApi = {
 
   async rejoinMember(id: string, data: {
     package_id: string;
-    package_version_id?: string;
-    branch_id?: string;
-    payment_amount?: number;
-    payment_provider?: string;
-    payment_method?: string;
-    reason?: string;
+    package_version_id?: string | undefined;
+    branch_id?: string | undefined;
+    payment_amount?: number | undefined;
+    payment_provider?: string | undefined;
+    payment_method?: string | undefined;
+    reason?: string | undefined;
+    coupon_code?: string | undefined;
   }): Promise<{ success: boolean; message: string; membership_id: string; order_id: string; member: Member }> {
     const res = await api.post<any>(`/tenant/members/${id}/rejoin/`, data);
     return res.data;

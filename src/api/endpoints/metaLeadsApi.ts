@@ -71,14 +71,17 @@ export type MetaMapping = {
   initial_stage?: string;
   repeat_policy: 'REVIEW' | 'CREATE_NEW' | 'UPDATE_EXISTING';
   assignment_mode?: 'TENANT_POLICY' | 'SPECIFIC_USER';
+  assigned_role?: string | null;
+  assigned_role_name?: string | null;
   assigned_sales_user?: string | null;
+  assigned_sales_users?: string[];
   create_followup_task?: boolean;
   followup_task_type?: string;
   followup_due_hours?: number;
   updated_at: string;
 };
 
-export type MappingInput = Omit<MetaMapping, 'id' | 'version' | 'updated_at'> & { expected_version?: number };
+export type MappingInput = Omit<MetaMapping, 'id' | 'version' | 'updated_at'> & { expected_version?: number | undefined };
 
 export type MetaImportMatchedLead = {
   id: string;
@@ -128,6 +131,18 @@ export type MetaImport = {
   ad_id?: string;
   ad_name?: string;
   is_organic?: boolean;
+  facebook_account_name?: string | null;
+  facebook_account_id?: string | null;
+  page_name?: string | null;
+  form_name?: string | null;
+  meta_form_status?: string | null;
+  mapping_state?: 'ACTIVE' | 'PAUSED' | 'UNCONFIGURED';
+  mapping_info?: {
+    id: string;
+    name: string;
+    is_active: boolean;
+    version: number;
+  } | null;
 };
 
 export type MetaAuditHistoryItem = {
@@ -165,7 +180,14 @@ export type MetaMetadata = {
   task_types?: Choice[];
   branches: { id: string; name: string; code?: string }[];
   lead_sources: { id: string; name: string }[];
-  eligible_users?: { id: string; name: string; email: string }[];
+  roles?: { id: string; name: string; code: string; scope?: string }[];
+  eligible_users?: {
+    id: string;
+    name: string;
+    email: string;
+    role_ids?: string[];
+    roles?: { id: string; name: string; code: string }[];
+  }[];
   tenant_assignment_policy?: {
     mode_allowed: string;
     auto_strategy: string;

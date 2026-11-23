@@ -149,8 +149,12 @@ function extractLeadName(item: MetaImport): string | null {
 // ===========================================================================
 // Main Component
 // ===========================================================================
+import { usePermissions } from '@/lib/permissions';
+import { formatDisplayPhone } from '@/lib/phonePrivacy';
+
 export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   const { tenantId } = useApp();
+  const { canViewPhoneNumber } = usePermissions();
   const navigate = useNavigate();
   const client = useQueryClient();
   const queryKeyBase = ['meta-leads', tenantId];
@@ -180,6 +184,11 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
   };
 
   const [editing, setEditing] = React.useState<MetaMapping | null | undefined>(undefined);
+  const [editorPrefill, setEditorPrefill] = React.useState<{
+    pageId: string;
+    formId: string;
+    name?: string;
+  } | null>(null);
   const [historyMapping, setHistoryMapping] = React.useState<MetaMapping | null>(null);
   const [resolvingImportId, setResolvingImportId] = React.useState<string | null>(null);
   const [resolveReason, setResolveReason] = React.useState<string>(
@@ -218,6 +227,20 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
       }
     }
   }, []);
+
+  // Auto-scroll smoothly to the inline Form Editor whenever opened for creation or editing
+  React.useEffect(() => {
+    if (editing !== undefined && typeof window !== 'undefined') {
+      const frameId = window.requestAnimationFrame(() => {
+        const editorEl = document.getElementById('lead-form-editor');
+        if (editorEl) {
+          editorEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+      return () => window.cancelAnimationFrame(frameId);
+    }
+    return undefined;
+  }, [editing, editorPrefill]);
 
   const metadataQuery = useQuery({
     queryKey: [...queryKeyBase, 'metadata'],
@@ -878,13 +901,21 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
       {/* 3. Form Editor Modal */}
       {editing !== undefined && (
         <MappingEditor
-          key={editing?.id || 'new'}
+          key={
+            editing?.id ||
+            (editorPrefill ? `prefill-${editorPrefill.pageId}-${editorPrefill.formId}` : 'new')
+          }
           mapping={editing}
+          prefill={editing === null ? editorPrefill : null}
           metadata={meta}
           canEdit={canEdit}
-          onClose={() => setEditing(undefined)}
+          onClose={() => {
+            setEditing(undefined);
+            setEditorPrefill(null);
+          }}
           onSaved={() => {
             setEditing(undefined);
+            setEditorPrefill(null);
             void refreshAll();
           }}
         />
@@ -901,7 +932,10 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
           </div>
           <Button
             disabled={!canEdit}
-            onClick={() => setEditing(null)}
+            onClick={() => {
+              setEditorPrefill(null);
+              setEditing(null);
+            }}
             className="gap-1.5"
           >
             <Sparkles className="h-4 w-4" />
@@ -1028,7 +1062,13 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                   : mapping.branch_mode === 'FIXED'
                   ? meta.branches.find((b) => b.id === mapping.branch)?.name || 'Default branch'
                   : 'Route based on form answer';
-              const assignedUser = meta.eligible_users?.find((u) => u.id === mapping.assigned_sales_user)?.name;
+              const assignedUsers = (meta.eligible_users || [])
+                .filter((u) =>
+                  mapping.assigned_sales_users && mapping.assigned_sales_users.length > 0
+                    ? mapping.assigned_sales_users.includes(u.id)
+                    : u.id === mapping.assigned_sales_user
+                )
+                .map((u) => u.name);
               const isDetailsExpanded = !!expandedDetailsMap[mapping.id];
 
               return (
@@ -1069,12 +1109,16 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
                     <div className="space-y-0.5">
                       <span className="text-muted-foreground flex items-center gap-1">
-                        <User className="h-3 w-3" /> Sales assignment:
+                        <User className="h-3 w-3" /> Follow-up assignment:
                       </span>
                       <p className="font-medium text-foreground">
                         {mapping.assignment_mode === 'SPECIFIC_USER'
-                          ? `Assigned to ${assignedUser || 'staff member'}`
-                          : 'Use team assignment settings'}
+                          ? assignedUsers.length > 1
+                            ? `${assignedUsers.join(', ')} (${mapping.assigned_role_name || 'Team'} • round-robin)`
+                            : assignedUsers.length === 1
+                            ? `${assignedUsers[0]} (${mapping.assigned_role_name || 'Staff'})`
+                            : 'Assigned to specific team member'
+                          : 'Use team assignment settings (automatic round-robin)'}
                       </p>
                     </div>
                   </div>
@@ -1116,7 +1160,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         </p>
                         <p>
                           <strong className="text-foreground">Repeat enquiry policy:</strong>{' '}
-                          {mapping.repeat_policy === 'REVIEW'
+                          {mapping.repeat_policy === 'UPDATE_EXISTING'
+                            ? 'Update existing lead & log activity in timeline'
+                            : mapping.repeat_policy === 'REVIEW'
                             ? 'Hold repeat enquiries for review'
                             : 'Create a new enquiry'}
                         </p>
@@ -1138,7 +1184,10 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         variant="outline"
                         size="sm"
                         disabled={!canEdit}
-                        onClick={() => setEditing(mapping)}
+                        onClick={() => {
+                          setEditorPrefill(null);
+                          setEditing(mapping);
+                        }}
                       >
                         Edit
                       </Button>
@@ -1329,7 +1378,29 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
               const matchingMapping = allMappings.find(
                 (m) => m.page_id === item.page_id && m.form_id === item.form_id
               );
-              const formDisplayName = matchingMapping?.name || `Form ${item.form_id}`;
+              const matchedPageMeta = meta.pages?.find(
+                (p) =>
+                  (p.page_id && p.page_id === item.page_id) ||
+                  p.id === item.page_id ||
+                  (p.connection_id && p.connection_id === item.page_id)
+              );
+              const resolvedPageName =
+                item.page_name || matchedPageMeta?.page_name || matchedPageMeta?.name || null;
+              const matchedConnection = matchedPageMeta?.connection_id
+                ? meta.connections?.find((c) => c.id === matchedPageMeta.connection_id)
+                : null;
+              const resolvedAccountName =
+                item.facebook_account_name || matchedConnection?.meta_user_name || null;
+              const resolvedFormName =
+                item.form_name || matchingMapping?.name || item.mapping_info?.name || null;
+              const formDisplayName = resolvedFormName || `Form ${item.form_id}`;
+              const mappingState: 'ACTIVE' | 'PAUSED' | 'UNCONFIGURED' =
+                item.mapping_state ||
+                (matchingMapping
+                  ? matchingMapping.is_active
+                    ? 'ACTIVE'
+                    : 'PAUSED'
+                  : 'UNCONFIGURED');
               const branchDisplayName =
                 matchingMapping?.branch_mode === 'ALL'
                   ? 'All branches'
@@ -1412,6 +1483,24 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                             </>
                           )}
                         </div>
+
+                        {(resolvedAccountName || resolvedPageName) && (
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
+                            {resolvedAccountName && (
+                              <span className="inline-flex items-center gap-1">
+                                <User className="h-3 w-3 shrink-0" />
+                                Account: <strong className="text-foreground font-medium">{resolvedAccountName}</strong>
+                              </span>
+                            )}
+                            {resolvedAccountName && resolvedPageName && <span>•</span>}
+                            {resolvedPageName && (
+                              <span className="inline-flex items-center gap-1">
+                                <Globe className="h-3 w-3 shrink-0 text-primary" />
+                                Page: <strong className="text-foreground font-medium">{resolvedPageName}</strong>
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>Submission ID:</span>
@@ -1514,7 +1603,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         <div className="space-y-1">
                           <p className="font-semibold text-sm">
                             {item.status === 'NEEDS_MAPPING'
-                              ? 'Question match required'
+                              ? mappingState === 'PAUSED'
+                                ? 'Lead form is currently paused'
+                                : 'Form setup required'
                               : item.status === 'NEEDS_ASSIGNMENT'
                               ? 'Branch routing required'
                               : item.status === 'NEEDS_REVIEW'
@@ -1525,7 +1616,9 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                           </p>
                           <p className="text-muted-foreground">
                             {item.status === 'NEEDS_MAPPING'
-                              ? 'This enquiry could not be automatically saved because the form is missing field matches for required CRM contact details.'
+                              ? mappingState === 'PAUSED'
+                                ? 'This enquiry matched a configured form that is currently paused. Resume the form and click "Retry enquiry" to import it.'
+                                : 'This enquiry arrived from a Meta Lead Form that has not been set up in CRM yet. Click "Set up this form" to pre-fill and save it, then click "Retry enquiry".'
                               : item.status === 'NEEDS_ASSIGNMENT'
                               ? "The prospect's form answer did not match any assigned branch, and no fallback branch is configured."
                               : item.status === 'NEEDS_REVIEW'
@@ -1538,6 +1631,44 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
                         {canEdit && !isResolved && (
                           <div className="flex flex-wrap items-center gap-2">
+                            {item.status === 'NEEDS_MAPPING' && mappingState === 'PAUSED' && item.mapping_info && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                disabled={toggleActiveMutation.isPending}
+                                onClick={() =>
+                                  toggleActiveMutation.mutate({
+                                    id: item.mapping_info!.id,
+                                    is_active: true,
+                                    version: item.mapping_info!.version,
+                                  })
+                                }
+                                className="shrink-0 gap-1.5"
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                                Resume form
+                              </Button>
+                            )}
+
+                            {item.status === 'NEEDS_MAPPING' && mappingState === 'UNCONFIGURED' && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  setEditorPrefill({
+                                    pageId: item.page_id,
+                                    formId: item.form_id,
+                                    name: resolvedFormName || '',
+                                  });
+                                  setEditing(null);
+                                }}
+                                className="shrink-0 gap-1.5"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Set up this form
+                              </Button>
+                            )}
+
                             <Button
                               variant="secondary"
                               size="sm"
@@ -1566,6 +1697,37 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                           </div>
                         )}
                       </div>
+
+                      {/* Source Breakdown for NEEDS_MAPPING (Account -> Page -> Form) */}
+                      {item.status === 'NEEDS_MAPPING' && (
+                        <div className="grid gap-2 sm:grid-cols-3 rounded-md border border-amber-300/60 dark:border-amber-800/60 bg-background/90 p-2.5 text-[11px]">
+                          <div>
+                            <span className="text-muted-foreground block">1. Facebook Account</span>
+                            <span className="font-semibold text-foreground">
+                              {resolvedAccountName || 'Connected account'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">2. Facebook Page</span>
+                            <span className="font-semibold text-foreground">
+                              {resolvedPageName || 'Unknown page'}
+                            </span>
+                            <code className="block font-mono text-[10px] text-muted-foreground">
+                              ID: {item.page_id || '—'}
+                            </code>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">3. Meta Lead Form</span>
+                            <span className="font-semibold text-foreground">
+                              {resolvedFormName || 'Unmapped Meta form'}
+                              {item.meta_form_status ? ` (${item.meta_form_status})` : ''}
+                            </span>
+                            <code className="block font-mono text-[10px] text-muted-foreground">
+                              ID: {item.form_id || '—'}
+                            </code>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Matching Existing Lead Details Card */}
                       {item.matched_lead && (
@@ -1599,7 +1761,7 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                           <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                             {item.matched_lead.phone && (
                               <span>
-                                Phone: <strong className="font-mono text-foreground">{item.matched_lead.phone}</strong>
+                                Phone: <strong className="font-mono text-foreground">{formatDisplayPhone(item.matched_lead.phone, canViewPhoneNumber)}</strong>
                               </span>
                             )}
                             {item.matched_lead.email && (
@@ -1742,14 +1904,24 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
                         <span>Support diagnostics</span>
                         <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 pt-2.5 text-[11px]">
+                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-5 pt-2.5 text-[11px]">
                         <div className="rounded border bg-muted/20 p-2">
-                          <span className="text-muted-foreground block">Form ID:</span>
-                          <code className="font-mono text-foreground font-medium">{item.form_id || '—'}</code>
+                          <span className="text-muted-foreground block">Facebook Account:</span>
+                          <span className="text-foreground font-medium block">{resolvedAccountName || '—'}</span>
                         </div>
                         <div className="rounded border bg-muted/20 p-2">
-                          <span className="text-muted-foreground block">Page ID:</span>
-                          <code className="font-mono text-foreground font-medium">{item.page_id || '—'}</code>
+                          <span className="text-muted-foreground block">Facebook Page:</span>
+                          {resolvedPageName && (
+                            <span className="text-foreground font-medium block">{resolvedPageName}</span>
+                          )}
+                          <code className="font-mono text-muted-foreground">{item.page_id || '—'}</code>
+                        </div>
+                        <div className="rounded border bg-muted/20 p-2">
+                          <span className="text-muted-foreground block">Meta Form:</span>
+                          {resolvedFormName && (
+                            <span className="text-foreground font-medium block">{resolvedFormName}</span>
+                          )}
+                          <code className="font-mono text-muted-foreground">{item.form_id || '—'}</code>
                         </div>
                         <div className="rounded border bg-muted/20 p-2">
                           <span className="text-muted-foreground block">Campaign:</span>
@@ -1879,20 +2051,22 @@ export function MetaLeadSettings({ canEdit }: { canEdit: boolean }) {
 
 function MappingEditor({
   mapping,
+  prefill,
   metadata,
   canEdit,
   onClose,
   onSaved,
 }: {
   mapping: MetaMapping | null;
+  prefill?: { pageId: string; formId: string; name?: string } | null;
   metadata: MetaMetadata;
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = React.useState(mapping?.name || '');
-  const [pageId, setPageId] = React.useState(mapping?.page_id || '');
-  const [formId, setFormId] = React.useState(mapping?.form_id || '');
+  const [name, setName] = React.useState(mapping?.name || prefill?.name || '');
+  const [pageId, setPageId] = React.useState(mapping?.page_id || prefill?.pageId || '');
+  const [formId, setFormId] = React.useState(mapping?.form_id || prefill?.formId || '');
   const [active, setActive] = React.useState(mapping?.is_active ?? true);
 
   // Field mappings list: destination CRM field -> form question
@@ -1941,14 +2115,38 @@ function MappingEditor({
   const [assignmentMode, setAssignmentMode] = React.useState<'TENANT_POLICY' | 'SPECIFIC_USER'>(
     mapping?.assignment_mode || 'TENANT_POLICY'
   );
-  const [assignedSalesUser, setAssignedSalesUser] = React.useState(
-    mapping?.assigned_sales_user || metadata.eligible_users?.[0]?.id || ''
-  );
+
+  const [assignedRole, setAssignedRole] = React.useState<string>(() => {
+    if (mapping?.assigned_role) return mapping.assigned_role;
+    if (mapping?.assigned_sales_user && metadata.eligible_users) {
+      const match = metadata.eligible_users.find((u) => u.id === mapping.assigned_sales_user);
+      if (match?.role_ids && match.role_ids.length > 0) {
+        return match.role_ids[0];
+      }
+    }
+    const salesRole = metadata.roles?.find((r) => r.code === 'SALES_REP');
+    return salesRole ? salesRole.id : metadata.roles?.[0]?.id || '';
+  });
+
+  const [selectedSalespersons, setSelectedSalespersons] = React.useState<string[]>(() => {
+    if (mapping?.assigned_sales_users && mapping.assigned_sales_users.length > 0) {
+      return mapping.assigned_sales_users;
+    }
+    if (mapping?.assigned_sales_user) {
+      return [mapping.assigned_sales_user];
+    }
+    return [];
+  });
+
+  const roleUsers = React.useMemo(() => {
+    if (!assignedRole || !metadata.eligible_users) return [];
+    return metadata.eligible_users.filter((u) => u.role_ids?.includes(assignedRole));
+  }, [metadata.eligible_users, assignedRole]);
 
   // Section 4: Follow-up & Rules
   const [initialStage, setInitialStage] = React.useState(mapping?.initial_stage || 'NEW_LEAD');
   const [repeatPolicy, setRepeatPolicy] = React.useState<MetaMapping['repeat_policy']>(
-    mapping?.repeat_policy || 'REVIEW'
+    mapping?.repeat_policy || (prefill ? 'UPDATE_EXISTING' : 'REVIEW')
   );
   const [createFollowup, setCreateFollowup] = React.useState(mapping?.create_followup_task ?? true);
   const [followupType, setFollowupType] = React.useState(mapping?.followup_task_type || 'CALL');
@@ -2093,6 +2291,17 @@ function MappingEditor({
       return;
     }
 
+    if (assignmentMode === 'SPECIFIC_USER') {
+      if (!assignedRole) {
+        toast.error('Please select a role under Who should follow up.');
+        return;
+      }
+      if (selectedSalespersons.length === 0) {
+        toast.error('Please select at least one salesperson / team member.');
+        return;
+      }
+    }
+
     const payload: MappingInput = {
       name: name.trim(),
       page_id: pageId.trim(),
@@ -2113,7 +2322,12 @@ function MappingEditor({
       initial_stage: initialStage,
       repeat_policy: repeatPolicy,
       assignment_mode: assignmentMode,
-      assigned_sales_user: assignmentMode === 'SPECIFIC_USER' ? assignedSalesUser || null : null,
+      assigned_role: assignmentMode === 'SPECIFIC_USER' ? assignedRole || null : null,
+      assigned_sales_users: assignmentMode === 'SPECIFIC_USER' ? selectedSalespersons : [],
+      assigned_sales_user:
+        assignmentMode === 'SPECIFIC_USER' && selectedSalespersons.length > 0
+          ? selectedSalespersons[0]
+          : null,
       create_followup_task: createFollowup,
       followup_task_type: followupType,
       followup_due_hours: Number(followupHours) || 24,
@@ -2136,11 +2350,18 @@ function MappingEditor({
       ? metadata.branches.find((b) => b.id === branch)?.name || 'the selected branch'
       : 'branches routed by question answer';
 
+  const selectedRoleName = metadata.roles?.find((r) => r.id === assignedRole)?.name;
+  const selectedUserNames = (metadata.eligible_users || [])
+    .filter((u) => selectedSalespersons.includes(u.id))
+    .map((u) => u.name);
+
   const selectedAssignmentLabel =
     assignmentMode === 'TENANT_POLICY'
       ? 'team assignment settings'
-      : metadata.eligible_users?.find((u) => u.id === assignedSalesUser)?.name
-      ? metadata.eligible_users.find((u) => u.id === assignedSalesUser)!.name
+      : selectedUserNames.length > 1
+      ? `${selectedUserNames.join(', ')} (${selectedRoleName || 'Team'} • round-robin)`
+      : selectedUserNames.length === 1
+      ? `${selectedUserNames[0]} (${selectedRoleName || 'Team member'})`
       : 'the assigned salesperson';
 
   const selectedTaskLabel =
@@ -2255,6 +2476,11 @@ function MappingEditor({
                 required
               >
                 <option value="">Select a lead form</option>
+                {formId && !discoveredForms.some((f) => f.id === formId) && (
+                  <option value={formId}>
+                    {prefill?.name || mapping?.name || `Form ${formId}`} (ID: {formId})
+                  </option>
+                )}
                 {discoveredForms.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name} (Status: {f.status})
@@ -2672,7 +2898,7 @@ function MappingEditor({
         )}
 
         {/* Question: Who should follow up? */}
-        <div className="grid gap-4 sm:grid-cols-2 pt-1">
+        <div className="space-y-4 pt-1">
           <label className={labelClass}>
             <span>Who should follow up?</span>
             <select
@@ -2688,22 +2914,118 @@ function MappingEditor({
           </label>
 
           {assignmentMode === 'SPECIFIC_USER' && (
-            <label className={labelClass}>
-              <span>Salesperson:</span>
-              <select
-                className={controlClass}
-                value={assignedSalesUser}
-                onChange={(e) => setAssignedSalesUser(e.target.value)}
-                required
-              >
-                <option value="">Select team member</option>
-                {metadata.eligible_users?.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.email})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="grid gap-5 sm:grid-cols-2 p-4 sm:p-5 rounded-xl border border-border/80 bg-muted/20 shadow-xs">
+              {/* Field 1: Role Selection */}
+              <label className={labelClass}>
+                <span className="font-semibold text-foreground">Select Role</span>
+                <select
+                  className={controlClass}
+                  value={assignedRole}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    setAssignedRole(newRole);
+                    setSelectedSalespersons([]);
+                  }}
+                  required
+                >
+                  <option value="">Select a role...</option>
+                  {metadata.roles?.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-muted-foreground leading-relaxed">
+                  Choose the role responsible for leads from this form (e.g. Sales, HR, Management).
+                </span>
+              </label>
+
+              {/* Field 2: Salesperson / Assignee Selection */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Select Salesperson(s)</span>
+                  {roleUsers.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSalespersons(roleUsers.map((u) => u.id))}
+                        className="text-[11px] text-primary hover:underline font-medium"
+                      >
+                        Select all ({roleUsers.length})
+                      </button>
+                      <span className="text-muted-foreground/40">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSalespersons([])}
+                        className="text-[11px] text-muted-foreground hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!assignedRole ? (
+                  <div className="p-3.5 rounded-lg border border-dashed border-border/80 bg-background text-xs text-muted-foreground text-center">
+                    Please select a role first to choose team members.
+                  </div>
+                ) : roleUsers.length === 0 ? (
+                  <div className="p-3.5 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 text-xs text-amber-600 dark:text-amber-400 text-center font-medium">
+                    No active team members currently found with this role.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded-lg border border-input bg-background shadow-2xs">
+                      {roleUsers.map((user) => {
+                        const isChecked = selectedSalespersons.includes(user.id);
+                        return (
+                          <label
+                            key={user.id}
+                            className={`flex items-center gap-2.5 p-2 rounded-md text-xs cursor-pointer transition-colors ${
+                              isChecked
+                                ? 'bg-primary/10 text-foreground font-medium'
+                                : 'hover:bg-muted/50 text-foreground/80'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSalespersons((prev) => [...prev, user.id]);
+                                } else {
+                                  setSelectedSalespersons((prev) => prev.filter((id) => id !== user.id));
+                                }
+                              }}
+                              className="rounded border-input text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                            />
+                            <div className="flex-1 truncate">
+                              <span className="block truncate font-medium">{user.name}</span>
+                              <span className="block text-[10px] text-muted-foreground truncate">{user.email}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Helper text based on selection count */}
+                    <div className="text-[11px] leading-relaxed">
+                      {selectedSalespersons.length === 0 ? (
+                        <span className="text-destructive font-medium">Please select at least one salesperson / team member.</span>
+                      ) : selectedSalespersons.length === 1 ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                          ✓ Single Assignee: All incoming leads from this form will be assigned exclusively to {roleUsers.find(u => u.id === selectedSalespersons[0])?.name || 'this user'}.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                          ✓ Multi-Assignee: Leads from this form will rotate evenly (fair round-robin) among the {selectedSalespersons.length} selected team members.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </section>

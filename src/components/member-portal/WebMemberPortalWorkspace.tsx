@@ -201,6 +201,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ApplicableOffersSelector, AppliedCouponState } from "@/components/discounts/ApplicableOffersSelector";
 import {
   Sheet,
   SheetContent,
@@ -293,7 +294,12 @@ export function safeFormatDate(dateVal: any, formatPattern: string, fallback = "
  * Strips internal backend package versioning suffixes (e.g., "-v2", "_v1.0")
  * to ensure pristine customer-facing package titles in the passbook.
  */
-function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string, programName?: string): string {
+function cleanPackageDisplayName(
+  nameSnapshot?: string,
+  packageName?: string,
+  programName?: string,
+  options?: { hideProgramPrefix?: boolean }
+): string {
   let pkg = '';
   if (packageName && packageName.trim()) {
     pkg = packageName.trim().replace(/[\s\-_]+v\d+(\.\d+)?$/i, '');
@@ -301,6 +307,44 @@ function cleanPackageDisplayName(nameSnapshot?: string, packageName?: string, pr
     const raw = (nameSnapshot || '').trim();
     pkg = raw.replace(/[\s\-_]+v\d+(\.\d+)?$/i, '').trim() || raw;
   }
+
+  // Strip redundant leading branch/program prefix (e.g. "Sweat Pilates (Goregaon) - 1 session" -> "1 session")
+  const dashIdx = pkg.indexOf(' - ');
+  if (dashIdx !== -1) {
+    const prefix = pkg.slice(0, dashIdx).trim();
+    if (
+      (programName && prefix.toLowerCase().includes(programName.toLowerCase())) ||
+      prefix.toLowerCase().includes('pilates') ||
+      prefix.toLowerCase().includes('bootcamp') ||
+      prefix.toLowerCase().includes('elite') ||
+      prefix.toLowerCase().includes('goregaon') ||
+      prefix.toLowerCase().includes('bandra') ||
+      prefix.toLowerCase().includes('andheri') ||
+      prefix.toLowerCase().includes('juhu') ||
+      prefix.toLowerCase().includes('studio') ||
+      prefix.toLowerCase().includes('branch')
+    ) {
+      pkg = pkg.slice(dashIdx + 3).trim();
+    }
+  }
+
+  const enDashIdx = pkg.indexOf(' – ');
+  if (enDashIdx !== -1) {
+    const prefix = pkg.slice(0, enDashIdx).trim();
+    if (
+      (programName && prefix.toLowerCase().includes(programName.toLowerCase())) ||
+      prefix.toLowerCase().includes('pilates') ||
+      prefix.toLowerCase().includes('bootcamp') ||
+      prefix.toLowerCase().includes('elite')
+    ) {
+      pkg = pkg.slice(enDashIdx + 3).trim();
+    }
+  }
+
+  if (options?.hideProgramPrefix) {
+    return pkg;
+  }
+
   const prog = (programName || '').trim();
   if (prog && pkg && !pkg.toLowerCase().includes(prog.toLowerCase()) && prog.toLowerCase() !== 'standard') {
     return `${prog} – ${pkg}`;
@@ -3444,8 +3488,10 @@ function WebMemberPortalWorkspaceInner() {
   const [membershipActions, setMembershipActions] = React.useState<MobileMembershipActionOptions | null>(null);
   const [isRenewModalOpen, setIsRenewModalOpen] = React.useState<boolean>(false);
   const [selectedRenewPackageId, setSelectedRenewPackageId] = React.useState<string>("");
+  const [renewAppliedCoupon, setRenewAppliedCoupon] = React.useState<AppliedCouponState | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = React.useState<boolean>(false);
   const [selectedUpgradePackageId, setSelectedUpgradePackageId] = React.useState<string>("");
+  const [upgradeAppliedCoupon, setUpgradeAppliedCoupon] = React.useState<AppliedCouponState | null>(null);
   const [upgradeReason, setUpgradeReason] = React.useState<string>("");
   const [isExtendModalOpen, setIsExtendModalOpen] = React.useState<boolean>(false);
   const [extendDays, setExtendDays] = React.useState<number>(14);
@@ -3488,17 +3534,43 @@ function WebMemberPortalWorkspaceInner() {
     }
   }, [memberHomeBranchId, selectedBranchId]);
 
+  const effectiveRenewBranchId = selectedRenewBranchId || membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+
+  // Strictly filter renewal packages by branch availability configured in CRM
+  const filteredRenewOptions = React.useMemo(() => {
+    if (!membershipActions?.renew_options) return [];
+    return membershipActions.renew_options.filter((opt) => {
+      if (!effectiveRenewBranchId) return true;
+      if (!opt.available_branch_ids || opt.available_branch_ids.length === 0) return true;
+      return opt.available_branch_ids.includes(effectiveRenewBranchId);
+    });
+  }, [membershipActions?.renew_options, effectiveRenewBranchId]);
+
+  // Keep selected renewal package aligned when branch changes or modal opens
+  React.useEffect(() => {
+    if (isRenewModalOpen && filteredRenewOptions.length > 0) {
+      if (!filteredRenewOptions.some((opt) => opt.package_id === selectedRenewPackageId)) {
+        const firstOption = filteredRenewOptions[0];
+        if (firstOption?.package_id) {
+          setSelectedRenewPackageId(firstOption.package_id);
+        }
+      }
+    }
+  }, [isRenewModalOpen, filteredRenewOptions, selectedRenewPackageId]);
+
   const effectiveUpgradeBranchId = selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
   const effectiveUpgradeProgramId = selectedUpgradeProgramId || membershipActions?.active_membership?.program_id || membershipActions?.programs?.[0]?.id || "";
 
-  // Strictly filter upgrade packages by selected program
+  // Strictly filter upgrade packages by selected program AND branch availability configured in CRM
   const filteredUpgradeOptions = React.useMemo(() => {
-    return (membershipActions?.upgrade_options || []).filter(
-      (opt) => opt.program_id === effectiveUpgradeProgramId
-    );
-  }, [membershipActions?.upgrade_options, effectiveUpgradeProgramId]);
+    return (membershipActions?.upgrade_options || []).filter((opt) => {
+      const matchProg = !effectiveUpgradeProgramId || opt.program_id === effectiveUpgradeProgramId;
+      const matchBranch = !effectiveUpgradeBranchId || !opt.available_branch_ids || opt.available_branch_ids.length === 0 || opt.available_branch_ids.includes(effectiveUpgradeBranchId);
+      return matchProg && matchBranch;
+    });
+  }, [membershipActions?.upgrade_options, effectiveUpgradeProgramId, effectiveUpgradeBranchId]);
 
-  // Keep selected upgrade package aligned when program changes
+  // Keep selected upgrade package aligned when program or branch changes
   React.useEffect(() => {
     if (isUpgradeModalOpen && filteredUpgradeOptions.length > 0) {
       if (!filteredUpgradeOptions.some((opt) => opt.package_id === selectedUpgradePackageId)) {
@@ -3857,6 +3929,7 @@ function WebMemberPortalWorkspaceInner() {
         branch_id: selectedRenewBranchId || membershipActions?.active_membership?.branch_id,
         package_id: selectedRenewPackageId,
         parq_decision: renewParqDecision,
+        coupon_code: renewAppliedCoupon ? renewAppliedCoupon.code : undefined,
       };
       if (parqSurvey?.submission?.id) {
         payload.existing_submission_id = parqSurvey.submission.id;
@@ -3936,6 +4009,7 @@ function WebMemberPortalWorkspaceInner() {
         target_package_id: selectedUpgradePackageId,
         reason: upgradeReason || "Self-service package upgrade",
         parq_decision: upgradeParqDecision,
+        coupon_code: upgradeAppliedCoupon ? upgradeAppliedCoupon.code : undefined,
       };
       if (parqSurvey?.submission?.id) {
         payload.existing_submission_id = parqSurvey.submission.id;
@@ -5251,8 +5325,13 @@ function WebMemberPortalWorkspaceInner() {
                       <Zap className="h-3.5 w-3.5 fill-amber-500" />
                     </div>
                   </CardDescription>
-                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
                     {remainingCredits}
+                    {membershipActions?.active_membership?.is_frozen && (
+                      <Badge className="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[10px] py-0 px-1.5 font-medium flex items-center gap-1">
+                        <Snowflake className="h-2.5 w-2.5" /> Paused
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -6094,8 +6173,13 @@ function WebMemberPortalWorkspaceInner() {
                       <Zap className="h-3.5 w-3.5 fill-violet-500" />
                     </div>
                   </CardDescription>
-                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
                     {remainingCredits}
+                    {membershipActions?.active_membership?.is_frozen && (
+                      <Badge className="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[10px] py-0 px-1.5 font-medium flex items-center gap-1">
+                        <Snowflake className="h-2.5 w-2.5" /> Paused
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -6531,7 +6615,13 @@ function WebMemberPortalWorkspaceInner() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setSelectedUpgradeTargetId(membershipActions?.upgrade_options?.[0]?.id || "");
+                      const initProgramId = membershipActions?.active_membership?.program_id || membershipActions?.programs?.[0]?.id || "";
+                      const initBranchId = membershipActions?.active_membership?.branch_id || availableBranches[0]?.id || "";
+                      setSelectedUpgradeProgramId(initProgramId);
+                      setSelectedUpgradeBranchId(initBranchId);
+                      const firstOpt = (membershipActions?.upgrade_options || []).find((o) => o.program_id === initProgramId);
+                      setSelectedUpgradePackageId(firstOpt?.package_id || membershipActions?.upgrade_options?.[0]?.package_id || "");
+                      setUpgradeReason("");
                       setIsUpgradeModalOpen(true);
                     }}
                     className="gap-2 border-border/80 hover:bg-accent font-semibold text-foreground"
@@ -6999,6 +7089,7 @@ function WebMemberPortalWorkspaceInner() {
                       <tbody className="divide-y divide-border/40">
                         {credits.map((cr, idx) => {
                           const isExpired = cr.days_remaining <= 0 || cr.status === "EXPIRED";
+                          const isFrozen = cr.status === "FROZEN";
                           return (
                             <tr key={cr.id || idx} className="hover:bg-muted/30 transition-colors">
                               <td className="py-3.5 px-4 font-semibold text-foreground">
@@ -7023,10 +7114,12 @@ function WebMemberPortalWorkspaceInner() {
                                   className={
                                     isExpired
                                       ? "bg-rose-500/10 text-rose-500 border-rose-500/20 text-[10px]"
+                                      : isFrozen
+                                      ? "bg-sky-500/15 text-sky-400 border-sky-500/30 text-[10px] inline-flex items-center gap-1"
                                       : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px]"
                                   }
                                 >
-                                  {isExpired ? "EXPIRED" : cr.status || "ACTIVE"}
+                                  {isExpired ? "EXPIRED" : isFrozen ? <><Snowflake className="h-2.5 w-2.5" /> PAUSED</> : cr.status || "ACTIVE"}
                                 </Badge>
                               </td>
                               <td className="py-3.5 px-4 text-right">
@@ -8508,27 +8601,27 @@ function WebMemberPortalWorkspaceInner() {
                   <Package size={14} className="text-emerald-500" />
                   <span>Select Renewal Package</span>
                 </label>
-                {membershipActions?.renew_options && (
-                  <span className="text-[11px] font-medium text-muted-foreground">
-                    {membershipActions.renew_options.length} available
-                  </span>
-                )}
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {filteredRenewOptions.length} available
+                </span>
               </div>
 
-              {!membershipActions?.renew_options || membershipActions.renew_options.length === 0 ? (
+              {filteredRenewOptions.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground border border-dashed border-border rounded-xl bg-muted/20">
                   <Package size={24} className="mx-auto mb-1.5 opacity-40 text-emerald-500" />
                   <p className="text-xs sm:text-sm font-medium">No active packages for this program at this branch</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-h-72 overflow-y-auto pr-0.5">
-                  {membershipActions.renew_options.map((opt) => {
+                  {filteredRenewOptions.map((opt) => {
                     const selected = selectedRenewPackageId === opt.package_id;
-                    const sessionCount = opt.session_credits || opt.session_count || 0;
+                    const homeCount = opt.home_sessions ?? (opt.session_credits || opt.session_count || 0);
+                    const passportCount = opt.passport_sessions || 0;
+                    const totalSessions = homeCount + passportCount;
                     const days = opt.duration_days;
                     const rawPrice = opt.base_price;
-                    const perSessionCost = (sessionCount > 0 && rawPrice > 0)
-                      ? Math.round(rawPrice / sessionCount)
+                    const perSessionCost = (totalSessions > 0 && rawPrice > 0)
+                      ? Math.round(rawPrice / totalSessions)
                       : null;
 
                     return (
@@ -8547,14 +8640,24 @@ function WebMemberPortalWorkspaceInner() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap mb-1">
                               <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
-                                {cleanPackageDisplayName(opt.name, opt.package_name, opt.program_name)}
+                                {cleanPackageDisplayName(opt.display_package_name || opt.name, opt.package_name, opt.program_name, { hideProgramPrefix: true })}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-                              {sessionCount > 0 && (
+                              {opt.is_unlimited ? (
                                 <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
                                   <Zap size={9} className="text-blue-500 fill-blue-500/30" />
-                                  {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}
+                                  Unlimited
+                                </span>
+                              ) : totalSessions > 0 ? (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
+                                  <Zap size={9} className="text-blue-500 fill-blue-500/30" />
+                                  {totalSessions} {totalSessions === 1 ? 'Session' : 'Sessions'}
+                                </span>
+                              ) : null}
+                              {passportCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                                  {homeCount} Home + {passportCount} Passport
                                 </span>
                               )}
                               {days > 0 && (
@@ -8599,34 +8702,79 @@ function WebMemberPortalWorkspaceInner() {
               )}
             </div>
 
+            {/* Offer Selector & Dynamic Coupons */}
+            {selectedRenewPackageId && (
+              <div className="rounded-xl border border-border bg-card/60 p-3.5 space-y-3">
+                <ApplicableOffersSelector
+                  packageId={selectedRenewPackageId}
+                  subtotal={
+                    filteredRenewOptions.find((o) => o.package_id === selectedRenewPackageId)?.total_price || 0
+                  }
+                  orderType="RENEWAL"
+                  branchId={selectedRenewBranchId || membershipActions?.active_membership?.branch_id}
+                  memberId={user?.id}
+                  appliedCoupon={renewAppliedCoupon}
+                  onApplyCoupon={(c) => setRenewAppliedCoupon(c)}
+                  onRemoveCoupon={() => setRenewAppliedCoupon(null)}
+                  disabled={isSubmittingAction}
+                />
+              </div>
+            )}
+
             {(() => {
-              const selectedOpt = membershipActions?.renew_options?.find(
+              const selectedOpt = filteredRenewOptions.find(
                 (o) => o.package_id === selectedRenewPackageId
               );
               if (!selectedOpt) return null;
+              const homeCount = selectedOpt.home_sessions ?? selectedOpt.session_credits ?? selectedOpt.session_count;
+              const passportCount = selectedOpt.passport_sessions || 0;
               return (
                 <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Entitlement Sessions:</span>
-                    <span className="font-bold text-foreground">{selectedOpt.session_credits || selectedOpt.session_count} Sessions</span>
+                    <span className="text-muted-foreground">Total Workout Sessions:</span>
+                    <span className="font-bold text-foreground">
+                      {selectedOpt.is_unlimited ? 'Unlimited' : `${(selectedOpt.home_sessions ?? selectedOpt.session_credits ?? selectedOpt.session_count) + (selectedOpt.passport_sessions || 0)} Sessions`}
+                    </span>
                   </div>
+                  <div className="flex justify-between pl-3 border-l-2 border-emerald-500/40 text-[11px]">
+                    <span className="text-muted-foreground">Home Studio Sessions:</span>
+                    <span className="font-semibold text-foreground">{homeCount} Sessions</span>
+                  </div>
+                  {passportCount > 0 && (
+                    <div className="flex justify-between pl-3 border-l-2 border-amber-500/40 text-[11px]">
+                      <span className="text-muted-foreground">Passport / Cross-Branch Sessions:</span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {passportCount} {passportCount === 1 ? 'Session' : 'Sessions'}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Validity Duration:</span>
                     <span className="font-semibold text-foreground">{selectedOpt.duration_days} Days</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Base Price:</span>
-                    <span className="font-mono text-foreground">₹{selectedOpt.base_price}</span>
+                    <span className="font-mono text-foreground">
+                      ₹{selectedOpt.base_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">GST Tax ({selectedOpt.tax_percent}%):</span>
                     <span className="font-mono text-foreground">
-                      ₹{selectedOpt.tax_amount || Math.round(selectedOpt.total_price - selectedOpt.base_price)}
+                      ₹{(selectedOpt.tax_amount || Math.round(selectedOpt.total_price - selectedOpt.base_price)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
+                  {renewAppliedCoupon && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span>Coupon Discount ({renewAppliedCoupon.code}):</span>
+                      <span className="font-mono">-₹{renewAppliedCoupon.discount_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-emerald-500">
                     <span>Total Amount Payable:</span>
-                    <span>₹{selectedOpt.total_price}</span>
+                    <span>
+                      ₹{Math.max(0, selectedOpt.total_price - (renewAppliedCoupon ? renewAppliedCoupon.discount_amount : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               );
@@ -8723,10 +8871,12 @@ function WebMemberPortalWorkspaceInner() {
               Cancel
             </Button>
             {(() => {
-              const selectedOpt = membershipActions?.renew_options?.find(
+              const selectedOpt = filteredRenewOptions.find(
                 (o) => o.package_id === selectedRenewPackageId
               );
-              const amount = selectedOpt?.total_price || 0;
+              const discount = renewAppliedCoupon ? renewAppliedCoupon.discount_amount : 0;
+              const finalAmount = selectedOpt?.total_price ? Math.max(0, selectedOpt.total_price - discount) : 0;
+              const amount = finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 });
               return (
                 <Button
                   size="sm"
@@ -8858,11 +9008,13 @@ function WebMemberPortalWorkspaceInner() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-h-72 overflow-y-auto pr-0.5">
                   {filteredUpgradeOptions.map((opt) => {
                     const selected = selectedUpgradePackageId === opt.package_id;
-                    const sessionCount = opt.session_credits || opt.session_count || 0;
+                    const homeCount = opt.home_sessions ?? (opt.session_credits || opt.session_count || 0);
+                    const passportCount = opt.passport_sessions || 0;
+                    const totalSessions = homeCount + passportCount;
                     const days = opt.duration_days;
                     const rawPrice = opt.base_price || opt.total_price;
-                    const perSessionCost = (sessionCount > 0 && rawPrice > 0)
-                      ? Math.round(rawPrice / sessionCount)
+                    const perSessionCost = (totalSessions > 0 && rawPrice > 0)
+                      ? Math.round(rawPrice / totalSessions)
                       : null;
 
                     return (
@@ -8881,25 +9033,30 @@ function WebMemberPortalWorkspaceInner() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap mb-1">
                               <span className="font-bold text-foreground text-xs sm:text-sm line-clamp-1">
-                                {cleanPackageDisplayName(opt.name, opt.package_name, opt.program_name)}
+                                {cleanPackageDisplayName(opt.display_package_name || opt.name, opt.package_name, opt.program_name, { hideProgramPrefix: true })}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-                              {sessionCount > 0 && (
+                              {opt.is_unlimited ? (
                                 <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
                                   <Zap size={9} className="text-blue-500 fill-blue-500/30" />
-                                  {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}
+                                  Unlimited
+                                </span>
+                              ) : totalSessions > 0 ? (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs">
+                                  <Zap size={9} className="text-blue-500 fill-blue-500/30" />
+                                  {totalSessions} {totalSessions === 1 ? 'Session' : 'Sessions'}
+                                </span>
+                              ) : null}
+                              {passportCount > 0 && (
+                                <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                                  {homeCount} Home + {passportCount} Passport
                                 </span>
                               )}
                               {days > 0 && (
                                 <span className="inline-flex items-center gap-1 font-semibold text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
                                   <CalendarIcon size={10} className="text-emerald-600 dark:text-emerald-400" />
                                   {days} Days
-                                </span>
-                              )}
-                              {opt.program_name && (
-                                <span className="inline-flex items-center font-medium text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/60">
-                                  {opt.program_name}
                                 </span>
                               )}
                             </div>
@@ -8942,21 +9099,53 @@ function WebMemberPortalWorkspaceInner() {
               )}
             </div>
 
+            {/* Offer Selector & Dynamic Coupons for Upgrade */}
+            {selectedUpgradePackageId && (
+              <div className="rounded-xl border border-border bg-card/60 p-3.5 space-y-3">
+                <ApplicableOffersSelector
+                  packageId={selectedUpgradePackageId}
+                  subtotal={
+                    filteredUpgradeOptions.find((o) => o.package_id === selectedUpgradePackageId)?.price_difference ||
+                    filteredUpgradeOptions.find((o) => o.package_id === selectedUpgradePackageId)?.total_price || 0
+                  }
+                  orderType="UPGRADE"
+                  branchId={selectedUpgradeBranchId || membershipActions?.active_membership?.branch_id}
+                  memberId={user?.id}
+                  appliedCoupon={upgradeAppliedCoupon}
+                  onApplyCoupon={(c) => setUpgradeAppliedCoupon(c)}
+                  onRemoveCoupon={() => setUpgradeAppliedCoupon(null)}
+                  disabled={isSubmittingAction}
+                />
+              </div>
+            )}
+
             {/* Dynamic Comparison Card */}
             {(() => {
-              const selectedOpt = membershipActions?.upgrade_options?.find(
+              const selectedOpt = filteredUpgradeOptions.find(
                 (o) => o.package_id === selectedUpgradePackageId
               );
               if (!selectedOpt) return null;
+              const currentVal = selectedOpt.current_price || 0;
+              const totalVal = selectedOpt.total_price || 0;
+              const diffVal = selectedOpt.price_difference || 0;
+              const discount = upgradeAppliedCoupon ? upgradeAppliedCoupon.discount_amount : 0;
+              const netPayable = Math.max(0, diffVal - discount);
               return (
                 <div className="p-3.5 bg-muted/40 border border-border rounded-xl space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Current Plan Value:</span>
-                    <span className="font-mono text-foreground">₹{selectedOpt.current_price || 0}</span>
+                    <span className="font-mono text-foreground">₹{currentVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Target Package Total:</span>
-                    <span className="font-mono text-foreground">₹{selectedOpt.total_price}</span>
+                    <span className="font-mono text-foreground">₹{totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Target Total Sessions:</span>
+                    <span className="font-semibold text-foreground">
+                      {(selectedOpt.home_sessions ?? (selectedOpt.session_credits || selectedOpt.session_count || 0)) + (selectedOpt.passport_sessions || 0)} Sessions
+                      {selectedOpt.passport_sessions ? ` (${selectedOpt.home_sessions || selectedOpt.session_count || 0} Home + ${selectedOpt.passport_sessions} Passport)` : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Additional Session Entitlement:</span>
@@ -8970,9 +9159,15 @@ function WebMemberPortalWorkspaceInner() {
                       +{selectedOpt.additional_days || 0} Days
                     </span>
                   </div>
+                  {upgradeAppliedCoupon && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span>Upgrade Coupon ({upgradeAppliedCoupon.code}):</span>
+                      <span className="font-mono">-₹{discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-2 border-t border-border font-bold text-sm text-blue-500">
                     <span>Authoritative Net Payable:</span>
-                    <span>₹{selectedOpt.price_difference}</span>
+                    <span>₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               );
@@ -9076,10 +9271,13 @@ function WebMemberPortalWorkspaceInner() {
               Cancel
             </Button>
             {(() => {
-              const selectedOpt = membershipActions?.upgrade_options?.find(
+              const selectedOpt = filteredUpgradeOptions.find(
                 (o) => o.package_id === selectedUpgradePackageId
               );
               const diff = selectedOpt?.price_difference || 0;
+              const discount = upgradeAppliedCoupon ? upgradeAppliedCoupon.discount_amount : 0;
+              const netPayable = Math.max(0, diff - discount);
+              const formattedDiff = netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 });
               return (
                 <Button
                   size="sm"
@@ -9088,7 +9286,7 @@ function WebMemberPortalWorkspaceInner() {
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
-                  {isSubmittingAction ? "Processing..." : diff > 0 ? `Pay ₹${diff} & Upgrade` : "Confirm Upgrade"}
+                  {isSubmittingAction ? "Processing..." : netPayable > 0 ? `Pay ₹${formattedDiff} & Upgrade` : "Confirm Upgrade"}
                 </Button>
               );
             })()}

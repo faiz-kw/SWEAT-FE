@@ -55,6 +55,7 @@ export interface ActivityAuditLog {
 export interface ActivityFiltersResponse {
   modules: string[];
   categories: string[];
+  roles?: { code: string; name: string }[];
   actor_types: string[];
   source_channels: string[];
   results: string[];
@@ -75,9 +76,11 @@ export interface ActivityQueryParams {
   module?: string | undefined;
   category?: string | undefined;
   action_category?: string | undefined;
+  role?: string | undefined;
   actor_type?: string | undefined;
   actor_id?: string | undefined;
   actor_email?: string | undefined;
+  actor_name?: string | undefined;
   result?: string | undefined;
   branch_id?: string | undefined;
   source_channel?: string | undefined;
@@ -102,9 +105,11 @@ export function buildActivityQueryParams(params?: ActivityQueryParams): URLSearc
     if (params.module && params.module !== 'ALL') query.set('module', params.module);
     if (params.category && params.category !== 'ALL') query.set('category', params.category);
     if (params.action_category && params.action_category !== 'ALL') query.set('action_category', params.action_category);
+    if (params.role && params.role !== 'ALL') query.set('role', params.role);
     if (params.actor_type && params.actor_type !== 'ALL') query.set('actor_type', params.actor_type);
     if (params.actor_id && params.actor_id !== 'ALL') query.set('actor_id', params.actor_id);
     if (params.actor_email && params.actor_email !== 'ALL') query.set('actor_email', params.actor_email);
+    if (params.actor_name && params.actor_name !== 'ALL') query.set('actor_name', params.actor_name);
     if (params.result && params.result !== 'ALL') query.set('result', params.result);
     if (params.branch_id && params.branch_id !== 'ALL') query.set('branch_id', params.branch_id);
     if (params.source_channel && params.source_channel !== 'ALL') query.set('source_channel', params.source_channel);
