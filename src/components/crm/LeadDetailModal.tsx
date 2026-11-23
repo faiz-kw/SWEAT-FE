@@ -2851,10 +2851,15 @@ export function LeadDetailModal({
                                   </div>
 
                                   {/* AUDIO RECORDING PLAYER & TRANSCRIPT ACCORDION */}
-                                  {evt.metadata?.recording_url ? (
+                                  {/* Only render the player when the call actually produced audio:
+                                      - turns > 0: Sarvam had a real conversation
+                                      - duration_seconds > 5: enough audio to be meaningful
+                                      Calls with Turns=0 (no answer, carrier fail) produce no audio;
+                                      showing the player for them causes the browser "no supported source" error. */}
+                                  {evt.metadata?.recording_url && (evt.metadata?.turns > 0 || evt.metadata?.duration_seconds > 5) ? (
                                     <CallRecordingPlayer
                                       recordingUrl={evt.metadata?.recording_url}
-                                      durationSeconds={evt.metadata?.duration_seconds || 155}
+                                      durationSeconds={evt.metadata?.duration_seconds || 0}
                                       transcript={evt.metadata?.transcript || evt.metadata?.notes || evt.description}
                                       title={evt.title}
                                       disposition={evt.metadata?.disposition}
