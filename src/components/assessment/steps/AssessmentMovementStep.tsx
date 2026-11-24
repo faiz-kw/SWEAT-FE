@@ -3,6 +3,7 @@ import { Dumbbell, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SymptomLoggerModal } from '../shared/SymptomLoggerModal';
+import { MovementBatteryExtras } from './MovementBatteryExtras';
 import type { FunctionalTestsPayload, FunctionalTestItem, SymptomRecord } from '@/api/endpoints/assessmentApi';
 
 interface AssessmentMovementStepProps {
@@ -62,7 +63,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Sections 4-11
+              Step 4 of 6
             </span>
             <h2 className="text-lg font-bold text-foreground">Movement Tests</h2>
           </div>
@@ -261,6 +262,13 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
               </select>
             </div>
           </div>
+
+        <MovementBatteryExtras
+          tests={tests}
+          setTests={setTests}
+          symptoms={symptoms}
+          onLogSymptom={(domain) => setActiveModalDomain(domain)}
+        />
         </div>
       </div>
 

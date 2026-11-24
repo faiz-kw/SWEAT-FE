@@ -53,13 +53,62 @@ export interface FunctionalTestItem {
   symptoms?: string;
 }
 
+/** Section 4: how the member moves before any test is scored. */
+export interface WarmUpObservation {
+  walking?: string;
+  sit_to_stand?: string;
+  squat_pattern?: string;
+  overhead_reach?: string;
+  step_up?: string;
+  warm_up_minutes?: number | null;
+  symptoms?: string;
+  status?: TestResultStatus;
+}
+
+/** Section 9. Screens are judgements; the two distances are optional measurements. */
+export interface MobilityTests {
+  shoulder_mobility?: string;
+  ankle_knee_to_wall?: string;
+  hamstring_reach?: string;
+  overhead_reach?: string;
+  squat_pattern?: string;
+  ankle_left_cm?: number | null;
+  ankle_right_cm?: number | null;
+  sit_and_reach_cm?: number | null;
+  symptoms?: string;
+  protocol_version?: string;
+  status?: TestResultStatus;
+}
+
+/** Section 10. A cardio result only means something beside the protocol that produced it. */
+export interface CardiovascularTest {
+  protocol?: string;
+  duration_minutes?: number | null;
+  speed_kmh?: number | null;
+  incline_pct?: number | null;
+  distance_m?: number | null;
+  repetitions?: number | null;
+  hr_before_bpm?: number | null;
+  hr_after_bpm?: number | null;
+  recovery_hr_bpm?: number | null;
+  perceived_exertion?: number | null;
+  talk_test?: string;
+  stopping_reason?: string;
+  symptoms?: string;
+  protocol_version?: string;
+  status?: TestResultStatus;
+}
+
+export type TestResultStatus = 'VALID' | 'MODIFIED' | 'INCOMPLETE' | 'NOT_ASSESSED';
+
 export interface FunctionalTestsPayload {
+  warm_up_observation?: WarmUpObservation;
   lower_body?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
   upper_body?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
   core?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
   balance?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
-  mobility?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
-  cardiovascular?: FunctionalTestItem | { assessed_tests?: FunctionalTestItem[] };
+  mobility?: MobilityTests;
+  cardiovascular?: CardiovascularTest;
 }
 
 export interface CapabilityMatrix {
