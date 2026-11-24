@@ -273,7 +273,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
         <Button
           onClick={onApproveAndSignOff}
           disabled={isApproving}
-          className="bg-primary hover:bg-primary/90 text-foreground font-semibold text-xs px-6 h-10 gap-2 shadow-lg shadow-emerald-600/20"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-6 h-10 gap-2 shadow-lg shadow-primary/20"
         >
           <CheckCircle2 className="w-4 h-4" />
           <span>{isApproving ? 'Submitting Sign-Off...' : 'Coach Approve & Unlock Screen'}</span>

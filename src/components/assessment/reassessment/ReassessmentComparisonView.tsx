@@ -90,7 +90,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
           <button
             type="submit"
             disabled={loading || !assessmentId.trim()}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-foreground transition hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? 'Comparing...' : 'Compare'}
           </button>

@@ -119,7 +119,7 @@ export const SymptomLoggerModal: React.FC<SymptomLoggerModalProps> = ({
           <Button variant="ghost" size="sm" onClick={onClose} className="text-xs text-muted-foreground">
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave} className="text-xs bg-amber-500 hover:bg-amber-600 text-foreground font-semibold">
+          <Button size="sm" onClick={handleSave} className="text-xs bg-amber-500 hover:bg-amber-600 text-white dark:text-amber-950 font-semibold">
             Record Safety Event
           </Button>
         </div>

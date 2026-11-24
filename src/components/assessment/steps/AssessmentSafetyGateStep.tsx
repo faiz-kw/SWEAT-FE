@@ -195,7 +195,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('DEFER_MEDICAL_CLEARANCE')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'DEFER_MEDICAL_CLEARANCE'
-                ? 'bg-destructive/10 border-red-500 text-destructive'
+                ? 'bg-destructive/10 border-destructive/40 text-destructive'
                 : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
@@ -208,7 +208,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('STOPPED_SAFETY_CONCERNS')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'STOPPED_SAFETY_CONCERNS'
-                ? 'bg-destructive/20 border-red-500 text-destructive font-bold'
+                ? 'bg-destructive/20 border-destructive/40 text-destructive font-bold'
                 : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
@@ -241,7 +241,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         {isTestingBlocked ? (
           <Button
             onClick={onNext}
-            className="bg-red-600 hover:bg-red-700 text-foreground font-semibold text-xs px-6 h-10 gap-2"
+            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
             <Lock className="w-4 h-4" />
             <span>Save & defer</span>
@@ -249,7 +249,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         ) : (
           <Button
             onClick={onNext}
-            className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
             <span>Continue</span>
             <ArrowRight className="w-4 h-4" />

@@ -279,7 +279,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Vitals</span>
         </Button>
-        <Button onClick={onNext} className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2">
+        <Button onClick={onNext} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-6 h-10 gap-2">
           <span>Continue</span>
           <ArrowRight className="w-4 h-4" />
         </Button>

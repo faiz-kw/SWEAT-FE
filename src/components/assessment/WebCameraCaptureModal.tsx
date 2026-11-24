@@ -507,7 +507,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                 variant="default"
                 size="sm"
                 onClick={handleConfirmPhoto}
-                className="gap-2 text-xs flex-1 bg-primary hover:bg-primary/90 text-foreground"
+                className="gap-2 text-xs flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Use This Photo</span>

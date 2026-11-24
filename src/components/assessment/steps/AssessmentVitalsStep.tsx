@@ -256,7 +256,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         </Button>
         <Button
           onClick={onNext}
-          className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
           <span>Continue</span>
           <ArrowRight className="w-4 h-4" />

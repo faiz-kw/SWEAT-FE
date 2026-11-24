@@ -69,7 +69,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
           <button
             type="button"
             onClick={() => setShowApprovalForm(!showApprovalForm)}
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-emerald-500 active:scale-95"
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 active:scale-95"
           >
             {showApprovalForm ? 'Cancel' : 'Approve Next Step'}
           </button>
@@ -169,7 +169,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-md bg-primary px-4 py-1 text-xs font-medium text-foreground hover:bg-emerald-500 disabled:opacity-50"
+              className="rounded-md bg-primary px-4 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {submitting ? 'Saving...' : 'Authorize Advancement'}
             </button>
