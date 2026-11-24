@@ -103,6 +103,59 @@ export interface CapabilityMatrix {
   functional_movement?: string;
 }
 
+/** A row in the assessment register. Compact: the full record comes from retrieve. */
+export interface AssessmentListRow {
+  id: string;
+  member_name: string;
+  member_phone: string | null;
+  member_id: string | null;
+  lead_id: string | null;
+  assessment_type: string;
+  assessment_type_display: string;
+  status: 'DRAFT' | 'TESTING' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
+  status_display: string;
+  screening_outcome: string;
+  scan_status: ScanStatus;
+  captures_taken: number;
+  posture_score: number | null;
+  branch: { id: string; name: string } | null;
+  conducted_by: string | null;
+  recommended_package: string | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AssessmentRegisterSummary {
+  total?: number;
+  in_progress?: number;
+  needs_review?: number;
+  approved?: number;
+  scan_failed?: number;
+}
+
+export interface AssessmentListResponse {
+  count: number;
+  next?: string | null;
+  previous?: string | null;
+  results: AssessmentListRow[];
+  summary?: AssessmentRegisterSummary;
+}
+
+export interface AssessmentListParams {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  bucket?: 'needs_review' | 'in_progress' | 'approved';
+  status?: string;
+  scan_status?: string;
+  assessment_type?: string;
+  branch_id?: string;
+  date_from?: string;
+  date_to?: string;
+  ordering?: string;
+}
+
 /** One view's verdict from the capture quality gate. */
 export interface CaptureQualityVerdict {
   usable: boolean;
@@ -297,6 +350,22 @@ export const assessmentApi = {
   ): Promise<AssessmentSession> {
     const res = await api.post<AssessmentSession>(`/tenant/assessments/${id}/capture/`, formData);
     return res.data;
+  },
+
+  /**
+   * The assessment register: newest first, paged, filtered and searched server-side.
+   */
+  async listAssessments(params: AssessmentListParams = {}): Promise<AssessmentListResponse> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, String(value));
+    });
+    const qs = query.toString();
+    const res = await api.get<AssessmentListResponse>(`/tenant/assessments/${qs ? `?${qs}` : ''}`);
+    const data = res.data as any;
+    // Tolerate an unpaginated array, so the UI does not depend on pagination being on.
+    if (Array.isArray(data)) return { count: data.length, results: data };
+    return { count: data?.count ?? 0, results: data?.results ?? [], summary: data?.summary, next: data?.next, previous: data?.previous };
   },
 
   /**

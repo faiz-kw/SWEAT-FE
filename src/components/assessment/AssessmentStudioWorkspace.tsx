@@ -2,6 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Camera,
+  RefreshCw,
+  Search,
+  Plus,
+  ClipboardList,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -78,7 +82,24 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
 
   // Workflow Steps: 'intake' | 'vitals_capture' | 'movement' | 'review' | 'display_mode'
-  const [currentStep, setCurrentStep] = useState<'intake' | 'vitals_capture' | 'movement' | 'review' | 'display_mode'>('intake');
+  const [currentStep, setCurrentStep] = useState<
+    'register' | 'intake' | 'vitals_capture' | 'movement' | 'review' | 'display_mode'
+  >('register');
+
+  // ---------------------------------------------------------------------------
+  // Register (list) state. Paging, search and filtering all happen server-side:
+  // an assessment register grows without bound, and a studio with three years of
+  // history should not ship every row to the tablet to filter it in the browser.
+  // ---------------------------------------------------------------------------
+  const [registerPage, setRegisterPage] = useState(1);
+  const [registerSearch, setRegisterSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [registerBucket, setRegisterBucket] = useState<'' | 'needs_review' | 'in_progress' | 'approved'>('');
+  const [registerType, setRegisterType] = useState('');
+  const [registerScanStatus, setRegisterScanStatus] = useState('');
+  const [registerFrom, setRegisterFrom] = useState('');
+  const [registerTo, setRegisterTo] = useState('');
+  const REGISTER_PAGE_SIZE = 20;
 
   // Active Session
   const [activeSession, setActiveSession] = useState<AssessmentSession | null>(null);
@@ -304,6 +325,50 @@ export const AssessmentStudioWorkspace: React.FC = () => {
     },
   });
 
+  // Debounce the search box so typing a member's name is one request, not eight.
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(registerSearch.trim());
+      setRegisterPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [registerSearch]);
+
+  const registerParams = {
+    page: registerPage,
+    page_size: REGISTER_PAGE_SIZE,
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(registerBucket ? { bucket: registerBucket } : {}),
+    ...(registerType ? { assessment_type: registerType } : {}),
+    ...(registerScanStatus ? { scan_status: registerScanStatus } : {}),
+    ...(registerFrom ? { date_from: registerFrom } : {}),
+    ...(registerTo ? { date_to: registerTo } : {}),
+  };
+
+  const {
+    data: register,
+    isLoading: registerLoading,
+    isFetching: registerFetching,
+    refetch: refetchRegister,
+  } = useQuery({
+    queryKey: ['assessment-register', registerParams],
+    queryFn: () => assessmentApi.listAssessments(registerParams),
+    enabled: currentStep === 'register',
+    placeholderData: (previous) => previous,
+  });
+
+  const openAssessment = async (id: string, step: 'intake' | 'vitals_capture' | 'movement' | 'review') => {
+    try {
+      const session = await assessmentApi.getAssessment(id);
+      setActiveSession(session);
+      setCurrentStep(step);
+      const scanStatus = (session as any)?.scan?.status;
+      if (scanStatus === 'QUEUED' || scanStatus === 'PROCESSING') setScanPollingId(session.id);
+    } catch (err: any) {
+      toast.error(err?.data?.error || 'Could not open that assessment.');
+    }
+  };
+
   // Poll the scan while it is in flight. The provider call takes a few seconds per view, so
   // the capture request returns immediately and the result lands here.
   const { data: scanState } = useQuery({
@@ -421,6 +486,12 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         description="Coach-led baseline & movement evaluation: health screening (PAR-Q), vitals, scaled test battery, nutrition targets & TV presentation reveal."
         actions={
           <div className="flex items-center gap-2">
+            {currentStep !== 'register' && (
+              <Button variant="ghost" size="sm" onClick={() => setCurrentStep('register')} className="gap-1.5">
+                <ClipboardList className="w-4 h-4" />
+                <span>All Assessments</span>
+              </Button>
+            )}
             <Button
               variant={currentStep === 'display_mode' ? 'default' : 'outline'}
               size="sm"
@@ -430,6 +501,19 @@ export const AssessmentStudioWorkspace: React.FC = () => {
               <Tv className="w-4 h-4" />
               <span>{currentStep === 'display_mode' ? 'Back to Coach Tablet' : 'Studio TV Screen Mirror'}</span>
             </Button>
+            {currentStep === 'register' && (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  setActiveSession(null);
+                  setCurrentStep('intake');
+                }}
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Assessment</span>
+              </Button>
+            )}
           </div>
         }
       />
@@ -438,7 +522,219 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         {/* ========================================================================= */}
         {/* MODE 1: STUDIO TV DISPLAY SCREEN (CLIENT PRESENTATION MIRROR) */}
         {/* ========================================================================= */}
-        {currentStep === 'display_mode' ? (
+        {currentStep === 'register' ? (
+          <div className="max-w-6xl mx-auto space-y-4">
+            {/* Filter chips, driven by server-computed counts */}
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                { id: '', label: 'All', count: register?.summary?.total },
+                { id: 'needs_review', label: 'Needs review', count: register?.summary?.needs_review },
+                { id: 'in_progress', label: 'In progress', count: register?.summary?.in_progress },
+                { id: 'approved', label: 'Approved', count: register?.summary?.approved },
+              ] as Array<{ id: '' | 'needs_review' | 'in_progress' | 'approved'; label: string; count?: number }>).map((chip) => (
+                <button
+                  key={chip.id || 'all'}
+                  onClick={() => { setRegisterBucket(chip.id); setRegisterPage(1); }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                    registerBucket === chip.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground'
+                  }`}
+                >
+                  {chip.label}
+                  {typeof chip.count === 'number' && (
+                    <span className="ml-1.5 opacity-80">{chip.count}</span>
+                  )}
+                </button>
+              ))}
+              {(register?.summary?.scan_failed ?? 0) > 0 && (
+                <button
+                  onClick={() => { setRegisterScanStatus('FAILED,PARTIAL'); setRegisterPage(1); }}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold border border-destructive/40 bg-destructive/10 text-destructive"
+                >
+                  Scan issues {register?.summary?.scan_failed}
+                </button>
+              )}
+            </div>
+
+            {/* Search and filters */}
+            <div className="flex flex-wrap items-center gap-2 bg-card border border-border/70 rounded-2xl p-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={registerSearch}
+                  onChange={(e) => setRegisterSearch(e.target.value)}
+                  placeholder="Search by member name, phone or member number"
+                  className="w-full h-9 rounded-lg border border-border bg-background pl-9 pr-3 text-xs"
+                />
+              </div>
+              <select
+                value={registerType}
+                onChange={(e) => { setRegisterType(e.target.value); setRegisterPage(1); }}
+                className="h-9 rounded-lg border border-border bg-background px-2 text-xs"
+              >
+                <option value="">All types</option>
+                <option value="INITIAL">Initial</option>
+                <option value="MONTHLY">Monthly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="POST_PROGRAM">Post-programme</option>
+                <option value="RETURN_TO_TRAINING">Return to training</option>
+              </select>
+              <select
+                value={registerScanStatus}
+                onChange={(e) => { setRegisterScanStatus(e.target.value); setRegisterPage(1); }}
+                className="h-9 rounded-lg border border-border bg-background px-2 text-xs"
+              >
+                <option value="">Any scan state</option>
+                <option value="COMPLETED">Scan complete</option>
+                <option value="PARTIAL">Scan partial</option>
+                <option value="FAILED">Scan failed</option>
+                <option value="UNAVAILABLE">Scan unavailable</option>
+                <option value="SKIPPED_NO_CONSENT">No consent</option>
+              </select>
+              <input
+                type="date"
+                value={registerFrom}
+                onChange={(e) => { setRegisterFrom(e.target.value); setRegisterPage(1); }}
+                className="h-9 rounded-lg border border-border bg-background px-2 text-xs"
+              />
+              <input
+                type="date"
+                value={registerTo}
+                onChange={(e) => { setRegisterTo(e.target.value); setRegisterPage(1); }}
+                className="h-9 rounded-lg border border-border bg-background px-2 text-xs"
+              />
+              {(registerSearch || registerType || registerScanStatus || registerFrom || registerTo || registerBucket) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs"
+                  onClick={() => {
+                    setRegisterSearch(''); setRegisterType(''); setRegisterScanStatus('');
+                    setRegisterFrom(''); setRegisterTo(''); setRegisterBucket(''); setRegisterPage(1);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={() => refetchRegister()}>
+                <RefreshCw className={`w-3.5 h-3.5 ${registerFetching ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {/* Rows */}
+            <div className="bg-card border border-border/70 rounded-2xl overflow-hidden">
+              <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="col-span-3">Member</div>
+                <div className="col-span-2">Date / Type</div>
+                <div className="col-span-2">Status</div>
+                <div className="col-span-2">Scan</div>
+                <div className="col-span-2">Coach</div>
+                <div className="col-span-1 text-right">Action</div>
+              </div>
+
+              {registerLoading ? (
+                <div className="p-10 text-center text-xs text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                  Loading assessments…
+                </div>
+              ) : !register?.results?.length ? (
+                <div className="p-10 text-center space-y-2">
+                  <ClipboardList className="w-7 h-7 text-muted-foreground mx-auto" />
+                  <p className="text-sm font-semibold text-foreground">No assessments found</p>
+                  <p className="text-xs text-muted-foreground">
+                    {debouncedSearch || registerBucket || registerType
+                      ? 'No assessment matches these filters.'
+                      : 'Start the first assessment with the New Assessment button.'}
+                  </p>
+                </div>
+              ) : (
+                register.results.map((row) => {
+                  const action =
+                    row.status === 'PENDING_REVIEW'
+                      ? { label: 'Review', step: 'review' as const }
+                      : row.status === 'APPROVED'
+                      ? { label: 'View', step: 'review' as const }
+                      : { label: 'Resume', step: 'vitals_capture' as const };
+                  return (
+                    <div
+                      key={row.id}
+                      className="grid grid-cols-2 md:grid-cols-12 gap-2 px-4 py-3 border-t border-border/60 items-center hover:bg-muted/30 transition"
+                    >
+                      <div className="col-span-2 md:col-span-3 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{row.member_name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {row.member_phone || '—'}{row.branch ? ` · ${row.branch.name}` : ''}
+                        </p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-xs text-foreground">
+                          {row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">{row.assessment_type_display}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                            row.status === 'APPROVED'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                              : row.status === 'PENDING_REVIEW'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                              : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {row.status_display || row.status}
+                        </span>
+                        {row.posture_score != null && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Posture {row.posture_score}</p>
+                        )}
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-[11px] text-muted-foreground">{row.scan_status.replace(/_/g, ' ').toLowerCase()}</p>
+                        <p className="text-[10px] text-muted-foreground">{row.captures_taken}/4 captures</p>
+                      </div>
+                      <div className="md:col-span-2 text-[11px] text-muted-foreground truncate">
+                        {row.conducted_by || '—'}
+                      </div>
+                      <div className="md:col-span-1 flex md:justify-end">
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                          onClick={() => openAssessment(row.id, action.step)}>
+                          {action.label}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Server-side paging */}
+            {!!register?.count && register.count > REGISTER_PAGE_SIZE && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  Showing {(registerPage - 1) * REGISTER_PAGE_SIZE + 1}–
+                  {Math.min(registerPage * REGISTER_PAGE_SIZE, register.count)} of {register.count}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    disabled={registerPage === 1 || registerFetching}
+                    onClick={() => setRegisterPage((p) => Math.max(1, p - 1))}>
+                    Previous
+                  </Button>
+                  <span className="text-muted-foreground">
+                    Page {registerPage} of {Math.max(1, Math.ceil(register.count / REGISTER_PAGE_SIZE))}
+                  </span>
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    disabled={registerPage >= Math.ceil(register.count / REGISTER_PAGE_SIZE) || registerFetching}
+                    onClick={() => setRegisterPage((p) => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : currentStep === 'display_mode' ? (
           <div className="bg-card border border-border/80 rounded-3xl p-8 max-w-4xl mx-auto text-center space-y-6 shadow-xl">
             <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-semibold">
               <Tv className="w-4 h-4" /> Studio Display Monitor Mirror
