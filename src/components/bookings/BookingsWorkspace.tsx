@@ -84,7 +84,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ACTIVE');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
   const [selectedProgramId, setSelectedProgramId] = useState<string>('ALL');
   const [selectedBookingType, setSelectedBookingType] = useState<string>('ALL');
@@ -237,6 +237,8 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const {
     data: paginatedBookings,
     isLoading: loadingBookings,
+    isError: errorBookings,
+    error: bookingsErrorObj,
     refetch: refetchBookings,
     isFetching: fetchingBookings,
   } = useQuery({
@@ -733,7 +735,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            Active Bookings ({activeTab === 'bookings' ? totalMatchingBookings : totalBookings})
+            {statusFilter === 'ALL' ? 'All Bookings' : statusFilter === 'ACTIVE' ? 'Active Bookings' : `${statusFilter} Bookings`} ({activeTab === 'bookings' ? totalMatchingBookings : totalBookings})
           </button>
           <button
             onClick={() => setActiveTab('waitlist')}
@@ -910,8 +912,8 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="h-8 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="ACTIVE">Active Bookings</option>
                     <option value="ALL">All Statuses (inc. Cancelled)</option>
+                    <option value="ACTIVE">Active Bookings</option>
                     <option value="BOOKED">Booked</option>
                     <option value="CONFIRMED">Confirmed</option>
                     <option value="WAITLISTED">Waitlisted</option>
@@ -945,6 +947,24 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                         <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                           <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
                           Loading reservations from tenant database...
+                        </td>
+                      </tr>
+                    ) : errorBookings ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-rose-500">
+                          <p className="text-sm font-medium mb-1">Failed to load reservations</p>
+                          <p className="text-xs text-muted-foreground mb-4">
+                            {bookingsErrorObj instanceof Error ? bookingsErrorObj.message : 'A server or network error occurred.'}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => refetchBookings()}
+                            className="gap-1.5 text-xs text-foreground"
+                          >
+                            <RefreshCw className="size-3.5" />
+                            <span>Retry</span>
+                          </Button>
                         </td>
                       </tr>
                     ) : filteredBookings.length === 0 ? (
@@ -1356,7 +1376,28 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 </span>
               </div>
 
-              {waitlistBookings.length === 0 ? (
+              {loadingBookings ? (
+                <div className="py-12 text-center text-muted-foreground text-sm">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                  Loading waitlist from tenant database...
+                </div>
+              ) : errorBookings ? (
+                <div className="py-12 text-center text-rose-500 text-sm">
+                  <p className="font-medium mb-1">Failed to load waitlist</p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    {bookingsErrorObj instanceof Error ? bookingsErrorObj.message : 'A server or network error occurred.'}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refetchBookings()}
+                    className="gap-1.5 text-xs text-foreground"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    <span>Retry</span>
+                  </Button>
+                </div>
+              ) : waitlistBookings.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground text-sm">
                   No active waitlisted members currently in queue across sessions.
                 </div>

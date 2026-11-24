@@ -19,6 +19,14 @@ export interface SpecialtySummary {
   is_primary: boolean;
 }
 
+export interface TrainerCategorySummary {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  display_order?: number;
+}
+
 export interface TrainerProfile {
   id: string;
   employee_profile: string;
@@ -32,6 +40,9 @@ export interface TrainerProfile {
   can_teach_all_specialties: boolean;
   minimum_schedule_buffer_minutes: number;
   specialties?: SpecialtySummary[];
+  category_ids?: string[];
+  categories?: TrainerCategorySummary[];
+  category_names?: string[];
   branch_ids?: string[];
   branch_names?: string[];
   created_at: string;

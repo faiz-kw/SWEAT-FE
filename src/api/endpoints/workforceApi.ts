@@ -132,6 +132,7 @@ export const workforceApi = {
       delivery_mode?: string;
       specialty_code?: string;
       min_proficiency?: string;
+      category_id?: string;
     }
   ): Promise<AvailabilityCheckResult> => {
     const query = new URLSearchParams();
@@ -141,6 +142,7 @@ export const workforceApi = {
     if (params.delivery_mode) query.append('delivery_mode', params.delivery_mode);
     if (params.specialty_code) query.append('specialty_code', params.specialty_code);
     if (params.min_proficiency) query.append('min_proficiency', params.min_proficiency);
+    if (params.category_id) query.append('category_id', params.category_id);
 
     const res = await api.get<AvailabilityCheckResult>(
       `/tenant/trainer-profiles/${trainerId}/check-availability/?${query.toString()}`
@@ -155,6 +157,7 @@ export const workforceApi = {
     delivery_mode?: string;
     specialty_code?: string;
     min_proficiency?: string;
+    category_id?: string;
   }): Promise<EligibleTrainer[]> => {
     const query = new URLSearchParams();
     query.append('start_datetime', params.start_datetime);
@@ -163,6 +166,7 @@ export const workforceApi = {
     if (params.delivery_mode) query.append('delivery_mode', params.delivery_mode);
     if (params.specialty_code) query.append('specialty_code', params.specialty_code);
     if (params.min_proficiency) query.append('min_proficiency', params.min_proficiency);
+    if (params.category_id) query.append('category_id', params.category_id);
 
     const res = await api.get<{ count: number; results: EligibleTrainer[] }>(
       `/tenant/trainer-profiles/find-eligible/?${query.toString()}`

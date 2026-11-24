@@ -29,32 +29,32 @@ export interface PaginatedBookingsResponse {
 export const bookingsApi = {
   // Bookings
   getBookings: async (params?: {
-    status?: string;
-    branch_id?: string;
-    occurrence_id?: string;
-    user_id?: string;
-    search?: string;
-    page?: number;
-    page_size?: number;
+    status?: string | undefined;
+    branch_id?: string | undefined;
+    occurrence_id?: string | undefined;
+    user_id?: string | undefined;
+    search?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<Booking[]> => {
     const res = await api.get('/tenant/bookings/', { params });
     return res.data.results || res.data;
   },
 
   getBookingsPaginated: async (params?: {
-    status?: string;
-    branch_id?: string;
-    program_id?: string;
-    booking_type?: string;
-    is_trial?: boolean;
-    occurrence_id?: string;
-    user_id?: string;
-    search?: string;
-    from_date?: string;
-    to_date?: string;
-    occurrence_date?: string;
-    page?: number;
-    page_size?: number;
+    status?: string | undefined;
+    branch_id?: string | undefined;
+    program_id?: string | undefined;
+    booking_type?: string | undefined;
+    is_trial?: boolean | undefined;
+    occurrence_id?: string | undefined;
+    user_id?: string | undefined;
+    search?: string | undefined;
+    from_date?: string | undefined;
+    to_date?: string | undefined;
+    occurrence_date?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<PaginatedBookingsResponse> => {
     const res = await api.get('/tenant/bookings/', { params: params as any });
     const data: any = res.data;

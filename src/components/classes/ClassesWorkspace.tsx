@@ -304,6 +304,8 @@ export const ClassesWorkspace: React.FC = () => {
     "today" | "week" | "custom" | "range" | "all"
   >("today");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
+  const [templateStatusFilter, setTemplateStatusFilter] = useState<string>("ACTIVE");
+  const [categoryStatusFilter, setCategoryStatusFilter] = useState<string>("ALL");
   const [ruleStatusFilter, setRuleStatusFilter] = useState<string>("ACTIVE");
   const [selectedCheckInFilter, setSelectedCheckInFilter] = useState<
     "ALL" | "CHECKED_IN" | "PENDING"
@@ -2261,7 +2263,7 @@ export const ClassesWorkspace: React.FC = () => {
       !term ||
       c.name.toLowerCase().includes(term) ||
       (c.description || "").toLowerCase().includes(term);
-    const matchesStatus = selectedStatusFilter === "ALL" || c.status === selectedStatusFilter;
+    const matchesStatus = categoryStatusFilter === "ALL" || c.status === categoryStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -2272,7 +2274,7 @@ export const ClassesWorkspace: React.FC = () => {
       tpl.name.toLowerCase().includes(term) ||
       (tpl.category_name || "").toLowerCase().includes(term) ||
       (tpl.program_name || "").toLowerCase().includes(term);
-    const matchesStatus = selectedStatusFilter === "ALL" || tpl.status === selectedStatusFilter;
+    const matchesStatus = templateStatusFilter === "ALL" || tpl.status === templateStatusFilter;
     const matchesCategory =
       selectedCategoryFilter === "ALL" || tpl.category === selectedCategoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
@@ -2548,7 +2550,8 @@ export const ClassesWorkspace: React.FC = () => {
               setShowTrainerCheckins(false);
               setShowContentStudio(false);
               setSearchTerm("");
-              setSelectedStatusFilter("ALL");
+              setTemplateStatusFilter("ACTIVE");
+              setCategoryStatusFilter("ALL");
               setSelectedBranchFilter("");
             }}
             className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -2675,7 +2678,7 @@ export const ClassesWorkspace: React.FC = () => {
                 onClick={() => {
                   setSetupSubTab("templates");
                   setSearchTerm("");
-                  setSelectedStatusFilter("ALL");
+                  setTemplateStatusFilter("ACTIVE");
                 }}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   setupSubTab === "templates"
@@ -2690,7 +2693,7 @@ export const ClassesWorkspace: React.FC = () => {
                 onClick={() => {
                   setSetupSubTab("categories");
                   setSearchTerm("");
-                  setSelectedStatusFilter("ALL");
+                  setCategoryStatusFilter("ALL");
                 }}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   setupSubTab === "categories"
@@ -2725,8 +2728,8 @@ export const ClassesWorkspace: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <select
-                      value={selectedStatusFilter}
-                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      value={categoryStatusFilter}
+                      onChange={(e) => setCategoryStatusFilter(e.target.value)}
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
@@ -2888,8 +2891,8 @@ export const ClassesWorkspace: React.FC = () => {
                       ))}
                     </select>
                     <select
-                      value={selectedStatusFilter}
-                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      value={templateStatusFilter}
+                      onChange={(e) => setTemplateStatusFilter(e.target.value)}
                       className="h-8 bg-background border border-border rounded-lg px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
                       <option value="ALL">All Statuses</option>
@@ -2922,16 +2925,16 @@ export const ClassesWorkspace: React.FC = () => {
                       <Award className="size-6" />
                     </div>
                     <h3 className="text-base font-semibold text-foreground">
-                      {selectedStatusFilter === "INACTIVE"
+                      {templateStatusFilter === "INACTIVE"
                         ? "No Inactive Class Templates"
                         : "No Class Templates Found"}
                     </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      {selectedStatusFilter === "INACTIVE"
+                      {templateStatusFilter === "INACTIVE"
                         ? "There are currently no deactivated or inactive class templates."
                         : "Create high-intensity, mobility, or strength workout templates to schedule group classes."}
                     </p>
-                    {canCreate && selectedStatusFilter !== "INACTIVE" && (
+                    {canCreate && templateStatusFilter !== "INACTIVE" && (
                       <Button
                         size="sm"
                         onClick={() => {
