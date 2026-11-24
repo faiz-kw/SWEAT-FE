@@ -1221,38 +1221,46 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
 
           {/* Custom Date Range Row */}
           {datePreset === 'CUSTOM' && (
-            <div className="col-span-full flex flex-wrap items-center gap-2 pt-2 border-t border-border/50 text-xs">
-              <span className="text-muted-foreground font-medium">Custom Range:</span>
+            <div className="col-span-full flex flex-wrap items-center gap-2.5 pt-2 border-t border-border/50 text-xs animate-in fade-in duration-150">
+              <span className="text-muted-foreground font-semibold flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-primary" /> Custom Date Range:
+              </span>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">From</span>
+                <span className="text-[11px] text-muted-foreground font-medium">Start Date:</span>
                 <Input
                   type="date"
                   value={customDateFrom}
                   onChange={(e) => setCustomDateFrom(e.target.value)}
-                  className="h-8 text-xs bg-background w-36"
+                  className="h-8 text-xs bg-background w-40"
                 />
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">To</span>
+                <span className="text-[11px] text-muted-foreground font-medium">End Date:</span>
                 <Input
                   type="date"
                   value={customDateTo}
+                  min={customDateFrom || undefined}
                   onChange={(e) => setCustomDateTo(e.target.value)}
-                  className="h-8 text-xs bg-background w-36"
+                  className="h-8 text-xs bg-background w-40"
                 />
               </div>
               {(customDateFrom || customDateTo) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setCustomDateFrom('');
-                    setCustomDateTo('');
-                  }}
-                  className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  Clear dates
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[11px] font-medium bg-primary/10 text-primary border-primary/20">
+                    Showing leads {customDateFrom ? `from ${formatLeadDate(customDateFrom)}` : ''} {customDateTo ? `to ${formatLeadDate(customDateTo)}` : ''}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCustomDateFrom('');
+                      setCustomDateTo('');
+                    }}
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Clear range
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -1330,6 +1338,20 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                 }`}
               >
                 This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDatePreset('CUSTOM');
+                  setSpecificDate('');
+                }}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  datePreset === 'CUSTOM'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                📅 Custom Range
               </button>
               <button
                 type="button"

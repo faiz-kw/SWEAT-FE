@@ -32,7 +32,7 @@ import {
   Trash2,
   CalendarDays,
   MoreHorizontal,
-  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { toast } from 'sonner';
@@ -46,6 +46,7 @@ import { fetchUsersApi } from '@/api/endpoints/api-admin';
 import { classesApi } from '@/api/endpoints/classesApi';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
 import type { ClassCategory } from '@/types/classes';
+import { StudioShiftRosterBoard } from './StudioShiftRosterBoard';
 import { TrainerScheduleModal } from './TrainerScheduleModal';
 import { TrainerLeaveApplyDialog } from './TrainerLeaveApplyDialog';
 import { TrainerLeaveApprovalsModal } from './TrainerLeaveApprovalsModal';
@@ -110,7 +111,7 @@ export function TrainersWorkspace() {
     return true;
   };
 
-  const [activeTab, setActiveTab] = React.useState<'directory' | 'classes' | 'availability'>('directory');
+  const [activeTab, setActiveTab] = React.useState<'studio-roster' | 'directory' | 'classes' | 'availability'>('studio-roster');
   const [searchQuery, setSearchQuery] = React.useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchQuery, setSearchQuery);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
@@ -118,6 +119,15 @@ export function TrainersWorkspace() {
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [scheduleInitialBranchId, setScheduleInitialBranchId] = React.useState<string | undefined>();
+  const [scheduleInitialWeekStart, setScheduleInitialWeekStart] = React.useState<string | undefined>();
+
+  const handleOpenTrainerSchedule = (trainer: TrainerProfile, branchId?: string, weekStart?: string) => {
+    setSelectedTrainer(trainer);
+    setScheduleInitialBranchId(branchId);
+    setScheduleInitialWeekStart(weekStart);
+    setIsScheduleModalOpen(true);
+  };
   const [isExcelImportOpen, setIsExcelImportOpen] = React.useState(false);
   const [isLeaveApplyOpen, setIsLeaveApplyOpen] = React.useState(false);
   const [isApprovalsModalOpen, setIsApprovalsModalOpen] = React.useState(false);
@@ -411,10 +421,10 @@ export function TrainersWorkspace() {
                   size="sm"
                   onClick={() => setIsExcelImportOpen(true)}
                   className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
-                  title="Upload Trainer Roster or Directory from Excel"
+                  title="Import Trainer Roster or Directory"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Upload Excel</span>
+                  <Upload className="w-3.5 h-3.5 text-primary" />
+                  <span>Import Schedule</span>
                 </Button>
                 <Link to="/admin/rosters">
                   <Button
@@ -472,9 +482,22 @@ export function TrainersWorkspace() {
       <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+            {!isTrainer && (
+              <button
+                onClick={() => setActiveTab('studio-roster')}
+                className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'studio-roster'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Studio Shift Roster</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('directory')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === 'directory'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -552,6 +575,16 @@ export function TrainersWorkspace() {
             </div>
           )}
         </div>
+
+        {/* Studio Shift Roster View */}
+        {activeTab === 'studio-roster' && !isTrainer && (
+          <StudioShiftRosterBoard
+            trainers={trainers}
+            branches={branches}
+            classCategories={classCategories}
+            onOpenTrainerSchedule={handleOpenTrainerSchedule}
+          />
+        )}
 
         {/* Directory View */}
         {activeTab === 'directory' && (
@@ -1852,16 +1885,22 @@ export function TrainersWorkspace() {
       {isScheduleModalOpen && (
         <TrainerScheduleModal
           isOpen={isScheduleModalOpen}
-          onClose={() => setIsScheduleModalOpen(false)}
+          onClose={() => {
+            setIsScheduleModalOpen(false);
+            setScheduleInitialBranchId(undefined);
+            setScheduleInitialWeekStart(undefined);
+          }}
           trainer={isTrainer ? (currentTrainer || selectedTrainer) : (selectedTrainer || trainers[0] || null)}
           trainers={isTrainer && currentTrainer ? [currentTrainer] : trainers}
           onSelectTrainer={(t) => setSelectedTrainer(t)}
           branches={branches}
           initialBranchId={
-            directoryBranchId !== 'ALL'
+            scheduleInitialBranchId ||
+            (directoryBranchId !== 'ALL'
               ? directoryBranchId
-              : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id
+              : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id)
           }
+          initialWeekStart={scheduleInitialWeekStart}
         />
       )}
 
@@ -1884,7 +1923,7 @@ export function TrainersWorkspace() {
       )}
 
       {/* Trainer Allotted Classes & Attendance Modal */}
-      {/* Universal Excel Import Wizard Modal */}
+      {/* Universal Schedule & Directory Import Wizard Modal */}
       <ExcelImportWizardModal
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}
@@ -1892,7 +1931,7 @@ export function TrainersWorkspace() {
         onImportComplete={() => {
           queryClient.invalidateQueries({ queryKey: ['trainers'] });
           refetch();
-          toast.success('Trainer data refreshed from Excel!');
+          toast.success('Trainer data refreshed successfully!');
         }}
       />
 

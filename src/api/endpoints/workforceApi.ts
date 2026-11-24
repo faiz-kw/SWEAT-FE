@@ -158,6 +158,7 @@ export const workforceApi = {
     specialty_code?: string;
     min_proficiency?: string;
     category_id?: string;
+    include_off_duty?: boolean;
   }): Promise<EligibleTrainer[]> => {
     const query = new URLSearchParams();
     query.append('start_datetime', params.start_datetime);
@@ -167,6 +168,7 @@ export const workforceApi = {
     if (params.specialty_code) query.append('specialty_code', params.specialty_code);
     if (params.min_proficiency) query.append('min_proficiency', params.min_proficiency);
     if (params.category_id) query.append('category_id', params.category_id);
+    if (params.include_off_duty) query.append('include_off_duty', 'true');
 
     const res = await api.get<{ count: number; results: EligibleTrainer[] }>(
       `/tenant/trainer-profiles/find-eligible/?${query.toString()}`

@@ -28,6 +28,8 @@ import {
   Filter,
   PhoneIncoming,
   PhoneOutgoing,
+  Calendar,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,10 +48,12 @@ import {
 import { CallRecordingPlayer } from '@/components/crm/CallRecordingPlayer';
 import { LeadDetailModal } from '@/components/crm/LeadDetailModal';
 
-type TimeframeOption = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_30_days';
+type TimeframeOption = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_30_days' | 'custom' | 'all';
 
 export function TelephonyAnalyticsDashboard() {
   const [timeframe, setTimeframe] = React.useState<TimeframeOption>('today');
+  const [customDateFrom, setCustomDateFrom] = React.useState<string>('');
+  const [customDateTo, setCustomDateTo] = React.useState<string>('');
   const [selectedRepId, setSelectedRepId] = React.useState<string>('ALL');
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = React.useState<string>('');
@@ -59,9 +63,17 @@ export function TelephonyAnalyticsDashboard() {
   const [page, setPage] = React.useState<number>(1);
   const [pageSize, setPageSize] = React.useState<number>(25);
   const [isExporting, setIsExporting] = React.useState<boolean>(false);
+  const [isExportingCallLogs, setIsExportingCallLogs] = React.useState<boolean>(false);
 
   const [selectedCallForAudio, setSelectedCallForAudio] = React.useState<any | null>(null);
   const [selectedLeadId, setSelectedLeadId] = React.useState<string | null>(null);
+
+  // Fetch full Lead object when inspecting a lead
+  const { data: fetchedLead } = useQuery({
+    queryKey: ['lead-detail', selectedLeadId],
+    queryFn: () => (selectedLeadId ? crmApi.getLead(selectedLeadId) : null),
+    enabled: Boolean(selectedLeadId),
+  });
 
   // Debounce search input by 350ms to keep backend queries fast
   React.useEffect(() => {
@@ -82,6 +94,8 @@ export function TelephonyAnalyticsDashboard() {
     queryKey: [
       'telephony-analytics',
       timeframe,
+      customDateFrom,
+      customDateTo,
       selectedRepId,
       debouncedSearch,
       directionFilter,
@@ -93,6 +107,8 @@ export function TelephonyAnalyticsDashboard() {
     queryFn: () =>
       crmApi.getTelephonyAnalytics({
         timeframe,
+        date_from: timeframe === 'custom' ? customDateFrom || undefined : undefined,
+        date_to: timeframe === 'custom' ? customDateTo || undefined : undefined,
         rep_id: selectedRepId !== 'ALL' ? selectedRepId : undefined,
         search: debouncedSearch || undefined,
         direction: directionFilter !== 'ALL' ? directionFilter : undefined,
@@ -119,7 +135,8 @@ export function TelephonyAnalyticsDashboard() {
     Boolean(searchQuery) ||
     directionFilter !== 'ALL' ||
     statusFilter !== 'ALL' ||
-    dispositionFilter !== 'ALL';
+    dispositionFilter !== 'ALL' ||
+    (timeframe === 'custom' && (Boolean(customDateFrom) || Boolean(customDateTo)));
 
   const resetAllFilters = () => {
     setSelectedRepId('ALL');
@@ -128,37 +145,53 @@ export function TelephonyAnalyticsDashboard() {
     setDirectionFilter('ALL');
     setStatusFilter('ALL');
     setDispositionFilter('ALL');
+    setCustomDateFrom('');
+    setCustomDateTo('');
     setPage(1);
   };
 
-  const handleExportCsv = async () => {
+  const handleExportExcel = async (exportType: 'all' | 'call_logs' | 'dialer_summary' = 'all') => {
     try {
-      setIsExporting(true);
+      if (exportType === 'call_logs') {
+        setIsExportingCallLogs(true);
+      } else {
+        setIsExporting(true);
+      }
+
       const blob = await crmApi.exportTelephonyReport({
         timeframe,
+        date_from: timeframe === 'custom' ? customDateFrom || undefined : undefined,
+        date_to: timeframe === 'custom' ? customDateTo || undefined : undefined,
         rep_id: selectedRepId !== 'ALL' ? selectedRepId : undefined,
         direction: directionFilter !== 'ALL' ? directionFilter : undefined,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
         disposition: dispositionFilter !== 'ALL' ? dispositionFilter : undefined,
         search: debouncedSearch || undefined,
+        export_type: exportType,
       });
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const dateStr = new Date().toISOString().slice(0, 10);
-      a.download = `sales_telephony_report_${timeframe}_${dateStr}.csv`;
+      const prefix = exportType === 'call_logs' ? 'call_logs_export' : 'sales_telephony_dialer_report';
+      a.download = `${prefix}_${timeframe}_${dateStr}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      toast.success('Calling report exported successfully.');
-    } catch (err) {
+      toast.success(
+        exportType === 'call_logs'
+          ? 'Call logs exported successfully as Excel (.xlsx).'
+          : 'Sales dialer report exported successfully as Excel (.xlsx).'
+      );
+    } catch (err: any) {
       console.error('Export failed:', err);
-      toast.error('Failed to export calling report. Please try again.');
+      toast.error('Failed to export report. Please try again.');
     } finally {
       setIsExporting(false);
+      setIsExportingCallLogs(false);
     }
   };
 
@@ -197,6 +230,8 @@ export function TelephonyAnalyticsDashboard() {
                 { id: 'this_week', label: 'This Week' },
                 { id: 'this_month', label: 'This Month' },
                 { id: 'last_30_days', label: 'Last 30D' },
+                { id: 'all', label: 'All Time' },
+                { id: 'custom', label: 'Custom' },
               ] as const
             ).map((opt) => (
               <button
@@ -246,19 +281,73 @@ export function TelephonyAnalyticsDashboard() {
             <span className="hidden sm:inline">Refresh</span>
           </Button>
 
-          {/* Export CSV Button */}
+          {/* Export Dialer & Analytics Excel Button */}
           <Button
             variant="outline"
             size="sm"
-            onClick={handleExportCsv}
+            onClick={() => handleExportExcel('all')}
             disabled={isExporting}
-            className="text-xs h-9 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            className="text-xs h-9 gap-1.5 border-emerald-600/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 shadow-2xs"
+            title="Download complete sales dialer & telephony report with all sheets (Call Logs, Leaderboard, Dispositions, Heatmap, Summary)"
           >
             <Download className={`w-3.5 h-3.5 ${isExporting ? 'animate-bounce' : ''}`} />
-            <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
+            <span>{isExporting ? 'Exporting...' : 'Export Excel (.xlsx)'}</span>
           </Button>
         </div>
       </div>
+
+      {/* Custom Date Range Selector Row (visible when timeframe === 'custom') */}
+      {timeframe === 'custom' && (
+        <div className="flex flex-wrap items-center gap-2.5 p-3 rounded-xl bg-card border border-border text-xs shadow-2xs animate-in fade-in duration-150">
+          <span className="text-muted-foreground font-semibold flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-primary" /> Filter Calling Activity By Date Range:
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground font-medium">Start Date:</span>
+            <Input
+              type="date"
+              value={customDateFrom}
+              onChange={(e) => {
+                setCustomDateFrom(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 text-xs bg-background w-36"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground font-medium">End Date:</span>
+            <Input
+              type="date"
+              value={customDateTo}
+              min={customDateFrom || undefined}
+              onChange={(e) => {
+                setCustomDateTo(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 text-xs bg-background w-36"
+            />
+          </div>
+          {(customDateFrom || customDateTo) && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[11px] font-medium bg-primary/10 text-primary border-primary/20">
+                Filtering from {customDateFrom || 'Earliest'} to {customDateTo || 'Latest'}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setCustomDateFrom('');
+                  setCustomDateTo('');
+                  setPage(1);
+                }}
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                Clear range
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Row */}
       {isLoading ? (
@@ -616,8 +705,21 @@ export function TelephonyAnalyticsDashboard() {
               <FileAudio className="w-4 h-4 text-primary" />
               <h2 className="text-sm sm:text-base font-bold">Recent Calls & QA Audit Log</h2>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Total {pagination.total_count} Recorded Calls
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Total {pagination.total_count} Recorded Calls
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExportExcel('call_logs')}
+                disabled={isExportingCallLogs}
+                className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 shadow-2xs"
+                title="Download complete call logs table as Excel (.xlsx)"
+              >
+                <Download className={`w-3.5 h-3.5 ${isExportingCallLogs ? 'animate-bounce' : ''}`} />
+                <span>{isExportingCallLogs ? 'Exporting...' : 'Export Call Logs (.xlsx)'}</span>
+              </Button>
             </div>
           </div>
 
@@ -924,9 +1026,11 @@ export function TelephonyAnalyticsDashboard() {
       {/* Lead Detail Modal Drilldown */}
       {selectedLeadId && (
         <LeadDetailModal
-          isOpen={Boolean(selectedLeadId)}
-          onClose={() => setSelectedLeadId(null)}
-          leadId={selectedLeadId}
+          lead={fetchedLead || null}
+          open={Boolean(selectedLeadId)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedLeadId(null);
+          }}
         />
       )}
     </div>

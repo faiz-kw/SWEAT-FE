@@ -859,6 +859,56 @@ export const ClassesWorkspace: React.FC = () => {
     }>,
   });
 
+  const [ruleModalStep, setRuleModalStep] = useState<1 | 2>(1);
+  const [templateBlocks, setTemplateBlocks] = useState<Array<{
+    uid: number;
+    class_template: string;
+    days_of_week: number[];
+    time_slots: RuleTimeSlot[];
+    default_trainer?: string;
+  }>>([
+    {
+      uid: 1,
+      class_template: "",
+      days_of_week: [1, 3, 5],
+      time_slots: [{ id: "1", start_time: "07:00", end_time: "07:50" }],
+      default_trainer: "",
+    },
+  ]);
+
+  const [previewOccurrences, setPreviewOccurrences] = useState<Array<{
+    id: string;
+    date: string;
+    dayNum: number;
+    dayName: string;
+    startTime: string;
+    endTime: string;
+    templateId: string;
+    templateName: string;
+    templateCategoryName: string;
+    templateCategoryId: string;
+    templateCapacity: number;
+    branchId: string;
+    branchName: string;
+    trainerId: string;
+    trainerName: string;
+  }>>([]);
+  const [previewFilterBranch, setPreviewFilterBranch] = useState<string>("ALL");
+  const [previewFilterTemplate, setPreviewFilterTemplate] = useState<string>("ALL");
+  const [previewFilterDay, setPreviewFilterDay] = useState<string>("ALL");
+  const [previewFilterTrainer, setPreviewFilterTrainer] = useState<string>("ALL");
+  const [previewSearch, setPreviewSearch] = useState<string>("");
+  const [previewViewMode, setPreviewViewMode] = useState<"WEEK" | "TABLE">("WEEK");
+  const [previewWeekOffset, setPreviewWeekOffset] = useState<number>(0);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState<boolean>(false);
+  const [successDetails, setSuccessDetails] = useState<{
+    rulesCount: number;
+    sessionsCount: number;
+    branchesCount: number;
+    templatesCount: number;
+    trainersCount: number;
+  }>({ rulesCount: 0, sessionsCount: 0, branchesCount: 0, templatesCount: 0, trainersCount: 0 });
+
   const [ruleForm, setRuleForm] = useState({
     class_template: "",
     branch: "",
@@ -1182,6 +1232,66 @@ export const ClassesWorkspace: React.FC = () => {
   });
 
   // Real-time Branch Operating Hours & Holiday Exceptions for Recurring Rule
+  const { data: allBranchWorkingHours = [] } = useQuery({
+    queryKey: ["all-tenant-branch-working-hours"],
+    queryFn: () => classesApi.getBranchWorkingHours(),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const getBranchOperatingDetails = (branchId: string) => {
+    const hours = allBranchWorkingHours.filter((w: any) => String(w.branch) === String(branchId) && w.is_open);
+    if (!hours || hours.length === 0) {
+      return { timeStr: "06:00 AM – 10:00 PM", daysCount: 7, isConfigured: false, label: "06:00 AM – 10:00 PM (7d/wk)" };
+    }
+    let earliest = "23:59";
+    let latest = "00:00";
+    hours.forEach((wh: any) => {
+      if (wh.is_24_hours) {
+        earliest = "00:00";
+        latest = "23:59";
+      } else {
+        if (wh.open_time && wh.open_time.substring(0, 5) < earliest) earliest = wh.open_time.substring(0, 5);
+        if (wh.close_time && wh.close_time.substring(0, 5) > latest) latest = wh.close_time.substring(0, 5);
+      }
+    });
+    const minT = earliest === "23:59" ? "06:00" : earliest;
+    const maxT = latest === "00:00" ? "22:00" : latest;
+    const label = `${formatTime12h(minT)} – ${formatTime12h(maxT)} (${hours.length}d/wk)`;
+    return { timeStr: `${formatTime12h(minT)} – ${formatTime12h(maxT)}`, daysCount: hours.length, isConfigured: true, label };
+  };
+
+  const getCombinedOperatingWindowSummary = () => {
+    if (ruleForm.branches.length === 0) {
+      return { text: "No branch selected", daysText: "Select at least 1 branch" };
+    }
+    const targetHours = allBranchWorkingHours.filter(
+      (w: any) => ruleForm.branches.some((bId) => String(bId) === String(w.branch)) && w.is_open
+    );
+    if (targetHours.length === 0) {
+      return {
+        text: `Branch Operating Window: 06:00 AM – 10:00 PM across ${ruleForm.branches.length} selected branch(es)`,
+        daysText: "Verified across selected branches",
+      };
+    }
+    let earliest = "23:59";
+    let latest = "00:00";
+    targetHours.forEach((wh: any) => {
+      if (wh.is_24_hours) {
+        earliest = "00:00";
+        latest = "23:59";
+      } else {
+        if (wh.open_time && wh.open_time.substring(0, 5) < earliest) earliest = wh.open_time.substring(0, 5);
+        if (wh.close_time && wh.close_time.substring(0, 5) > latest) latest = wh.close_time.substring(0, 5);
+      }
+    });
+    const minT = earliest === "23:59" ? "06:00" : earliest;
+    const maxT = latest === "00:00" ? "22:00" : latest;
+    return {
+      text: `Combined Operating Window: ${formatTime12h(minT)} – ${formatTime12h(maxT)} across ${ruleForm.branches.length} selected branch(es)`,
+      daysText: "Operating hours verified (Admin → Location)",
+    };
+  };
+
   const { data: ruleBranchWorkingHours = [] } = useQuery({
     queryKey: ["branch-working-hours", ruleForm.branch],
     queryFn: () => classesApi.getBranchWorkingHours(ruleForm.branch),
@@ -1425,22 +1535,312 @@ export const ClassesWorkspace: React.FC = () => {
 
   const occurrenceSchedule = getOccurrenceDateSchedule();
 
+  const getEligibleTrainersForCategory = (categoryId?: string, categoryName?: string) => {
+    if (!trainers || trainers.length === 0) return [];
+    if (!categoryId && !categoryName) return trainers;
+
+    return trainers.filter((tr: any) => {
+      if (tr.can_teach_all_specialties) return true;
+      if (categoryId && Array.isArray(tr.category_ids)) {
+        if (tr.category_ids.some((cid: any) => String(cid) === String(categoryId))) return true;
+      }
+      if (categoryId && Array.isArray(tr.categories)) {
+        if (tr.categories.some((c: any) => String(c.id || c.category_id || c) === String(categoryId))) return true;
+      }
+      if (categoryName && Array.isArray(tr.categories)) {
+        if (tr.categories.some((c: any) => (c.name || c.category_name || "").toLowerCase() === categoryName.toLowerCase())) return true;
+      }
+      if (categoryName && Array.isArray(tr.category_names)) {
+        if (tr.category_names.some((cn: string) => String(cn).toLowerCase() === categoryName.toLowerCase())) return true;
+      }
+      return false;
+    });
+  };
+
+  const addTemplateBlock = () => {
+    const nextUid = templateBlocks.length > 0 ? Math.max(...templateBlocks.map((t) => t.uid)) + 1 : 1;
+    const activeTemplates = templates.filter(
+      (t) => (t.status || "").toUpperCase() === "ACTIVE" || (!t.status && (t as any).is_active !== false)
+    );
+    const availableTpl = activeTemplates.find((t) => !templateBlocks.some((b) => b.class_template === t.id)) || activeTemplates[0] || templates[0];
+    const dur = availableTpl?.default_duration_minutes || 60;
+    const durEndM = Math.min(1439, 8 * 60 + dur);
+    const endH = Math.floor(durEndM / 60) % 24;
+    const endM = durEndM % 60;
+    const endStr = `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
+
+    setTemplateBlocks((prev) => [
+      ...prev,
+      {
+        uid: nextUid,
+        class_template: availableTpl?.id || "",
+        days_of_week: [2, 4, 6],
+        time_slots: [{ id: String(Date.now()), start_time: "08:00", end_time: endStr }],
+        default_trainer: "",
+      },
+    ]);
+  };
+
+  const removeTemplateBlock = (uid: number) => {
+    if (templateBlocks.length <= 1) return;
+    setTemplateBlocks((prev) => prev.filter((b) => b.uid !== uid));
+  };
+
+  const updateTemplateBlock = (uid: number, updates: Partial<{
+    class_template: string;
+    days_of_week: number[];
+    time_slots: RuleTimeSlot[];
+    default_trainer?: string;
+  }>) => {
+    setTemplateBlocks((prev) => prev.map((b) => (b.uid === uid ? { ...b, ...updates } : b)));
+  };
+
+  const addSlotToBlock = (uid: number) => {
+    setTemplateBlocks((prev) =>
+      prev.map((b) => {
+        if (b.uid !== uid) return b;
+        const lastSlot = b.time_slots[b.time_slots.length - 1];
+        const tpl = templates.find((t) => t.id === b.class_template);
+        const dur = tpl?.default_duration_minutes || 60;
+        let nextStart = "10:00";
+        let nextEnd = "11:00";
+
+        if (lastSlot && lastSlot.end_time) {
+          nextStart = lastSlot.end_time;
+          const parts = nextStart.split(":");
+          const h = parseInt(parts[0] || "0", 10);
+          const m = parseInt(parts[1] || "0", 10);
+          const endTotalM = Math.min(1439, h * 60 + m + dur);
+          const eh = Math.floor(endTotalM / 60) % 24;
+          const em = endTotalM % 60;
+          nextEnd = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
+        }
+
+        return {
+          ...b,
+          time_slots: [
+            ...b.time_slots,
+            { id: String(Date.now() + Math.random()), start_time: nextStart, end_time: nextEnd },
+          ],
+        };
+      })
+    );
+  };
+
+  const removeSlotFromBlock = (uid: number, slotIdx: number) => {
+    setTemplateBlocks((prev) =>
+      prev.map((b) => {
+        if (b.uid !== uid || b.time_slots.length <= 1) return b;
+        return {
+          ...b,
+          time_slots: b.time_slots.filter((_, idx) => idx !== slotIdx),
+        };
+      })
+    );
+  };
+
+  const updateSlotInBlock = (
+    uid: number,
+    slotIdx: number,
+    field: "start_time" | "end_time",
+    val: string
+  ) => {
+    setTemplateBlocks((prev) =>
+      prev.map((b) => {
+        if (b.uid !== uid) return b;
+        const tpl = templates.find((t) => t.id === b.class_template);
+        const dur = tpl?.default_duration_minutes || 60;
+        const newSlots = b.time_slots.map((s, idx) => {
+          if (idx !== slotIdx) return s;
+          const updated = { ...s, [field]: val };
+          if (field === "start_time" && val) {
+            const parts = val.split(":");
+            const h = parseInt(parts[0] || "0", 10);
+            const m = parseInt(parts[1] || "0", 10);
+            const endTotalM = Math.min(1439, h * 60 + m + dur);
+            const eh = Math.floor(endTotalM / 60) % 24;
+            const em = endTotalM % 60;
+            updated.end_time = `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`;
+          }
+          return updated;
+        });
+        return { ...b, time_slots: newSlots };
+      })
+    );
+  };
+
+  const calculatePreviewOccurrences = () => {
+    const fromStr = ruleForm.generate_from_date || ruleForm.valid_from;
+    const toStr = ruleForm.generate_to_date || ruleForm.valid_until;
+    if (!fromStr || !toStr) return [];
+
+    const fromDate = new Date(fromStr);
+    const toDate = new Date(toStr);
+    if (toDate < fromDate) return [];
+
+    const selectedBranchesList = branches.filter((b) => ruleForm.branches.includes(b.id));
+    const occurrences: Array<{
+      id: string;
+      date: string;
+      dayNum: number;
+      dayName: string;
+      startTime: string;
+      endTime: string;
+      templateId: string;
+      templateName: string;
+      templateCategoryName: string;
+      templateCategoryId: string;
+      templateCapacity: number;
+      branchId: string;
+      branchName: string;
+      trainerId: string;
+      trainerName: string;
+    }> = [];
+
+    const curr = new Date(fromDate);
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    while (curr <= toDate) {
+      const dateIso = curr.toISOString().split("T")[0] || "";
+      const jsDay = curr.getDay(); // 0=Sun, 1=Mon...6=Sat
+      const isoDay = jsDay === 0 ? 7 : jsDay; // 1=Mon...7=Sun
+      const dayName = dayNames[jsDay] || "";
+
+      selectedBranchesList.forEach((branch) => {
+        templateBlocks.forEach((tb) => {
+          if (tb.class_template && tb.days_of_week.includes(isoDay)) {
+            const tpl = templates.find((t) => t.id === tb.class_template);
+            const tplName = tpl?.name || "Class";
+            const catName =
+              tpl?.category_name ||
+              categories.find((c) => c.id === tpl?.category)?.name ||
+              "General";
+            const catId = tpl?.category || "";
+            const cap = tpl?.default_capacity || 20;
+
+            tb.time_slots.forEach((slot) => {
+              if (slot.start_time && slot.end_time) {
+                const uniqueKey = `${dateIso}_${branch.id}_${tb.class_template}_${slot.start_time}`;
+                const existing = previewOccurrences.find((p) => p.id === uniqueKey);
+                const assignedTrId = existing ? existing.trainerId : tb.default_trainer || "";
+                const trObj = trainers.find(
+                  (tr: any) => (tr.id || tr.trainer_profile_id) === assignedTrId
+                );
+                const trName = trObj
+                  ? trObj.full_name || trObj.trainer_name || trObj.name || trObj.employee_name
+                  : "";
+
+                occurrences.push({
+                  id: uniqueKey,
+                  date: dateIso,
+                  dayNum: isoDay,
+                  dayName: dayName,
+                  startTime: slot.start_time,
+                  endTime: slot.end_time,
+                  templateId: tb.class_template,
+                  templateName: tplName,
+                  templateCategoryName: catName,
+                  templateCategoryId: catId,
+                  templateCapacity: Number(cap),
+                  branchId: branch.id,
+                  branchName: branch.name,
+                  trainerId: assignedTrId,
+                  trainerName: trName,
+                });
+              }
+            });
+          }
+        });
+      });
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    return occurrences;
+  };
+
+  const validateStep1 = (): boolean => {
+    if (ruleForm.branches.length === 0) {
+      setRuleError("Please select at least one branch.");
+      return false;
+    }
+    if (templateBlocks.length === 0) {
+      setRuleError("Please configure at least one class template.");
+      return false;
+    }
+    for (let i = 0; i < templateBlocks.length; i++) {
+      const tb = templateBlocks[i];
+      if (!tb || !tb.class_template) {
+        setRuleError(`Template block #${i + 1} is missing a selected class template.`);
+        return false;
+      }
+      if (tb.days_of_week.length === 0) {
+        setRuleError(`Template block #${i + 1} must have at least one day selected.`);
+        return false;
+      }
+      if (tb.time_slots.length === 0) {
+        setRuleError(`Template block #${i + 1} must have at least one time slot.`);
+        return false;
+      }
+      for (let s = 0; s < tb.time_slots.length; s++) {
+        const slot = tb.time_slots[s];
+        if (!slot || !slot.start_time || !slot.end_time) {
+          setRuleError(`Template #${i + 1}, Slot #${s + 1} is missing start or end time.`);
+          return false;
+        }
+        if (slot.end_time <= slot.start_time) {
+          setRuleError(`Template #${i + 1}, Slot #${s + 1}: End time must be strictly greater than start time.`);
+          return false;
+        }
+      }
+    }
+    setRuleError(null);
+    return true;
+  };
+
   const openNewRuleModal = () => {
     setRuleError(null);
     setEditingRule(null);
+    setRuleModalStep(1);
+    setPreviewOccurrences([]);
     const initialBranches = selectedBranchFilter
       ? [selectedBranchFilter]
       : branches.map((b) => b.id);
     const defaultBranchId = selectedBranchFilter || initialBranches[0] || "";
+
+    const activeTemplates = templates.filter(
+      (t) => (t.status || "").toUpperCase() === "ACTIVE" || (!t.status && (t as any).is_active !== false)
+    );
+    const firstActiveTemplate = activeTemplates[0]?.id || templates[0]?.id || "";
+    const activeTplObj = templates.find((t) => t.id === firstActiveTemplate);
+    const initDur = activeTplObj?.default_duration_minutes || 50;
+    const durEndM = Math.min(1439, 7 * 60 + initDur);
+    const endH = Math.floor(durEndM / 60) % 24;
+    const endM = durEndM % 60;
+    const endStr = `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
+
+    setTemplateBlocks([
+      {
+        uid: 1,
+        class_template: firstActiveTemplate,
+        days_of_week: [1, 3, 5],
+        time_slots: [
+          { id: "1", start_time: "07:00", end_time: endStr },
+          { id: "2", start_time: "18:00", end_time: "18:50" },
+        ],
+        default_trainer: "",
+      },
+    ]);
+
     setRuleForm({
-      class_template: "",
+      class_template: firstActiveTemplate,
       branch: defaultBranchId,
       branches: initialBranches,
       recurrence_type: "WEEKLY",
-      days_of_week: [],
-      start_time: "",
-      end_time: "",
-      time_slots: [{ id: "1", start_time: "", end_time: "" }],
+      days_of_week: [1, 3, 5],
+      start_time: "07:00",
+      end_time: endStr,
+      time_slots: [{ id: "1", start_time: "07:00", end_time: endStr }],
       valid_from: new Date().toISOString().split("T")[0],
       valid_until: "",
       delivery_mode: "OFFLINE",
@@ -1462,6 +1862,7 @@ export const ClassesWorkspace: React.FC = () => {
   const openEditRuleModal = (rule: ClassScheduleRule) => {
     setRuleError(null);
     setEditingRule(rule);
+    setRuleModalStep(1);
     const resolvedTemplateId = (() => {
       const raw = rule.class_template as any;
       if (typeof raw === "object" && raw !== null) return raw.id || "";
@@ -1912,25 +2313,45 @@ export const ClassesWorkspace: React.FC = () => {
       }
 
       const payload: any = {
-        class_template: data.class_template,
-        branch: selectedBranches[0] || data.branch,
         branches: selectedBranches,
-        time_slots: slotsToSubmit,
-        start_time: slotsToSubmit[0]?.start_time || data.start_time,
-        end_time: slotsToSubmit[0]?.end_time || data.end_time,
+        templates:
+          templateBlocks && templateBlocks.length > 0
+            ? templateBlocks.map((tb) => ({
+                class_template: tb.class_template,
+                days_of_week: tb.days_of_week,
+                time_slots: tb.time_slots.map((s) => ({
+                  start_time: s.start_time,
+                  end_time: s.end_time,
+                })),
+                default_trainer: tb.default_trainer || null,
+              }))
+            : undefined,
+        trainer_assignments: previewOccurrences
+          .filter((o) => o.trainerId)
+          .map((o) => ({
+            date: o.date,
+            start_time: o.startTime,
+            branch: o.branchId,
+            class_template: o.templateId,
+            trainer: o.trainerId,
+          })),
+        class_template: templateBlocks[0]?.class_template || data.class_template,
+        branch: selectedBranches[0] || data.branch,
+        time_slots: templateBlocks[0]?.time_slots || slotsToSubmit,
+        start_time:
+          templateBlocks[0]?.time_slots[0]?.start_time ||
+          slotsToSubmit[0]?.start_time ||
+          data.start_time,
+        end_time:
+          templateBlocks[0]?.time_slots[0]?.end_time ||
+          slotsToSubmit[0]?.end_time ||
+          data.end_time,
         recurrence_type: data.recurrence_type || "WEEKLY",
-        days_of_week: data.days_of_week,
+        days_of_week: templateBlocks[0]?.days_of_week || data.days_of_week,
         valid_from: data.valid_from,
         valid_until: data.valid_until || null,
-        delivery_mode: data.delivery_mode || "OFFLINE",
-        capacity_override: data.capacity_override ? Number(data.capacity_override) : null,
-        trial_capacity_override: data.trial_capacity_override
-          ? Number(data.trial_capacity_override)
-          : null,
-        waitlist_capacity_override: data.waitlist_capacity_override
-          ? Number(data.waitlist_capacity_override)
-          : null,
-        status: data.status || "ACTIVE",
+        delivery_mode: "OFFLINE",
+        status: "ACTIVE",
         generate_slots: data.auto_generate_slots !== false,
         generate_from_date: data.generate_from_date || data.valid_from,
         generate_to_date: data.generate_to_date || data.valid_until || null,
@@ -1943,7 +2364,24 @@ export const ClassesWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
       queryClient.invalidateQueries({ queryKey: ["today-class-occurrences"] });
       queryClient.invalidateQueries({ queryKey: ["classes-occurrences-kpi"] });
+      
+      const selectedBrs = ruleForm.branches.length > 0 ? ruleForm.branches : [ruleForm.branch];
+      const totalCreatedRules =
+        resp?.count ||
+        selectedBrs.length * (templateBlocks?.length || 1) * (ruleForm.time_slots?.length || 1);
+      const totalOccsGenerated = resp?.occurrences_generated || previewOccurrences.length;
+      
+      setSuccessDetails({
+        rulesCount: totalCreatedRules,
+        sessionsCount: totalOccsGenerated,
+        branchesCount: selectedBrs.length,
+        templatesCount: templateBlocks.length > 0 ? templateBlocks.length : 1,
+        trainersCount:
+          resp?.trainers_assigned || previewOccurrences.filter((p) => p.trainerId).length,
+      });
+
       setIsCreateRuleOpen(false);
+      setIsSuccessModalOpen(true);
       setEditingRule(null);
       setRuleError(null);
       if (resp?.message) {
@@ -5482,571 +5920,1224 @@ export const ClassesWorkspace: React.FC = () => {
 
       {/* CREATE / EDIT RECURRING RULE MODAL */}
       <Dialog open={isCreateRuleOpen} onOpenChange={setIsCreateRuleOpen}>
-        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span>
-                {editingRule ? "Edit Recurring Schedule Rule" : "Create Recurring Schedule Rule"}
-              </span>
-              <span className="text-[10px] px-2 py-0.5 font-normal bg-primary/10 text-primary border border-primary/20 rounded-full">
-                Branch Hours Aware
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-xs sm:text-sm">
+        <DialogContent
+          className={`w-[calc(100vw-1.5rem)] ${
+            editingRule ? "sm:max-w-xl" : "sm:max-w-5xl"
+          } max-h-[94vh] overflow-y-auto p-0 border border-border shadow-2xl rounded-2xl bg-card`}
+        >
+          {/* STICKY MODAL HEADER */}
+          <div className="px-6 py-4 border-b border-border bg-card sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                <Calendar className="size-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <DialogTitle className="text-base font-bold text-foreground">
+                    {editingRule
+                      ? "Edit Recurring Schedule Rule"
+                      : "Create Recurring Schedule Rules"}
+                  </DialogTitle>
+                  {!editingRule && (
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                      Multi-Branch & Multi-Template
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {editingRule
+                    ? "Update timings, branch operating schedule, or capacity overrides."
+                    : "Configure class templates and time slots across branches, preview sessions, and assign trainers."}
+                </p>
+              </div>
+            </div>
+
+            {/* STEPPER (Only shown when creating new rules) */}
+            {!editingRule && (
+              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/60 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setRuleModalStep(1)}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
+                    ruleModalStep === 1
+                      ? "bg-background text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground cursor-pointer"
+                  }`}
+                >
+                  <span className="size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                    1
+                  </span>
+                  <span>Configure Schedule</span>
+                </button>
+                <ChevronRight className="size-3.5 text-muted-foreground" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (validateStep1()) {
+                      setPreviewOccurrences(calculatePreviewOccurrences());
+                      setRuleModalStep(2);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
+                    ruleModalStep === 2
+                      ? "bg-background text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground cursor-pointer"
+                  }`}
+                >
+                  <span className="size-4 rounded-full bg-muted text-foreground text-[10px] font-bold flex items-center justify-center">
+                    2
+                  </span>
+                  <span>Preview & Review</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary text-primary-foreground font-bold ml-0.5">
+                    {calculatePreviewOccurrences().length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* MODAL BODY */}
+          <div className="p-6 space-y-6">
             {ruleError && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs flex items-start gap-2">
                 <AlertCircle className="size-4 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-semibold">Schedule Rule Validation Failed</p>
+                  <p className="font-semibold">Schedule Rule Validation Notice</p>
                   <p className="text-[11px] leading-relaxed">{ruleError}</p>
                 </div>
               </div>
             )}
 
-            {/* TEMPLATE & BRANCH SELECTION */}
-            <div className="space-y-3">
-              <div>
-                <Label className="mb-1 block font-medium">Class Template *</Label>
-                <select
-                  value={ruleForm.class_template}
-                  onChange={(e) => handleRuleTemplateChange(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">Select Template</option>
-                  {templates
-                    .filter(
-                      (t) =>
-                        (t.status || "").toUpperCase() === "ACTIVE" ||
-                        (!t.status && (t as any).is_active !== false) ||
-                        (editingRule && ruleForm.class_template === t.id),
-                    )
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.status === "INACTIVE" ? " (Inactive)" : ""}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Label className="font-medium text-xs">
-                      {editingRule ? "Branches (Current & Additional) *" : "Select Branches *"}
-                    </Label>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
-                      {ruleForm.branches.length} of {branches.length} Selected
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const allIds = branches.map((b) => b.id);
-                        setRuleForm((prev) => ({
-                          ...prev,
-                          branches: allIds,
-                          branch: allIds[0] || prev.branch,
-                        }));
-                      }}
-                      className="text-[11px] font-semibold text-primary hover:underline hover:text-primary/80 transition-colors cursor-pointer"
-                    >
-                      Select All
-                    </button>
-                    <span className="text-muted-foreground text-[10px]">|</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRuleForm((prev) => ({
-                          ...prev,
-                          branches: [],
-                          branch: "",
-                        }));
-                      }}
-                      className="text-[11px] font-semibold text-muted-foreground hover:underline hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl border border-border bg-muted/20 max-h-36 overflow-y-auto">
-                  {branches.map((b) => {
-                    const isSelected = ruleForm.branches.includes(b.id);
-                    return (
+            {/* ========================================================================= */}
+            {/* STEP 1: CONFIGURE SCHEDULE (OR EDITING SINGLE RULE)                       */}
+            {/* ========================================================================= */}
+            {(ruleModalStep === 1 || editingRule) && (
+              <div className="space-y-6">
+                {/* 1. SELECT TARGET STUDIO BRANCHES (AT TOP) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-bold text-xs flex items-center gap-2">
+                        <span className="size-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px]">
+                          1
+                        </span>
+                        <span>Select Target Studio Branches *</span>
+                      </Label>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Operating windows dynamically synchronized with Administration → Location.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
+                        {ruleForm.branches.length} of {branches.length} Selected
+                      </span>
                       <button
-                        key={b.id}
                         type="button"
                         onClick={() => {
-                          setRuleForm((prev) => {
-                            const newBranches = isSelected
-                              ? prev.branches.filter((id) => id !== b.id)
-                              : [...prev.branches, b.id];
-                            return {
-                              ...prev,
-                              branches: newBranches,
-                              branch: newBranches[0] || "",
-                            };
-                          });
+                          const allIds = branches.map((b) => b.id);
+                          setRuleForm((prev) => ({
+                            ...prev,
+                            branches: allIds,
+                            branch: allIds[0] || prev.branch,
+                          }));
                         }}
-                        className={`flex items-center gap-2 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-primary/10 border-primary text-foreground font-semibold shadow-2xs"
-                            : "bg-background border-border/80 text-muted-foreground hover:border-primary/50 hover:bg-muted/30"
-                        }`}
+                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer ml-1"
                       >
-                        <div
-                          className={`size-3.5 rounded flex items-center justify-center border text-[9px] font-bold ${
+                        Select All
+                      </button>
+                      <span className="text-muted-foreground text-[10px]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRuleForm((prev) => ({
+                            ...prev,
+                            branches: [],
+                            branch: "",
+                          }));
+                        }}
+                        className="text-[11px] font-semibold text-muted-foreground hover:underline cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Branch Cards Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {branches.map((b) => {
+                      const isSelected = ruleForm.branches.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            setRuleForm((prev) => {
+                              const newBranches = isSelected
+                                ? prev.branches.filter((id) => id !== b.id)
+                                : [...prev.branches, b.id];
+                              return {
+                                ...prev,
+                                branches: newBranches,
+                                branch: newBranches[0] || "",
+                              };
+                            });
+                          }}
+                          className={`p-3 rounded-xl border text-left text-xs transition-all cursor-pointer relative space-y-1.5 ${
                             isSelected
-                              ? "bg-primary border-primary text-primary-foreground"
-                              : "border-muted-foreground/40 bg-background"
+                              ? "bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30"
+                              : "bg-card border-border hover:border-primary/40 hover:bg-muted/30"
                           }`}
                         >
-                          {isSelected && "✓"}
-                        </div>
-                        <span className="truncate flex-1" title={b.name}>
-                          {b.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {(() => {
-              const selRuleTpl = templates.find((t) => t.id === ruleForm.class_template);
-              return selRuleTpl ? (
-                <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Clock className="size-3.5 text-primary" />
-                    <span className="font-semibold text-foreground">
-                      Duration:{" "}
-                      <span className="text-primary">
-                        {selRuleTpl.default_duration_minutes} mins
-                      </span>
-                    </span>
-                    <span className="text-muted-foreground text-[11px]">
-                      (Auto-fetched from {selRuleTpl.name})
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <Building2 className="size-3 text-primary" />
-                    <span className="text-muted-foreground">Capacity:</span>
-                    <strong className="text-primary font-semibold">
-                      {ruleForm.capacity_override
-                        ? `${ruleForm.capacity_override} beds (Rule Override)`
-                        : "Branch-Specific (From Template Setup)"}
-                    </strong>
-                  </div>
-                </div>
-              ) : null;
-            })()}
-
-            {/* BRANCH OPERATING SCHEDULE BADGE */}
-            {ruleForm.branch && (
-              <div className="p-2.5 bg-muted/40 rounded-lg border border-border/50 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5 text-foreground font-medium">
-                  <Clock className="size-3.5 text-primary" />
-                  <span>{getEffectiveOperatingWindow().text}</span>
-                </div>
-                {ruleBranchWorkingHours.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {ruleBranchWorkingHours.filter((w: any) => w.is_open).length} open days/wk
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* WEEKDAY SELECTOR WITH CLOSED-DAY INTELLIGENCE */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="font-medium">Select Days of Week *</Label>
-                <span className="text-[10px] text-muted-foreground">Click day to toggle</span>
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {[
-                  { num: 1, label: "Mon" },
-                  { num: 2, label: "Tue" },
-                  { num: 3, label: "Wed" },
-                  { num: 4, label: "Thu" },
-                  { num: 5, label: "Fri" },
-                  { num: 6, label: "Sat" },
-                  { num: 7, label: "Sun" },
-                ].map((d) => {
-                  const currentDays = normalizeDaysOfWeek(ruleForm.days_of_week);
-                  const isSelected = currentDays.includes(d.num);
-                  const closed = isDayClosed(d.num);
-                  const scheduleText = getDayScheduleText(d.num);
-
-                  return (
-                    <button
-                      key={d.num}
-                      type="button"
-                      disabled={closed}
-                      title={closed ? "Branch is closed on this day" : scheduleText || ""}
-                      onClick={() => {
-                        if (closed) return;
-                        const next = isSelected
-                          ? currentDays.filter((x) => x !== d.num)
-                          : [...currentDays, d.num].sort();
-                        setRuleForm({ ...ruleForm, days_of_week: next });
-                      }}
-                      className={`py-2 px-1 flex flex-col items-center justify-center rounded-lg border transition-all ${
-                        closed
-                          ? "bg-rose-500/5 text-rose-500/70 border-rose-500/20 cursor-not-allowed opacity-75"
-                          : isSelected
-                            ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold cursor-pointer"
-                            : "bg-muted/40 text-muted-foreground border-border hover:bg-muted cursor-pointer"
-                      }`}
-                    >
-                      <span className="text-xs font-semibold">{d.label}</span>
-                      <span className="text-[9px] mt-0.5 leading-none">
-                        {closed ? "Closed" : isSelected ? "Active" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Warning if a closed day somehow selected */}
-              {normalizeDaysOfWeek(ruleForm.days_of_week).some((d) => isDayClosed(d)) && (
-                <p className="text-[11px] text-rose-500 mt-1.5 flex items-center gap-1 font-medium">
-                  <AlertTriangle className="size-3 shrink-0" />
-                  Branch is closed on some selected days. Please unselect them to proceed.
-                </p>
-              )}
-            </div>
-
-            {/* TIME SLOTS SECTION (SUPPORTS MULTIPLE TIME SLOTS WITH PLUS ICON) */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Label className="font-medium text-xs">Time Slots (Branch Local) *</Label>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
-                    {ruleForm.time_slots.length} Slot{ruleForm.time_slots.length > 1 ? "s" : ""}{" "}
-                    Configured
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addTimeSlot}
-                  className="h-7 text-xs px-2.5 gap-1.5 border-primary/30 hover:bg-primary/10 text-primary font-medium"
-                  title="Add another time slot for this recurring class"
-                >
-                  <Plus className="size-3.5" />
-                  <span>Add Time Slot</span>
-                </Button>
-              </div>
-
-              <div className="space-y-2.5">
-                {ruleForm.time_slots.map((slot, index) => {
-                  const isInvalid = Boolean(
-                    slot.start_time && slot.end_time && slot.end_time <= slot.start_time,
-                  );
-                  const isDuplicate = ruleForm.time_slots.some(
-                    (s, i) =>
-                      i !== index &&
-                      s.start_time &&
-                      s.start_time === slot.start_time &&
-                      s.end_time === slot.end_time,
-                  );
-
-                  return (
-                    <div
-                      key={slot.id || index}
-                      className={`p-2.5 rounded-xl border transition-all ${
-                        isInvalid || isDuplicate
-                          ? "border-rose-400 bg-rose-500/5"
-                          : "border-border/80 bg-muted/20 hover:border-primary/40"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">
-                            Slot #{index + 1}
-                          </span>
-                          {slot.start_time && slot.end_time && !isInvalid && !isDuplicate && (
-                            <span className="text-[11px] font-semibold text-primary">
-                              {formatTime12h(slot.start_time)} – {formatTime12h(slot.end_time)}
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-foreground truncate pr-2" title={b.name}>
+                              {b.name}
                             </span>
-                          )}
-                        </div>
-                        {ruleForm.time_slots.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeTimeSlot(index)}
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-                            title={`Remove Slot #${index + 1}`}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        )}
-                      </div>
+                            <div
+                              className={`size-4 rounded flex items-center justify-center border text-[9px] font-bold ${
+                                isSelected
+                                  ? "bg-primary border-primary text-primary-foreground"
+                                  : "border-muted-foreground/40 bg-background"
+                              }`}
+                            >
+                              {isSelected && "✓"}
+                            </div>
+                          </div>
+                          {(() => {
+                            const bDetails = getBranchOperatingDetails(b.id);
+                            return (
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                <span title="Configured in Administration → Location">🕒 {bDetails.label}</span>
+                                <span className={bDetails.isConfigured ? "text-emerald-600 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded" : "text-amber-600 font-semibold bg-amber-500/10 px-1.5 py-0.2 rounded"}>
+                                  {bDetails.isConfigured ? "OPERATIONAL" : "CONFIGURED"}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                            Start Time *
-                          </Label>
-                          <BranchScheduleTimePicker
-                            value={slot.start_time}
-                            onChange={(val) => updateTimeSlot(index, "start_time", val)}
-                            minTime={getEffectiveOperatingWindow().minTime}
-                            maxTime={getEffectiveOperatingWindow().maxTime}
-                            operatingWindowText={getEffectiveOperatingWindow().text}
-                            label={`Slot #${index + 1} Start Time`}
-                            disabled={ruleForm.branches.length === 0}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                            End Time *
-                          </Label>
-                          <BranchScheduleTimePicker
-                            value={slot.end_time}
-                            onChange={(val) => updateTimeSlot(index, "end_time", val)}
-                            minTime={slot.start_time || getEffectiveOperatingWindow().minTime}
-                            maxTime={getEffectiveOperatingWindow().maxTime}
-                            operatingWindowText={getEffectiveOperatingWindow().text}
-                            label={`Slot #${index + 1} End Time`}
-                            isEndTime={true}
-                            startTime={slot.start_time}
-                            disabled={ruleForm.branches.length === 0}
-                          />
-                        </div>
-                      </div>
-
-                      {isInvalid && (
-                        <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium mt-1.5">
-                          <AlertCircle className="size-3 shrink-0" />
-                          End Time ({formatTime12h(slot.end_time)}) must be strictly later than
-                          Start Time ({formatTime12h(slot.start_time)}).
-                        </p>
-                      )}
-                      {isDuplicate && (
-                        <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium mt-1.5">
-                          <AlertCircle className="size-3 shrink-0" />
-                          Duplicate time slot! Another slot in this rule has the exact same start
-                          and end time.
-                        </p>
-                      )}
+                  {/* Combined Operating Window Banner */}
+                  <div className="p-3 bg-muted/40 rounded-xl border border-border/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-foreground font-medium">
+                      <Clock className="size-3.5 text-primary" />
+                      <span>{getCombinedOperatingWindowSummary().text}</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* VALIDITY DATES */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block font-medium">Valid From *</Label>
-                <Input
-                  type="date"
-                  value={ruleForm.valid_from}
-                  onChange={(e) => setRuleForm({ ...ruleForm, valid_from: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block font-medium">Valid Until</Label>
-                <Input
-                  type="date"
-                  value={ruleForm.valid_until}
-                  onChange={(e) => setRuleForm({ ...ruleForm, valid_until: e.target.value })}
-                  placeholder="Ongoing if empty"
-                />
-              </div>
-            </div>
-
-            {ruleForm.valid_from &&
-              ruleForm.valid_until &&
-              ruleForm.valid_until < ruleForm.valid_from && (
-                <p className="text-[11px] text-rose-500 flex items-center gap-1 font-medium">
-                  <AlertCircle className="size-3" />
-                  Valid Until date cannot be earlier than Valid From date.
-                </p>
-              )}
-
-            {/* HOLIDAY / OPERATING EXCEPTION NOTICES */}
-            {activeHolidayClosures.length > 0 && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 rounded-lg text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <CalendarX className="size-3.5 text-amber-600 dark:text-amber-400" />
-                  <span>Branch Holiday Closures in Schedule Period</span>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="text-emerald-600 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        ✓ {getCombinedOperatingWindowSummary().daysText}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <ul className="space-y-1 text-[11px] pl-5 list-disc">
-                  {activeHolidayClosures.map((h: any) => (
-                    <li key={h.id}>
-                      <span className="font-semibold">{h.exception_date}</span>:{" "}
-                      {h.reason || "Closed for Branch Exception"} (occurrences will be skipped)
-                    </li>
-                  ))}
-                </ul>
+
+                {/* 2. CONFIGURE CLASS TEMPLATES & TIME SLOTS */}
+                <div className="space-y-4 pt-2 border-t border-border/80">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-bold text-xs flex items-center gap-2">
+                        <span className="size-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px]">
+                          2
+                        </span>
+                        <span>Configure Class Templates & Time Slots</span>
+                      </Label>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Each template independently configures its own days of the week, duration, and multiple time slots.
+                      </p>
+                    </div>
+                    {!editingRule && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={addTemplateBlock}
+                        className="h-8 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs"
+                      >
+                        <Plus className="size-3.5" />
+                        <span>Add Another Template</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Template Blocks List */}
+                  <div className="space-y-4">
+                    {templateBlocks.map((block, bIdx) => {
+                      const selTpl = templates.find((t) => t.id === block.class_template);
+                      const catName =
+                        selTpl?.category_name ||
+                        categories.find((c) => c.id === selTpl?.category)?.name ||
+                        "General";
+                      const eligibleTrainers = getEligibleTrainersForCategory(
+                        selTpl?.category,
+                        catName
+                      );
+
+                      return (
+                        <div
+                          key={block.uid || bIdx}
+                          className="bg-card p-4 rounded-xl border border-border shadow-xs space-y-4 relative"
+                        >
+                          {/* Block Header */}
+                          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 uppercase">
+                                #{bIdx + 1} Class Template Setup
+                              </span>
+                              {catName && (
+                                <span className="text-[10px] font-semibold text-purple-600 bg-purple-500/10 px-2 py-0.5 rounded">
+                                  {catName}
+                                </span>
+                              )}
+                            </div>
+                            {templateBlocks.length > 1 && !editingRule && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeTemplateBlock(block.uid)}
+                                className="h-6 text-[10px] text-rose-500 hover:bg-rose-500/10 px-2 gap-1 cursor-pointer"
+                              >
+                                <Trash2 className="size-3" />
+                                <span>Remove Template</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Template Dropdown & Details */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="sm:col-span-2 space-y-1">
+                              <Label className="text-[11px] font-medium text-foreground">
+                                Class Template (Active from Class Setup) *
+                              </Label>
+                              <select
+                                value={block.class_template}
+                                onChange={(e) => {
+                                  const newTplId = e.target.value;
+                                  const tplObj = templates.find((t) => t.id === newTplId);
+                                  const dur = tplObj?.default_duration_minutes || 60;
+                                  // auto-adjust first slot end time
+                                  const updatedSlots = block.time_slots.map((s) => {
+                                    if (!s.start_time) return s;
+                                    const parts = s.start_time.split(":");
+                                    const h = parseInt(parts[0] || "0", 10);
+                                    const m = parseInt(parts[1] || "0", 10);
+                                    const endTotalM = Math.min(1439, h * 60 + m + dur);
+                                    const eh = Math.floor(endTotalM / 60) % 24;
+                                    const em = endTotalM % 60;
+                                    return {
+                                      ...s,
+                                      end_time: `${eh.toString().padStart(2, "0")}:${em.toString().padStart(2, "0")}`,
+                                    };
+                                  });
+                                  updateTemplateBlock(block.uid, {
+                                    class_template: newTplId,
+                                    time_slots: updatedSlots,
+                                  });
+                                }}
+                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                              >
+                                <option value="">Select Template</option>
+                                {templates
+                                  .filter(
+                                    (t) =>
+                                      (t.status || "").toUpperCase() === "ACTIVE" ||
+                                      (!t.status && (t as any).is_active !== false) ||
+                                      (editingRule && block.class_template === t.id)
+                                  )
+                                  .map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name} ({t.default_duration_minutes} mins |{" "}
+                                      {t.default_capacity} Capacity)
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            {/* Dynamic Duration & Capacity Badges */}
+                            <div className="flex flex-col justify-end">
+                              {selTpl ? (
+                                <div className="p-2 bg-muted/30 rounded-lg border border-border text-[11px] flex items-center justify-between gap-1">
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <Clock className="size-3 text-primary" />
+                                    <span>Duration: <strong className="text-foreground">{selTpl.default_duration_minutes}m</strong></span>
+                                  </span>
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <Users className="size-3 text-primary" />
+                                    <span>Cap: <strong className="text-foreground">{selTpl.default_capacity}</strong></span>
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-muted-foreground italic p-2 bg-muted/20 rounded-lg border border-border">
+                                  Select a template to view duration & capacity
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Days of Week Selector */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[11px] font-medium text-foreground">
+                                Select Days of Week *
+                              </Label>
+                              <span className="text-[10px] text-muted-foreground">
+                                Click day to toggle
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {[
+                                { num: 1, label: "Mon" },
+                                { num: 2, label: "Tue" },
+                                { num: 3, label: "Wed" },
+                                { num: 4, label: "Thu" },
+                                { num: 5, label: "Fri" },
+                                { num: 6, label: "Sat" },
+                                { num: 7, label: "Sun" },
+                              ].map((d) => {
+                                const isSelected = block.days_of_week.includes(d.num);
+                                return (
+                                  <button
+                                    key={d.num}
+                                    type="button"
+                                    onClick={() => {
+                                      const next = isSelected
+                                        ? block.days_of_week.filter((x) => x !== d.num)
+                                        : [...block.days_of_week, d.num].sort();
+                                      updateTemplateBlock(block.uid, { days_of_week: next });
+                                    }}
+                                    className={`py-1.5 px-1 flex flex-col items-center justify-center rounded-lg border transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "bg-slate-900 text-white dark:bg-primary dark:text-primary-foreground border-slate-900 font-semibold shadow-2xs"
+                                        : "bg-muted/40 text-muted-foreground border-border hover:bg-muted"
+                                    }`}
+                                  >
+                                    <span className="text-xs font-semibold">{d.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Time Slots Configurator */}
+                          <div className="space-y-2 pt-1">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[11px] font-medium text-foreground">
+                                Time Slots ({block.time_slots.length} configured)
+                              </Label>
+                              <button
+                                type="button"
+                                onClick={() => addSlotToBlock(block.uid)}
+                                className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus className="size-3" />
+                                <span>Add Time Slot</span>
+                              </button>
+                            </div>
+
+                            <div className="space-y-2">
+                              {block.time_slots.map((slot, sIdx) => {
+                                const isInvalid = Boolean(
+                                  slot.start_time &&
+                                    slot.end_time &&
+                                    slot.end_time <= slot.start_time
+                                );
+
+                                return (
+                                  <div
+                                    key={slot.id || sIdx}
+                                    className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                                      isInvalid
+                                        ? "border-rose-400 bg-rose-500/5"
+                                        : "border-border/80 bg-muted/20"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">
+                                        Slot #{sIdx + 1}
+                                      </span>
+                                      <input
+                                        type="time"
+                                        value={slot.start_time}
+                                        onChange={(e) =>
+                                          updateSlotInBlock(block.uid, sIdx, "start_time", e.target.value)
+                                        }
+                                        className="p-1 text-xs border border-border rounded bg-background font-medium text-foreground"
+                                      />
+                                      <span className="text-muted-foreground">to</span>
+                                      <input
+                                        type="time"
+                                        value={slot.end_time}
+                                        onChange={(e) =>
+                                          updateSlotInBlock(block.uid, sIdx, "end_time", e.target.value)
+                                        }
+                                        className="p-1 text-xs border border-border rounded bg-background font-medium text-foreground"
+                                      />
+                                      {slot.start_time && slot.end_time && !isInvalid && (
+                                        <span className="text-[11px] font-semibold text-primary ml-1">
+                                          ({formatTime12h(slot.start_time)} – {formatTime12h(slot.end_time)})
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {block.time_slots.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeSlotFromBlock(block.uid, sIdx)}
+                                        className="text-muted-foreground hover:text-rose-500 p-1 cursor-pointer"
+                                      >
+                                        <Trash2 className="size-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Category-Filtered Default Trainer Selection (Optional) */}
+                          <div className="p-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div className="space-y-0.5">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Users className="size-3.5 text-purple-600" />
+                                <span>Default Lead Trainer for {catName}</span>
+                                <span className="text-[9px] bg-purple-500/10 text-purple-600 px-1.5 py-0.2 rounded font-semibold">
+                                  Filtered for {catName}
+                                </span>
+                              </span>
+                              <p className="text-[10px] text-muted-foreground">
+                                Optional: Can also be assigned or changed individually in Step 2 (Preview).
+                              </p>
+                            </div>
+                            <select
+                              value={block.default_trainer || ""}
+                              onChange={(e) =>
+                                updateTemplateBlock(block.uid, { default_trainer: e.target.value })
+                              }
+                              className="text-xs font-medium p-1.5 rounded-lg border border-border bg-background text-foreground"
+                            >
+                              <option value="">-- No Default Trainer --</option>
+                              {eligibleTrainers.map((tr: any) => {
+                                const trId = tr.id || tr.trainer_profile_id;
+                                const trName =
+                                  tr.full_name || tr.trainer_name || tr.name || tr.employee_name;
+                                return (
+                                  <option key={trId} value={trId}>
+                                    {trName} ({tr.trainer_code || "Trainer"})
+                                    {tr.can_teach_all_specialties ? " ★ All Specialties" : ""}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. GENERATE CLASS SLOTS IMMEDIATELY SECTION */}
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="rule_auto_gen"
+                      checked={ruleForm.auto_generate_slots}
+                      onChange={(e) =>
+                        setRuleForm({ ...ruleForm, auto_generate_slots: e.target.checked })
+                      }
+                      className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
+                    />
+                    <div className="flex-1 text-xs">
+                      <label
+                        htmlFor="rule_auto_gen"
+                        className="font-bold text-foreground cursor-pointer block"
+                      >
+                        Generate Class Slots Immediately
+                      </label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Automatically calculates and generates individual class occurrences across all selected branches and configured templates for this date window.
+                      </p>
+                    </div>
+                  </div>
+
+                  {ruleForm.auto_generate_slots && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 pl-6">
+                      <div>
+                        <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                          Generate From Date *
+                        </Label>
+                        <Input
+                          type="date"
+                          value={ruleForm.generate_from_date}
+                          onChange={(e) =>
+                            setRuleForm({
+                              ...ruleForm,
+                              generate_from_date: e.target.value,
+                              valid_from: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                          Generate To Date *
+                        </Label>
+                        <Input
+                          type="date"
+                          value={ruleForm.generate_to_date}
+                          onChange={(e) =>
+                            setRuleForm({
+                              ...ruleForm,
+                              generate_to_date: e.target.value,
+                              valid_until: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* OVERRIDES & DELIVERY */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <Label className="mb-1 block font-medium">Capacity Override</Label>
-                <Input
-                  type="number"
-                  value={ruleForm.capacity_override}
-                  onChange={(e) => setRuleForm({ ...ruleForm, capacity_override: e.target.value })}
-                  placeholder="Template default"
-                />
-                <span className="text-[10px] text-muted-foreground block mt-0.5">
-                  Leave blank to use each branch's configured studio capacity
-                </span>
-              </div>
-              <div>
-                <Label className="mb-1 block font-medium">Delivery Mode</Label>
-                <select
-                  value={ruleForm.delivery_mode || "OFFLINE"}
-                  onChange={(e) =>
-                    setRuleForm({ ...ruleForm, delivery_mode: e.target.value as any })
-                  }
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {(metadata?.delivery_modes || []).map(
-                    (m: ClassesMetadataOption<DeliveryMode>) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-              <div>
-                <Label className="mb-1 block font-medium">Status</Label>
-                <select
-                  value={ruleForm.status || "ACTIVE"}
-                  onChange={(e) => setRuleForm({ ...ruleForm, status: e.target.value })}
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {(metadata?.statuses || [])
-                    .filter(
-                      (s: ClassesMetadataOption<string>) =>
-                        s.value === "ACTIVE" || s.value === "INACTIVE",
-                    )
-                    .map((s: ClassesMetadataOption<string>) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
+            {/* ========================================================================= */}
+            {/* STEP 2: MANDATORY PREVIEW & REVIEW TAB                                     */}
+            {/* ========================================================================= */}
+            {ruleModalStep === 2 && !editingRule && (
+              <div className="space-y-4">
+                {/* Notice Banner */}
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-primary" />
+                    <div>
+                      <strong className="text-foreground font-semibold">
+                        Mandatory Schedule Review (No DB Writes Yet)
+                      </strong>
+                      <p className="text-[11px] text-muted-foreground">
+                        Inspect every class session that will be generated. Assign trainers, review timings, or remove specific dates below.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    Preview Mode
+                  </span>
+                </div>
 
-            {/* AUTOMATIC SLOT GENERATION SETTINGS */}
-            {(!editingRule || ruleForm.branches.length > 1) && (
-              <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-2.5">
-                <div className="flex items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="auto_generate_slots"
-                    checked={ruleForm.auto_generate_slots}
-                    onChange={(e) =>
-                      setRuleForm({ ...ruleForm, auto_generate_slots: e.target.checked })
-                    }
-                    className="mt-0.5 rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
-                  />
-                  <div className="flex-1 text-xs">
-                    <label
-                      htmlFor="auto_generate_slots"
-                      className="font-semibold text-foreground cursor-pointer block"
-                    >
-                      Generate Class Slots Immediately
-                    </label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Automatically generates scheduled class occurrence slots across all{" "}
-                      {ruleForm.branches.length || 0} selected branch(es) for the date window below.
-                    </p>
+                {/* Summary Metrics Bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                      Total Sessions
+                    </span>
+                    <span className="text-lg font-black text-primary">
+                      {previewOccurrences.length}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground block">
+                      To create in calendar
+                    </span>
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                      Master Plan
+                    </span>
+                    <span className="text-lg font-black text-foreground">
+                      1 Master Plan
+                    </span>
+                    <span className="text-[10px] text-muted-foreground block">
+                      {ruleForm.branches.length * templateBlocks.length * (templateBlocks[0]?.time_slots.length || 1)} relational rules
+                    </span>
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                      Branches
+                    </span>
+                    <span className="text-lg font-black text-foreground">
+                      {ruleForm.branches.length}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground block">
+                      Targeted studios
+                    </span>
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-xl border border-border flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                        Layout View
+                      </span>
+                      <span className="text-xs font-bold text-foreground">
+                        {previewViewMode === "WEEK" ? "Week View" : "Table View"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewViewMode("WEEK")}
+                        className={`p-1 rounded ${
+                          previewViewMode === "WEEK"
+                            ? "bg-background shadow-xs text-primary"
+                            : "text-muted-foreground"
+                        }`}
+                        title="Week-wise Grid View"
+                      >
+                        <LayoutGrid className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewViewMode("TABLE")}
+                        className={`p-1 rounded ${
+                          previewViewMode === "TABLE"
+                            ? "bg-background shadow-xs text-primary"
+                            : "text-muted-foreground"
+                        }`}
+                        title="Table List View"
+                      >
+                        <LayoutList className="size-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {ruleForm.auto_generate_slots && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
-                    <div>
-                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                        Generate From Date
-                      </Label>
-                      <input
-                        type="date"
-                        value={ruleForm.generate_from_date}
-                        onChange={(e) =>
-                          setRuleForm({ ...ruleForm, generate_from_date: e.target.value })
-                        }
-                        className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                        Generate To Date
-                      </Label>
-                      <input
-                        type="date"
-                        value={ruleForm.generate_to_date}
-                        onChange={(e) =>
-                          setRuleForm({ ...ruleForm, generate_to_date: e.target.value })
-                        }
-                        className="w-full bg-background border border-border rounded-lg p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
+                {/* Filters Toolbar */}
+                <div className="p-3 bg-card rounded-xl border border-border flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Filter className="size-3.5 text-muted-foreground" />
+                    <select
+                      value={previewFilterBranch}
+                      onChange={(e) => setPreviewFilterBranch(e.target.value)}
+                      className="text-xs p-1.5 rounded-lg border border-border bg-background text-foreground"
+                    >
+                      <option value="ALL">All Branches</option>
+                      {branches
+                        .filter((b) => ruleForm.branches.includes(b.id))
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                    </select>
+
+                    <select
+                      value={previewFilterTemplate}
+                      onChange={(e) => setPreviewFilterTemplate(e.target.value)}
+                      className="text-xs p-1.5 rounded-lg border border-border bg-background text-foreground"
+                    >
+                      <option value="ALL">All Class Templates</option>
+                      {templateBlocks.map((tb) => {
+                        const tpl = templates.find((t) => t.id === tb.class_template);
+                        return (
+                          <option key={tb.uid} value={tb.class_template}>
+                            {tpl?.name || "Template"}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <select
+                      value={previewFilterDay}
+                      onChange={(e) => setPreviewFilterDay(e.target.value)}
+                      className="text-xs p-1.5 rounded-lg border border-border bg-background text-foreground"
+                    >
+                      <option value="ALL">All Days of Week</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                      <option value="7">Sunday</option>
+                    </select>
+
+                    <input
+                      type="text"
+                      placeholder="Search class, branch, time..."
+                      value={previewSearch}
+                      onChange={(e) => setPreviewSearch(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-border bg-background text-foreground w-40 sm:w-48"
+                    />
                   </div>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewFilterBranch("ALL");
+                      setPreviewFilterTemplate("ALL");
+                      setPreviewFilterDay("ALL");
+                      setPreviewFilterTrainer("ALL");
+                      setPreviewSearch("");
+                    }}
+                    className="text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+
+                {/* Filtered Occurrences Calculation */}
+                {(() => {
+                  const filteredList = previewOccurrences.filter((occ) => {
+                    if (previewFilterBranch !== "ALL" && occ.branchId !== previewFilterBranch)
+                      return false;
+                    if (
+                      previewFilterTemplate !== "ALL" &&
+                      occ.templateId !== previewFilterTemplate
+                    )
+                      return false;
+                    if (
+                      previewFilterDay !== "ALL" &&
+                      String(occ.dayNum) !== previewFilterDay
+                    )
+                      return false;
+                    if (
+                      previewFilterTrainer !== "ALL" &&
+                      occ.trainerId !== previewFilterTrainer
+                    )
+                      return false;
+                    if (previewSearch.trim()) {
+                      const q = previewSearch.toLowerCase();
+                      const match =
+                        occ.templateName.toLowerCase().includes(q) ||
+                        occ.branchName.toLowerCase().includes(q) ||
+                        occ.startTime.toLowerCase().includes(q) ||
+                        occ.date.toLowerCase().includes(q);
+                      if (!match) return false;
+                    }
+                    return true;
+                  });
+
+                  // WEEK-WISE VIEW
+                  if (previewViewMode === "WEEK") {
+                    const fromBase = new Date(
+                      ruleForm.generate_from_date || ruleForm.valid_from || new Date().toISOString()
+                    );
+                    const weekStartDate = new Date(fromBase);
+                    weekStartDate.setDate(weekStartDate.getDate() + previewWeekOffset * 7);
+
+                    const daysCols = [1, 2, 3, 4, 5, 6, 7].map((isoDay) => {
+                      const d = new Date(weekStartDate);
+                      const currentDay = d.getDay() === 0 ? 7 : d.getDay();
+                      const diff = isoDay - currentDay;
+                      d.setDate(d.getDate() + diff);
+                      const dIso = d.toISOString().split("T")[0] || "";
+                      const sessionsThisDay = filteredList.filter((o) => o.date === dIso);
+                      const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                      return {
+                        isoDay,
+                        label: dayLabels[isoDay - 1],
+                        dateIso: dIso,
+                        sessions: sessionsThisDay,
+                      };
+                    });
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Week Navigator */}
+                        <div className="flex items-center justify-between px-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPreviewWeekOffset((prev) => Math.max(0, prev - 1))}
+                              disabled={previewWeekOffset <= 0}
+                              className="h-7 w-7 p-0"
+                            >
+                              <ChevronLeft className="size-3.5" />
+                            </Button>
+                            <span className="font-bold text-foreground">
+                              Week {previewWeekOffset + 1}: {daysCols[0]?.dateIso} to {daysCols[6]?.dateIso}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPreviewWeekOffset((prev) => prev + 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <ChevronRight className="size-3.5" />
+                            </Button>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            Showing classes scheduled for this week (Capacity from Class Setup)
+                          </span>
+                        </div>
+
+                        {/* 7 Columns Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
+                          {daysCols.map((col) => (
+                            <div
+                              key={col.isoDay}
+                              className="bg-muted/20 rounded-xl border border-border p-2 space-y-2 min-h-[220px]"
+                            >
+                              <div className="text-center pb-1.5 border-b border-border/60">
+                                <span className="text-xs font-bold text-foreground block">
+                                  {col.label}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground block">
+                                  {col.dateIso.slice(5)}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                {col.sessions.map((s) => {
+                                  const eligible = getEligibleTrainersForCategory(
+                                    s.templateCategoryId,
+                                    s.templateCategoryName
+                                  );
+
+                                  return (
+                                    <div
+                                      key={s.id}
+                                      className="p-2 bg-card rounded-lg border border-border shadow-2xs hover:border-primary/40 transition-all space-y-1 text-xs"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-bold text-foreground text-[10px]">
+                                          {formatTime12h(s.startTime)}
+                                        </span>
+                                        <span className="text-[9px] px-1 py-0.2 rounded font-semibold bg-primary/10 text-primary">
+                                          {s.templateName.split(" ")[1] || s.templateName}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                        <span className="truncate max-w-[80px]" title={s.branchName}>
+                                          {s.branchName.replace("Sweat ", "")}
+                                        </span>
+                                        <span>{s.templateCapacity} cap</span>
+                                      </div>
+
+                                      {/* Category-Filtered Trainer Dropdown */}
+                                      <div className="pt-1 border-t border-border/40">
+                                        <select
+                                          value={s.trainerId || ""}
+                                          onChange={(e) => {
+                                            const newTrId = e.target.value;
+                                            const trObj = trainers.find(
+                                              (t: any) =>
+                                                (t.id || t.trainer_profile_id) === newTrId
+                                            );
+                                            const trName = trObj
+                                              ? trObj.full_name ||
+                                                trObj.trainer_name ||
+                                                trObj.name
+                                              : "";
+                                            setPreviewOccurrences((prev) =>
+                                              prev.map((occ) =>
+                                                occ.id === s.id
+                                                  ? { ...occ, trainerId: newTrId, trainerName: trName }
+                                                  : occ
+                                              )
+                                            );
+                                          }}
+                                          className="w-full text-[10px] font-medium p-1 rounded border border-border bg-background text-foreground"
+                                        >
+                                          <option value="">-- Trainer --</option>
+                                          {eligible.map((tr: any) => {
+                                            const tId = tr.id || tr.trainer_profile_id;
+                                            const tName =
+                                              tr.full_name ||
+                                              tr.trainer_name ||
+                                              tr.name ||
+                                              tr.employee_name;
+                                            return (
+                                              <option key={tId} value={tId}>
+                                                {tName}
+                                              </option>
+                                            );
+                                          })}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                {col.sessions.length === 0 && (
+                                  <div className="text-center py-6 text-[10px] text-muted-foreground/60 italic">
+                                    No classes
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // TABLE LIST VIEW
+                  return (
+                    <div className="rounded-xl border border-border overflow-hidden bg-card">
+                      <div className="max-h-[380px] overflow-y-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-muted/50 sticky top-0 border-b border-border text-[11px] font-semibold text-muted-foreground">
+                            <tr>
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-3">Day</th>
+                              <th className="py-2.5 px-3">Time</th>
+                              <th className="py-2.5 px-3">Class Template</th>
+                              <th className="py-2.5 px-3">Branch</th>
+                              <th className="py-2.5 px-3">Capacity</th>
+                              <th className="py-2.5 px-3">Assigned Trainer</th>
+                              <th className="py-2.5 px-3 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {filteredList.map((occ) => {
+                              const eligible = getEligibleTrainersForCategory(
+                                occ.templateCategoryId,
+                                occ.templateCategoryName
+                              );
+
+                              return (
+                                <tr key={occ.id} className="hover:bg-muted/30 transition-colors">
+                                  <td className="py-2 px-3 font-semibold text-foreground">
+                                    {occ.date}
+                                  </td>
+                                  <td className="py-2 px-3 text-muted-foreground font-medium">
+                                    {occ.dayName}
+                                  </td>
+                                  <td className="py-2 px-3 font-mono text-[11px]">
+                                    {formatTime12h(occ.startTime)} – {formatTime12h(occ.endTime)}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <span className="font-semibold text-foreground block">
+                                      {occ.templateName}
+                                    </span>
+                                    <span className="text-[10px] text-purple-600 bg-purple-500/10 px-1.5 py-0.2 rounded font-medium">
+                                      {occ.templateCategoryName}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-3 text-muted-foreground font-medium">
+                                    {occ.branchName}
+                                  </td>
+                                  <td className="py-2 px-3 font-semibold text-foreground">
+                                    {occ.templateCapacity} cap
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <select
+                                      value={occ.trainerId || ""}
+                                      onChange={(e) => {
+                                        const newTrId = e.target.value;
+                                        const trObj = trainers.find(
+                                          (t: any) =>
+                                            (t.id || t.trainer_profile_id) === newTrId
+                                        );
+                                        const trName = trObj
+                                          ? trObj.full_name ||
+                                            trObj.trainer_name ||
+                                            trObj.name
+                                          : "";
+                                        setPreviewOccurrences((prev) =>
+                                          prev.map((o) =>
+                                            o.id === occ.id
+                                              ? { ...o, trainerId: newTrId, trainerName: trName }
+                                              : o
+                                          )
+                                        );
+                                      }}
+                                      className="text-xs p-1 rounded border border-border bg-background text-foreground"
+                                    >
+                                      <option value="">-- Unassigned --</option>
+                                      {eligible.map((tr: any) => {
+                                        const tId = tr.id || tr.trainer_profile_id;
+                                        const tName =
+                                          tr.full_name ||
+                                          tr.trainer_name ||
+                                          tr.name ||
+                                          tr.employee_name;
+                                        return (
+                                          <option key={tId} value={tId}>
+                                            {tName}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPreviewOccurrences((prev) =>
+                                          prev.filter((o) => o.id !== occ.id)
+                                        );
+                                      }}
+                                      className="text-muted-foreground hover:text-rose-500 p-1 cursor-pointer"
+                                      title="Remove this date session"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                            {filteredList.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={8}
+                                  className="text-center py-8 text-xs text-muted-foreground italic"
+                                >
+                                  No class sessions match the selected filters.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsCreateRuleOpen(false)}>
-              Cancel
+          {/* STICKY MODAL FOOTER */}
+          <div className="px-6 py-3.5 border-t border-border bg-card sticky bottom-0 z-30 flex items-center justify-between gap-3">
+            <div>
+              {ruleModalStep === 2 && !editingRule ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRuleModalStep(1)}
+                  className="gap-1.5 text-xs font-semibold"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  <span>Back to Configuration</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCreateRuleOpen(false)}
+                  className="text-xs font-semibold"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+
+            <div>
+              {editingRule ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => saveRuleMutation.mutate(ruleForm)}
+                  disabled={saveRuleMutation.isPending}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold"
+                >
+                  {saveRuleMutation.isPending ? "Updating Rule..." : "Update Recurring Rule"}
+                </Button>
+              ) : ruleModalStep === 1 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    if (validateStep1()) {
+                      const occs = calculatePreviewOccurrences();
+                      setPreviewOccurrences(occs);
+                      setRuleModalStep(2);
+                    }
+                  }}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold gap-1.5 shadow-xs"
+                >
+                  <span>
+                    Next: Preview & Review Schedule ({calculatePreviewOccurrences().length} Sessions)
+                  </span>
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => saveRuleMutation.mutate(ruleForm)}
+                  disabled={saveRuleMutation.isPending || previewOccurrences.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-2 shadow-md shadow-emerald-600/20"
+                >
+                  <CheckCircle2 className="size-4" />
+                  <span>
+                    {saveRuleMutation.isPending
+                      ? "Generating Schedule..."
+                      : `Confirm & Generate All Classes (${previewOccurrences.length} Sessions)`}
+                  </span>
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* NATIVE SUCCESS CONFIRMATION MODAL */}
+      <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <DialogContent className="sm:max-w-md p-6 border border-border shadow-2xl rounded-2xl bg-card space-y-4">
+          <div className="text-center space-y-2">
+            <div className="size-14 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/20 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="size-7" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-foreground">
+              Schedule Generated Successfully!
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Your multi-branch recurring schedule rules have been saved and all calendar sessions were created.
+            </p>
+          </div>
+
+          {/* Breakdown Stats */}
+          <div className="p-4 bg-muted/30 rounded-xl border border-border grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                Total Classes
+              </span>
+              <strong className="text-base font-black text-primary">
+                {successDetails.sessionsCount} Sessions
+              </strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                Database Rules
+              </span>
+              <strong className="text-base font-black text-foreground">
+                {successDetails.rulesCount} Rules Saved
+              </strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                Studios Targeted
+              </span>
+              <strong className="font-semibold text-foreground">
+                {successDetails.branchesCount} Branches
+              </strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+                Trainers Assigned
+              </span>
+              <strong className="font-semibold text-emerald-600">
+                {successDetails.trainersCount} Assigned
+              </strong>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSuccessModalOpen(false)}
+              className="flex-1 text-xs font-semibold"
+            >
+              Close
             </Button>
             <Button
-              onClick={() => saveRuleMutation.mutate(ruleForm)}
-              disabled={
-                !ruleForm.class_template ||
-                ruleForm.branches.length === 0 ||
-                normalizeDaysOfWeek(ruleForm.days_of_week).length === 0 ||
-                ruleForm.time_slots.length === 0 ||
-                ruleForm.time_slots.some(
-                  (s) => !s.start_time || !s.end_time || s.end_time <= s.start_time,
-                ) ||
-                ruleForm.time_slots.some((s, idx) =>
-                  ruleForm.time_slots.some(
-                    (o, oi) =>
-                      oi !== idx &&
-                      s.start_time &&
-                      s.start_time === o.start_time &&
-                      s.end_time === o.end_time,
-                  ),
-                ) ||
-                Boolean(
-                  ruleForm.valid_until &&
-                  ruleForm.valid_from &&
-                  ruleForm.valid_until < ruleForm.valid_from,
-                ) ||
-                saveRuleMutation.isPending
-              }
+              type="button"
+              size="sm"
+              onClick={() => {
+                setIsSuccessModalOpen(false);
+                setActiveTab("sessions");
+              }}
+              className="flex-1 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
             >
-              {saveRuleMutation.isPending
-                ? "Validating & Saving..."
-                : editingRule
-                  ? ruleForm.branches.length > 1 || ruleForm.time_slots.length > 1
-                    ? `Update & Fan Out (${ruleForm.branches.length} branches × ${ruleForm.time_slots.length} slots)`
-                    : "Update Recurring Rule"
-                  : ruleForm.auto_generate_slots
-                    ? `Save Rule & Generate Slots (${ruleForm.branches.length} branches × ${ruleForm.time_slots.length} slots)`
-                    : `Save Recurring Rules (${ruleForm.branches.length * ruleForm.time_slots.length})`}
+              <span>View in Class Sessions Tab</span>
+              <ChevronRight className="size-3.5" />
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

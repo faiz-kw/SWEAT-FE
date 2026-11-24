@@ -28,6 +28,7 @@ export interface CallEndedData {
   is_meaningful?: boolean;
   recording_url?: string;
   lead_name?: string;
+  member_id?: string | null;
   caller_phone?: string;
   direction?: string;
   call_uuid?: string;
@@ -142,11 +143,16 @@ export function CallDispositionModal({
         duration_seconds: rawSeconds,
         direction: callEndedData.direction,
         lead_id: callEndedData.lead_id,
+        lead_name: callEndedData.lead_name,
       });
 
       if (res.whatsapp_sent) {
         toast.success(
           `Call logged and WhatsApp follow-up delivered to ${leadFirstName}! Presence reset to Available.`
+        );
+      } else if (isUnansweredOutcome && sendWhatsApp && res.whatsapp_error) {
+        toast.warning(
+          `Call disposition logged, but WhatsApp delivery failed: ${res.whatsapp_error}`
         );
       } else {
         toast.success("Call disposition logged. Softphone presence reset to Available.");

@@ -801,8 +801,8 @@ export const crmApi = {
     return res.data.slots || [];
   },
 
-  bookTrial: async (payload: BookTrialPayload): Promise<TrialBooking> => {
-    const res = await api.post<TrialBooking>('/tenant/trial-bookings/', payload);
+  bookTrial: async (payload: BookTrialPayload): Promise<TrialBooking & { whatsapp_sent?: boolean; whatsapp_error?: string | null; whatsapp_message_id?: string | null }> => {
+    const res = await api.post<TrialBooking & { whatsapp_sent?: boolean; whatsapp_error?: string | null; whatsapp_message_id?: string | null }>('/tenant/trial-bookings/', payload);
     return res.data;
   },
 
@@ -1361,6 +1361,7 @@ export const crmApi = {
     duration_seconds?: number;
     direction?: string;
     lead_id?: string | number | null;
+    lead_name?: string;
   }): Promise<{
     status?: string;
     success?: boolean;
@@ -1368,6 +1369,8 @@ export const crmApi = {
     disposition?: string;
     agent_presence?: string;
     whatsapp_sent?: boolean;
+    whatsapp_error?: string | null;
+    whatsapp_message_id?: string | null;
     lead_status?: string;
   }> => {
     const res = await api.post('/tenant/crm/telephony/disposition/', payload);
@@ -1502,18 +1505,18 @@ export const crmApi = {
   },
 
   getTelephonyAnalytics: async (params?: {
-    timeframe?: 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_30_days' | 'custom';
-    date_from?: string;
-    date_to?: string;
-    branch_id?: string;
-    rep_id?: string;
-    team_only?: boolean;
-    direction?: string;
-    status?: string;
-    disposition?: string;
-    search?: string;
-    page?: number;
-    page_size?: number;
+    timeframe?: 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_30_days' | 'custom' | 'all' | undefined;
+    date_from?: string | undefined;
+    date_to?: string | undefined;
+    branch_id?: string | undefined;
+    rep_id?: string | undefined;
+    team_only?: boolean | undefined;
+    direction?: string | undefined;
+    status?: string | undefined;
+    disposition?: string | undefined;
+    search?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<{
     timeframe: string;
     summary: {
@@ -1598,21 +1601,18 @@ export const crmApi = {
   },
 
   exportTelephonyReport: async (params?: {
-    timeframe?: string;
-    branch_id?: string;
-    rep_id?: string;
-    date_from?: string;
-    date_to?: string;
-    direction?: string;
-    status?: string;
-    disposition?: string;
-    search?: string;
+    timeframe?: string | undefined;
+    branch_id?: string | undefined;
+    rep_id?: string | undefined;
+    date_from?: string | undefined;
+    date_to?: string | undefined;
+    direction?: string | undefined;
+    status?: string | undefined;
+    disposition?: string | undefined;
+    search?: string | undefined;
+    export_type?: 'all' | 'call_logs' | 'dialer_summary' | undefined;
   }): Promise<Blob> => {
-    const res = await api.get('/tenant/crm/telephony/export/', {
-      params,
-      responseType: 'blob',
-    });
-    return res.data;
+    return api.downloadBlob('/tenant/crm/telephony/export/', { params: params as Record<string, any> });
   },
 
   // =========================================================================

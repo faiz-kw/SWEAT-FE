@@ -242,9 +242,15 @@ export function BookTrialModal({
   // Booking mutation
   const bookMutation = useMutation({
     mutationFn: (payload: BookTrialPayload) => crmApi.bookTrial(payload),
-    onSuccess: () => {
+    onSuccess: (res) => {
       invalidateCrossModuleCaches();
-      toast.success('Trial booked successfully! Class occurrence slot reserved.');
+      if (res?.whatsapp_sent) {
+        toast.success('Trial booked successfully! WhatsApp confirmation delivered.');
+      } else if (res?.whatsapp_error) {
+        toast.warning(`Trial booked successfully, but WhatsApp delivery failed: ${res.whatsapp_error}`);
+      } else {
+        toast.success('Trial booked successfully! Class occurrence slot reserved.');
+      }
       onOpenChange(false);
       setSelectedSlot(null);
       setNotes('');

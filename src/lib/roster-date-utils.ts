@@ -51,7 +51,10 @@ export function formatToDateStr(d: Date): string {
  * Parse YYYY-MM-DD into a local Date object safely without UTC timezone shift
  */
 export function parseDateStr(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
+  const parts = dateStr.split('-').map(Number);
+  const year = parts[0] ?? 2026;
+  const month = parts[1] ?? 1;
+  const day = parts[2] ?? 1;
   return new Date(year, month - 1, day, 12, 0, 0);
 }
 
@@ -76,7 +79,7 @@ export function getWeekInfo(refDate?: string | Date): WeekInfo {
   for (let i = 0; i < 7; i++) {
     const dayDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i, 12, 0, 0);
     const dateStr = formatToDateStr(dayDate);
-    const meta = DAY_NAMES[i];
+    const meta = DAY_NAMES[i] ?? { id: i + 1, name: '', fullName: '' };
 
     days.push({
       id: meta.id,
@@ -84,18 +87,20 @@ export function getWeekInfo(refDate?: string | Date): WeekInfo {
       fullName: meta.fullName,
       dateStr,
       dayOfMonth: dayDate.getDate(),
-      monthShort: MONTH_NAMES_SHORT[dayDate.getMonth()],
+      monthShort: MONTH_NAMES_SHORT[dayDate.getMonth()] ?? '',
       isToday: dateStr === todayStr,
     });
   }
 
-  const startDate = days[0].dateStr;
-  const endDate = days[6].dateStr;
+  const startDate = days[0]?.dateStr ?? '';
+  const endDate = days[6]?.dateStr ?? '';
 
   const startObj = parseDateStr(startDate);
   const endObj = parseDateStr(endDate);
 
-  const formattedRange = `${startObj.getDate()} ${MONTH_NAMES_SHORT[startObj.getMonth()]} - ${endObj.getDate()} ${MONTH_NAMES_SHORT[endObj.getMonth()]} ${endObj.getFullYear()}`;
+  const startMonth = MONTH_NAMES_SHORT[startObj.getMonth()] ?? '';
+  const endMonth = MONTH_NAMES_SHORT[endObj.getMonth()] ?? '';
+  const formattedRange = `${startObj.getDate()} ${startMonth} - ${endObj.getDate()} ${endMonth} ${endObj.getFullYear()}`;
   const isCurrentWeek = days.some((d) => d.isToday);
 
   return {
