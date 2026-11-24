@@ -44,7 +44,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         ...prev,
         [domain]: {
           ...existing,
-          test_name: existing.test_name || defaultTestName,
+          ...(defaultTestName ? { test_name: existing.test_name || defaultTestName } : {}),
           [field]: val,
         },
       };
@@ -82,6 +82,17 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Lower body</span>
+            <select
+              value={lb.status || 'NOT_ASSESSED'}
+              onChange={(e) => updateDomain('lower_body', '', 'status', e.target.value)}
+              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
+              aria-label="Result status"
+            >
+              <option value="NOT_ASSESSED">Not assessed</option>
+              <option value="VALID">Valid</option>
+              <option value="MODIFIED">Modified</option>
+              <option value="INCOMPLETE">Incomplete</option>
+            </select>
             <button
               type="button"
               onClick={() => setActiveModalDomain('lower_body')}
@@ -135,6 +146,17 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Upper body</span>
+            <select
+              value={ub.status || 'NOT_ASSESSED'}
+              onChange={(e) => updateDomain('upper_body', '', 'status', e.target.value)}
+              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
+              aria-label="Result status"
+            >
+              <option value="NOT_ASSESSED">Not assessed</option>
+              <option value="VALID">Valid</option>
+              <option value="MODIFIED">Modified</option>
+              <option value="INCOMPLETE">Incomplete</option>
+            </select>
             <button
               type="button"
               onClick={() => setActiveModalDomain('upper_body')}
@@ -189,6 +211,17 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 3: Core</span>
+            <select
+              value={core.status || 'NOT_ASSESSED'}
+              onChange={(e) => updateDomain('core', '', 'status', e.target.value)}
+              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
+              aria-label="Result status"
+            >
+              <option value="NOT_ASSESSED">Not assessed</option>
+              <option value="VALID">Valid</option>
+              <option value="MODIFIED">Modified</option>
+              <option value="INCOMPLETE">Incomplete</option>
+            </select>
             <button
               type="button"
               onClick={() => setActiveModalDomain('core')}
@@ -227,6 +260,17 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Balance</span>
+            <select
+              value={bal.status || 'NOT_ASSESSED'}
+              onChange={(e) => updateDomain('balance', '', 'status', e.target.value)}
+              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
+              aria-label="Result status"
+            >
+              <option value="NOT_ASSESSED">Not assessed</option>
+              <option value="VALID">Valid</option>
+              <option value="MODIFIED">Modified</option>
+              <option value="INCOMPLETE">Incomplete</option>
+            </select>
             <button
               type="button"
               onClick={() => setActiveModalDomain('balance')}
