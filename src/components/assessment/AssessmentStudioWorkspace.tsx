@@ -511,7 +511,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
                       <div className="p-4 bg-muted/40 rounded-2xl border border-border/60 text-center">
                         <span className="text-[11px] text-muted-foreground font-semibold uppercase">Posture Score</span>
                         <h4 className="text-2xl font-black text-primary mt-1">
-                          {activeSession.metrics?.posture_score || 85}
+                          {activeSession.metrics?.posture_score ?? '—'}
                           <span className="text-xs font-normal text-muted-foreground">/100</span>
                         </h4>
                       </div>
@@ -562,44 +562,40 @@ export const AssessmentStudioWorkspace: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Month 1, 2, 3 Transformation Progression */}
+                    {/* Baseline captures.
+                        Per the module specification, a "goal" image must be a pose-locked,
+                        identity-preserving simulation of THIS member, clearly labelled as an
+                        illustration. That pipeline is not built yet, so the roadmap shows the
+                        member's own baseline captures and the plan behind them, rather than
+                        stock photographs of other people presented as their future. */}
                     <div className="space-y-3 pt-2">
-                      <h4 className="text-sm font-bold text-foreground">Transformation Milestones</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="bg-muted/40 rounded-2xl p-4 border border-border/60 text-center space-y-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-primary">Month 1 Baseline</span>
-                          <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted">
-                            <img
-                              src={activeSession.milestones?.month_1 || activeSession.photo_front_url || 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=400&q=80'}
-                              alt="Month 1"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">Postural realignment & core neuromuscular adaptation</p>
-                        </div>
-                        <div className="bg-muted/40 rounded-2xl p-4 border border-border/60 text-center space-y-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-primary">Month 2 Progression</span>
-                          <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted">
-                            <img
-                              src={activeSession.milestones?.month_2 || activeSession.photo_front_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
-                              alt="Month 2"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">Core hypertrophy & subcutaneous fat reduction</p>
-                        </div>
-                        <div className="bg-muted/40 rounded-2xl p-4 border border-border/60 text-center space-y-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Month 3 Target</span>
-                          <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted">
-                            <img
-                              src={activeSession.milestones?.month_3 || activeSession.photo_front_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80'}
-                              alt="Month 3"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">Target silhouette & functional posture score 92+</p>
-                        </div>
+                      <h4 className="text-sm font-bold text-foreground">Baseline Captures</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {([
+                          { key: 'front', label: 'Front' },
+                          { key: 'back', label: 'Back' },
+                          { key: 'left', label: 'Left Profile' },
+                          { key: 'right', label: 'Right Profile' },
+                        ] as Array<{ key: 'front' | 'back' | 'left' | 'right'; label: string }>).map((shot) => {
+                          const src = (activeSession as any)?.photos?.[shot.key] as string | null | undefined;
+                          return (
+                            <div key={shot.key} className="bg-muted/40 rounded-2xl p-3 border border-border/60 text-center space-y-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">{shot.label}</span>
+                              <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+                                {src ? (
+                                  <img src={src} alt={`${shot.label} baseline capture`} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground px-2">Not captured</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Re-shoot these at the reassessment under the same framing, distance and clothing to make
+                        the comparison meaningful.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -1384,7 +1380,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
                     <div className="p-3.5 bg-muted/40 rounded-2xl border border-border/60 text-center">
                       <span className="text-[10px] text-muted-foreground font-semibold uppercase">Posture Score</span>
                       <h3 className="text-xl font-black text-primary mt-0.5">
-                        {activeSession.metrics?.posture_score || 85.0}
+                        {activeSession.metrics?.posture_score ?? '—'}
                         <span className="text-[10px] font-normal text-muted-foreground">/100</span>
                       </h3>
                     </div>
