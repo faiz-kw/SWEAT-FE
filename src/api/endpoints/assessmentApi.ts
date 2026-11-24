@@ -360,7 +360,7 @@ export const assessmentApi = {
 
   async approveTestProgression(
     id: string,
-    payload: { next_variation: string; criteria_met_notes?: string; review_date?: string }
+    payload: { next_variation: string; criteria_met_notes?: string | undefined; review_date?: string | undefined }
   ): Promise<TestProgressionRecord> {
     const res = await api.post<TestProgressionRecord>(`/tenant/assessment-progressions/${id}/approve/`, payload);
     return res.data;

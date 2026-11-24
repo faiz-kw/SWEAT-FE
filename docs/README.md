@@ -21,6 +21,11 @@ This directory houses the foundational system architecture, scope requirements, 
 | [`Phase_1_Layer_1_Final_Schema_Design.docx`](./phases/Phase_1_Layer_1_Final_Schema_Design.docx) | Word Document | `docs/phases/` | Canonical Phase 1 Layer 1 foundational schema design document. |
 | [`AI FITNESS-Scope.pdf`](./phases/AI%20FITNESS-Scope.pdf) | PDF | `docs/phases/` | Defines functional scope, modules, business requirements, and operational flows across tenant administration, member management, coaching, and billing. |
 
+### Analysis & Incident Reports
+| Document | Format | Path | Description |
+| :--- | :--- | :--- | :--- |
+| [`vobiz_telephony_inbound_routing_fixes.md`](./analysis/vobiz_telephony_inbound_routing_fixes.md) | Markdown | `docs/analysis/` | Vobiz inbound/outbound call handling: the 2026-11-16 missed-call incident, root causes, completed fixes (Phases 1 to 2c), and the planned Phases 3, 4, 5, F and R with release plan and open decisions. |
+
 ## Structure Overview
 
 - **Frontend (SWEAT-FE)**: TanStack Start / React 19 / Vite single-page & SSR enterprise application (`src/`).
