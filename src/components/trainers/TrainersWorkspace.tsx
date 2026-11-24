@@ -32,7 +32,7 @@ import {
   Trash2,
   CalendarDays,
   MoreHorizontal,
-  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
 import { ExcelImportWizardModal } from '@/components/common/ExcelImportWizardModal';
 import { toast } from 'sonner';
@@ -43,7 +43,10 @@ import { workforceApi } from '@/api/endpoints/workforceApi';
 import { useGlobalSearchSync } from '@/hooks/useGlobalSearchSync';
 import { approvalsApi } from '@/api/endpoints/approvalsApi';
 import { fetchUsersApi } from '@/api/endpoints/api-admin';
+import { classesApi } from '@/api/endpoints/classesApi';
 import type { TrainerProfile, AvailabilityCheckResult, EligibleTrainer } from '@/types/workforce';
+import type { ClassCategory } from '@/types/classes';
+import { StudioShiftRosterBoard } from './StudioShiftRosterBoard';
 import { TrainerScheduleModal } from './TrainerScheduleModal';
 import { TrainerLeaveApplyDialog } from './TrainerLeaveApplyDialog';
 import { TrainerLeaveApprovalsModal } from './TrainerLeaveApprovalsModal';
@@ -108,7 +111,7 @@ export function TrainersWorkspace() {
     return true;
   };
 
-  const [activeTab, setActiveTab] = React.useState<'directory' | 'classes' | 'availability'>('directory');
+  const [activeTab, setActiveTab] = React.useState<'studio-roster' | 'directory' | 'classes' | 'availability'>('studio-roster');
   const [searchQuery, setSearchQuery] = React.useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchQuery, setSearchQuery);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
@@ -116,6 +119,15 @@ export function TrainersWorkspace() {
   const [selectedTrainer, setSelectedTrainer] = React.useState<TrainerProfile | null>(null);
   const [isCheckModalOpen, setIsCheckModalOpen] = React.useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [scheduleInitialBranchId, setScheduleInitialBranchId] = React.useState<string | undefined>();
+  const [scheduleInitialWeekStart, setScheduleInitialWeekStart] = React.useState<string | undefined>();
+
+  const handleOpenTrainerSchedule = (trainer: TrainerProfile, branchId?: string, weekStart?: string) => {
+    setSelectedTrainer(trainer);
+    setScheduleInitialBranchId(branchId);
+    setScheduleInitialWeekStart(weekStart);
+    setIsScheduleModalOpen(true);
+  };
   const [isExcelImportOpen, setIsExcelImportOpen] = React.useState(false);
   const [isLeaveApplyOpen, setIsLeaveApplyOpen] = React.useState(false);
   const [isApprovalsModalOpen, setIsApprovalsModalOpen] = React.useState(false);
@@ -154,8 +166,21 @@ export function TrainersWorkspace() {
   const [editExperienceYears, setEditExperienceYears] = React.useState('3');
   const [editBio, setEditBio] = React.useState('');
   const [editScheduleBuffer, setEditScheduleBuffer] = React.useState(15);
-  const [editCanTeachAll, setEditCanTeachAll] = React.useState(true);
+  const [editSelectedCategoryIds, setEditSelectedCategoryIds] = React.useState<string[]>([]);
   const [editLoading, setEditLoading] = React.useState(false);
+
+  // Dynamic Class Categories Query - strictly active categories
+  const { data: rawCategories = [], isLoading: isLoadingCategories } = useQuery<ClassCategory[]>({
+    queryKey: ['class-categories-active'],
+    queryFn: () => classesApi.getCategories({ status: 'ACTIVE' }),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Guarantee only active categories are presented for assignment
+  const classCategories = React.useMemo(
+    () => (Array.isArray(rawCategories) ? rawCategories.filter((c) => c.status === 'ACTIVE') : []),
+    [rawCategories]
+  );
 
   // Delete Trainer Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
@@ -290,7 +315,9 @@ export function TrainersWorkspace() {
     setEditExperienceYears(String(trainer.experience_years ?? '0'));
     setEditBio(trainer.bio || '');
     setEditScheduleBuffer(trainer.minimum_schedule_buffer_minutes || 0);
-    setEditCanTeachAll(trainer.can_teach_all_specialties ?? false);
+    setEditSelectedCategoryIds(
+      trainer.category_ids || trainer.categories?.map((c) => c.id) || []
+    );
     setIsEditModalOpen(true);
   };
 
@@ -305,7 +332,7 @@ export function TrainersWorkspace() {
         experience_years: editExperienceYears ? parseFloat(editExperienceYears) : undefined,
         bio: editBio.trim(),
         minimum_schedule_buffer_minutes: editScheduleBuffer,
-        can_teach_all_specialties: editCanTeachAll,
+        category_ids: editSelectedCategoryIds,
       });
       toast.success('Trainer profile updated successfully!');
       setIsEditModalOpen(false);
@@ -394,10 +421,10 @@ export function TrainersWorkspace() {
                   size="sm"
                   onClick={() => setIsExcelImportOpen(true)}
                   className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
-                  title="Upload Trainer Roster or Directory from Excel"
+                  title="Import Trainer Roster or Directory"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Upload Excel</span>
+                  <Upload className="w-3.5 h-3.5 text-primary" />
+                  <span>Import Schedule</span>
                 </Button>
                 <Link to="/admin/rosters">
                   <Button
@@ -455,9 +482,22 @@ export function TrainersWorkspace() {
       <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+            {!isTrainer && (
+              <button
+                onClick={() => setActiveTab('studio-roster')}
+                className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'studio-roster'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Studio Shift Roster</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('directory')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === 'directory'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -535,6 +575,16 @@ export function TrainersWorkspace() {
             </div>
           )}
         </div>
+
+        {/* Studio Shift Roster View */}
+        {activeTab === 'studio-roster' && !isTrainer && (
+          <StudioShiftRosterBoard
+            trainers={trainers}
+            branches={branches}
+            classCategories={classCategories}
+            onOpenTrainerSchedule={handleOpenTrainerSchedule}
+          />
+        )}
 
         {/* Directory View */}
         {activeTab === 'directory' && (
@@ -647,7 +697,9 @@ export function TrainersWorkspace() {
                       <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-1">
                         <span className="text-xs text-muted-foreground font-medium block">Scope of Delivery</span>
                         <div className="font-semibold text-sm text-foreground">
-                          {currentTrainer.can_teach_all_specialties ? 'All Modalities & Classes' : 'Assigned Specialties'}
+                          {currentTrainer.categories && currentTrainer.categories.length > 0
+                            ? currentTrainer.categories.map((c) => c.name).join(', ')
+                            : 'None assigned'}
                         </div>
                       </div>
                     </div>
@@ -781,7 +833,7 @@ export function TrainersWorkspace() {
                         <th className="px-4 py-3.5 whitespace-nowrap">Trainer Code</th>
                         <th className="px-4 py-3.5 whitespace-nowrap">Assigned Branch</th>
                         <th className="px-4 py-3.5 whitespace-nowrap">Experience</th>
-                        <th className="px-4 py-3.5">Specialties</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Assigned Categories</th>
                         <th className="px-4 py-3.5 whitespace-nowrap">Buffer</th>
                         <th className="px-4 py-3.5 whitespace-nowrap">Status</th>
                         <th className="px-4 py-3.5 text-right whitespace-nowrap">Actions</th>
@@ -815,24 +867,21 @@ export function TrainersWorkspace() {
                             {trainer.experience_years ? `${trainer.experience_years} yrs` : '—'}
                           </td>
                           <td className="px-4 py-3.5">
-                            <div className="flex flex-wrap gap-1 max-w-sm">
-                              {trainer.can_teach_all_specialties ? (
-                                <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/20 whitespace-nowrap">
-                                  All Specialties
-                                </Badge>
-                              ) : trainer.specialties && trainer.specialties.length > 0 ? (
-                                trainer.specialties.slice(0, 3).map((spec) => (
-                                  <Badge key={spec.id} variant="secondary" className="text-[10px] whitespace-nowrap">
-                                    {spec.code} ({spec.proficiency_level.substring(0, 3)})
+                            {trainer.categories && trainer.categories.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 max-w-sm">
+                                {trainer.categories.map((cat) => (
+                                  <Badge
+                                    key={cat.id}
+                                    variant="secondary"
+                                    className="text-[10px] bg-primary/10 text-primary border-primary/25 whitespace-nowrap font-medium"
+                                  >
+                                    {cat.name}
                                   </Badge>
-                                ))
-                              ) : (
-                                <span className="text-xs text-muted-foreground">None</span>
-                              )}
-                              {trainer.specialties && trainer.specialties.length > 3 && (
-                                <span className="text-[10px] text-muted-foreground">+{trainer.specialties.length - 3}</span>
-                              )}
-                            </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">None assigned</span>
+                            )}
                           </td>
                           <td className="px-4 py-3.5 text-xs text-muted-foreground">
                             {trainer.minimum_schedule_buffer_minutes}m
@@ -985,16 +1034,14 @@ export function TrainersWorkspace() {
                       )}
 
                       <div className="flex flex-wrap gap-1 text-xs">
-                        {trainer.can_teach_all_specialties ? (
-                          <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600">
-                            All Specialties
-                          </Badge>
-                        ) : (
-                          trainer.specialties?.map((s) => (
-                            <Badge key={s.id} variant="secondary" className="text-[10px]">
-                              {s.code}
+                        {trainer.categories && trainer.categories.length > 0 ? (
+                          trainer.categories.map((c) => (
+                            <Badge key={c.id} variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                              {c.name}
                             </Badge>
                           ))
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground italic">None assigned</span>
                         )}
                       </div>
 
@@ -1545,25 +1592,33 @@ export function TrainersWorkspace() {
                 </div>
               )}
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">
-                  Specialties &amp; Capabilities
-                </Label>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {selectedTrainer.can_teach_all_specialties ? (
-                    <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 font-medium">
-                      All Fitness Specialties Permitted
-                    </Badge>
-                  ) : selectedTrainer.specialties && selectedTrainer.specialties.length > 0 ? (
-                    selectedTrainer.specialties.map((s) => (
-                      <Badge key={s.id} variant="secondary">
-                        {s.name || s.code}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic">No specific specialties mapped.</span>
+              <div className="space-y-1.5 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-primary" />
+                    <span>Assigned Class Categories</span>
+                  </Label>
+                  {selectedTrainer.categories && (
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      {selectedTrainer.categories.length} assigned
+                    </span>
                   )}
                 </div>
+                {selectedTrainer.categories && selectedTrainer.categories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {selectedTrainer.categories.map((c) => (
+                      <Badge
+                        key={c.id}
+                        variant="secondary"
+                        className="bg-primary/10 text-primary border-primary/20 text-xs font-medium"
+                      >
+                        {c.name}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">No class categories assigned.</span>
+                )}
               </div>
             </div>
           )}
@@ -1657,17 +1712,88 @@ export function TrainersWorkspace() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Capabilities</Label>
-              <label className="flex items-center gap-2 text-xs mt-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editCanTeachAll}
-                  onChange={(e) => setEditCanTeachAll(e.target.checked)}
-                  className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-                />
-                <span>Can teach all fitness specialties</span>
-              </label>
+            {/* Class Category Assignment Section */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-primary" />
+                    <span>Class Category Assignment</span>
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Select the class categories this trainer is qualified and suitable to conduct.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5">
+                  {editSelectedCategoryIds.length} / {classCategories.length} selected
+                </Badge>
+              </div>
+
+              {isLoadingCategories ? (
+                <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground border rounded-lg bg-muted/10">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span>Loading class categories...</span>
+                </div>
+              ) : classCategories.length === 0 ? (
+                <div className="p-3 text-center rounded-lg border border-dashed text-xs text-muted-foreground bg-muted/10">
+                  No class categories found. Manage categories in Operations &gt; Classes &gt; Class Setup.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-end gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setEditSelectedCategoryIds(classCategories.map((c) => c.id))}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-muted-foreground">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditSelectedCategoryIds([])}
+                      className="text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 rounded-lg border bg-muted/10">
+                    {classCategories.map((cat) => {
+                      const isSelected = editSelectedCategoryIds.includes(cat.id);
+                      return (
+                        <label
+                          key={cat.id}
+                          className={cn(
+                            "flex items-start gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-colors select-none",
+                            isSelected
+                              ? "bg-primary/5 border-primary/50 text-foreground font-medium shadow-xs"
+                              : "bg-background border-border hover:bg-muted/40 text-muted-foreground"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditSelectedCategoryIds((prev) => [...prev, cat.id]);
+                              } else {
+                                setEditSelectedCategoryIds((prev) => prev.filter((id) => id !== cat.id));
+                              }
+                            }}
+                            className="rounded border-input text-primary focus:ring-primary h-4 w-4 mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="truncate font-semibold text-foreground text-xs block">{cat.name}</span>
+                            {cat.code && (
+                              <span className="block font-mono text-[10px] text-muted-foreground">{cat.code}</span>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
@@ -1759,16 +1885,22 @@ export function TrainersWorkspace() {
       {isScheduleModalOpen && (
         <TrainerScheduleModal
           isOpen={isScheduleModalOpen}
-          onClose={() => setIsScheduleModalOpen(false)}
+          onClose={() => {
+            setIsScheduleModalOpen(false);
+            setScheduleInitialBranchId(undefined);
+            setScheduleInitialWeekStart(undefined);
+          }}
           trainer={isTrainer ? (currentTrainer || selectedTrainer) : (selectedTrainer || trainers[0] || null)}
           trainers={isTrainer && currentTrainer ? [currentTrainer] : trainers}
           onSelectTrainer={(t) => setSelectedTrainer(t)}
           branches={branches}
           initialBranchId={
-            directoryBranchId !== 'ALL'
+            scheduleInitialBranchId ||
+            (directoryBranchId !== 'ALL'
               ? directoryBranchId
-              : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id
+              : selectedTrainer?.branch_ids?.[0] || currentTrainer?.branch_ids?.[0] || branches[0]?.id)
           }
+          initialWeekStart={scheduleInitialWeekStart}
         />
       )}
 
@@ -1791,7 +1923,7 @@ export function TrainersWorkspace() {
       )}
 
       {/* Trainer Allotted Classes & Attendance Modal */}
-      {/* Universal Excel Import Wizard Modal */}
+      {/* Universal Schedule & Directory Import Wizard Modal */}
       <ExcelImportWizardModal
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}
@@ -1799,7 +1931,7 @@ export function TrainersWorkspace() {
         onImportComplete={() => {
           queryClient.invalidateQueries({ queryKey: ['trainers'] });
           refetch();
-          toast.success('Trainer data refreshed from Excel!');
+          toast.success('Trainer data refreshed successfully!');
         }}
       />
 

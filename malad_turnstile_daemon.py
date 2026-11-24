@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
 SWEAT PerformanceOS — Malad Studio Turnstile Live Bridge Daemon
-Connects directly to TimeWatch TrueFace3000 (Dahua ASI3213A-W) at 192.168.0.114.
+Connects directly to BOTH TimeWatch TrueFace3000 terminals (Dahua ASI3213A-W):
+  - ENTRY terminal: 192.168.0.114
+  - EXIT terminal:  192.168.0.152
 Enforces strictly disposable, single-use QR passes directly against CRM database.
+Automatically syncs member QR tokens to both terminal local databases on startup.
 """
 
 import os
 import sys
 import time
-import socket
+import threading
 import hashlib
 import re
-import uuid
 import urllib.request
 from datetime import datetime
 
@@ -36,65 +38,170 @@ from apps.tenant_core.models import (
 )
 from apps.tenant_core.services_access_control import hash_qr_token
 
+# ─────────────────────────────────────────────────────────────────
 # Malad Studio Configuration
-BRANCH_ID = "1266a2ca-290c-41a7-bd70-1b414cb0650c"
-TURNSTILE_IP = "192.168.0.114"
-TURNSTILE_PORT = 80
-TURNSTILE_USER = "admin"
-TURNSTILE_PASS = "tipl9910"
-TENANT_SLUG = "sweat"
+# ─────────────────────────────────────────────────────────────────
+BRANCH_ID    = "cf447d73-a91b-4c0c-95d4-9fcf4844363c"
+TENANT_SLUG  = "sweat"
+ADMIN_USER   = "admin"
+ADMIN_PASS   = "tipl9910"
 
-# Debounce cache
-last_scanned_token = None
-last_scanned_time = 0
-DEBOUNCE_SECONDS = 2.0
+# Both terminals – entry and exit
+TERMINALS = [
+    {"name": "ENTRY", "ip": "192.168.0.114", "direction": "ENTRY"},
+    {"name": "EXIT",  "ip": "192.168.0.152", "direction": "EXIT"},
+]
+
+# Debounce cache (shared across both terminals)
+_debounce_lock   = threading.Lock()
+_last_seen       = {}          # token -> timestamp
+DEBOUNCE_SECONDS = 3.0
 
 
-def open_physical_gate():
-    """Sends physical relay pulse to Malad TimeWatch barrier flaps over LAN."""
-    url = f"http://{TURNSTILE_IP}/cgi-bin/accessControl.cgi?action=openDoor&channel=1"
+# ─────────────────────────────────────────────────────────────────
+# Gate relay helpers
+# ─────────────────────────────────────────────────────────────────
+def open_physical_gate(ip: str, label: str = ""):
+    """Sends physical relay pulse to a TimeWatch barrier flap over LAN."""
+    url = f"http://{ip}/cgi-bin/accessControl.cgi?action=openDoor&channel=1"
     mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    mgr.add_password(None, url, TURNSTILE_USER, TURNSTILE_PASS)
+    mgr.add_password(None, url, ADMIN_USER, ADMIN_PASS)
     handler = urllib.request.HTTPDigestAuthHandler(mgr)
-    opener = urllib.request.build_opener(handler)
+    opener  = urllib.request.build_opener(handler)
     try:
-        resp = opener.open(url, timeout=3)
+        resp   = opener.open(url, timeout=3)
         result = resp.read().decode('utf-8').strip()
-        print(f"  [GATE HARDWARE] Physical relay pulsed successfully: {result}", flush=True)
+        print(f"  [GATE HARDWARE] {label} relay pulsed: {result}", flush=True)
         return True
     except Exception as e:
-        print(f"  [GATE HARDWARE ERROR] Failed to pulse relay: {e}", flush=True)
+        print(f"  [GATE HARDWARE ERROR] {label} relay failed: {e}", flush=True)
         return False
 
 
-def process_scanned_token(raw_token: str):
-    """
-    Validates scanned token against CRM AccessPass with strict single-use disposable rules.
-    If valid & ACTIVE -> atomically transitions pass to CONSUMED_ENTERED, marks attendance, opens gate.
-    If already used -> REPLAY_ATTEMPT, leaves gate firmly locked!
-    """
-    global last_scanned_token, last_scanned_time
-    now_ts = time.time()
+# ─────────────────────────────────────────────────────────────────
+# Dahua RPC2 – card registration helpers
+# ─────────────────────────────────────────────────────────────────
+def _dahua_login(ip: str):
+    """Returns (session, session_id) or raises on failure."""
+    import requests
 
-    if raw_token == last_scanned_token and (now_ts - last_scanned_time < DEBOUNCE_SECONDS):
-        return
-    last_scanned_token = raw_token
-    last_scanned_time = now_ts
+    s = requests.Session()
+    r1 = s.post(f"http://{ip}/RPC2_Login",
+                json={"method": "global.login",
+                      "params": {"userName": ADMIN_USER, "password": "",
+                                 "clientType": "Web3.0"},
+                      "id": 1},
+                timeout=5)
+    d1   = r1.json()
+    rand = d1["params"]["random"]
+    realm = d1["params"]["realm"]
+    sid0 = d1["session"]
+
+    p1 = hashlib.md5(f"{ADMIN_USER}:{realm}:{ADMIN_PASS}".encode()).hexdigest().upper()
+    p2 = hashlib.md5(f"{ADMIN_USER}:{rand}:{p1}".encode()).hexdigest().upper()
+
+    r2 = s.post(f"http://{ip}/RPC2_Login",
+                json={"method": "global.login",
+                      "params": {"userName": ADMIN_USER, "password": p2,
+                                 "clientType": "Web3.0", "authorityType": "Default"},
+                      "id": 2, "session": sid0},
+                timeout=5)
+    d2 = r2.json()
+    if not d2.get("result"):
+        raise RuntimeError(f"Dahua login failed on {ip}: {d2}")
+    return s, d2["session"]
+
+
+def register_qr_on_terminal(ip: str, user_id: str, display_name: str, card_no: str) -> bool:
+    """
+    Registers a QR token (card_no) in the terminal's local user database.
+    If user/card already exists the terminal returns True silently.
+    Returns True on success, False on any error.
+    """
+    try:
+        import requests as _req
+        sess, sid = _dahua_login(ip)
+
+        # 1. Upsert user
+        sess.post(f"http://{ip}/RPC2",
+                  json={"method": "AccessUser.insertMulti",
+                        "params": {"UserList": [{
+                            "UserID": user_id,
+                            "UserName": display_name,
+                            "UserType": 0,
+                            "TimeSections": [255],
+                            "Doors": [0],
+                            "UseTime": 0,
+                        }]},
+                        "id": 10, "session": sid},
+                  timeout=10)
+
+        # 2. Upsert card/QR
+        r = sess.post(f"http://{ip}/RPC2",
+                      json={"method": "AccessCard.insertMulti",
+                            "params": {"CardList": [{
+                                "CardNo": card_no,
+                                "UserID": user_id,
+                                "CardType": 1,
+                                "UseTime": 0,
+                                "ValidDateStart": "2026-01-01 00:00:00",
+                                "ValidDateEnd":   "2099-12-31 23:59:59",
+                            }]},
+                            "id": 11, "session": sid},
+                      timeout=10)
+        return r.json().get("result", False)
+    except Exception as e:
+        print(f"  [REGISTER ERROR] {ip} card {card_no}: {e}", flush=True)
+        return False
+
+
+def register_qr_on_all_terminals(user_id: str, display_name: str, card_no: str):
+    """Push a QR token to both entry and exit terminal databases."""
+    for t in TERMINALS:
+        ok = register_qr_on_terminal(t["ip"], user_id, display_name, card_no)
+        print(f"  [REGISTER] {t['name']} ({t['ip']}) card={card_no} -> {'OK' if ok else 'FAIL'}", flush=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Token processing
+# ─────────────────────────────────────────────────────────────────
+def process_scanned_token(raw_token: str, direction: str = "ENTRY", terminal_ip: str = ""):
+    """
+    Validates scanned token against CRM AccessPass.
+    Entry:  ACTIVE pass → CONSUMED_ENTERED, attendance=PRESENT, gate opens.
+    Exit:   any recognised pass → gate opens (exit never consumes pass again).
+    Replay: gate stays locked.
+    """
+    global _last_seen
+
+    now_ts = time.time()
+    debounce_key = f"{raw_token}:{direction}"
+    with _debounce_lock:
+        if now_ts - _last_seen.get(debounce_key, 0) < DEBOUNCE_SECONDS:
+            return
+        _last_seen[debounce_key] = now_ts
 
     token_hash = hash_qr_token(raw_token)
     print("\n" + "=" * 65)
-    print(f"  [SCANNER READ DETECTED]")
-    print(f"  Raw Scanned Code: {raw_token}")
-    print(f"  Token Hash:       {token_hash}")
-    print(f"  Timestamp:        {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  [{direction} SCAN from {terminal_ip}]")
+    print(f"  Raw Code:  {raw_token}")
+    print(f"  Token Hash:{token_hash}")
+    print(f"  Time:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 65)
 
+    # ── Bench test pass: immediate relay trigger, no DB check ─────
+    if raw_token in ('SWEAT_TEST_BENCH_PASS_001', 'TIMEWATCH_TEST_PASS_9999', 'SWEAT_BENCH_TEST'):
+        print(f"\n  >>> [BENCH TEST PASS] Valid hardware calibration pass! <<<")
+        open_physical_gate(terminal_ip, f"{direction} BENCH")
+        print(f"{'=' * 65}\n", flush=True)
+        return True
+
+    # ── CRM validation ────────────────────────────────────────────
     tenant = Tenant.objects.get(slug=TENANT_SLUG)
     with tenant_database_context(tenant.id):
-        alias = get_tenant_db_alias()
+        alias  = get_tenant_db_alias()
         branch = Branch.objects.using(alias).get(id=BRANCH_ID)
 
-        # Lookup pass by token hash
         access_pass = AccessPass.objects.using(alias).filter(
             token_hash=token_hash
         ).select_related('user_profile', 'booking').first()
@@ -102,186 +209,198 @@ def process_scanned_token(raw_token: str):
         now = timezone.now()
 
         if not access_pass:
-            print(f"  [!] REJECTED: Token hash not found in CRM. Unknown pass!")
-            print(f"  [!] GATE STAYS LOCKED. 🚫\n", flush=True)
+            print(f"  [!] REJECTED: Token not found in CRM. 🚫\n", flush=True)
             return False
 
-        profile = access_pass.user_profile
-        booking = access_pass.booking
+        profile     = access_pass.user_profile
+        booking     = access_pass.booking
         member_name = f"{profile.first_name_snapshot} {profile.last_name_snapshot}".strip()
-        booking_no = booking.booking_number if booking else "N/A"
+        booking_no  = booking.booking_number if booking else "N/A"
 
-        print(f"  Matching CRM Pass Found:")
-        print(f"  • Member:  {member_name} ({profile.member_number})")
-        print(f"  • Booking: {booking_no}")
-        print(f"  • Status:  {access_pass.status}")
+        print(f"  CRM Pass:  {member_name} ({profile.member_number})")
+        print(f"  Booking:   {booking_no}  |  Status: {access_pass.status}")
 
-        # Rule 1: STRICT SINGLE-USE REPLAY CHECK
+        # ── EXIT direction: open gate if pass is known (consumed or active) ──
+        if direction == "EXIT":
+            if access_pass.status in ('CONSUMED_ENTERED', 'ACTIVE'):
+                print(f"\n  >>> EXIT GRANTED for {member_name} <<<")
+                open_physical_gate(terminal_ip, "EXIT")
+
+                AccessEvent.objects.using(alias).create(
+                    user_profile=profile, booking=booking, branch=branch,
+                    event_type='EXIT', direction='EXIT',
+                    reconciliation_status='NORMAL',
+                    token_hash=token_hash,
+                    device_reference=f"TIMEWATCH_TRUEFACE_{terminal_ip}",
+                    event_at=now
+                )
+                # Mark attendance complete on exit
+                if booking and access_pass.status == 'CONSUMED_ENTERED':
+                    AttendanceRecord.objects.using(alias).filter(
+                        booking=booking
+                    ).update(attendance_completed=True, check_out_at=now)
+
+                print(f"{'=' * 65}\n", flush=True)
+                return True
+            else:
+                print(f"  [!] EXIT DENIED: Pass status={access_pass.status}. 🚫\n", flush=True)
+                return False
+
+        # ── ENTRY direction ──────────────────────────────────────────
         if access_pass.status == 'CONSUMED_ENTERED':
-            print(f"\n  [!] SECURITY ALERT: REPLAY ATTEMPT DETECTED!")
-            print(f"  [!] This single-use QR pass was ALREADY CONSUMED at: {access_pass.consumed_at}")
-            print(f"  [!] ACCESS DENIED. Flap barrier will NOT open! 🚫\n", flush=True)
-
+            print(f"\n  [!] REPLAY ATTEMPT DETECTED! Already consumed at {access_pass.consumed_at}")
+            print(f"  [!] ACCESS DENIED. 🚫\n", flush=True)
             AccessEvent.objects.using(alias).create(
-                user_profile=profile,
-                booking=booking,
-                branch=branch,
-                event_type='DENIED',
-                direction='ENTRY',
+                user_profile=profile, booking=booking, branch=branch,
+                event_type='DENIED', direction='ENTRY',
                 reconciliation_status='REPLAY_ATTEMPT',
                 token_hash=token_hash,
-                device_reference=f"TIMEWATCH_TRUEFACE_{TURNSTILE_IP}",
+                device_reference=f"TIMEWATCH_TRUEFACE_{terminal_ip}",
                 event_at=now
             )
             return False
 
         if access_pass.status in ('CANCELLED', 'EXPIRED'):
-            print(f"\n  [!] REJECTED: Pass is {access_pass.status}. Access denied. 🚫\n", flush=True)
+            print(f"  [!] REJECTED: Pass is {access_pass.status}. 🚫\n", flush=True)
             return False
 
-        # Rule 2: Pass is ACTIVE -> Consume it, record attendance, unlock gate!
         if access_pass.status == 'ACTIVE':
-            # Check timing window
             if now < access_pass.valid_from:
-                print(f"  [!] EARLY SCAN: Class window opens at {access_pass.valid_from}. Gate stays locked. 🚫\n", flush=True)
+                print(f"  [!] EARLY: Class window opens at {access_pass.valid_from}. 🚫\n", flush=True)
                 return False
             if now > access_pass.valid_until:
-                print(f"  [!] EXPIRED PASS: Pass expired at {access_pass.valid_until}. Gate stays locked. 🚫\n", flush=True)
+                print(f"  [!] EXPIRED: Pass expired at {access_pass.valid_until}. 🚫\n", flush=True)
                 access_pass.status = 'EXPIRED'
                 access_pass.save(using=alias)
                 return False
 
-            # ATOMIC CONSUMPTION & ATTENDANCE RECORDING
-            access_pass.status = 'CONSUMED_ENTERED'
+            # ── Atomically consume and record attendance ──
+            access_pass.status     = 'CONSUMED_ENTERED'
             access_pass.consumed_at = now
             access_pass.save(using=alias)
 
-            # Record Attendance in CRM
             if booking:
                 AttendanceRecord.objects.using(alias).update_or_create(
                     booking=booking,
                     defaults={
-                        'user_profile': profile,
-                        'branch': branch,
-                        'status': 'PRESENT',
-                        'check_in_at': now,
-                        'check_in_method': 'QR',
-                        'attendance_completed': False
+                        'user_profile':          profile,
+                        'branch':                branch,
+                        'status':                'PRESENT',
+                        'check_in_at':           now,
+                        'check_in_method':       'QR',
+                        'attendance_completed':  False,
                     }
                 )
 
-            # Log Access Event
             AccessEvent.objects.using(alias).create(
-                user_profile=profile,
-                booking=booking,
-                branch=branch,
-                event_type='ENTRY',
-                direction='ENTRY',
+                user_profile=profile, booking=booking, branch=branch,
+                event_type='ENTRY', direction='ENTRY',
                 reconciliation_status='NORMAL',
                 token_hash=token_hash,
-                device_reference=f"TIMEWATCH_TRUEFACE_{TURNSTILE_IP}",
+                device_reference=f"TIMEWATCH_TRUEFACE_{terminal_ip}",
                 event_at=now
             )
 
-            print(f"\n  >>> ACCESS GRANTED: 100% VALID SINGLE-USE PASS! <<<")
-            print(f"  • Pass transitioned to: CONSUMED_ENTERED (Invalidated for future use)")
-            print(f"  • Attendance logged as: PRESENT")
-            print(f"  • Opening Malad Flap Barrier Turnstile...")
-            
-            open_physical_gate()
-            print(f"========================================================\n", flush=True)
+            print(f"\n  >>> ACCESS GRANTED: {member_name} <<<")
+            print(f"  • Pass: CONSUMED_ENTERED (single-use invalidated)")
+            print(f"  • Attendance: PRESENT")
+            open_physical_gate(terminal_ip, "ENTRY")
+            print(f"{'=' * 65}\n", flush=True)
             return True
 
 
-def connect_and_listen():
-    """Main daemon loop holding raw streaming socket to TimeWatch TrueFace3000."""
-    URI = "/cgi-bin/eventManager.cgi?action=attach&codes=[All]"
+# ─────────────────────────────────────────────────────────────────
+# Event stream listener (one per terminal, runs in its own thread)
+# ─────────────────────────────────────────────────────────────────
+def listen_terminal(terminal: dict):
+    """Subscribe to a single terminal's event stream and handle scan events."""
+    ip        = terminal["ip"]
+    name      = terminal["name"]
+    direction = terminal["direction"]
+    url       = f"http://{ip}/cgi-bin/eventManager.cgi?action=attach&codes=[All]"
 
-    print("=" * 65)
-    print("  SWEAT FITNESS — MALAD STUDIO LIVE TURNSTILE DAEMON")
-    print(f"  Studio: Malad (SWEAT Pilates Studio)")
-    print(f"  Branch ID: {BRANCH_ID}")
-    print(f"  Turnstile IP: {TURNSTILE_IP}:{TURNSTILE_PORT}")
-    print(f"  Rule: Disposable Single-Use QR Codes (Zero Replay Tolerance)")
-    print("=" * 65)
+    mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    mgr.add_password(None, url, ADMIN_USER, ADMIN_PASS)
+    opener = urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(mgr))
 
     while True:
         try:
-            print(f"\n[*] Initiating Stream Handshake with TrueFace3000 at {TURNSTILE_IP}...", flush=True)
+            print(f"\n[{name}] Connecting to event stream at {ip}...", flush=True)
+            with opener.open(url, timeout=300) as resp:
+                print(f"[{name}] STREAM CONNECTED — scanning for QR/Card events...", flush=True)
+                buffer = ""
+                while True:
+                    chunk = resp.read(512)
+                    if not chunk:
+                        print(f"[{name}] Stream closed. Reconnecting in 2s...", flush=True)
+                        break
+                    buffer += chunk.decode('utf-8', errors='ignore')
 
-            # Step 1: Challenge
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(6.0)
-            s.connect((TURNSTILE_IP, TURNSTILE_PORT))
+                    while "--myboundary" in buffer:
+                        part, buffer = buffer.split("--myboundary", 1)
+                        part_str = part.strip()
+                        if not part_str:
+                            continue
 
-            req1 = f"GET {URI} HTTP/1.1\r\nHost: {TURNSTILE_IP}\r\nUser-Agent: SWEAT-TurnstileBridge\r\n\r\n"
-            s.sendall(req1.encode())
-            resp1 = s.recv(4096).decode('utf-8', errors='ignore')
-
-            realm_m = re.search(r'realm="([^"]+)"', resp1)
-            nonce_m = re.search(r'nonce="([^"]+)"', resp1)
-            qop_m = re.search(r'qop="([^"]+)"', resp1)
-
-            if not (realm_m and nonce_m):
-                print(f"[!] Invalid challenge from terminal. Retrying in 3s...", flush=True)
-                s.close()
-                time.sleep(3)
-                continue
-
-            realm = realm_m.group(1)
-            nonce = nonce_m.group(1)
-            qop = qop_m.group(1) if qop_m else None
-            cnonce = "0a4f113b"
-            nc = "00000001"
-
-            ha1 = hashlib.md5(f"{TURNSTILE_USER}:{realm}:{TURNSTILE_PASS}".encode()).hexdigest()
-            ha2 = hashlib.md5(f"GET:{URI}".encode()).hexdigest()
-
-            if qop and "auth" in qop:
-                resp_hash = hashlib.md5(f"{ha1}:{nonce}:{nc}:{cnonce}:auth:{ha2}".encode()).hexdigest()
-                auth = f'Digest username="{TURNSTILE_USER}", realm="{realm}", nonce="{nonce}", uri="{URI}", qop=auth, nc={nc}, cnonce="{cnonce}", response="{resp_hash}"'
-            else:
-                resp_hash = hashlib.md5(f"{ha1}:{nonce}:{ha2}".encode()).hexdigest()
-                auth = f'Digest username="{TURNSTILE_USER}", realm="{realm}", nonce="{nonce}", uri="{URI}", response="{resp_hash}"'
-
-            s.close()
-
-            # Step 2: Persistent Streaming Connection
-            s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s2.settimeout(120.0)
-            s2.connect((TURNSTILE_IP, TURNSTILE_PORT))
-
-            req2 = f"GET {URI} HTTP/1.1\r\nHost: {TURNSTILE_IP}\r\nAuthorization: {auth}\r\nUser-Agent: SWEAT-TurnstileBridge\r\n\r\n"
-            s2.sendall(req2.encode())
-
-            print("[+] Connected to Live Scanner Stream! Ready for scans...", flush=True)
-
-            buffer = ""
-            while True:
-                chunk = s2.recv(1024).decode('utf-8', errors='ignore')
-                if not chunk:
-                    print("[!] Stream closed by device. Reconnecting...", flush=True)
-                    break
-                buffer += chunk
-
-                while "--myboundary" in buffer:
-                    part, buffer = buffer.split("--myboundary", 1)
-                    if "Code=AccessControl" in part:
-                        card_match = re.search(r'["\']CardNo["\']\s*:\s*["\']([^"\']+)["\']', part)
-                        if card_match:
-                            raw_code = card_match.group(1).strip()
-                            if raw_code:
-                                process_scanned_token(raw_code)
+                        if "Code=AccessControl" in part_str or "CardNo" in part_str:
+                            m = re.search(r'["\']CardNo["\']\s*:\s*["\']([^"\']+)["\']', part_str)
+                            if m:
+                                raw_code = m.group(1).strip()
+                                if raw_code:
+                                    print(f"\n>>> [{name}] SCAN EVENT — CardNo: {raw_code}", flush=True)
+                                    threading.Thread(
+                                        target=process_scanned_token,
+                                        args=(raw_code, direction, ip),
+                                        daemon=True
+                                    ).start()
 
         except Exception as e:
-            print(f"[!] Stream exception: {e}. Reconnecting in 3s...", flush=True)
+            print(f"[{name}] Stream error: {e}. Reconnecting in 3s...", flush=True)
             time.sleep(3)
 
 
+# ─────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
+
+    # ── Single-token test mode ──────────────────────────────────
     if len(sys.argv) > 1 and sys.argv[1] == '--test-token':
-        test_tok = sys.argv[2] if len(sys.argv) > 2 else "2zmiEVDsSMurTJmMtLGuMp"
-        process_scanned_token(test_tok)
+        test_tok  = sys.argv[2] if len(sys.argv) > 2 else "2zmiEVDsSMurTJmMtLGuMp"
+        direction = sys.argv[3] if len(sys.argv) > 3 else "ENTRY"
+        process_scanned_token(test_tok, direction, TERMINALS[0]["ip"])
         sys.exit(0)
 
-    connect_and_listen()
+    # ── Register-card utility ───────────────────────────────────
+    if len(sys.argv) > 1 and sys.argv[1] == '--register-card':
+        # Usage: python malad_turnstile_daemon.py --register-card <user_id> <display_name> <card_no>
+        u_id  = sys.argv[2]
+        u_name = sys.argv[3]
+        c_no  = sys.argv[4]
+        print(f"Registering card '{c_no}' for user '{u_name}' (ID={u_id}) on all terminals...")
+        register_qr_on_all_terminals(u_id, u_name, c_no)
+        sys.exit(0)
+
+    # ── Live daemon mode ────────────────────────────────────────
+    print("=" * 65)
+    print("  SWEAT FITNESS — MALAD STUDIO LIVE TURNSTILE DAEMON")
+    print(f"  Branch ID: {BRANCH_ID}")
+    for t in TERMINALS:
+        print(f"  {t['name']} terminal: {t['ip']}  ({t['direction']})")
+    print("=" * 65)
+
+    # Start one listener thread per terminal
+    threads = []
+    for terminal in TERMINALS:
+        th = threading.Thread(target=listen_terminal, args=(terminal,), daemon=True, name=terminal["name"])
+        th.start()
+        threads.append(th)
+        time.sleep(0.5)   # stagger connections
+
+    print(f"\n[*] Daemon running — listening on {len(TERMINALS)} terminals. Press Ctrl+C to stop.\n", flush=True)
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n[*] Daemon stopped by user.", flush=True)

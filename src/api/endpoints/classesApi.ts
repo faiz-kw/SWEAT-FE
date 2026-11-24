@@ -453,8 +453,9 @@ export const classesApi = {
       : [];
   },
 
-  async getBranchWorkingHours(branchId: string): Promise<any[]> {
-    const res = await api.get<any>('/tenant/branch-working-hours/', { params: { branch: branchId } });
+  async getBranchWorkingHours(branchId?: string): Promise<any[]> {
+    const params = branchId ? { branch: branchId } : {};
+    const res = await api.get<any>('/tenant/branch-working-hours/', { params });
     return res.data?.results || res.data || [];
   },
 

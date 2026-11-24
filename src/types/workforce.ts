@@ -19,6 +19,14 @@ export interface SpecialtySummary {
   is_primary: boolean;
 }
 
+export interface TrainerCategorySummary {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  display_order?: number;
+}
+
 export interface TrainerProfile {
   id: string;
   employee_profile: string;
@@ -32,6 +40,9 @@ export interface TrainerProfile {
   can_teach_all_specialties: boolean;
   minimum_schedule_buffer_minutes: number;
   specialties?: SpecialtySummary[];
+  category_ids?: string[];
+  categories?: TrainerCategorySummary[];
+  category_names?: string[];
   branch_ids?: string[];
   branch_names?: string[];
   created_at: string;
@@ -74,6 +85,8 @@ export interface EmployeeWorkSchedule {
   id: string;
   employee_profile: string;
   employee_name?: string;
+  trainer_id?: string;
+  trainer_code?: string;
   branch: string;
   branch_name?: string;
   day_of_week: number; // 1=Mon ... 7=Sun
@@ -130,8 +143,18 @@ export interface EligibleTrainer {
   full_name: string;
   email: string;
   buffer_minutes: number;
+  is_available?: boolean;
+  is_on_duty?: boolean;
+  shift_pool?: 'MORNING' | 'EVENING' | null;
+  shift_start?: string;
+  shift_end?: string;
+  reason?: string;
   details: {
     code?: string;
     branch_id?: string;
+    is_on_duty?: boolean;
+    shift_pool?: string;
+    shift_start?: string;
+    shift_end?: string;
   };
 }

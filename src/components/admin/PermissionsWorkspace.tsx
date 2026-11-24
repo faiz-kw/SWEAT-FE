@@ -173,18 +173,39 @@ export const EXPLICIT_PERMISSION_LABELS: Record<string, { label: string; descrip
   },
 };
 
+export const isRootAdminRole = (role?: RoleDefRow | null): boolean => {
+  if (!role) return false;
+  const code = (role.code || "").toUpperCase().trim();
+  const name = (role.name || "").toUpperCase().trim();
+  return (
+    code === "SUPER_ADMIN" ||
+    code === "SUPERADMIN" ||
+    code === "ORG_ADMIN" ||
+    code === "ORGANIZATION_ADMIN" ||
+    code === "ADMIN" ||
+    name === "SUPER ADMIN" ||
+    name === "ORGANIZATION ADMINISTRATOR" ||
+    name === "ORGANIZATION ADMIN"
+  );
+};
+
 export const getFriendlyModuleName = (perm: PermissionDefRow): string => {
+  // 1. Dynamic database module name from backend catalog
   if (perm.module_name && !isUuid(perm.module_name)) return perm.module_name;
-  if (perm.module_code && MODULE_FRIENDLY_NAMES[perm.module_code.toLowerCase()]) {
-    return MODULE_FRIENDLY_NAMES[perm.module_code.toLowerCase()];
+
+  // 2. Module code fallback lookup
+  const modCode = (perm.module_code || "").toLowerCase();
+  if (modCode && MODULE_FRIENDLY_NAMES[modCode]) {
+    return MODULE_FRIENDLY_NAMES[modCode] || modCode.toUpperCase();
   }
   if (perm.module && !isUuid(perm.module)) {
-    return MODULE_FRIENDLY_NAMES[perm.module.toLowerCase()] || perm.module.toUpperCase();
+    const m = perm.module.toLowerCase();
+    return MODULE_FRIENDLY_NAMES[m] || perm.module.toUpperCase();
   }
   const code = perm.permission_code || perm.code || "";
   const first = code.split(".")[0]?.toLowerCase();
   if (first && MODULE_FRIENDLY_NAMES[first]) {
-    return MODULE_FRIENDLY_NAMES[first];
+    return MODULE_FRIENDLY_NAMES[first] || first.toUpperCase();
   }
   if (perm.module_code) return perm.module_code.toUpperCase();
   if (first) return first.toUpperCase();
@@ -192,19 +213,24 @@ export const getFriendlyModuleName = (perm: PermissionDefRow): string => {
 };
 
 export const getFriendlySubmoduleName = (perm: PermissionDefRow): string => {
+  // 1. Dynamic database submodule name from backend catalog
   if (perm.submodule_name && !isUuid(perm.submodule_name)) return perm.submodule_name;
-  if (perm.submodule_code && SUBMODULE_FRIENDLY_NAMES[perm.submodule_code.toLowerCase()]) {
-    return SUBMODULE_FRIENDLY_NAMES[perm.submodule_code.toLowerCase()];
+
+  // 2. Submodule code fallback lookup
+  const subCode = (perm.submodule_code || "").toLowerCase();
+  if (subCode && SUBMODULE_FRIENDLY_NAMES[subCode]) {
+    return SUBMODULE_FRIENDLY_NAMES[subCode] || subCode;
   }
   if (perm.submodule && !isUuid(perm.submodule)) {
-    return SUBMODULE_FRIENDLY_NAMES[perm.submodule.toLowerCase()] || perm.submodule;
+    const s = perm.submodule.toLowerCase();
+    return SUBMODULE_FRIENDLY_NAMES[s] || perm.submodule;
   }
   const code = perm.permission_code || perm.code || "";
   const parts = code.split(".");
   if (parts.length > 2) {
-    const sub = parts[1].toLowerCase();
-    if (SUBMODULE_FRIENDLY_NAMES[sub]) return SUBMODULE_FRIENDLY_NAMES[sub];
-    return sub.charAt(0).toUpperCase() + sub.slice(1);
+    const sub = parts[1]?.toLowerCase() || "";
+    if (sub && SUBMODULE_FRIENDLY_NAMES[sub]) return SUBMODULE_FRIENDLY_NAMES[sub] || sub;
+    return sub ? sub.charAt(0).toUpperCase() + sub.slice(1) : "";
   }
   if (perm.submodule_code) {
     return perm.submodule_code.charAt(0).toUpperCase() + perm.submodule_code.slice(1);
@@ -220,27 +246,38 @@ export const getFriendlyPermissionCode = (perm: PermissionDefRow): string => {
 };
 
 export const getFriendlyPermissionLabel = (perm: PermissionDefRow): string => {
+  // 1. Dynamic database label first!
+  if (perm.label && !isUuid(perm.label)) return perm.label;
+  if (perm.name && !isUuid(perm.name)) return perm.name;
+
+  // 2. Explicit dictionary override fallback if DB label is empty
   const code = getFriendlyPermissionCode(perm).toLowerCase();
   if (EXPLICIT_PERMISSION_LABELS[code]?.label) {
     return EXPLICIT_PERMISSION_LABELS[code].label;
   }
-  if (perm.label && !isUuid(perm.label)) return perm.label;
-  if (perm.name && !isUuid(perm.name)) return perm.name;
+
+  // 3. Fallback code formatting
   const parts = code.split(".");
   if (parts.length >= 2) {
-    const action = parts[parts.length - 1];
-    const resource = parts[parts.length - 2];
-    return `${action.charAt(0).toUpperCase() + action.slice(1)} ${resource.charAt(0).toUpperCase() + resource.slice(1)}`;
+    const action = parts[parts.length - 1] || "";
+    const resource = parts[parts.length - 2] || "";
+    if (action && resource) {
+      return `${action.charAt(0).toUpperCase() + action.slice(1)} ${resource.charAt(0).toUpperCase() + resource.slice(1)}`;
+    }
   }
   return code.charAt(0).toUpperCase() + code.slice(1);
 };
 
 export const getFriendlyPermissionDescription = (perm: PermissionDefRow): string => {
+  // 1. Dynamic database description first!
+  if (perm.description && perm.description.trim()) return perm.description;
+
+  // 2. Explicit dictionary override fallback
   const code = getFriendlyPermissionCode(perm).toLowerCase();
   if (EXPLICIT_PERMISSION_LABELS[code]?.description) {
     return EXPLICIT_PERMISSION_LABELS[code].description;
   }
-  if (perm.description) return perm.description;
+
   return `Allows staff to execute ${getFriendlyPermissionLabel(perm).toLowerCase()} actions.`;
 };
 
@@ -290,21 +327,30 @@ export function PermissionsWorkspace() {
         const grantedSet = new Set<string>();
         if (r.permissions && Array.isArray(r.permissions)) {
           r.permissions.forEach((pMapping: any) => {
-            if (pMapping.granted && pMapping.permission?.id) {
-              grantedSet.add(pMapping.permission.id);
+            const permId = pMapping.permission?.id || pMapping.permission_id;
+            if (pMapping.granted && permId) {
+              grantedSet.add(permId);
             }
           });
         }
         initialMap[r.id] = grantedSet;
       });
 
+      // Deep clone for initialMatrix
+      const initialMapCloned: Record<string, Set<string>> = {};
+      Object.keys(initialMap).forEach((k) => {
+        initialMapCloned[k] = new Set(initialMap[k]);
+      });
+
       setMatrix(initialMap);
-      setInitialMatrix(initialMap);
+      setInitialMatrix(initialMapCloned);
       setHasChanges(false);
 
       if (fetchedRoles.length > 0 && !selectedRoleId) {
-        const defaultRole = fetchedRoles.find((r) => r.code === "admin") || fetchedRoles[0];
-        setSelectedRoleId(defaultRole.id);
+        const defaultRole = fetchedRoles.find((r) => isRootAdminRole(r)) || fetchedRoles[0];
+        if (defaultRole?.id) {
+          setSelectedRoleId(defaultRole.id);
+        }
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || err?.message || "Failed to load permissions and roles matrix.");
@@ -322,13 +368,13 @@ export function PermissionsWorkspace() {
     return roles.find((r) => r.id === selectedRoleId) || roles[0];
   }, [roles, selectedRoleId]);
 
-  const isSuperAdminRole = selectedRole?.code === "super_admin";
+  const isSuperAdminRole = isRootAdminRole(selectedRole);
 
   // Toggle single permission for a role
   const togglePermission = (roleId: string, permId: string) => {
     const role = roles.find((r) => r.id === roleId);
-    if (role?.code === "super_admin") {
-      toast.info("Super Admin holds unrestricted wildcard capabilities across all platform modules.");
+    if (isRootAdminRole(role)) {
+      toast.info("Root Admin holds unrestricted wildcard capabilities across all platform modules.");
       return;
     }
 
@@ -347,7 +393,7 @@ export function PermissionsWorkspace() {
   // Toggle all permissions in a module for the current role
   const toggleModuleForRole = (modulePerms: PermissionDefRow[], roleId: string, grant: boolean) => {
     const role = roles.find((r) => r.id === roleId);
-    if (role?.code === "super_admin") return;
+    if (isRootAdminRole(role)) return;
 
     setMatrix((prev) => {
       const current = new Set(prev[roleId] || []);
@@ -365,7 +411,7 @@ export function PermissionsWorkspace() {
 
   // Grant all capabilities for selected role
   const handleGrantAll = () => {
-    if (!selectedRole || selectedRole.code === "super_admin") return;
+    if (!selectedRole || isRootAdminRole(selectedRole)) return;
     setMatrix((prev) => {
       const allPermIds = new Set(permissions.map((p) => p.id));
       return { ...prev, [selectedRole.id]: allPermIds };
@@ -376,7 +422,7 @@ export function PermissionsWorkspace() {
 
   // Revoke all capabilities for selected role
   const handleRevokeAll = () => {
-    if (!selectedRole || selectedRole.code === "super_admin") return;
+    if (!selectedRole || isRootAdminRole(selectedRole)) return;
     setMatrix((prev) => {
       return { ...prev, [selectedRole.id]: new Set() };
     });
@@ -386,19 +432,28 @@ export function PermissionsWorkspace() {
 
   // Clone permissions from another role
   const handleCopyFromRole = (sourceRoleId: string) => {
-    if (!selectedRole || selectedRole.code === "super_admin") return;
-    const sourcePerms = matrix[sourceRoleId] || new Set();
+    if (!selectedRole || isRootAdminRole(selectedRole)) return;
+    const sourceRole = roles.find((r) => r.id === sourceRoleId);
+    if (!sourceRole) return;
+
+    let sourcePerms: Set<string>;
+    if (isRootAdminRole(sourceRole)) {
+      // If copying from Super Admin or Org Admin, grant all active capabilities
+      sourcePerms = new Set(permissions.map((p) => p.id));
+    } else {
+      sourcePerms = new Set(matrix[sourceRoleId] || []);
+    }
+
     setMatrix((prev) => ({
       ...prev,
-      [selectedRole.id]: new Set(sourcePerms),
+      [selectedRole.id]: sourcePerms,
     }));
     setHasChanges(true);
-    const sourceRoleName = roles.find((r) => r.id === sourceRoleId)?.name || "role";
-    toast.success(`Copied permissions from "${sourceRoleName}" to "${selectedRole.name}".`);
+    toast.success(`Copied permissions from "${sourceRole.name}" to "${selectedRole.name}".`);
   };
 
   // Save changes to database
-    const [syncing, setSyncing] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
   const handleSyncCatalog = async () => {
     setSyncing(true);
     try {
@@ -415,21 +470,71 @@ export function PermissionsWorkspace() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const promises = roles.map((role) => {
-        if (role.code === "super_admin") return Promise.resolve();
+      // Find roles that actually changed
+      const rolesToUpdate = roles.filter((role) => {
+        if (isRootAdminRole(role)) return false;
+        const initial = initialMatrix[role.id] || new Set();
+        const current = matrix[role.id] || new Set();
+        if (initial.size !== current.size) return true;
+        for (const id of current) {
+          if (!initial.has(id)) return true;
+        }
+        return false;
+      });
+
+      if (rolesToUpdate.length === 0) {
+        toast.info("No permission modifications detected.");
+        setHasChanges(false);
+        return;
+      }
+
+      const promises = rolesToUpdate.map((role) => {
         const grantedPerms = matrix[role.id] || new Set();
         const payload = permissions.map((p) => ({
           permission_id: p.id,
           granted: grantedPerms.has(p.id),
         }));
-        return updateRolePermissionsApi(role.id, payload);
+
+        // Compute module access for this role
+        const activeModules = new Set<string>();
+        permissions.forEach((p) => {
+          if (grantedPerms.has(p.id)) {
+            const mCode = p.module_code || (p.permission_code || "").split(".")[0];
+            if (mCode) activeModules.add(mCode.toLowerCase());
+          }
+        });
+
+        const allModuleCodes = Array.from(
+          new Set(
+            permissions
+              .map((p) => p.module_code || (p.permission_code || "").split(".")[0])
+              .filter((x): x is string => Boolean(x))
+          )
+        );
+
+        const module_access = allModuleCodes.map((mCode) => ({
+          module_code: mCode.toLowerCase(),
+          can_access: activeModules.has(mCode.toLowerCase()),
+        }));
+
+        return updateRolePermissionsApi(role.id, payload, { module_access });
       });
 
       await Promise.all(promises);
       await refreshUserProfile();
       await queryClient.invalidateQueries();
-      toast.success("Permission rules saved to tenant database successfully.");
-      setInitialMatrix(matrix);
+      toast.success(
+        `Permission rules saved for ${rolesToUpdate.length} ${
+          rolesToUpdate.length === 1 ? "role" : "roles"
+        } successfully.`
+      );
+
+      // Deep clone matrix to initialMatrix
+      const clonedMatrix: Record<string, Set<string>> = {};
+      Object.keys(matrix).forEach((k) => {
+        clonedMatrix[k] = new Set(matrix[k]);
+      });
+      setInitialMatrix(clonedMatrix);
       setHasChanges(false);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || err?.message || "Failed to save permission changes.");
@@ -497,7 +602,7 @@ export function PermissionsWorkspace() {
         actions={
           <div className="flex items-center gap-2">
             {/* View Switcher: Role Configurator vs Comparison Matrix */}
-            <div className="hidden sm:flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
+            <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
               <Button
                 variant={viewMode === "focused" ? "secondary" : "ghost"}
                 size="sm"
@@ -507,7 +612,8 @@ export function PermissionsWorkspace() {
                 }`}
               >
                 <SlidersHorizontal className="size-3.5" />
-                Role Editor
+                <span className="hidden sm:inline">Role Editor</span>
+                <span className="sm:hidden">Editor</span>
               </Button>
               <Button
                 variant={viewMode === "matrix" ? "secondary" : "ghost"}
@@ -518,7 +624,8 @@ export function PermissionsWorkspace() {
                 }`}
               >
                 <TableProperties className="size-3.5" />
-                Comparison Matrix
+                <span className="hidden sm:inline">Comparison Matrix</span>
+                <span className="sm:hidden">Matrix</span>
               </Button>
             </div>
 
@@ -600,7 +707,7 @@ export function PermissionsWorkspace() {
               <div className="flex flex-col gap-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
                 {filteredRoles.map((role) => {
                   const isSelected = selectedRole?.id === role.id;
-                  const isSuper = role.code === "super_admin";
+                  const isSuper = isRootAdminRole(role);
                   const grantedCount = isSuper ? permissions.length : (matrix[role.id]?.size || 0);
 
                   return (
@@ -675,7 +782,7 @@ export function PermissionsWorkspace() {
                   <div className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 rounded-lg border border-border/80 shrink-0">
                     <CheckCircle2 className="size-4 text-emerald-500" />
                     <span className="text-xs font-bold text-foreground">
-                      {isSuperAdminRole ? permissions.length : (matrix[selectedRole?.id]?.size || 0)} of {permissions.length} Capabilities Allowed
+                      {isSuperAdminRole ? permissions.length : (matrix[selectedRoleId]?.size || 0)} of {permissions.length} Capabilities Allowed
                     </span>
                   </div>
                 </div>
@@ -713,7 +820,7 @@ export function PermissionsWorkspace() {
                         </SelectTrigger>
                         <SelectContent className="text-xs">
                           {filteredRoles
-                            .filter((r) => r.id !== selectedRole?.id)
+                            .filter((r) => r.id !== selectedRoleId)
                             .map((r) => (
                               <SelectItem key={r.id} value={r.id}>
                                 Copy: {r.name}
@@ -762,7 +869,7 @@ export function PermissionsWorkspace() {
                 {Object.entries(groupedPermissions).map(([moduleName, perms]) => {
                   const allGranted =
                     !isSuperAdminRole &&
-                    perms.every((p) => matrix[selectedRole?.id]?.has(p.id));
+                    perms.every((p) => matrix[selectedRoleId]?.has(p.id));
 
                   return (
                     <div
@@ -785,7 +892,7 @@ export function PermissionsWorkspace() {
                             <button
                               type="button"
                               onClick={() =>
-                                toggleModuleForRole(perms, selectedRole.id, !allGranted)
+                                toggleModuleForRole(perms, selectedRoleId, !allGranted)
                               }
                               className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                             >
@@ -799,13 +906,13 @@ export function PermissionsWorkspace() {
                       <div className="divide-y divide-border/60">
                         {perms.map((perm) => {
                           const isGranted =
-                            isSuperAdminRole || (matrix[selectedRole?.id]?.has(perm.id) ?? false);
+                            isSuperAdminRole || (matrix[selectedRoleId]?.has(perm.id) ?? false);
 
                           return (
                             <div
                               key={perm.id}
                               onClick={() => {
-                                if (!isSuperAdminRole) togglePermission(selectedRole.id, perm.id);
+                                if (!isSuperAdminRole) togglePermission(selectedRoleId, perm.id);
                               }}
                               className={`p-3 sm:px-4 flex items-center justify-between gap-4 transition-colors cursor-pointer ${
                                 isGranted ? "bg-emerald-500/[0.03]" : "hover:bg-muted/30"
@@ -947,7 +1054,7 @@ export function PermissionsWorkspace() {
                             </td>
 
                             {filteredRoles.map((role) => {
-                              const isSuper = role.code === "super_admin";
+                              const isSuper = isRootAdminRole(role);
                               const isGranted = isSuper || (matrix[role.id]?.has(perm.id) ?? false);
 
                               return (

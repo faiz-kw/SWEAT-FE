@@ -98,10 +98,34 @@ export function TelephonyManager() {
         return;
       }
 
+      let resolvedLeadId = lastEndedCall.leadId || activePopup?.lead_id;
+      let resolvedLeadName = lastEndedCall.leadName || activePopup?.lead_name || lastEndedCall.displayName;
+
+      if (!resolvedLeadId && realPhone) {
+        const phoneDigits = realPhone.replace(/\D/g, "").slice(-10);
+        if (phoneDigits.length === 10) {
+          const cachedQueries = queryClient.getQueriesData<any>({ queryKey: ["leads"] });
+          for (const [_, cacheData] of cachedQueries) {
+            const list = Array.isArray(cacheData) ? cacheData : (cacheData?.data || cacheData?.leads || []);
+            if (Array.isArray(list)) {
+              const match = list.find((item: any) => {
+                const itemPhone = String(item.phone_normalized || item.phone || item.phone_raw || "").replace(/\D/g, "");
+                return itemPhone.endsWith(phoneDigits);
+              });
+              if (match) {
+                resolvedLeadId = match.id;
+                resolvedLeadName = `${match.first_name || ""} ${match.last_name || ""}`.trim() || resolvedLeadName;
+                break;
+              }
+            }
+          }
+        }
+      }
+
       setCallEndedData({
         session_id: sessId,
-        lead_id: lastEndedCall.leadId || activePopup?.lead_id,
-        lead_name: lastEndedCall.leadName || activePopup?.lead_name || lastEndedCall.displayName,
+        lead_id: resolvedLeadId,
+        lead_name: resolvedLeadName,
         member_id: lastEndedCall.memberId || activePopup?.member_id,
         caller_phone: realPhone,
         direction: lastEndedCall.direction,
@@ -278,7 +302,33 @@ export function TelephonyManager() {
             }
 
             setActiveCallPopup(null); // Dismiss incoming alert
-            setCallEndedData(data);
+            let sseLeadId = data.lead_id;
+            let sseLeadName = data.lead_name;
+            if (!sseLeadId && data.caller_phone) {
+              const phoneDigits = String(data.caller_phone).replace(/\D/g, "").slice(-10);
+              if (phoneDigits.length === 10) {
+                const cachedQueries = queryClient.getQueriesData<any>({ queryKey: ["leads"] });
+                for (const [_, cacheData] of cachedQueries) {
+                  const list = Array.isArray(cacheData) ? cacheData : (cacheData?.data || cacheData?.leads || []);
+                  if (Array.isArray(list)) {
+                    const match = list.find((item: any) => {
+                      const itemPhone = String(item.phone_normalized || item.phone || item.phone_raw || "").replace(/\D/g, "");
+                      return itemPhone.endsWith(phoneDigits);
+                    });
+                    if (match) {
+                      sseLeadId = match.id;
+                      sseLeadName = `${match.first_name || ""} ${match.last_name || ""}`.trim() || sseLeadName;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            setCallEndedData({
+              ...data,
+              lead_id: sseLeadId,
+              lead_name: sseLeadName,
+            });
             setIsDispositionOpen(true);
             queryClient.invalidateQueries({ queryKey: ["telephony-presence"] });
           } catch (parseErr) {

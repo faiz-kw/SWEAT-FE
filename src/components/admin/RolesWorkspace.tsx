@@ -166,7 +166,10 @@ export function RolesWorkspace() {
         const templateRole = roles.find((r) => r.id === newRoleCopyFrom);
         if (templateRole?.permissions) {
           const grantedIds = new Set(
-            templateRole.permissions.filter((p) => p.granted).map((p) => p.permission.id)
+            templateRole.permissions
+              .filter((p) => p.granted)
+              .map((p) => p.permission?.id || p.permission_id)
+              .filter((id): id is string => Boolean(id))
           );
           initialPerms = permissions.map((p) => ({
             permission_id: p.id,
@@ -175,13 +178,19 @@ export function RolesWorkspace() {
         }
       }
 
-      await createRoleApi({
+      const createPayload: Parameters<typeof createRoleApi>[0] = {
         name: newRoleName.trim(),
-        code: newRoleCode.trim() || undefined,
         description: newRoleDescription.trim(),
         scope: newRoleScope,
-        permissions: initialPerms.length > 0 ? initialPerms : undefined,
-      });
+      };
+      if (newRoleCode.trim()) {
+        createPayload.code = newRoleCode.trim();
+      }
+      if (initialPerms.length > 0) {
+        createPayload.permissions = initialPerms;
+      }
+
+      await createRoleApi(createPayload);
 
       toast.success(`Role "${newRoleName}" provisioned successfully in tenant database.`);
       setCreateModalOpen(false);
@@ -242,8 +251,9 @@ export function RolesWorkspace() {
     const granted = new Set<string>();
     if (role.permissions && Array.isArray(role.permissions)) {
       role.permissions.forEach((p: any) => {
-        if (p.granted && p.permission?.id) {
-          granted.add(p.permission.id);
+        const permId = p.permission?.id || p.permission_id || (typeof p === "string" ? p : undefined);
+        if (p.granted && permId) {
+          granted.add(permId);
         }
       });
     }
@@ -261,7 +271,29 @@ export function RolesWorkspace() {
         granted: selectedPermIds.has(p.id),
       }));
 
-      await updateRolePermissionsApi(activeRoleForPerms.id, payload);
+      // Compute module access for this role
+      const activeModules = new Set<string>();
+      permissions.forEach((p) => {
+        if (selectedPermIds.has(p.id)) {
+          const mCode = p.module_code || (p.permission_code || "").split(".")[0];
+          if (mCode) activeModules.add(mCode.toLowerCase());
+        }
+      });
+
+      const allModuleCodes = Array.from(
+        new Set(
+          permissions
+            .map((p) => p.module_code || (p.permission_code || "").split(".")[0])
+            .filter((x): x is string => Boolean(x))
+        )
+      );
+
+      const module_access = allModuleCodes.map((mCode) => ({
+        module_code: mCode.toLowerCase(),
+        can_access: activeModules.has(mCode.toLowerCase()),
+      }));
+
+      await updateRolePermissionsApi(activeRoleForPerms.id, payload, { module_access });
       toast.success(`Permissions saved for role "${activeRoleForPerms.name}".`);
       setPermModalOpen(false);
       loadData();
@@ -586,7 +618,7 @@ export function RolesWorkspace() {
                     <div className="mt-3 flex items-center gap-3 text-xs">
                       <span className="flex items-center gap-1 font-semibold text-foreground">
                         <Users className="size-3.5 text-muted-foreground" />
-                        {role.users_count ?? 0} {
+                        {role.users_count ?? 0} active {
                           (role.code || "").toUpperCase() === "MEMBER" || (role.name || "").toLowerCase().includes("member")
                             ? (role.users_count === 1 ? "member" : "members")
                             : (role.users_count === 1 ? "staff" : "staff")

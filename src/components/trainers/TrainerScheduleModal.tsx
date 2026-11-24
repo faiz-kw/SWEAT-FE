@@ -76,11 +76,11 @@ interface TrainerScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   trainer: TrainerProfile | null;
-  trainers?: TrainerProfile[];
-  onSelectTrainer?: (trainer: TrainerProfile) => void;
+  trainers?: TrainerProfile[] | undefined;
+  onSelectTrainer?: ((trainer: TrainerProfile) => void) | undefined;
   branches: Array<{ id: string; name: string; city?: string }>;
-  initialBranchId?: string;
-  initialWeekStart?: string;
+  initialBranchId?: string | undefined;
+  initialWeekStart?: string | undefined;
 }
 
 export function TrainerScheduleModal({
@@ -644,35 +644,82 @@ export function TrainerScheduleModal({
               </div>
 
               {/* Quick Apply Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span className="text-xs font-medium">Quick Apply Hours:</span>
-                  <Input
-                    type="time"
-                    value={quickStartTime}
-                    onChange={(e) => setQuickStartTime(e.target.value)}
-                    className="h-8 w-24 text-xs"
-                  />
-                  <span className="text-xs text-muted-foreground">to</span>
-                  <Input
-                    type="time"
-                    value={quickEndTime}
-                    onChange={(e) => setQuickEndTime(e.target.value)}
-                    className="h-8 w-24 text-xs"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleQuickApplyTimes}
-                    className="h-8 text-xs gap-1"
-                  >
-                    Apply to Working Days
-                  </Button>
+              <div className="flex flex-col gap-2.5 p-3 rounded-lg border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-semibold">Custom Hours:</span>
+                    <Input
+                      type="time"
+                      value={quickStartTime}
+                      onChange={(e) => setQuickStartTime(e.target.value)}
+                      className="h-8 w-24 text-xs font-mono"
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="time"
+                      value={quickEndTime}
+                      onChange={(e) => setQuickEndTime(e.target.value)}
+                      className="h-8 w-24 text-xs font-mono"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleQuickApplyTimes}
+                      className="h-8 text-xs gap-1"
+                    >
+                      Apply to Working Days
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setWeeklyState((prev) => {
+                          const next = { ...prev };
+                          [1, 2, 3, 4, 5].forEach((d) => {
+                            next[d] = { ...next[d], isOnDuty: true };
+                          });
+                          [6, 7].forEach((d) => {
+                            next[d] = { ...next[d], isOnDuty: false };
+                          });
+                          return next;
+                        });
+                        toast.info('Mon-Fri set On Duty; Sat-Sun set to Week-Off');
+                      }}
+                      className="h-8 text-xs"
+                    >
+                      Mon-Fri Active
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setWeeklyState((prev) => {
+                          const next = { ...prev };
+                          [1, 2, 3, 4, 5, 6].forEach((d) => {
+                            next[d] = { ...next[d], isOnDuty: true };
+                          });
+                          next[7] = { ...next[7], isOnDuty: false };
+                          return next;
+                        });
+                        toast.info('Mon-Sat set On Duty; Sun set to Week-Off');
+                      }}
+                      className="h-8 text-xs"
+                    >
+                      Mon-Sat Active
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Studio Shift Allocation Presets */}
+                <div className="flex items-center gap-2 pt-2 border-t border-border/50 flex-wrap text-xs">
+                  <span className="text-muted-foreground font-medium text-[11px]">Shift Presets:</span>
                   <Button
                     type="button"
                     variant="outline"
@@ -680,19 +727,75 @@ export function TrainerScheduleModal({
                     onClick={() => {
                       setWeeklyState((prev) => {
                         const next = { ...prev };
-                        [1, 2, 3, 4, 5].forEach((d) => {
-                          next[d] = { ...next[d], isOnDuty: true };
-                        });
-                        [6, 7].forEach((d) => {
-                          next[d] = { ...next[d], isOnDuty: false };
+                        [1, 2, 3, 4, 5, 6].forEach((d) => {
+                          if (next[d]?.isOnDuty) {
+                            next[d] = {
+                              ...next[d],
+                              startTime: '07:00',
+                              endTime: '15:00',
+                              hasSplitShift: false,
+                            };
+                          }
                         });
                         return next;
                       });
-                      toast.info('Mon-Fri set On Duty; Sat-Sun set to Week-Off');
+                      toast.success('Applied Single Shift: 07:00 AM – 03:00 PM');
                     }}
-                    className="h-8 text-xs"
+                    className="h-7 px-2 text-[11px] bg-muted/40 hover:bg-muted"
                   >
-                    Standard Mon-Fri
+                    Single Shift (07:00 AM – 03:00 PM)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setWeeklyState((prev) => {
+                        const next = { ...prev };
+                        [1, 2, 3, 4, 5, 6].forEach((d) => {
+                          if (next[d]?.isOnDuty) {
+                            next[d] = {
+                              ...next[d],
+                              startTime: '06:30',
+                              endTime: '11:30',
+                              hasSplitShift: true,
+                              splitStartTime: '17:00',
+                              splitEndTime: '21:30',
+                            };
+                          }
+                        });
+                        return next;
+                      });
+                      toast.success('Applied Split / Dual Shift: 06:30–11:30 & 17:00–21:30');
+                    }}
+                    className="h-7 px-2 text-[11px] bg-primary/10 text-primary border-primary/30 font-medium hover:bg-primary/20"
+                  >
+                    Split / Dual Shift (06:30–11:30 &amp; 17:00–21:30)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setWeeklyState((prev) => {
+                        const next = { ...prev };
+                        [1, 2, 3, 4, 5, 6].forEach((d) => {
+                          if (next[d]?.isOnDuty) {
+                            next[d] = {
+                              ...next[d],
+                              startTime: '13:00',
+                              endTime: '21:00',
+                              hasSplitShift: false,
+                            };
+                          }
+                        });
+                        return next;
+                      });
+                      toast.success('Applied Evening Shift: 01:00 PM – 09:00 PM');
+                    }}
+                    className="h-7 px-2 text-[11px] bg-muted/40 hover:bg-muted"
+                  >
+                    Evening Shift (01:00 PM – 09:00 PM)
                   </Button>
                 </div>
               </div>
@@ -828,7 +931,10 @@ export function TrainerScheduleModal({
 
                             {/* Shift 2 (Split Shift Input) */}
                             {day.hasSplitShift && (
-                              <div className="flex items-center gap-1.5 pl-2 sm:border-l border-border/60">
+                              <div className="flex items-center gap-1.5 pl-2 sm:border-l border-border/60 flex-wrap">
+                                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
+                                  Midday Break: {day.endTime} – {day.splitStartTime || '17:00'}
+                                </span>
                                 <span className="text-[10px] font-semibold text-primary uppercase shrink-0">
                                   Shift 2:
                                 </span>
