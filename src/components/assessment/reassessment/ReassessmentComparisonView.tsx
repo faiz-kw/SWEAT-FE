@@ -72,10 +72,10 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
             <ArrowLeftRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            Longitudinal Reassessment Comparison
+            Reassessment Comparison
           </h2>
           <p className="text-xs text-muted-foreground">
-            Section 15 like-for-like biomechanical comparison against established baseline assessment.
+            Compared against the baseline, like for like.
           </p>
         </div>
 
@@ -108,7 +108,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
           <ShieldAlert className="mx-auto h-8 w-8 text-amber-600 dark:text-amber-400" />
           <h3 className="mt-3 text-sm font-semibold text-foreground">Baseline Assessment</h3>
           <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-            This record serves as the initial member baseline. No previous assessment is linked for direct longitudinal comparison.
+            This is the first assessment, so there is nothing to compare against yet.
           </p>
         </div>
       )}
@@ -124,14 +124,14 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
             </div>
             <div className="flex items-center gap-2 justify-end">
               <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-muted-foreground">Current Reassessment:</span>
+              <span className="text-muted-foreground">This assessment:</span>
               <strong className="text-emerald-300">{data.current_date || 'Current Session'}</strong>
             </div>
           </div>
 
           {/* Vitals Comparison Section */}
           <div className="rounded-xl border border-border bg-card/60 p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Vitals & Body Composition Deltas</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Vitals change</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-muted-foreground">
                 <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -158,7 +158,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
 
           {/* Movement Battery Like-For-Like Comparison */}
           <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Movement Battery & Protocol Progression</h3>
+            <h3 className="text-sm font-semibold text-foreground">Movement tests</h3>
             <div className="space-y-4">
               {data.movement_comparisons.map((item) => (
                 <div
@@ -221,7 +221,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
           {/* Capability Matrix Comparison */}
           {Object.keys(data.capability_comparison).length > 0 && (
             <div className="rounded-xl border border-border bg-card/60 p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Domain Capability Level Evolution</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-3">Capability change</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {Object.entries(data.capability_comparison).map(([domain, caps]) => (
                   <div key={domain} className="rounded-lg border border-border bg-background p-3 text-xs">

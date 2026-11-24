@@ -62,7 +62,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">Section 14 Individual Exercise Progression Standard</p>
+          <p className="mt-1 text-xs text-muted-foreground">Exercise progression</p>
         </div>
 
         {isCoach && !isApproved && (
@@ -88,7 +88,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
         </div>
 
         <div className="rounded-lg border border-border/80 bg-background/50 p-3">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Next Target Variation</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Next variation</span>
           <div className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-emerald-300">
             <ChevronRight className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span>{progression.next_progression_target || 'Target to be prescribed'}</span>
@@ -111,7 +111,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
         {progression.progression_criteria && (
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-cyan-400 shrink-0" />
-            <span><strong className="text-foreground">Advancement Criteria:</strong> {progression.progression_criteria}</span>
+            <span><strong className="text-foreground">Criteria:</strong> {progression.progression_criteria}</span>
           </div>
         )}
         {progression.coach_approved_by_name && (
@@ -124,11 +124,11 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
       {showApprovalForm && (
         <form onSubmit={handleApprove} className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-3">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-            Coach Progression Sign-off
+            Sign off progression
           </h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-[11px] font-medium text-muted-foreground">Next Variation Target *</label>
+              <label className="block text-[11px] font-medium text-muted-foreground">Next variation *</label>
               <input
                 type="text"
                 required
@@ -149,7 +149,7 @@ export const IndividualProgressionCard: React.FC<IndividualProgressionCardProps>
             </div>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-muted-foreground">Criteria Met / Coach Clinical Notes</label>
+            <label className="block text-[11px] font-medium text-muted-foreground">Notes</label>
             <input
               type="text"
               value={criteriaNotes}

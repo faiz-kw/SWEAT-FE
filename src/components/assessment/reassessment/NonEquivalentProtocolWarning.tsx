@@ -28,7 +28,7 @@ export const NonEquivalentProtocolWarning: React.FC<NonEquivalentProtocolWarning
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold tracking-wide text-amber-300">
-              Protocol Progression: Non-Equivalent Direct Delta
+              Different test — not directly comparable
             </h4>
             <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300 border border-amber-500/30">
               {testTitle}
@@ -40,14 +40,14 @@ export const NonEquivalentProtocolWarning: React.FC<NonEquivalentProtocolWarning
               <>
                 The baseline was evaluated using <strong className="text-foreground font-medium">{previousVariation || 'Unknown'}</strong>,
                 while the current assessment progressed to <strong className="text-foreground font-medium">{currentVariation}</strong>.
-                Mathematical rep and load deltas are suppressed to avoid misleading comparisons across unequal biomechanical levers.
+                Rep and load changes are hidden, because the two tests are not the same test.
               </>
             )}
           </p>
 
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400/80">
             <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>Advancement is tracked qualitatively via the Individual Progression Registry.</span>
+            <span>Progress is tracked under Progressions instead.</span>
           </div>
         </div>
       </div>

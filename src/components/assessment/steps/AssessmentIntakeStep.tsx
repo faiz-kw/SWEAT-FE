@@ -48,17 +48,17 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Section 1
+              Step 1 of 6
             </span>
-            <h2 className="text-lg font-bold text-foreground">Member Intake & Baseline Profile</h2>
+            <h2 className="text-lg font-bold text-foreground">Member Profile</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Capture member identity, prior training background, and training style preferences.
+            Who they are and how they train today.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Coach-Led Assessment</span>
+          <span>Coach-led</span>
         </div>
       </div>
 
@@ -66,7 +66,7 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
         {/* Member Name */}
         <div>
           <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Member Full Name <span className="text-amber-600 dark:text-amber-400">*</span>
+            Full name <span className="text-amber-600 dark:text-amber-400">*</span>
           </label>
           <Input
             value={memberName}
@@ -79,7 +79,7 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
         {/* Member Phone */}
         <div>
           <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Mobile Number (WhatsApp Enabled)
+            Mobile number
           </label>
           <Input
             value={memberPhone}
@@ -97,24 +97,24 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
             onChange={(e) => setAssessmentType(e.target.value)}
             className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
-            <option value="INITIAL">Initial Baseline Assessment (New Member)</option>
-            <option value="REASSESSMENT">Follow-Up Reassessment (Longitudinal)</option>
-            <option value="PROGRESS_CHECK">Mid-Program Progress Check</option>
+            <option value="INITIAL">Initial baseline</option>
+            <option value="REASSESSMENT">Reassessment</option>
+            <option value="PROGRESS_CHECK">Progress check</option>
           </select>
         </div>
 
         {/* Training Experience */}
         <div>
-          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Training Background</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Training experience</label>
           <select
             value={trainingExperience}
             onChange={(e) => setTrainingExperience(e.target.value)}
             className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
-            <option value="BEGINNER">Beginner (&lt; 6 months structured training)</option>
-            <option value="INTERMEDIATE">Intermediate (6 months - 2 years consistent training)</option>
-            <option value="ADVANCED">Advanced (2+ years dedicated training)</option>
-            <option value="ATHLETE">Competitive / Former Athlete</option>
+            <option value="BEGINNER">Beginner — under 6 months</option>
+            <option value="INTERMEDIATE">Intermediate — 6 months to 2 years</option>
+            <option value="ADVANCED">Advanced — 2 years or more</option>
+            <option value="ATHLETE">Athlete</option>
           </select>
         </div>
 
@@ -126,25 +126,25 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
             onChange={(e) => setActivityLevel(e.target.value)}
             className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
-            <option value="SEDENTARY">Sedentary (Desk work, little to no regular exercise)</option>
-            <option value="LIGHTLY_ACTIVE">Lightly Active (1-2 days/week light walks or yoga)</option>
-            <option value="MODERATELY_ACTIVE">Moderately Active (3-4 days/week workouts)</option>
-            <option value="HIGHLY_ACTIVE">Highly Active (5-7 days/week intense training)</option>
+            <option value="SEDENTARY">Sedentary — desk work</option>
+            <option value="LIGHTLY_ACTIVE">Lightly active — 1–2 days a week</option>
+            <option value="MODERATELY_ACTIVE">Moderately active — 3–4 days a week</option>
+            <option value="HIGHLY_ACTIVE">Highly active — 5 or more days a week</option>
           </select>
         </div>
 
         {/* Preferred Training Style */}
         <div>
-          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Preferred Modality</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Preferred training</label>
           <select
             value={preferredStyle}
             onChange={(e) => setPreferredStyle(e.target.value)}
             className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
-            <option value="PILATES">Pilates Reformer & Mat (Alignment & Core)</option>
-            <option value="STRENGTH">Functional Strength & Resistance</option>
-            <option value="HIIT_BOOTCAMP">HIIT & Metabolic Conditioning</option>
-            <option value="HYBRID">Hybrid (Pilates + Strength Blend)</option>
+            <option value="PILATES">Pilates</option>
+            <option value="STRENGTH">Strength</option>
+            <option value="HIIT_BOOTCAMP">Conditioning</option>
+            <option value="HYBRID">Mixed</option>
           </select>
         </div>
       </div>
@@ -152,7 +152,7 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
       {/* User Notes */}
       <div>
         <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-          Intake Observations & Member Comments
+          Notes
         </label>
         <Textarea
           value={userNotes}
@@ -170,7 +170,7 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
           disabled={!isFormValid}
           className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
-          <span>Continue to Safety Gate</span>
+          <span>Continue</span>
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>

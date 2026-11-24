@@ -141,8 +141,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
         <div>
           <h4 className="text-sm font-semibold text-foreground">Baseline Captures</h4>
           <p className="text-[11px] text-muted-foreground">
-            Four views: front, back and both profiles. Same stance, same distance, every time —
-            comparisons are only valid between captures taken the same way.
+            Front, back and both profiles. Same stance and distance every time.
           </p>
         </div>
         <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted font-semibold text-foreground">
@@ -208,7 +207,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
           </select>
           {clothingFit === 'LOOSE' && (
             <p className="text-[10px] text-amber-600 dark:text-amber-600 dark:text-amber-400">
-              Loose clothing hides body outline. Posture angles still hold; girth estimates will read low.
+              Posture angles still hold. Girth estimates will read low.
             </p>
           )}
         </div>
@@ -225,16 +224,15 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
         </div>
         <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
           <input type="checkbox" checked={consentPhotos} onChange={(e) => setConsentPhotos(e.target.checked)} className="mt-0.5" />
-          <span>Member consents to movement photographs being stored for this assessment.</span>
+          <span>Member agrees to photos being stored.</span>
         </label>
         <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
           <input type="checkbox" checked={consentAiAnalysis} onChange={(e) => setConsentAiAnalysis(e.target.checked)} className="mt-0.5" />
-          <span>Member consents to automated movement analysis of those photographs.</span>
+          <span>Member agrees to automated analysis of those photos.</span>
         </label>
         {(!consentPhotos || !consentAiAnalysis) && (
           <p className="text-[10px] text-muted-foreground sm:col-span-2">
-            Without both consents the captures are stored but not analysed, and the assessment
-            continues on coach-measured values alone.
+            Without both, photos are stored but not analysed.
           </p>
         )}
       </div>
@@ -246,7 +244,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
         onClick={() => uploadMutation.mutate()}
       >
         {uploadMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        Save captures &amp; run scan
+        Save &amp; scan
       </Button>
 
       {/* Scan result */}
@@ -305,8 +303,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Estimated from capture geometry, low confidence. Tape measurements stay authoritative;
-                use these for tracking change between assessments, not as absolute values.
+                Estimates. Use them to track change, not as tape measurements.
               </p>
             </div>
           )}

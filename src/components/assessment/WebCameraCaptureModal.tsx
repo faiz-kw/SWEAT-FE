@@ -326,7 +326,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
               </Badge>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-              Align member according to the biomechanical framing guide at ~{targetDistanceMeters}m distance.
+              Stand the member on the marker, about {targetDistanceMeters}m from the camera.
             </DialogDescription>
           </div>
         </DialogHeader>

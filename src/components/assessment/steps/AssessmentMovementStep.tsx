@@ -64,10 +64,10 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Sections 4-11
             </span>
-            <h2 className="text-lg font-bold text-foreground">Functional Movement Battery (6 Core Domains)</h2>
+            <h2 className="text-lg font-bold text-foreground">Movement Tests</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Standardized protocols, reps & load. Decouple symptom tracking from performance.
+            Record symptoms separately from performance.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -77,10 +77,10 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Domain 1: Lower Body (Squat) */}
+        {/* Lower body (Squat) */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 1: Lower Body</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Lower body</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('lower_body')}
@@ -93,15 +93,15 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             </button>
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Squat Variation</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Squat</label>
             <select
-              value={lb.variation || 'Bodyweight Squat'}
+              value={lb.variation || 'Bodyweight squat'}
               onChange={(e) => updateDomain('lower_body', 'Squat', 'variation', e.target.value)}
               className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
-              <option value="Box Squat (Assisted)">Box Squat (Assisted)</option>
-              <option value="Bodyweight Squat">Bodyweight Squat</option>
-              <option value="Goblet Squat (Loaded)">Goblet Squat (Loaded)</option>
+              <option value="Box squat">Box squat</option>
+              <option value="Bodyweight squat">Bodyweight squat</option>
+              <option value="Goblet squat">Goblet squat</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -130,10 +130,10 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
         </div>
 
-        {/* Domain 2: Upper Body (Push-up) */}
+        {/* Upper body (Push-up) */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 2: Upper Body</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Upper body</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('upper_body')}
@@ -146,16 +146,16 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             </button>
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Push-up Variation</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Push-up</label>
             <select
               value={ub.variation || 'Wall Push-up'}
               onChange={(e) => updateDomain('upper_body', 'Push-up', 'variation', e.target.value)}
               className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
               <option value="Wall Push-up">Wall Push-up</option>
-              <option value="High-incline Push-up">High-incline Push-up</option>
+              <option value="High incline">High incline</option>
               <option value="Knee Push-up">Knee Push-up</option>
-              <option value="Standard Floor Push-up">Standard Floor Push-up</option>
+              <option value="Floor">Floor</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -202,16 +202,16 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Plank Protocol</label>
             <select
-              value={core.variation || 'Standard Forearm Plank'}
+              value={core.variation || 'Forearm plank'}
               onChange={(e) => updateDomain('core', 'Plank', 'variation', e.target.value)}
               className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
-              <option value="Elevated Plank">Elevated Plank (Box)</option>
-              <option value="Standard Forearm Plank">Standard Forearm Plank</option>
+              <option value="Elevated Plank">Elevated plank</option>
+              <option value="Forearm plank">Forearm plank</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Hold Duration (Seconds)</label>
+            <label className="block text-xs text-muted-foreground mb-1">Hold (seconds)</label>
             <Input
               type="number"
               placeholder="e.g. 45"
@@ -222,10 +222,10 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
         </div>
 
-        {/* Domain 4: Balance */}
+        {/* Balance */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 4: Balance</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Balance</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('balance')}
@@ -280,7 +280,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           <span>Back to Vitals</span>
         </Button>
         <Button onClick={onNext} className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2">
-          <span>Continue to Goals</span>
+          <span>Continue</span>
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>

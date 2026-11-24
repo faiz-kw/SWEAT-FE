@@ -70,15 +70,15 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Sections 13-17
             </span>
-            <h2 className="text-lg font-bold text-foreground">Review, Consents & Coach Sign-Off</h2>
+            <h2 className="text-lg font-bold text-foreground">Review & Sign-Off</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Verify capability matrix, review catalog recommendation, collect opt-in consents, and submit coach sign-off.
+            Confirm the plan with the member, then sign off.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Governance & Compliance</span>
+          <span>Needs sign-off</span>
         </div>
       </div>
 
@@ -86,7 +86,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
       <div className="p-4 rounded-xl bg-card border border-border space-y-3">
         <div className="flex items-center gap-2 text-foreground">
           <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider">Functional Capability Matrix</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider">Capability</h3>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
           {Object.entries({
@@ -111,7 +111,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <PackageIcon className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">Tailored Studio Package</span>
+              <span className="text-xs font-bold uppercase tracking-wider">Recommended package</span>
             </div>
             <span className="text-xs font-bold text-foreground px-2.5 py-1 rounded bg-muted border border-border">
               ₹{recPkg.price ? recPkg.price.toLocaleString('en-IN') : 'Custom'}
@@ -126,14 +126,14 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
         </div>
       )}
 
-      {/* Section 16: Explicit Opt-In Consents (Default False) */}
+      {/* Step 6 of 6: Explicit Opt-In Consents (Default False) */}
       <div className="p-5 rounded-xl bg-card border border-border space-y-3.5">
         <div className="flex items-center gap-2 text-foreground">
           <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider">Section 16: Opt-In Consents & Disclaimers</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider">Consents</h3>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          In compliance with digital health privacy rules, each consent must be explicitly granted by the member. None default to true.
+          Ask the member for each one. Nothing is assumed.
         </p>
 
         <div className="space-y-2.5">
@@ -145,8 +145,8 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-foreground">Consent for Biometrics & Body Measurements</span>
-              <p className="text-muted-foreground mt-0.5">Authorize recording of height, weight, waist circumference, and blood pressure.</p>
+              <span className="font-semibold text-foreground">Body measurements</span>
+              <p className="text-muted-foreground mt-0.5">Height, weight, waist and blood pressure.</p>
             </div>
           </label>
 
@@ -158,8 +158,8 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-foreground">Consent for Movement Photography & Media</span>
-              <p className="text-muted-foreground mt-0.5">Authorize baseline posture alignment photos stored encrypted in dedicated tenant storage.</p>
+              <span className="font-semibold text-foreground">Movement photos</span>
+              <p className="text-muted-foreground mt-0.5">Baseline photos, stored encrypted.</p>
             </div>
           </label>
 
@@ -171,8 +171,8 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-foreground">Consent for Automated Metabolic & Posture Analysis</span>
-              <p className="text-muted-foreground mt-0.5">Authorize algorithmic estimation of RMR, TDEE, and joint alignment angles.</p>
+              <span className="font-semibold text-foreground">Automated analysis</span>
+              <p className="text-muted-foreground mt-0.5">Estimates calorie needs and posture angles.</p>
             </div>
           </label>
 
@@ -184,8 +184,8 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-foreground">Consent for De-Identified Secondary Quality Research</span>
-              <p className="text-muted-foreground mt-0.5">Optional: Authorize anonymized data to improve training progression benchmarks.</p>
+              <span className="font-semibold text-foreground">Anonymised research</span>
+              <p className="text-muted-foreground mt-0.5">Optional. Anonymised, used to improve benchmarks.</p>
             </div>
           </label>
         </div>
@@ -198,17 +198,17 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               onChange={(e) => setMemberAcknowledged(e.target.checked)}
               className="accent-amber-500 rounded"
             />
-            <span>Member In-Person Verbal & Signed Acknowledgement Confirmed</span>
+            <span>Member acknowledged this in person</span>
           </label>
         </div>
       </div>
 
       {/* Coach Prescriptions */}
       <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Section 15: Coach Prescriptions</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Prescriptions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Key Movement Strengths</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Strengths</label>
             <Textarea
               value={coachStrengths}
               onChange={(e) => setCoachStrengths(e.target.value)}
@@ -228,7 +228,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Workout Prescription</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Training plan</label>
             <Textarea
               value={workoutPrescription}
               onChange={(e) => setWorkoutPrescription(e.target.value)}
@@ -238,7 +238,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Diet & Hydration Prescription</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Nutrition plan</label>
             <Textarea
               value={dietPrescription}
               onChange={(e) => setDietPrescription(e.target.value)}
@@ -250,7 +250,7 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
         </div>
 
         <div className="pt-2">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Reassessment Interval (Weeks)</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Reassess in (weeks)</label>
           <select
             value={reassessmentWeeks}
             onChange={(e) => setReassessmentWeeks(parseInt(e.target.value, 10))}

@@ -55,7 +55,7 @@ export const SymptomLoggerModal: React.FC<SymptomLoggerModalProps> = ({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Decoupled from movement performance scores. Document adverse events for clinical safety and recovery tracking.
+          Recorded separately from performance.
         </p>
 
         <div className="space-y-3">
@@ -68,11 +68,11 @@ export const SymptomLoggerModal: React.FC<SymptomLoggerModalProps> = ({
             >
               <option value="Sharp Pain">Sharp Pain</option>
               <option value="Dull Ache">Dull Ache</option>
-              <option value="Joint Impingement / Pinching">Joint Impingement / Pinching</option>
-              <option value="Dizziness / Lightheadedness">Dizziness / Lightheadedness</option>
-              <option value="Shortness of Breath / Dyspnea">Shortness of Breath / Dyspnea</option>
+              <option value="Joint pinching">Joint pinching</option>
+              <option value="Dizziness">Dizziness</option>
+              <option value="Shortness of breath">Shortness of breath</option>
               <option value="Muscle Cramp / Spasm">Muscle Cramp / Spasm</option>
-              <option value="Loss of Balance / Instability">Loss of Balance / Instability</option>
+              <option value="Loss of balance">Loss of balance</option>
             </select>
           </div>
 
@@ -88,7 +88,7 @@ export const SymptomLoggerModal: React.FC<SymptomLoggerModalProps> = ({
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-medium text-muted-foreground">Severity Scale (1 - 10)</label>
+              <label className="text-xs font-medium text-muted-foreground">Severity (1–10)</label>
               <span className={`text-xs font-bold ${severity >= 7 ? 'text-destructive' : severity >= 4 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {severity} / 10
               </span>
@@ -104,7 +104,7 @@ export const SymptomLoggerModal: React.FC<SymptomLoggerModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Stopping Reason / Action Taken</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">What you did</label>
             <Textarea
               value={stoppingReason}
               onChange={(e) => setStoppingReason(e.target.value)}

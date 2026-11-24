@@ -76,17 +76,17 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Section 2
+              Step 2 of 6
             </span>
-            <h2 className="text-lg font-bold text-foreground">Safety & Readiness Gate (10-Question PAR-Q)</h2>
+            <h2 className="text-lg font-bold text-foreground">Health & Readiness</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Mandatory clinical readiness screening. Any affirmative critical red flag triggers a testing stop.
+            Complete this before any physical testing.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          <span className="text-muted-foreground font-medium">Standard PAR-Q Battery</span>
+          <span className="text-muted-foreground font-medium">PAR-Q</span>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         <div className="rounded-xl border border-destructive/40 bg-red-950/30 p-4 space-y-2">
           <div className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-            <h4 className="font-semibold text-sm">Critical Red Flag Identified — Medical Clearance Required</h4>
+            <h4 className="font-semibold text-sm">Stop — medical clearance needed</h4>
           </div>
           <p className="text-xs text-red-200/80 leading-relaxed">
             The member reported affirmative symptoms to cardiovascular or neurological risk factors (chest pain, syncope, or resting breathlessness). 
@@ -161,7 +161,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
       {/* Coach Safety Outcome Decision */}
       <div className="p-4 rounded-xl bg-card border border-border space-y-3">
         <label className="block text-xs font-semibold text-foreground">
-          Coach Safety Gate Decision & Action Taken <span className="text-amber-600 dark:text-amber-400">*</span>
+          Your decision <span className="text-amber-600 dark:text-amber-400">*</span>
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
           <button
@@ -219,7 +219,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
 
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Coach Clinical Notes & Referral Context
+            Notes
           </label>
           <Textarea
             value={screeningCoachNotes}
@@ -244,14 +244,14 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             className="bg-red-600 hover:bg-red-700 text-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
             <Lock className="w-4 h-4" />
-            <span>Save & Defer Assessment</span>
+            <span>Save & defer</span>
           </Button>
         ) : (
           <Button
             onClick={onNext}
             className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
-            <span>Proceed to Vitals</span>
+            <span>Continue</span>
             <ArrowRight className="w-4 h-4" />
           </Button>
         )}

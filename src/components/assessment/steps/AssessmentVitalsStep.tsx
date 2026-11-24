@@ -82,17 +82,17 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Section 3
+              Step 3 of 6
             </span>
-            <h2 className="text-lg font-bold text-foreground">Vitals & Body Metrics</h2>
+            <h2 className="text-lg font-bold text-foreground">Vitals</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Log physical biometrics with data-source provenance tags. Inputs initialize empty.
+            Tag each value with how it was obtained.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Validated Provenance</span>
+          <span>Source tagged</span>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         {/* Waist Circumference */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-muted-foreground">Waist Circumference (cm)</label>
+            <label className="text-xs font-semibold text-muted-foreground">Waist (cm)</label>
             <ProvenanceSelect
               value={provenance['waist'] || 'MEASURED'}
               onChange={(t) => updateProvenance('waist', t)}
@@ -158,7 +158,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         {/* Resting Heart Rate */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-muted-foreground">Resting Heart Rate (BPM)</label>
+            <label className="text-xs font-semibold text-muted-foreground">Resting heart rate (bpm)</label>
             <ProvenanceSelect
               value={provenance['resting_hr'] || 'MEASURED'}
               onChange={(t) => updateProvenance('resting_hr', t)}
@@ -176,7 +176,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         {/* Blood Pressure */}
         <div className="p-4 rounded-xl bg-card border border-border space-y-2 md:col-span-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-muted-foreground">Resting Blood Pressure (Systolic/Diastolic)</label>
+            <label className="text-xs font-semibold text-muted-foreground">Blood pressure</label>
             <ProvenanceSelect
               value={provenance['resting_bp'] || 'MEASURED'}
               onChange={(t) => updateProvenance('resting_bp', t)}
@@ -196,12 +196,12 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
         <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
           <div className="flex items-center gap-2 text-foreground">
             <Scale className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <h4 className="text-xs font-bold uppercase tracking-wider">Calculated Metabolic Preview</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider">Calculated</h4>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-3 rounded-lg bg-muted/80 border border-border/50">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Body Mass Index</span>
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">BMI</span>
               <div className="text-xl font-bold text-foreground">{bmiInfo.val}</div>
               <span className={`text-[11px] font-semibold ${bmiInfo.color}`}>{bmiInfo.category}</span>
             </div>
@@ -229,11 +229,11 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
           <div className="space-y-1.5 pt-2 border-t border-border text-[11px] text-muted-foreground leading-relaxed">
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400/80 flex-shrink-0 mt-0.5" />
-              <span><strong>BMI Disclaimer:</strong> BMI is a screening metric, not a direct measure of body fat or muscularity.</span>
+              <span><strong>BMI Disclaimer:</strong> A screening number. It does not measure body fat.</span>
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400/80 flex-shrink-0 mt-0.5" />
-              <span><strong>Metabolic Disclaimer:</strong> Estimated via Mifflin-St Jeor formula with physical activity multiplier. Individual metabolic rates vary.</span>
+              <span><strong>Metabolic Disclaimer:</strong> Estimated, not measured. Individual rates vary.</span>
             </div>
           </div>
         </div>
@@ -252,13 +252,13 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
       <div className="flex items-center justify-between pt-4 border-t border-border">
         <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Safety Gate</span>
+          <span>Back</span>
         </Button>
         <Button
           onClick={onNext}
           className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
-          <span>Continue to Movement Battery</span>
+          <span>Continue</span>
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>

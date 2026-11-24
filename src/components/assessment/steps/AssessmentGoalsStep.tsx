@@ -51,24 +51,24 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Section 12
+              Step 5 of 6
             </span>
-            <h2 className="text-lg font-bold text-foreground">Member Goals & Commitment Framework</h2>
+            <h2 className="text-lg font-bold text-foreground">Goals</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Establish the member's target outcome, realistic timeline, and attendance commitment.
+            What they want, and what they can commit to.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          <span>Outcome Alignment</span>
+          <span>Goals</span>
         </div>
       </div>
 
       {/* Primary Goal Selector */}
       <div className="space-y-2.5">
         <label className="block text-xs font-semibold text-muted-foreground">
-          Primary Transformation Target <span className="text-amber-600 dark:text-amber-400">*</span>
+          Primary goal <span className="text-amber-600 dark:text-amber-400">*</span>
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {GOALS.map((g) => {
@@ -97,7 +97,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
       {/* Stated Goal in Member's Own Words */}
       <div>
         <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-          Stated Goal Outcome (Member's Exact Words)
+          In the member's words
         </label>
         <Textarea
           value={customGoalOutcome}
@@ -112,7 +112,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-4 rounded-xl bg-card border border-border">
         <div>
           <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Commitment Timeline (Weeks)
+            Timeline (weeks)
           </label>
           <select
             value={durationWeeks}
@@ -128,7 +128,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
 
         <div>
           <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Weekly Frequency (Days / Week)
+            Sessions per week
           </label>
           <div className="flex gap-2">
             {[2, 3, 4, 5].map((d) => (
@@ -150,7 +150,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
 
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Perceived Barriers & Obstacles
+            Main barrier
           </label>
           <Input
             value={perceivedBarrier}
@@ -163,7 +163,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
         <div className="sm:col-span-2">
           <div className="flex justify-between items-center mb-1">
             <label className="text-xs font-semibold text-muted-foreground">
-              Member Confidence Score (1 - 10)
+              Confidence (1–10)
             </label>
             <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{confidenceScore} / 10</span>
           </div>
@@ -182,13 +182,13 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
       <div className="flex items-center justify-between pt-4 border-t border-border">
         <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Movement Tests</span>
+          <span>Back</span>
         </Button>
         <Button
           onClick={onNext}
           className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
-          <span>Review & Consents</span>
+          <span>Continue</span>
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
