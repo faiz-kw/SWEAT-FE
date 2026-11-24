@@ -198,6 +198,16 @@ function formatLeadDateTime(dateStr?: string | null): { date: string; time: stri
   }
 }
 
+function dispositionBadgeClass(code?: string | null): string {
+  const c = (code || '').toUpperCase();
+  if (/TRIAL|CONVERT/.test(c)) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+  if (/INTEREST|FOLLOW/.test(c)) return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20';
+  if (/CALLBACK|BUSY/.test(c)) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+  if (/NO_?ANSWER|RINGING/.test(c)) return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+  if (/NOT_?INTERESTED|INVALID|WRONG|OBJECTION|DISTANCE|LOST/.test(c)) return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+  return 'bg-muted text-muted-foreground border-border';
+}
+
 function formatLeadDate(dateStr?: string | null): string {
   if (!dateStr) return '—';
   try {
@@ -1842,6 +1852,8 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                         </div>
                       </th>
 
+                      <th className="px-4 py-3.5 min-w-[150px] select-none">Last Call</th>
+
                       <th className="px-5 py-3.5 min-w-[170px] text-right">Actions</th>
                     </tr>
                   </thead>
@@ -2062,6 +2074,28 @@ export function LeadsWorkspace({ initialViewMode = 'LIST' }: LeadsWorkspaceProps
                                 <span>{formatDuration(lead.sla.stage_age_seconds)} in stage</span>
                               </div>
                             ) : null}
+                          </td>
+
+                          {/* 5b. Last Call Outcome */}
+                          <td className="px-4 py-3.5 min-w-[150px]">
+                            {lead.last_call_disposition_display ? (
+                              <div className="space-y-0.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-md inline-flex items-center gap-1 ${dispositionBadgeClass(lead.last_call_disposition)}`}
+                                >
+                                  <Phone className="w-2.5 h-2.5 shrink-0" />
+                                  {lead.last_call_disposition_display}
+                                </Badge>
+                                {lead.last_call_at && (
+                                  <div className="text-[10px] text-muted-foreground font-mono">
+                                    {formatLeadDateTime(lead.last_call_at).date}, {formatLeadDateTime(lead.last_call_at).time}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/50">No calls yet</span>
+                            )}
                           </td>
 
                           {/* 6. Actions */}
