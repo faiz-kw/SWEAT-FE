@@ -103,6 +103,76 @@ export interface CapabilityMatrix {
   functional_movement?: string;
 }
 
+/** One view's verdict from the capture quality gate. */
+export interface CaptureQualityVerdict {
+  usable: boolean;
+  reason?: string;
+  warnings?: string[];
+  person_count?: number;
+  frame_coverage?: number;
+}
+
+export type ScanStatus =
+  | 'NOT_STARTED'
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'PARTIAL'
+  | 'FAILED'
+  | 'UNAVAILABLE'
+  | 'SKIPPED_NO_CONSENT';
+
+/**
+ * Result of the four-view body scan.
+ *
+ * Every posture value is nullable on purpose: null means that angle was not measurable from
+ * the captures provided, which is a different statement from a measured zero.
+ */
+export interface AssessmentScanState {
+  assessment_id: string;
+  status: ScanStatus;
+  is_terminal: boolean;
+  provider: string | null;
+  model: string | null;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  views_submitted: string[];
+  views_usable: string[];
+  capture_quality: Partial<Record<'front' | 'back' | 'left' | 'right', CaptureQualityVerdict>>;
+  warnings: string[];
+  per_view: Record<string, Record<string, number>>;
+  posture: {
+    posture_score: number | null;
+    shoulder_tilt_degrees: number | null;
+    hip_tilt_degrees: number | null;
+    forward_head_angle_degrees: number | null;
+    lateral_shift_degrees: number | null;
+    breakdown?: {
+      score: number;
+      method: string;
+      scale: string;
+      components: Array<{
+        metric: string;
+        value_degrees: number | null;
+        penalty: number;
+        status: 'within_tolerance' | 'outside_tolerance' | 'not_assessed';
+      }>;
+      interpretation_note: string;
+    } | null;
+  };
+  circumference_estimates: {
+    method?: string;
+    confidence?: 'low' | 'medium' | 'high';
+    source?: string;
+    assumptions?: string[];
+    unavailable_reason?: string;
+    values?: Record<string, number>;
+  };
+  capture_conditions: Record<string, string>;
+  measurement_metadata: Record<string, { source: string; method: string; confidence: string; note?: string }>;
+}
+
 export interface AssessmentSession {
   id: string;
   pairing_code: string;
@@ -226,6 +296,20 @@ export const assessmentApi = {
     formData: FormData
   ): Promise<AssessmentSession> {
     const res = await api.post<AssessmentSession>(`/tenant/assessments/${id}/capture/`, formData);
+    return res.data;
+  },
+
+  /**
+   * Current state of the body scan. Poll while `is_terminal` is false.
+   */
+  async getScanStatus(id: string): Promise<AssessmentScanState> {
+    const res = await api.get<AssessmentScanState>(`/tenant/assessments/${id}/scan/`);
+    return res.data;
+  },
+
+  /** Re-runs the analysis against the captures already stored on the assessment. */
+  async rescan(id: string): Promise<AssessmentScanState> {
+    const res = await api.post<AssessmentScanState>(`/tenant/assessments/${id}/rescan/`, {});
     return res.data;
   },
 

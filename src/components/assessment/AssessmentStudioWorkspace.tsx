@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Camera,
+  Loader2,
   CheckCircle2,
   AlertCircle,
   Sparkles,
@@ -36,6 +37,31 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { WebCameraCaptureModal } from './WebCameraCaptureModal';
+
+/**
+ * The four standardised capture views.
+ *
+ * Front and back carry the frontal-plane angles (shoulder tilt, hip tilt, midline shift);
+ * the two profiles carry forward-head and trunk lean, and supply the depth axis the girth
+ * estimate needs. Capturing both profiles also gives a repeatability check: if the two
+ * disagree, the member rotated between shots and the baseline is not yet trustworthy.
+ */
+type CaptureViewId = 'photo_front' | 'photo_back' | 'photo_side_left' | 'photo_side_right';
+
+const CAPTURE_VIEWS: Array<{
+  id: CaptureViewId;
+  scanKey: 'front' | 'back' | 'left' | 'right';
+  label: string;
+  instruction: string;
+  framing: 'front' | 'side';
+}> = [
+  { id: 'photo_front', scanKey: 'front', label: '1. Front Standing', instruction: 'Face the camera, look straight ahead at the 2.5m marker', framing: 'front' },
+  { id: 'photo_back', scanKey: 'back', label: '2. Back Standing', instruction: 'Face away, heels on the floor markers, arms relaxed', framing: 'front' },
+  { id: 'photo_side_left', scanKey: 'left', label: '3. Left Profile', instruction: 'Left shoulder to camera, arms resting naturally at sides', framing: 'side' },
+  { id: 'photo_side_right', scanKey: 'right', label: '4. Right Profile', instruction: 'Right shoulder to camera, same stance as the left', framing: 'side' },
+];
+
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,11 +125,29 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [restingHr, setRestingHr] = useState<number>(72);
   const [restingBp, setRestingBp] = useState<string>('120/80');
 
-  // Camera baseline photos
-  const [frontPhotoPreview, setFrontPhotoPreview] = useState<string | null>(null);
-  const [sidePhotoPreview, setSidePhotoPreview] = useState<string | null>(null);
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [sideFile, setSideFile] = useState<File | null>(null);
+  // Four standardised baseline captures. The scan combines frontal width with profile
+  // depth, so front + at least one profile is the minimum that yields any geometry.
+  const [captureFiles, setCaptureFiles] = useState<Record<CaptureViewId, File | null>>({
+    photo_front: null,
+    photo_back: null,
+    photo_side_left: null,
+    photo_side_right: null,
+  });
+  const [capturePreviews, setCapturePreviews] = useState<Record<CaptureViewId, string | null>>({
+    photo_front: null,
+    photo_back: null,
+    photo_side_left: null,
+    photo_side_right: null,
+  });
+
+  // Capture conditions the camera cannot infer. Recorded so a later reader knows how
+  // comparable two assessments actually are.
+  const [clothingFit, setClothingFit] = useState<'CLOSE_FITTING' | 'ORDINARY' | 'LOOSE'>('ORDINARY');
+  const [captureMode, setCaptureMode] = useState<'PUBLIC_STUDIO' | 'PRIVATE_ROOM'>('PUBLIC_STUDIO');
+  const [consentPhotos, setConsentPhotos] = useState(true);
+  const [consentAiAnalysis, setConsentAiAnalysis] = useState(true);
+  const [scanPollingId, setScanPollingId] = useState<string | null>(null);
+  const [cameraForView, setCameraForView] = useState<CaptureViewId | null>(null);
 
   // =========================================================================
   // SECTIONS 4-11: FUNCTIONAL MOVEMENT BATTERY STATE (FAST-LOGGING)
@@ -260,6 +304,37 @@ export const AssessmentStudioWorkspace: React.FC = () => {
     },
   });
 
+  // Poll the scan while it is in flight. The provider call takes a few seconds per view, so
+  // the capture request returns immediately and the result lands here.
+  const { data: scanState } = useQuery({
+    queryKey: ['assessment-scan', scanPollingId],
+    queryFn: () => assessmentApi.getScanStatus(scanPollingId as string),
+    enabled: !!scanPollingId,
+    refetchInterval: (query) => (query.state.data?.is_terminal ? false : 2500),
+  });
+
+  React.useEffect(() => {
+    if (scanState?.is_terminal) {
+      setScanPollingId(null);
+      if (scanState.status === 'FAILED') {
+        toast.error(scanState.error || 'The body scan failed. The captures are saved — you can retry the scan.');
+      } else if (scanState.status === 'PARTIAL') {
+        toast.warning('Body scan finished, but some views were unusable. Check the notes below.');
+      } else if (scanState.status === 'COMPLETED') {
+        toast.success('Body scan complete.');
+      }
+    }
+  }, [scanState?.is_terminal, scanState?.status]);
+
+  const rescanMutation = useMutation({
+    mutationFn: () => assessmentApi.rescan((activeSession as any).id),
+    onSuccess: () => {
+      if (activeSession) setScanPollingId(activeSession.id);
+      toast.success('Re-running the scan against the stored captures.');
+    },
+    onError: (err: any) => toast.error(err?.data?.error || 'Could not restart the scan.'),
+  });
+
   const uploadPhotosAndVitalsMutation = useMutation({
     mutationFn: async () => {
       if (!activeSession) throw new Error('No active assessment session');
@@ -273,17 +348,34 @@ export const AssessmentStudioWorkspace: React.FC = () => {
       });
 
       const formData = new FormData();
-      if (frontFile) formData.append('photo_front', frontFile);
-      if (sideFile) formData.append('photo_side', sideFile);
+      (Object.keys(captureFiles) as CaptureViewId[]).forEach((view) => {
+        const file = captureFiles[view];
+        if (file) formData.append(view, file);
+      });
       formData.append('height_cm', String(heightCm));
       formData.append('weight_kg', String(weightKg));
+      formData.append('consent_movement_photos', String(consentPhotos));
+      formData.append('consent_ai_analysis', String(consentAiAnalysis));
+      formData.append('clothing_fit', clothingFit);
+      formData.append('capture_mode', captureMode);
 
       return assessmentApi.capturePhotos(activeSession.id, formData);
     },
     onSuccess: (data) => {
       setActiveSession(data);
-      setCurrentStep('movement');
-      toast.success('Vitals and photos analyzed. Proceed to movement battery.');
+      const scanStatus = (data as any)?.scan?.status;
+      if (scanStatus === 'QUEUED' || scanStatus === 'PROCESSING') {
+        // The analysis runs in the background; keep the coach on this step so they can see
+        // the per-view verdict and retake anything the scan rejected.
+        setScanPollingId(data.id);
+        toast.success('Captures stored. Body scan running — results appear below.');
+      } else if (scanStatus === 'UNAVAILABLE') {
+        toast.warning('Captures stored. Body scanning is not configured, so no measurements were produced.');
+      } else if (scanStatus === 'SKIPPED_NO_CONSENT') {
+        toast.info('Captures stored without analysis, as consent was not given.');
+      } else {
+        toast.success('Captures and vitals saved.');
+      }
     },
     onError: (err: any) => {
       toast.error(err?.data?.error || 'Failed to save vitals/photos.');
@@ -821,64 +913,189 @@ export const AssessmentStudioWorkspace: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Baseline Photo Uploads */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-foreground">1. Front Standing View</label>
-                    <div className="aspect-3/4 rounded-2xl border-2 border-dashed border-border/80 bg-muted/30 relative flex flex-col items-center justify-center overflow-hidden hover:border-primary/50 transition cursor-pointer">
-                      {frontPhotoPreview ? (
-                        <img src={frontPhotoPreview} alt="Front View" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="text-center p-4 space-y-2">
-                          <Camera className="w-8 h-8 text-muted-foreground mx-auto" />
-                          <p className="text-xs font-medium text-foreground">Tap to take photo</p>
-                          <p className="text-[10px] text-muted-foreground">Look straight ahead at 2.5m marker</p>
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setFrontFile(file);
-                            setFrontPhotoPreview(URL.createObjectURL(file));
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
+                {/* Four standardised baseline captures */}
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Baseline Captures</h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Four views: front, back and both profiles. Same stance, same distance, every time —
+                        comparisons are only valid between captures taken the same way.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-muted-foreground">Captured</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted font-semibold text-foreground">
+                        {CAPTURE_VIEWS.filter((v) => capturePreviews[v.id]).length} / 4
+                      </span>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-foreground">2. Side Profile View</label>
-                    <div className="aspect-3/4 rounded-2xl border-2 border-dashed border-border/80 bg-muted/30 relative flex flex-col items-center justify-center overflow-hidden hover:border-primary/50 transition cursor-pointer">
-                      {sidePhotoPreview ? (
-                        <img src={sidePhotoPreview} alt="Side View" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="text-center p-4 space-y-2">
-                          <Camera className="w-8 h-8 text-muted-foreground mx-auto" />
-                          <p className="text-xs font-medium text-foreground">Tap to take photo</p>
-                          <p className="text-[10px] text-muted-foreground">Arms resting naturally at sides</p>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {CAPTURE_VIEWS.map((view) => {
+                      const preview = capturePreviews[view.id];
+                      const quality = scanState?.capture_quality?.[view.scanKey];
+                      const rejected = quality && quality.usable === false;
+                      return (
+                        <div key={view.id} className="space-y-1.5">
+                          <label className="text-xs font-semibold text-foreground">{view.label}</label>
+                          <div
+                            className={`aspect-3/4 rounded-2xl border-2 border-dashed relative flex flex-col items-center justify-center overflow-hidden transition cursor-pointer ${
+                              rejected
+                                ? 'border-destructive/60 bg-destructive/5'
+                                : quality?.usable
+                                ? 'border-emerald-500/60 bg-emerald-500/5'
+                                : 'border-border/80 bg-muted/30 hover:border-primary/50'
+                            }`}
+                          >
+                            {preview ? (
+                              <img src={preview} alt={view.label} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="text-center p-3 space-y-1.5">
+                                <Camera className="w-7 h-7 text-muted-foreground mx-auto" />
+                                <p className="text-[11px] font-medium text-foreground">Tap to take photo</p>
+                                <p className="text-[10px] text-muted-foreground leading-tight">{view.instruction}</p>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              aria-label={`Capture ${view.label}`}
+                              onClick={() => setCameraForView(view.id)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                          </div>
+                          {quality && (
+                            <p className={`text-[10px] leading-tight ${rejected ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {rejected ? quality.reason : 'Usable for measurement'}
+                            </p>
+                          )}
                         </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setSideFile(file);
-                            setSidePhotoPreview(URL.createObjectURL(file));
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                    </div>
+                      );
+                    })}
                   </div>
                 </div>
+
+                {/* Capture conditions and consent — neither can be inferred from the image */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-foreground">Clothing fit</label>
+                    <select
+                      value={clothingFit}
+                      onChange={(e) => setClothingFit(e.target.value as typeof clothingFit)}
+                      className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
+                    >
+                      <option value="CLOSE_FITTING">Close-fitting athletic wear</option>
+                      <option value="ORDINARY">Ordinary studio clothing</option>
+                      <option value="LOOSE">Loose clothing</option>
+                    </select>
+                    {clothingFit === 'LOOSE' && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                        Loose clothing hides body outline. Posture angles still hold; girth estimates will read low.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-foreground">Capture setting</label>
+                    <select
+                      value={captureMode}
+                      onChange={(e) => setCaptureMode(e.target.value as typeof captureMode)}
+                      className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
+                    >
+                      <option value="PUBLIC_STUDIO">Public studio floor</option>
+                      <option value="PRIVATE_ROOM">Private assessment room</option>
+                    </select>
+                  </div>
+                  <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={consentPhotos}
+                      onChange={(e) => setConsentPhotos(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>Member consents to movement photographs being stored for this assessment.</span>
+                  </label>
+                  <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={consentAiAnalysis}
+                      onChange={(e) => setConsentAiAnalysis(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>Member consents to automated movement analysis of those photographs.</span>
+                  </label>
+                  {(!consentPhotos || !consentAiAnalysis) && (
+                    <p className="text-[10px] text-muted-foreground sm:col-span-2">
+                      Without both consents the captures are stored but not analysed, and the assessment
+                      continues on coach-measured values alone.
+                    </p>
+                  )}
+                </div>
+
+                {/* Scan result */}
+                {scanState && (
+                  <div className="rounded-xl border border-border/70 bg-background p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground">Body scan</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-medium">
+                          {scanState.status}
+                        </span>
+                        {!scanState.is_terminal && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                      </div>
+                      {scanState.is_terminal && scanState.status !== 'SKIPPED_NO_CONSENT' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px]"
+                          disabled={rescanMutation.isPending}
+                          onClick={() => rescanMutation.mutate()}
+                        >
+                          Re-run scan
+                        </Button>
+                      )}
+                    </div>
+
+                    {scanState.error && <p className="text-[11px] text-destructive">{scanState.error}</p>}
+                    {(scanState.warnings || []).map((w: string, i: number) => (
+                      <p key={i} className="text-[11px] text-amber-600 dark:text-amber-400">{w}</p>
+                    ))}
+
+                    {scanState.posture?.posture_score != null && (
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                        {([
+                          { label: 'Posture', value: scanState.posture.posture_score, unit: '/100' },
+                          { label: 'Shoulder tilt', value: scanState.posture.shoulder_tilt_degrees, unit: '°' },
+                          { label: 'Hip tilt', value: scanState.posture.hip_tilt_degrees, unit: '°' },
+                          { label: 'Forward head', value: scanState.posture.forward_head_angle_degrees, unit: '°' },
+                          { label: 'Midline shift', value: scanState.posture.lateral_shift_degrees, unit: '°' },
+                        ] as Array<{ label: string; value: number | null; unit: string }>).map((tile) => (
+                          <div key={tile.label} className="rounded-lg bg-muted/40 p-2">
+                            <p className="text-[10px] text-muted-foreground">{tile.label}</p>
+                            <p className="text-sm font-bold text-foreground">
+                              {tile.value == null ? 'Not assessed' : `${tile.value}${tile.unit}`}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!!Object.keys(scanState.circumference_estimates?.values || {}).length && (
+                      <div className="pt-1 space-y-1">
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(scanState.circumference_estimates?.values || {}).map(([key, value]) => (
+                            <span key={key} className="text-[11px] px-2 py-0.5 rounded-md bg-muted/60 text-foreground">
+                              {key.replace(/_/g, ' ')}: <strong>{String(value)}</strong>
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Estimated from capture geometry, low confidence. Tape measurements stay authoritative;
+                          use these for tracking change between assessments, not as absolute values.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setCurrentStep('intake')} className="flex-1">
@@ -1361,6 +1578,24 @@ export const AssessmentStudioWorkspace: React.FC = () => {
           </div>
         )}
       </PageBody>
+
+      {/* Standardised capture: live preview with framing guides, so every assessment is shot
+          the same way and two captures stay comparable. */}
+      {cameraForView && (
+        <WebCameraCaptureModal
+          isOpen={!!cameraForView}
+          onClose={() => setCameraForView(null)}
+          title={CAPTURE_VIEWS.find((v) => v.id === cameraForView)?.label || 'Baseline Capture'}
+          viewType={CAPTURE_VIEWS.find((v) => v.id === cameraForView)?.framing || 'general'}
+          onPhotoCaptured={(file, previewUrl) => {
+            const view = cameraForView;
+            if (!view) return;
+            setCaptureFiles((prev) => ({ ...prev, [view]: file }));
+            setCapturePreviews((prev) => ({ ...prev, [view]: previewUrl }));
+            setCameraForView(null);
+          }}
+        />
+      )}
     </div>
   );
 };
