@@ -48,6 +48,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
   // Capture & review states
   const [capturedBlobUrl, setCapturedBlobUrl] = useState<string | null>(null);
+  const capturedBlobUrlRef = useRef<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [isCountingDown, setIsCountingDown] = useState<boolean>(false);
   const [countdownValue, setCountdownValue] = useState<number>(3);
@@ -108,7 +109,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (firstErr: any) {
+      } catch (firstErr: unknown) {
         // Fallback to basic video constraint if high-res or facingMode fails
         console.warn('Initial camera constraint failed, retrying with basic video constraint:', firstErr);
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -133,7 +134,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
         setAvailableDevices(videoInputs);
         if (videoInputs.length > 0 && !selectedDeviceId) {
           const activeTrack = stream.getVideoTracks()[0];
-          const currentSettings = activeTrack.getSettings ? activeTrack.getSettings() : null;
+          const currentSettings = activeTrack?.getSettings ? activeTrack.getSettings() : null;
           if (currentSettings?.deviceId) {
             setSelectedDeviceId(currentSettings.deviceId);
           }
@@ -141,17 +142,19 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
       } catch (enumErr) {
         console.warn('Failed to enumerate media devices:', enumErr);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting camera stream:', err);
       let errorMsg = 'Could not access camera.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      const errName = err instanceof Error ? err.name : '';
+      const errMsg = err instanceof Error ? err.message : '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
         errorMsg = 'Camera permission was denied. Please click the camera icon in your browser address bar and choose "Allow" for this site.';
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
         errorMsg = 'No camera device was detected on your computer or device. Please plug in a webcam or upload a file.';
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
         errorMsg = 'The camera is currently in use by another application or browser tab. Please close any other app using the camera.';
-      } else if (err.message) {
-        errorMsg = err.message;
+      } else if (errMsg) {
+        errorMsg = errMsg;
       }
       setCameraError(errorMsg);
       setIsStreaming(false);
@@ -161,20 +164,29 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
   // Handle modal open/close lifecycle
   useEffect(() => {
     if (isOpen) {
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
+      }
       setCapturedBlobUrl(null);
       setCapturedFile(null);
       setIsCountingDown(false);
       startCamera();
     } else {
       stopCamera();
-      if (capturedBlobUrl) {
-        URL.revokeObjectURL(capturedBlobUrl);
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
       }
       setCapturedBlobUrl(null);
       setCapturedFile(null);
     }
     return () => {
       stopCamera();
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
+      }
     };
   }, [isOpen, startCamera, stopCamera]);
 
@@ -225,6 +237,10 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
         const file = new File([blob], fileName, { type: 'image/jpeg', lastModified: Date.now() });
         const url = URL.createObjectURL(blob);
 
+        if (capturedBlobUrlRef.current) {
+          URL.revokeObjectURL(capturedBlobUrlRef.current);
+        }
+        capturedBlobUrlRef.current = url;
         setCapturedFile(file);
         setCapturedBlobUrl(url);
 
@@ -257,8 +273,9 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
   // Retake photo: discard captured snapshot and restart live video feed
   const handleRetake = () => {
-    if (capturedBlobUrl) {
-      URL.revokeObjectURL(capturedBlobUrl);
+    if (capturedBlobUrlRef.current) {
+      URL.revokeObjectURL(capturedBlobUrlRef.current);
+      capturedBlobUrlRef.current = null;
     }
     setCapturedBlobUrl(null);
     setCapturedFile(null);
@@ -278,6 +295,10 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+      }
+      capturedBlobUrlRef.current = url;
       setCapturedFile(file);
       setCapturedBlobUrl(url);
       stopCamera();
