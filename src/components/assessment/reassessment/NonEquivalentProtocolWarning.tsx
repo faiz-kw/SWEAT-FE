@@ -22,7 +22,7 @@ export const NonEquivalentProtocolWarning: React.FC<NonEquivalentProtocolWarning
       role="alert"
     >
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 rounded-lg bg-amber-500/20 p-1.5 text-amber-400">
+        <div className="mt-0.5 rounded-lg bg-amber-500/20 p-1.5 text-amber-600 dark:text-amber-400">
           <AlertTriangle className="h-5 w-5" />
         </div>
         <div className="flex-1 space-y-1.5">
@@ -38,14 +38,14 @@ export const NonEquivalentProtocolWarning: React.FC<NonEquivalentProtocolWarning
           <p className="text-xs leading-relaxed text-amber-200/90">
             {comparisonNote || (
               <>
-                The baseline was evaluated using <strong className="text-white font-medium">{previousVariation || 'Unknown'}</strong>,
-                while the current assessment progressed to <strong className="text-white font-medium">{currentVariation}</strong>.
+                The baseline was evaluated using <strong className="text-foreground font-medium">{previousVariation || 'Unknown'}</strong>,
+                while the current assessment progressed to <strong className="text-foreground font-medium">{currentVariation}</strong>.
                 Mathematical rep and load deltas are suppressed to avoid misleading comparisons across unequal biomechanical levers.
               </>
             )}
           </p>
 
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400/80">
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400/80">
             <Info className="h-3.5 w-3.5 shrink-0" />
             <span>Advancement is tracked qualitatively via the Individual Progression Registry.</span>
           </div>

@@ -184,7 +184,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
                 />
               </div>
               {quality && (
-                <p className={`text-[10px] leading-tight ${rejected ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                <p className={`text-[10px] leading-tight ${rejected ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400'}`}>
                   {rejected ? quality.reason : 'Usable for measurement'}
                 </p>
               )}
@@ -207,7 +207,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
             <option value="LOOSE">Loose clothing</option>
           </select>
           {clothingFit === 'LOOSE' && (
-            <p className="text-[10px] text-amber-600 dark:text-amber-400">
+            <p className="text-[10px] text-amber-600 dark:text-amber-600 dark:text-amber-400">
               Loose clothing hides body outline. Posture angles still hold; girth estimates will read low.
             </p>
           )}
@@ -273,7 +273,7 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
 
           {scanState.error && <p className="text-[11px] text-destructive">{scanState.error}</p>}
           {(scanState.warnings || []).map((warning: string, index: number) => (
-            <p key={index} className="text-[11px] text-amber-600 dark:text-amber-400">{warning}</p>
+            <p key={index} className="text-[11px] text-amber-600 dark:text-amber-600 dark:text-amber-400">{warning}</p>
           ))}
 
           {scanState.posture?.posture_score != null && (

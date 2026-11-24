@@ -332,7 +332,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
         </DialogHeader>
 
         {/* MAIN VIEWFINDER VIEWPORT */}
-        <div className="relative w-full aspect-4/3 bg-black flex items-center justify-center overflow-hidden select-none">
+        <div className="relative w-full aspect-4/3 bg-background flex items-center justify-center overflow-hidden select-none">
           {/* Live Video Feed */}
           <video
             ref={videoRef}
@@ -354,11 +354,11 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
           )}
 
           {/* Camera Flash Animation */}
-          {flashActive && <div className="absolute inset-0 bg-white z-40 animate-out fade-out duration-200 pointer-events-none" />}
+          {flashActive && <div className="absolute inset-0 bg-card z-40 animate-out fade-out duration-200 pointer-events-none" />}
 
           {/* Camera Loading Spinner */}
           {!capturedBlobUrl && !isStreaming && !cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 text-white z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/90 text-foreground z-10">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
               <p className="text-xs font-semibold text-muted-foreground">Requesting web camera access...</p>
             </div>
@@ -366,8 +366,8 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
           {/* Camera Error / Permission Denied Overlay */}
           {cameraError && !capturedBlobUrl && (
-            <div className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center bg-black/95 text-white z-20 space-y-3">
-              <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
+            <div className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center bg-background/95 text-foreground z-20 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-rose-500/20 text-destructive flex items-center justify-center">
                 <ShieldAlert className="w-6 h-6" />
               </div>
               <div className="space-y-1 max-w-sm">
@@ -375,7 +375,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                 <p className="text-xs text-muted-foreground leading-relaxed">{cameraError}</p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                <Button size="sm" variant="outline" onClick={startCamera} className="text-xs gap-1.5 border-white/20 text-white hover:bg-white/10">
+                <Button size="sm" variant="outline" onClick={startCamera} className="text-xs gap-1.5 border-white/20 text-foreground hover:bg-card/10">
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Retry Camera</span>
                 </Button>
@@ -394,7 +394,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
           {/* Countdown Indicator Overlay */}
           {isCountingDown && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40 backdrop-blur-xs">
               <div className="w-24 h-24 rounded-full bg-primary/90 text-primary-foreground flex items-center justify-center text-5xl font-black shadow-2xl animate-pulse">
                 {countdownValue}
               </div>
@@ -406,11 +406,11 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
             <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-10">
               {/* TOP DISTANCE & HEAD ALIGNMENT */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-white font-mono">
+                <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-foreground font-mono">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>TARGET DISTANCE: {targetDistanceMeters} METERS</span>
                 </div>
-                <div className="bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-white font-mono">
+                <div className="bg-background/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-foreground font-mono">
                   {viewType === 'front' ? 'CORONAL (FRONT)' : viewType === 'side' ? 'SAGITTAL (SIDE)' : 'ORTHOGONAL'}
                 </div>
               </div>
@@ -426,14 +426,14 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
                   {/* Shoulder & Pelvis Level Axis */}
                   <div className="space-y-6">
-                    <div className="flex items-center gap-2 text-[9px] text-white/80 font-mono">
-                      <div className="h-px bg-white/40 flex-1 border-t border-dashed" />
-                      <span className="bg-black/60 px-2 py-0.5 rounded">SHOULDER LEVEL AXIS</span>
-                      <div className="h-px bg-white/40 flex-1 border-t border-dashed" />
+                    <div className="flex items-center gap-2 text-[9px] text-foreground/80 font-mono">
+                      <div className="h-px bg-card/40 flex-1 border-t border-dashed" />
+                      <span className="bg-background/60 px-2 py-0.5 rounded">SHOULDER LEVEL AXIS</span>
+                      <div className="h-px bg-card/40 flex-1 border-t border-dashed" />
                     </div>
-                    <div className="flex items-center gap-2 text-[9px] text-white/80 font-mono">
+                    <div className="flex items-center gap-2 text-[9px] text-foreground/80 font-mono">
                       <div className="h-px bg-emerald-400/50 flex-1" />
-                      <span className="bg-black/60 px-2 py-0.5 rounded text-emerald-300">ASIS PELVIS AXIS</span>
+                      <span className="bg-background/60 px-2 py-0.5 rounded text-emerald-300">ASIS PELVIS AXIS</span>
                       <div className="h-px bg-emerald-400/50 flex-1" />
                     </div>
                   </div>
@@ -457,7 +457,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                   {/* Vertical Plumb Line */}
                   <div className="absolute inset-y-10 left-1/2 -translate-x-1/2 flex flex-col items-center justify-between pointer-events-none">
                     <div className="w-0.5 h-full bg-sky-400/60 border-l border-dashed border-sky-300 flex flex-col justify-center items-center">
-                      <span className="bg-black/80 text-sky-300 text-[9px] font-mono px-2 py-0.5 rounded whitespace-nowrap -rotate-90">
+                      <span className="bg-background/80 text-sky-300 text-[9px] font-mono px-2 py-0.5 rounded whitespace-nowrap -rotate-90">
                         PLUMB: EAR → SHOULDER → HIP → ANKLE
                       </span>
                     </div>
@@ -479,7 +479,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
               {/* BOTTOM TIPS */}
               <div className="text-center">
-                <span className="bg-black/70 backdrop-blur-sm text-white/90 text-[10px] px-3 py-1 rounded-full border border-white/20 font-medium">
+                <span className="bg-background/70 backdrop-blur-sm text-foreground/90 text-[10px] px-3 py-1 rounded-full border border-white/20 font-medium">
                   {viewType === 'front'
                     ? 'Member faces camera with neutral posture, arms relaxed at sides.'
                     : 'Member turns 90° sideways, looking straight forward.'}
@@ -507,7 +507,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                 variant="default"
                 size="sm"
                 onClick={handleConfirmPhoto}
-                className="gap-2 text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="gap-2 text-xs flex-1 bg-primary hover:bg-primary/90 text-foreground"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Use This Photo</span>

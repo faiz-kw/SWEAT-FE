@@ -44,20 +44,20 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Step Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Section 1
             </span>
-            <h2 className="text-lg font-bold text-zinc-100">Member Intake & Baseline Profile</h2>
+            <h2 className="text-lg font-bold text-foreground">Member Intake & Baseline Profile</h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Capture member identity, prior training background, and training style preferences.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <UserCheck className="w-4 h-4 text-emerald-400" />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>Coach-Led Assessment</span>
         </div>
       </div>
@@ -65,37 +65,37 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Member Name */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-            Member Full Name <span className="text-amber-400">*</span>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+            Member Full Name <span className="text-amber-600 dark:text-amber-400">*</span>
           </label>
           <Input
             value={memberName}
             onChange={(e) => setMemberName(e.target.value)}
             placeholder="e.g. Priya Sharma"
-            className="h-10 bg-zinc-900 border-zinc-800 text-sm text-zinc-100 focus:border-amber-500"
+            className="h-10 bg-card border-border text-sm text-foreground focus:border-amber-500"
           />
         </div>
 
         {/* Member Phone */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
             Mobile Number (WhatsApp Enabled)
           </label>
           <Input
             value={memberPhone}
             onChange={(e) => setMemberPhone(e.target.value)}
             placeholder="+91 98765 43210"
-            className="h-10 bg-zinc-900 border-zinc-800 text-sm text-zinc-100 focus:border-amber-500"
+            className="h-10 bg-card border-border text-sm text-foreground focus:border-amber-500"
           />
         </div>
 
         {/* Assessment Type */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Assessment Type</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Assessment Type</label>
           <select
             value={assessmentType}
             onChange={(e) => setAssessmentType(e.target.value)}
-            className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-200 focus:outline-none focus:border-amber-500"
+            className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="INITIAL">Initial Baseline Assessment (New Member)</option>
             <option value="REASSESSMENT">Follow-Up Reassessment (Longitudinal)</option>
@@ -105,11 +105,11 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
 
         {/* Training Experience */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Training Background</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Training Background</label>
           <select
             value={trainingExperience}
             onChange={(e) => setTrainingExperience(e.target.value)}
-            className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-200 focus:outline-none focus:border-amber-500"
+            className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="BEGINNER">Beginner (&lt; 6 months structured training)</option>
             <option value="INTERMEDIATE">Intermediate (6 months - 2 years consistent training)</option>
@@ -120,11 +120,11 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
 
         {/* Current Activity Level */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Current Activity Level</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Current Activity Level</label>
           <select
             value={activityLevel}
             onChange={(e) => setActivityLevel(e.target.value)}
-            className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-200 focus:outline-none focus:border-amber-500"
+            className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="SEDENTARY">Sedentary (Desk work, little to no regular exercise)</option>
             <option value="LIGHTLY_ACTIVE">Lightly Active (1-2 days/week light walks or yoga)</option>
@@ -135,11 +135,11 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
 
         {/* Preferred Training Style */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Preferred Modality</label>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Preferred Modality</label>
           <select
             value={preferredStyle}
             onChange={(e) => setPreferredStyle(e.target.value)}
-            className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-200 focus:outline-none focus:border-amber-500"
+            className="w-full h-10 rounded-md bg-card border border-border px-3 text-sm text-foreground focus:outline-none focus:border-amber-500"
           >
             <option value="PILATES">Pilates Reformer & Mat (Alignment & Core)</option>
             <option value="STRENGTH">Functional Strength & Resistance</option>
@@ -151,7 +151,7 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
 
       {/* User Notes */}
       <div>
-        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
           Intake Observations & Member Comments
         </label>
         <Textarea
@@ -159,16 +159,16 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
           onChange={(e) => setUserNotes(e.target.value)}
           rows={3}
           placeholder="e.g. Member noted tightness in upper traps from laptop posture; interested in improving core engagement."
-          className="bg-zinc-900 border-zinc-800 text-sm text-zinc-100"
+          className="bg-card border-border text-sm text-foreground"
         />
       </div>
 
       {/* Next Button */}
-      <div className="flex justify-end pt-4 border-t border-zinc-800">
+      <div className="flex justify-end pt-4 border-t border-border">
         <Button
           onClick={onNext}
           disabled={!isFormValid}
-          className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs px-6 h-10 gap-2"
+          className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
           <span>Continue to Safety Gate</span>
           <ArrowRight className="w-4 h-4" />

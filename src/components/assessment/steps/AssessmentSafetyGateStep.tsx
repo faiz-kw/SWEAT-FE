@@ -72,28 +72,28 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Section 2
             </span>
-            <h2 className="text-lg font-bold text-zinc-100">Safety & Readiness Gate (10-Question PAR-Q)</h2>
+            <h2 className="text-lg font-bold text-foreground">Safety & Readiness Gate (10-Question PAR-Q)</h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Mandatory clinical readiness screening. Any affirmative critical red flag triggers a testing stop.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
-          <ShieldCheck className="w-4 h-4 text-amber-400" />
-          <span className="text-zinc-300 font-medium">Standard PAR-Q Battery</span>
+          <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <span className="text-muted-foreground font-medium">Standard PAR-Q Battery</span>
         </div>
       </div>
 
       {/* Reactive Safety Alert Banner */}
       {criticalTriggered && (
-        <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-red-400">
+        <div className="rounded-xl border border-destructive/40 bg-red-950/30 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5 flex-shrink-0" />
             <h4 className="font-semibold text-sm">Critical Red Flag Identified — Medical Clearance Required</h4>
           </div>
@@ -114,15 +114,15 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
               className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                 isYes
                   ? q.isCritical
-                    ? 'bg-red-950/20 border-red-500/50'
+                    ? 'bg-red-950/20 border-destructive/50'
                     : 'bg-amber-950/20 border-amber-500/50'
-                  : 'bg-zinc-900 border-zinc-800/80'
+                  : 'bg-card border-border/80'
               }`}
             >
               <div className="pr-4">
-                <span className="text-xs font-medium text-zinc-200">{q.title}</span>
+                <span className="text-xs font-medium text-foreground">{q.title}</span>
                 {q.isCritical && (
-                  <span className="ml-2 text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                  <span className="ml-2 text-[10px] font-bold text-destructive uppercase tracking-wider">
                     [Critical Red Flag]
                   </span>
                 )}
@@ -133,8 +133,8 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
                   onClick={() => handleToggle(q.key, false)}
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
                     !isYes
-                      ? 'bg-zinc-800 text-zinc-200 border border-zinc-700'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      ? 'bg-muted text-foreground border border-border'
+                      : 'text-muted-foreground hover:text-muted-foreground'
                   }`}
                 >
                   No
@@ -145,9 +145,9 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
                   className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
                     isYes
                       ? q.isCritical
-                        ? 'bg-red-500 text-white'
-                        : 'bg-amber-500 text-black'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                        ? 'bg-red-500 text-foreground'
+                        : 'bg-amber-500 text-foreground'
+                      : 'text-muted-foreground hover:text-muted-foreground'
                   }`}
                 >
                   Yes
@@ -159,9 +159,9 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
       </div>
 
       {/* Coach Safety Outcome Decision */}
-      <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
-        <label className="block text-xs font-semibold text-zinc-200">
-          Coach Safety Gate Decision & Action Taken <span className="text-amber-400">*</span>
+      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+        <label className="block text-xs font-semibold text-foreground">
+          Coach Safety Gate Decision & Action Taken <span className="text-amber-600 dark:text-amber-400">*</span>
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
           <button
@@ -169,11 +169,11 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('CLEARED')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'CLEARED'
-                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
-            <div className="font-semibold text-zinc-100 mb-0.5">Cleared</div>
+            <div className="font-semibold text-foreground mb-0.5">Cleared</div>
             <div>Full testing battery</div>
           </button>
 
@@ -182,11 +182,11 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('PROCEED_WITH_MODIFICATIONS')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'PROCEED_WITH_MODIFICATIONS'
-                ? 'bg-amber-500/10 border-amber-500 text-amber-400'
-                : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400'
+                : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
-            <div className="font-semibold text-zinc-100 mb-0.5">With Modifications</div>
+            <div className="font-semibold text-foreground mb-0.5">With Modifications</div>
             <div>Adjust exercises</div>
           </button>
 
@@ -195,11 +195,11 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('DEFER_MEDICAL_CLEARANCE')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'DEFER_MEDICAL_CLEARANCE'
-                ? 'bg-red-500/10 border-red-500 text-red-400'
-                : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                ? 'bg-destructive/10 border-red-500 text-destructive'
+                : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
-            <div className="font-semibold text-zinc-100 mb-0.5">Defer for Clearance</div>
+            <div className="font-semibold text-foreground mb-0.5">Defer for Clearance</div>
             <div>Block physical tests</div>
           </button>
 
@@ -208,17 +208,17 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onClick={() => setScreeningOutcome('STOPPED_SAFETY_CONCERNS')}
             className={`p-3 rounded-lg border text-left text-xs font-medium transition-all ${
               screeningOutcome === 'STOPPED_SAFETY_CONCERNS'
-                ? 'bg-red-500/20 border-red-500 text-red-400 font-bold'
-                : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                ? 'bg-destructive/20 border-red-500 text-destructive font-bold'
+                : 'border-border text-muted-foreground hover:border-border'
             }`}
           >
-            <div className="font-semibold text-zinc-100 mb-0.5">Stop Assessment</div>
+            <div className="font-semibold text-foreground mb-0.5">Stop Assessment</div>
             <div>Halt session now</div>
           </button>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
             Coach Clinical Notes & Referral Context
           </label>
           <Textarea
@@ -226,14 +226,14 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             onChange={(e) => setScreeningCoachNotes(e.target.value)}
             rows={2}
             placeholder="e.g. Member noted mild knee ache on stairs. Cleared for box squats; avoid deep lunges."
-            className="bg-zinc-800 border-zinc-700 text-xs text-zinc-200"
+            className="bg-muted border-border text-xs text-foreground"
           />
         </div>
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-        <Button variant="ghost" onClick={onPrev} className="text-xs text-zinc-400 gap-1.5">
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Intake</span>
         </Button>
@@ -241,7 +241,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         {isTestingBlocked ? (
           <Button
             onClick={onNext}
-            className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-6 h-10 gap-2"
+            className="bg-red-600 hover:bg-red-700 text-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
             <Lock className="w-4 h-4" />
             <span>Save & Defer Assessment</span>
@@ -249,7 +249,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
         ) : (
           <Button
             onClick={onNext}
-            className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs px-6 h-10 gap-2"
+            className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
           >
             <span>Proceed to Vitals</span>
             <ArrowRight className="w-4 h-4" />

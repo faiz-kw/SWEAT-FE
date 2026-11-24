@@ -47,28 +47,28 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Section 12
             </span>
-            <h2 className="text-lg font-bold text-zinc-100">Member Goals & Commitment Framework</h2>
+            <h2 className="text-lg font-bold text-foreground">Member Goals & Commitment Framework</h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Establish the member's target outcome, realistic timeline, and attendance commitment.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <Target className="w-4 h-4 text-amber-400" />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           <span>Outcome Alignment</span>
         </div>
       </div>
 
       {/* Primary Goal Selector */}
       <div className="space-y-2.5">
-        <label className="block text-xs font-semibold text-zinc-300">
-          Primary Transformation Target <span className="text-amber-400">*</span>
+        <label className="block text-xs font-semibold text-muted-foreground">
+          Primary Transformation Target <span className="text-amber-600 dark:text-amber-400">*</span>
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {GOALS.map((g) => {
@@ -80,14 +80,14 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
                 onClick={() => setTargetGoal(g.id)}
                 className={`p-3.5 rounded-xl border text-left transition-all ${
                   isSelected
-                    ? 'bg-amber-500/10 border-amber-500 text-zinc-100 shadow-md shadow-amber-500/5'
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    ? 'bg-amber-500/10 border-amber-500 text-foreground shadow-md shadow-amber-500/5'
+                    : 'bg-card border-border text-muted-foreground hover:border-border'
                 }`}
               >
-                <div className={`text-xs font-bold ${isSelected ? 'text-amber-400' : 'text-zinc-200'} mb-1`}>
+                <div className={`text-xs font-bold ${isSelected ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'} mb-1`}>
                   {g.label}
                 </div>
-                <div className="text-[11px] text-zinc-400 leading-relaxed">{g.desc}</div>
+                <div className="text-[11px] text-muted-foreground leading-relaxed">{g.desc}</div>
               </button>
             );
           })}
@@ -96,7 +96,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
 
       {/* Stated Goal in Member's Own Words */}
       <div>
-        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
           Stated Goal Outcome (Member's Exact Words)
         </label>
         <Textarea
@@ -104,20 +104,20 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
           onChange={(e) => setCustomGoalOutcome(e.target.value)}
           rows={2}
           placeholder="e.g. Relieve neck and shoulder stiffness, tone core, and feel energized without fatigue."
-          className="bg-zinc-900 border-zinc-800 text-sm text-zinc-100"
+          className="bg-card border-border text-sm text-foreground"
         />
       </div>
 
       {/* Timeline & Commitment Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-4 rounded-xl bg-card border border-border">
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
             Commitment Timeline (Weeks)
           </label>
           <select
             value={durationWeeks}
             onChange={(e) => setDurationWeeks(parseInt(e.target.value, 10))}
-            className="w-full h-10 rounded-md bg-zinc-800 border border-zinc-700 px-3 text-xs text-zinc-200"
+            className="w-full h-10 rounded-md bg-muted border border-border px-3 text-xs text-foreground"
           >
             <option value={6}>6 Weeks (Kickstart Baseline)</option>
             <option value={12}>12 Weeks (Quarterly Recomposition)</option>
@@ -127,7 +127,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
             Weekly Frequency (Days / Week)
           </label>
           <div className="flex gap-2">
@@ -138,8 +138,8 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
                 onClick={() => setWeeklyFrequency(d)}
                 className={`flex-1 h-10 rounded-md text-xs font-bold border transition-all ${
                   weeklyFrequency === d
-                    ? 'bg-amber-500 text-black border-amber-500'
-                    : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-zinc-600'
+                    ? 'bg-amber-500 text-foreground border-amber-500'
+                    : 'bg-muted text-muted-foreground border-border hover:border-border-strong'
                 }`}
               >
                 {d}x / week
@@ -149,23 +149,23 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
             Perceived Barriers & Obstacles
           </label>
           <Input
             value={perceivedBarrier}
             onChange={(e) => setPerceivedBarrier(e.target.value)}
             placeholder="e.g. Busy work schedule, travel, or past knee injury"
-            className="h-10 bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+            className="h-10 bg-muted border-border text-xs text-foreground"
           />
         </div>
 
         <div className="sm:col-span-2">
           <div className="flex justify-between items-center mb-1">
-            <label className="text-xs font-semibold text-zinc-300">
+            <label className="text-xs font-semibold text-muted-foreground">
               Member Confidence Score (1 - 10)
             </label>
-            <span className="text-xs font-bold text-amber-400">{confidenceScore} / 10</span>
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{confidenceScore} / 10</span>
           </div>
           <input
             type="range"
@@ -179,14 +179,14 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
       </div>
 
       {/* Navigation */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-        <Button variant="ghost" onClick={onPrev} className="text-xs text-zinc-400 gap-1.5">
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Movement Tests</span>
         </Button>
         <Button
           onClick={onNext}
-          className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs px-6 h-10 gap-2"
+          className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
           <span>Review & Consents</span>
           <ArrowRight className="w-4 h-4" />

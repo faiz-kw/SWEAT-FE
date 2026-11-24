@@ -64,28 +64,28 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Sections 13-17
             </span>
-            <h2 className="text-lg font-bold text-zinc-100">Review, Consents & Coach Sign-Off</h2>
+            <h2 className="text-lg font-bold text-foreground">Review, Consents & Coach Sign-Off</h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Verify capability matrix, review catalog recommendation, collect opt-in consents, and submit coach sign-off.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>Governance & Compliance</span>
         </div>
       </div>
 
       {/* Domain Capability Matrix Summary */}
-      <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
-        <div className="flex items-center gap-2 text-zinc-200">
-          <Award className="w-4 h-4 text-amber-400" />
+      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+        <div className="flex items-center gap-2 text-foreground">
+          <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           <h3 className="text-xs font-bold uppercase tracking-wider">Functional Capability Matrix</h3>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
@@ -97,9 +97,9 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             'Mobility': capabilityMatrix.mobility || 'Within Protocol',
             'Cardio': capabilityMatrix.cardiovascular || 'Baseline',
           }).map(([domain, status]) => (
-            <div key={domain} className="p-2.5 rounded-lg bg-zinc-800/80 border border-zinc-700/60 text-center">
-              <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">{domain}</span>
-              <span className="text-xs font-semibold text-amber-400">{status}</span>
+            <div key={domain} className="p-2.5 rounded-lg bg-muted/80 border border-border/60 text-center">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">{domain}</span>
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{status}</span>
             </div>
           ))}
         </div>
@@ -107,19 +107,19 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
 
       {/* Recommended Catalog Package Card */}
       {recPkg && (
-        <div className="p-5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-900 space-y-3">
+        <div className="p-5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-card to-card space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-400">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <PackageIcon className="w-5 h-5" />
               <span className="text-xs font-bold uppercase tracking-wider">Tailored Studio Package</span>
             </div>
-            <span className="text-xs font-bold text-zinc-100 px-2.5 py-1 rounded bg-zinc-800 border border-zinc-700">
+            <span className="text-xs font-bold text-foreground px-2.5 py-1 rounded bg-muted border border-border">
               ₹{recPkg.price ? recPkg.price.toLocaleString('en-IN') : 'Custom'}
             </span>
           </div>
           <div>
-            <h4 className="text-base font-bold text-zinc-100">{recPkg.name || 'Studio Program'}</h4>
-            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            <h4 className="text-base font-bold text-foreground">{recPkg.name || 'Studio Program'}</h4>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {recPkg.reason || 'Matched directly to member commitment and goal profile.'}
             </p>
           </div>
@@ -127,17 +127,17 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
       )}
 
       {/* Section 16: Explicit Opt-In Consents (Default False) */}
-      <div className="p-5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3.5">
-        <div className="flex items-center gap-2 text-zinc-200">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+      <div className="p-5 rounded-xl bg-card border border-border space-y-3.5">
+        <div className="flex items-center gap-2 text-foreground">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <h3 className="text-xs font-bold uppercase tracking-wider">Section 16: Opt-In Consents & Disclaimers</h3>
         </div>
-        <p className="text-xs text-zinc-400 leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           In compliance with digital health privacy rules, each consent must be explicitly granted by the member. None default to true.
         </p>
 
         <div className="space-y-2.5">
-          <label className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
+          <label className="flex items-start gap-3 p-3 rounded-lg bg-muted/60 border border-border/50 cursor-pointer hover:bg-muted transition-colors">
             <input
               type="checkbox"
               checked={consentBody}
@@ -145,12 +145,12 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-zinc-200">Consent for Biometrics & Body Measurements</span>
-              <p className="text-zinc-400 mt-0.5">Authorize recording of height, weight, waist circumference, and blood pressure.</p>
+              <span className="font-semibold text-foreground">Consent for Biometrics & Body Measurements</span>
+              <p className="text-muted-foreground mt-0.5">Authorize recording of height, weight, waist circumference, and blood pressure.</p>
             </div>
           </label>
 
-          <label className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
+          <label className="flex items-start gap-3 p-3 rounded-lg bg-muted/60 border border-border/50 cursor-pointer hover:bg-muted transition-colors">
             <input
               type="checkbox"
               checked={consentPhotos}
@@ -158,12 +158,12 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-zinc-200">Consent for Movement Photography & Media</span>
-              <p className="text-zinc-400 mt-0.5">Authorize baseline posture alignment photos stored encrypted in dedicated tenant storage.</p>
+              <span className="font-semibold text-foreground">Consent for Movement Photography & Media</span>
+              <p className="text-muted-foreground mt-0.5">Authorize baseline posture alignment photos stored encrypted in dedicated tenant storage.</p>
             </div>
           </label>
 
-          <label className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
+          <label className="flex items-start gap-3 p-3 rounded-lg bg-muted/60 border border-border/50 cursor-pointer hover:bg-muted transition-colors">
             <input
               type="checkbox"
               checked={consentAi}
@@ -171,12 +171,12 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-zinc-200">Consent for Automated Metabolic & Posture Analysis</span>
-              <p className="text-zinc-400 mt-0.5">Authorize algorithmic estimation of RMR, TDEE, and joint alignment angles.</p>
+              <span className="font-semibold text-foreground">Consent for Automated Metabolic & Posture Analysis</span>
+              <p className="text-muted-foreground mt-0.5">Authorize algorithmic estimation of RMR, TDEE, and joint alignment angles.</p>
             </div>
           </label>
 
-          <label className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
+          <label className="flex items-start gap-3 p-3 rounded-lg bg-muted/60 border border-border/50 cursor-pointer hover:bg-muted transition-colors">
             <input
               type="checkbox"
               checked={consentSecondary}
@@ -184,14 +184,14 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
               className="mt-0.5 accent-amber-500 rounded"
             />
             <div className="text-xs">
-              <span className="font-semibold text-zinc-200">Consent for De-Identified Secondary Quality Research</span>
-              <p className="text-zinc-400 mt-0.5">Optional: Authorize anonymized data to improve training progression benchmarks.</p>
+              <span className="font-semibold text-foreground">Consent for De-Identified Secondary Quality Research</span>
+              <p className="text-muted-foreground mt-0.5">Optional: Authorize anonymized data to improve training progression benchmarks.</p>
             </div>
           </label>
         </div>
 
-        <div className="pt-2 border-t border-zinc-800">
-          <label className="flex items-center gap-2 text-xs font-semibold text-zinc-300 cursor-pointer">
+        <div className="pt-2 border-t border-border">
+          <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
               checked={memberAcknowledged}
@@ -204,57 +204,57 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
       </div>
 
       {/* Coach Prescriptions */}
-      <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-200">Section 15: Coach Prescriptions</h3>
+      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Section 15: Coach Prescriptions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Key Movement Strengths</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Key Movement Strengths</label>
             <Textarea
               value={coachStrengths}
               onChange={(e) => setCoachStrengths(e.target.value)}
               rows={2}
               placeholder="e.g. Excellent hip hinge mechanics, strong core endurance."
-              className="bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+              className="bg-muted border-border text-xs text-foreground"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Areas to Develop</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Areas to Develop</label>
             <Textarea
               value={coachAreasToDevelop}
               onChange={(e) => setCoachAreasToDevelop(e.target.value)}
               rows={2}
               placeholder="e.g. Thoracic spine mobility, ankle dorsiflexion."
-              className="bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+              className="bg-muted border-border text-xs text-foreground"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Workout Prescription</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Workout Prescription</label>
             <Textarea
               value={workoutPrescription}
               onChange={(e) => setWorkoutPrescription(e.target.value)}
               rows={2}
               placeholder="e.g. 3x weekly Reformer Pilates focusing on pelvic neutral."
-              className="bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+              className="bg-muted border-border text-xs text-foreground"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Diet & Hydration Prescription</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Diet & Hydration Prescription</label>
             <Textarea
               value={dietPrescription}
               onChange={(e) => setDietPrescription(e.target.value)}
               rows={2}
               placeholder="e.g. 100g daily protein, ~2.5L water daily."
-              className="bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+              className="bg-muted border-border text-xs text-foreground"
             />
           </div>
         </div>
 
         <div className="pt-2">
-          <label className="block text-xs font-medium text-zinc-300 mb-1">Reassessment Interval (Weeks)</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Reassessment Interval (Weeks)</label>
           <select
             value={reassessmentWeeks}
             onChange={(e) => setReassessmentWeeks(parseInt(e.target.value, 10))}
-            className="w-48 h-9 rounded bg-zinc-800 border border-zinc-700 px-3 text-xs text-zinc-200"
+            className="w-48 h-9 rounded bg-muted border border-border px-3 text-xs text-foreground"
           >
             <option value={4}>4 Weeks</option>
             <option value={6}>6 Weeks (Recommended)</option>
@@ -265,15 +265,15 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
       </div>
 
       {/* Navigation */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-        <Button variant="ghost" onClick={onPrev} className="text-xs text-zinc-400 gap-1.5">
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Goals</span>
         </Button>
         <Button
           onClick={onApproveAndSignOff}
           disabled={isApproving}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-6 h-10 gap-2 shadow-lg shadow-emerald-600/20"
+          className="bg-primary hover:bg-primary/90 text-foreground font-semibold text-xs px-6 h-10 gap-2 shadow-lg shadow-emerald-600/20"
         >
           <CheckCircle2 className="w-4 h-4" />
           <span>{isApproving ? 'Submitting Sign-Off...' : 'Coach Approve & Unlock Screen'}</span>

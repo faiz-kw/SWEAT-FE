@@ -58,34 +58,34 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               Sections 4-11
             </span>
-            <h2 className="text-lg font-bold text-zinc-100">Functional Movement Battery (6 Core Domains)</h2>
+            <h2 className="text-lg font-bold text-foreground">Functional Movement Battery (6 Core Domains)</h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Standardized protocols, reps & load. Decouple symptom tracking from performance.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <Dumbbell className="w-4 h-4 text-amber-400" />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Dumbbell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           <span>Protocol v1.0</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Domain 1: Lower Body (Squat) */}
-        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
+        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Domain 1: Lower Body</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 1: Lower Body</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('lower_body')}
               className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['lower_body'] ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200'
+                symptoms['lower_body'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
               }`}
             >
               <AlertTriangle className="w-3 h-3" />
@@ -93,11 +93,11 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             </button>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Squat Variation</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Squat Variation</label>
             <select
               value={lb.variation || 'Bodyweight Squat'}
               onChange={(e) => updateDomain('lower_body', 'Squat', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2.5 text-xs text-zinc-200"
+              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
               <option value="Box Squat (Assisted)">Box Squat (Assisted)</option>
               <option value="Bodyweight Squat">Bodyweight Squat</option>
@@ -106,21 +106,21 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Reps</label>
+              <label className="block text-xs text-muted-foreground mb-1">Reps</label>
               <Input
                 type="number"
                 placeholder="0"
                 value={lb.reps ?? ''}
                 onChange={(e) => updateDomain('lower_body', 'Squat', 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+                className="h-9 bg-muted border-border text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Quality</label>
+              <label className="block text-xs text-muted-foreground mb-1">Quality</label>
               <select
                 value={lb.movement_quality || 'Meets criteria'}
                 onChange={(e) => updateDomain('lower_body', 'Squat', 'movement_quality', e.target.value)}
-                className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2 text-xs text-zinc-200"
+                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
               >
                 <option value="Meets criteria">Meets criteria</option>
                 <option value="Needs cueing">Needs cueing</option>
@@ -131,14 +131,14 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         </div>
 
         {/* Domain 2: Upper Body (Push-up) */}
-        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
+        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Domain 2: Upper Body</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 2: Upper Body</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('upper_body')}
               className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['upper_body'] ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200'
+                symptoms['upper_body'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
               }`}
             >
               <AlertTriangle className="w-3 h-3" />
@@ -146,11 +146,11 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             </button>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Push-up Variation</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Push-up Variation</label>
             <select
               value={ub.variation || 'Wall Push-up'}
               onChange={(e) => updateDomain('upper_body', 'Push-up', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2.5 text-xs text-zinc-200"
+              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
               <option value="Wall Push-up">Wall Push-up</option>
               <option value="High-incline Push-up">High-incline Push-up</option>
@@ -160,21 +160,21 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Reps</label>
+              <label className="block text-xs text-muted-foreground mb-1">Reps</label>
               <Input
                 type="number"
                 placeholder="0"
                 value={ub.reps ?? ''}
                 onChange={(e) => updateDomain('upper_body', 'Push-up', 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+                className="h-9 bg-muted border-border text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Quality</label>
+              <label className="block text-xs text-muted-foreground mb-1">Quality</label>
               <select
                 value={ub.movement_quality || 'Meets criteria'}
                 onChange={(e) => updateDomain('upper_body', 'Push-up', 'movement_quality', e.target.value)}
-                className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2 text-xs text-zinc-200"
+                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
               >
                 <option value="Meets criteria">Meets criteria</option>
                 <option value="Needs cueing">Needs cueing</option>
@@ -185,14 +185,14 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
         </div>
 
         {/* Domain 3: Core (Plank) */}
-        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
+        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Domain 3: Core</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 3: Core</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('core')}
               className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['core'] ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200'
+                symptoms['core'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
               }`}
             >
               <AlertTriangle className="w-3 h-3" />
@@ -200,37 +200,37 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             </button>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Plank Protocol</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Plank Protocol</label>
             <select
               value={core.variation || 'Standard Forearm Plank'}
               onChange={(e) => updateDomain('core', 'Plank', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2.5 text-xs text-zinc-200"
+              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
             >
               <option value="Elevated Plank">Elevated Plank (Box)</option>
               <option value="Standard Forearm Plank">Standard Forearm Plank</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Hold Duration (Seconds)</label>
+            <label className="block text-xs text-muted-foreground mb-1">Hold Duration (Seconds)</label>
             <Input
               type="number"
               placeholder="e.g. 45"
               value={core.hold_seconds ?? ''}
               onChange={(e) => updateDomain('core', 'Plank', 'hold_seconds', e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="h-9 bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+              className="h-9 bg-muted border-border text-xs text-foreground"
             />
           </div>
         </div>
 
         {/* Domain 4: Balance */}
-        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
+        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Domain 4: Balance</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 4: Balance</span>
             <button
               type="button"
               onClick={() => setActiveModalDomain('balance')}
               className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['balance'] ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200'
+                symptoms['balance'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
               }`}
             >
               <AlertTriangle className="w-3 h-3" />
@@ -239,21 +239,21 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Left Leg (Sec)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Left Leg (Sec)</label>
               <Input
                 type="number"
                 placeholder="25"
                 value={bal.hold_seconds ?? ''}
                 onChange={(e) => updateDomain('balance', 'Single Leg Balance', 'hold_seconds', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-zinc-800 border-zinc-700 text-xs text-zinc-100"
+                className="h-9 bg-muted border-border text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Support Used</label>
+              <label className="block text-xs text-muted-foreground mb-1">Support Used</label>
               <select
                 value={bal.movement_quality || 'None (Independent)'}
                 onChange={(e) => updateDomain('balance', 'Single Leg Balance', 'movement_quality', e.target.value)}
-                className="w-full h-9 rounded bg-zinc-800 border border-zinc-700 px-2 text-xs text-zinc-200"
+                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
               >
                 <option value="None (Independent)">None</option>
                 <option value="Fingertip touch">Fingertip touch</option>
@@ -274,12 +274,12 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
       )}
 
       {/* Navigation */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-        <Button variant="ghost" onClick={onPrev} className="text-xs text-zinc-400 gap-1.5">
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Vitals</span>
         </Button>
-        <Button onClick={onNext} className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs px-6 h-10 gap-2">
+        <Button onClick={onNext} className="bg-amber-500 hover:bg-amber-600 text-foreground font-semibold text-xs px-6 h-10 gap-2">
           <span>Continue to Goals</span>
           <ArrowRight className="w-4 h-4" />
         </Button>

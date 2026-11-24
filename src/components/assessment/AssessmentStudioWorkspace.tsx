@@ -139,21 +139,21 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <PageHeader
         title="Assessment Studio Workspace"
         description="Standardized 17-section functional movement assessment, safety readiness gate & clinical roadmap."
       />
       <PageBody>
         <div className="max-w-4xl mx-auto mb-8">
-          <div className="flex items-center justify-between overflow-x-auto pb-2 border-b border-zinc-800">
+          <div className="flex items-center justify-between overflow-x-auto pb-2 border-b border-border">
             {stepsList.map((s) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setCurrentStep(s.id)}
                 className={`text-xs font-semibold whitespace-nowrap px-3 py-1.5 rounded-lg transition-all ${
-                  currentStep === s.id ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  currentStep === s.id ? 'bg-amber-500 text-foreground shadow-md shadow-amber-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-card'
                 }`}
               >
                 {s.label}

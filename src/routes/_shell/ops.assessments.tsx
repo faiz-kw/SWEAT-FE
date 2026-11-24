@@ -6,6 +6,7 @@ import { AssessmentRegister } from '@/components/assessment/AssessmentRegister';
 import { ReassessmentComparisonView } from '@/components/assessment/reassessment/ReassessmentComparisonView';
 import { IndividualProgressionCard } from '@/components/assessment/reassessment/IndividualProgressionCard';
 import { assessmentApi, TestProgressionRecord } from '@/api/endpoints/assessmentApi';
+import { PageHeader, PageBody } from '@/components/enterprise/Page';
 
 export const Route = createFileRoute('/_shell/ops/assessments')({
   head: () => ({
@@ -46,74 +47,47 @@ function AssessmentOpsPage() {
     }
   }, [activeTab]);
 
+  // One tab definition drives both the header control and the body, so a new tab cannot be
+  // added to one and forgotten in the other.
+  const TABS: Array<{ id: ActiveTab; label: string; icon: React.ElementType }> = [
+    { id: 'register', label: 'All Assessments', icon: ClipboardList },
+    { id: 'new', label: 'New Assessment', icon: ClipboardCheck },
+    { id: 'reassessment', label: 'Reassessment', icon: ArrowLeftRight },
+    { id: 'progressions', label: 'Progressions', icon: TrendingUp },
+  ];
+
   return (
-    <div className="min-h-screen bg-zinc-950 p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Top Navigation Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-800 pb-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-            Assessment & Transformation Hub
-          </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Standardized 17-section assessment battery, safety screening, like-for-like reassessments & progression tracking.
-          </p>
-        </div>
+    <div className="flex flex-col min-h-screen bg-background text-foreground pb-24">
+      <PageHeader
+        title="Assessment & Transformation Studio"
+        description="Standardised 17-section assessment battery, safety screening, like-for-like reassessments and progression tracking."
+        actions={
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-card/80 p-1 overflow-x-auto">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        }
+      />
 
-        <div className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('register')}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-              activeTab === 'register'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
-          >
-            <ClipboardList className="h-4 w-4" />
-            <span>All Assessments</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('new')}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-              activeTab === 'new'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
-          >
-            <ClipboardCheck className="h-4 w-4" />
-            <span>New Assessment</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('reassessment')}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-              activeTab === 'reassessment'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
-          >
-            <ArrowLeftRight className="h-4 w-4" />
-            <span>Reassessment Comparison</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('progressions')}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-              activeTab === 'progressions'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
-          >
-            <TrendingUp className="h-4 w-4" />
-            <span>Active Progressions</span>
-          </button>
-        </div>
-      </div>
-
+      <PageBody className="space-y-6">
       {/* Tab Contents */}
       {activeTab === 'register' && (
         <AssessmentRegister
@@ -130,8 +104,8 @@ function AssessmentOpsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-white">Section 14 Individual Exercise Progression Registry</h2>
-              <p className="text-xs text-zinc-400">
+              <h2 className="text-base font-bold text-foreground">Section 14 Individual Exercise Progression Registry</h2>
+              <p className="text-xs text-muted-foreground">
                 Independent test progression targets, quality rubrics, and coach advancement authorizations.
               </p>
             </div>
@@ -139,7 +113,7 @@ function AssessmentOpsPage() {
               type="button"
               onClick={() => void fetchProgressions()}
               disabled={loadingProgressions}
-              className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingProgressions ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -153,16 +127,16 @@ function AssessmentOpsPage() {
           )}
 
           {loadingProgressions && progressions.length === 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-xs text-zinc-400">
+            <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-xs text-muted-foreground">
               Loading active exercise progressions...
             </div>
           )}
 
           {!loadingProgressions && progressions.length === 0 && !progressionsError && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
-              <AlertCircle className="mx-auto h-8 w-8 text-zinc-500" />
-              <h3 className="mt-3 text-sm font-semibold text-white">No Active Progressions Found</h3>
-              <p className="mt-1 text-xs text-zinc-400 max-w-sm mx-auto">
+            <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
+              <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
+              <h3 className="mt-3 text-sm font-semibold text-foreground">No Active Progressions Found</h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
                 Individual exercise progression targets are established upon completing and approving a member functional assessment.
               </p>
             </div>
@@ -181,6 +155,7 @@ function AssessmentOpsPage() {
           </div>
         </div>
       )}
+      </PageBody>
     </div>
   );
 }
