@@ -51,6 +51,9 @@ export interface Lead {
   consent_voice?: boolean;
   voice_consent?: LeadVoiceConsentInfo | null;
   current_status: LeadStatus;
+  last_call_disposition?: string | null;
+  last_call_disposition_display?: string | null;
+  last_call_at?: string | null;
   assigned_sales_user?: string | null;
   assigned_sales_name?: string | null;
   assigned_trainer_user?: string | null;

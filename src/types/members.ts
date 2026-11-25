@@ -15,6 +15,7 @@ export type MembershipLifecycleAction =
   | 'COLLECT_PAYMENT'
   | 'CHECK_IN'
   | 'BUY_PASSPORT'
+  | 'CHANGE_START_DATE'
   | 'PURCHASE_PACKAGE';
 
 export interface AvailableAction {

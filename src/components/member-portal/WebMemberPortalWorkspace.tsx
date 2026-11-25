@@ -8617,7 +8617,7 @@ function WebMemberPortalWorkspaceInner() {
                     const selected = selectedRenewPackageId === opt.package_id;
                     const homeCount = opt.home_sessions ?? (opt.session_credits || opt.session_count || 0);
                     const passportCount = opt.passport_sessions || 0;
-                    const totalSessions = homeCount + passportCount;
+                    const totalSessions = homeCount; // passport is a cross-branch cap within base, not additive
                     const days = opt.duration_days;
                     const rawPrice = opt.base_price;
                     const perSessionCost = (totalSessions > 0 && rawPrice > 0)
@@ -8657,7 +8657,7 @@ function WebMemberPortalWorkspaceInner() {
                               ) : null}
                               {passportCount > 0 && (
                                 <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-                                  {homeCount} Home + {passportCount} Passport
+                                  incl. {passportCount} cross-branch
                                 </span>
                               )}
                               {days > 0 && (
@@ -8733,7 +8733,7 @@ function WebMemberPortalWorkspaceInner() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Workout Sessions:</span>
                     <span className="font-bold text-foreground">
-                      {selectedOpt.is_unlimited ? 'Unlimited' : `${(selectedOpt.home_sessions ?? selectedOpt.session_credits ?? selectedOpt.session_count) + (selectedOpt.passport_sessions || 0)} Sessions`}
+                      {selectedOpt.is_unlimited ? 'Unlimited' : `${(selectedOpt.home_sessions ?? selectedOpt.session_credits ?? selectedOpt.session_count)} Sessions`}
                     </span>
                   </div>
                   <div className="flex justify-between pl-3 border-l-2 border-emerald-500/40 text-[11px]">
@@ -9010,7 +9010,7 @@ function WebMemberPortalWorkspaceInner() {
                     const selected = selectedUpgradePackageId === opt.package_id;
                     const homeCount = opt.home_sessions ?? (opt.session_credits || opt.session_count || 0);
                     const passportCount = opt.passport_sessions || 0;
-                    const totalSessions = homeCount + passportCount;
+                    const totalSessions = homeCount; // passport is a cross-branch cap within base, not additive
                     const days = opt.duration_days;
                     const rawPrice = opt.base_price || opt.total_price;
                     const perSessionCost = (totalSessions > 0 && rawPrice > 0)
@@ -9050,7 +9050,7 @@ function WebMemberPortalWorkspaceInner() {
                               ) : null}
                               {passportCount > 0 && (
                                 <span className="inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-                                  {homeCount} Home + {passportCount} Passport
+                                  incl. {passportCount} cross-branch
                                 </span>
                               )}
                               {days > 0 && (
@@ -9143,8 +9143,8 @@ function WebMemberPortalWorkspaceInner() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Target Total Sessions:</span>
                     <span className="font-semibold text-foreground">
-                      {(selectedOpt.home_sessions ?? (selectedOpt.session_credits || selectedOpt.session_count || 0)) + (selectedOpt.passport_sessions || 0)} Sessions
-                      {selectedOpt.passport_sessions ? ` (${selectedOpt.home_sessions || selectedOpt.session_count || 0} Home + ${selectedOpt.passport_sessions} Passport)` : ''}
+                      {(selectedOpt.home_sessions ?? (selectedOpt.session_credits || selectedOpt.session_count || 0))} Sessions
+                      {selectedOpt.passport_sessions ? ` (incl. ${selectedOpt.passport_sessions} cross-branch)` : ''}
                     </span>
                   </div>
                   <div className="flex justify-between">

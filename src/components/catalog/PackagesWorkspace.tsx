@@ -2467,7 +2467,9 @@ export const PackagesWorkspace: React.FC = () => {
                                                       (() => {
                                                         const homeUnits = Number(homeEnt.allocated_units || 0);
                                                         const passportUnits = Number(crossEnt?.allocated_units ?? cfgPassportSessions ?? 0);
-                                                        const totalSessions = homeUnits + passportUnits;
+                                                        // Passport is a cross-branch cap WITHIN the base sessions (a cross-branch
+                                                        // booking also consumes a home session), so the true total = home pool only.
+                                                        const totalSessions = homeUnits;
                                                         return (
                                                           <div className="flex flex-col gap-0.5 items-start">
                                                             <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md text-xs">
@@ -2479,7 +2481,7 @@ export const PackagesWorkspace: React.FC = () => {
                                                             </span>
                                                             {!homeEnt.is_unlimited && passportUnits > 0 && (
                                                               <span className="text-[10px] text-muted-foreground font-medium">
-                                                                {formatSessionCount(homeUnits)} Home + {formatSessionCount(passportUnits)} Passport
+                                                                incl. {formatSessionCount(passportUnits)} cross-branch (passport)
                                                               </span>
                                                             )}
                                                           </div>

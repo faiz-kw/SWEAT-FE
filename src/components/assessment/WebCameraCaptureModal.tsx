@@ -48,6 +48,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
   // Capture & review states
   const [capturedBlobUrl, setCapturedBlobUrl] = useState<string | null>(null);
+  const capturedBlobUrlRef = useRef<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [isCountingDown, setIsCountingDown] = useState<boolean>(false);
   const [countdownValue, setCountdownValue] = useState<number>(3);
@@ -108,7 +109,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (firstErr: any) {
+      } catch (firstErr: unknown) {
         // Fallback to basic video constraint if high-res or facingMode fails
         console.warn('Initial camera constraint failed, retrying with basic video constraint:', firstErr);
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -133,7 +134,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
         setAvailableDevices(videoInputs);
         if (videoInputs.length > 0 && !selectedDeviceId) {
           const activeTrack = stream.getVideoTracks()[0];
-          const currentSettings = activeTrack.getSettings ? activeTrack.getSettings() : null;
+          const currentSettings = activeTrack?.getSettings ? activeTrack.getSettings() : null;
           if (currentSettings?.deviceId) {
             setSelectedDeviceId(currentSettings.deviceId);
           }
@@ -141,17 +142,19 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
       } catch (enumErr) {
         console.warn('Failed to enumerate media devices:', enumErr);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting camera stream:', err);
       let errorMsg = 'Could not access camera.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      const errName = err instanceof Error ? err.name : '';
+      const errMsg = err instanceof Error ? err.message : '';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
         errorMsg = 'Camera permission was denied. Please click the camera icon in your browser address bar and choose "Allow" for this site.';
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
         errorMsg = 'No camera device was detected on your computer or device. Please plug in a webcam or upload a file.';
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
         errorMsg = 'The camera is currently in use by another application or browser tab. Please close any other app using the camera.';
-      } else if (err.message) {
-        errorMsg = err.message;
+      } else if (errMsg) {
+        errorMsg = errMsg;
       }
       setCameraError(errorMsg);
       setIsStreaming(false);
@@ -161,20 +164,29 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
   // Handle modal open/close lifecycle
   useEffect(() => {
     if (isOpen) {
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
+      }
       setCapturedBlobUrl(null);
       setCapturedFile(null);
       setIsCountingDown(false);
       startCamera();
     } else {
       stopCamera();
-      if (capturedBlobUrl) {
-        URL.revokeObjectURL(capturedBlobUrl);
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
       }
       setCapturedBlobUrl(null);
       setCapturedFile(null);
     }
     return () => {
       stopCamera();
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+        capturedBlobUrlRef.current = null;
+      }
     };
   }, [isOpen, startCamera, stopCamera]);
 
@@ -225,6 +237,10 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
         const file = new File([blob], fileName, { type: 'image/jpeg', lastModified: Date.now() });
         const url = URL.createObjectURL(blob);
 
+        if (capturedBlobUrlRef.current) {
+          URL.revokeObjectURL(capturedBlobUrlRef.current);
+        }
+        capturedBlobUrlRef.current = url;
         setCapturedFile(file);
         setCapturedBlobUrl(url);
 
@@ -257,8 +273,9 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
   // Retake photo: discard captured snapshot and restart live video feed
   const handleRetake = () => {
-    if (capturedBlobUrl) {
-      URL.revokeObjectURL(capturedBlobUrl);
+    if (capturedBlobUrlRef.current) {
+      URL.revokeObjectURL(capturedBlobUrlRef.current);
+      capturedBlobUrlRef.current = null;
     }
     setCapturedBlobUrl(null);
     setCapturedFile(null);
@@ -278,6 +295,10 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
+      if (capturedBlobUrlRef.current) {
+        URL.revokeObjectURL(capturedBlobUrlRef.current);
+      }
+      capturedBlobUrlRef.current = url;
       setCapturedFile(file);
       setCapturedBlobUrl(url);
       stopCamera();
@@ -305,13 +326,13 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
               </Badge>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-              Align member according to the biomechanical framing guide at ~{targetDistanceMeters}m distance.
+              Stand the member on the marker, about {targetDistanceMeters}m from the camera.
             </DialogDescription>
           </div>
         </DialogHeader>
 
         {/* MAIN VIEWFINDER VIEWPORT */}
-        <div className="relative w-full aspect-4/3 bg-black flex items-center justify-center overflow-hidden select-none">
+        <div className="relative w-full aspect-4/3 bg-background flex items-center justify-center overflow-hidden select-none">
           {/* Live Video Feed */}
           <video
             ref={videoRef}
@@ -333,11 +354,11 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
           )}
 
           {/* Camera Flash Animation */}
-          {flashActive && <div className="absolute inset-0 bg-white z-40 animate-out fade-out duration-200 pointer-events-none" />}
+          {flashActive && <div className="absolute inset-0 bg-card z-40 animate-out fade-out duration-200 pointer-events-none" />}
 
           {/* Camera Loading Spinner */}
           {!capturedBlobUrl && !isStreaming && !cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 text-white z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/90 text-foreground z-10">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
               <p className="text-xs font-semibold text-muted-foreground">Requesting web camera access...</p>
             </div>
@@ -345,8 +366,8 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
           {/* Camera Error / Permission Denied Overlay */}
           {cameraError && !capturedBlobUrl && (
-            <div className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center bg-black/95 text-white z-20 space-y-3">
-              <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
+            <div className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center bg-background/95 text-foreground z-20 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-rose-500/20 text-destructive flex items-center justify-center">
                 <ShieldAlert className="w-6 h-6" />
               </div>
               <div className="space-y-1 max-w-sm">
@@ -354,7 +375,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                 <p className="text-xs text-muted-foreground leading-relaxed">{cameraError}</p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                <Button size="sm" variant="outline" onClick={startCamera} className="text-xs gap-1.5 border-white/20 text-white hover:bg-white/10">
+                <Button size="sm" variant="outline" onClick={startCamera} className="text-xs gap-1.5 border-white/20 text-foreground hover:bg-card/10">
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Retry Camera</span>
                 </Button>
@@ -373,7 +394,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
           {/* Countdown Indicator Overlay */}
           {isCountingDown && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40 backdrop-blur-xs">
               <div className="w-24 h-24 rounded-full bg-primary/90 text-primary-foreground flex items-center justify-center text-5xl font-black shadow-2xl animate-pulse">
                 {countdownValue}
               </div>
@@ -385,11 +406,11 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
             <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-10">
               {/* TOP DISTANCE & HEAD ALIGNMENT */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-white font-mono">
+                <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-foreground font-mono">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>TARGET DISTANCE: {targetDistanceMeters} METERS</span>
                 </div>
-                <div className="bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-white font-mono">
+                <div className="bg-background/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 text-[10px] text-foreground font-mono">
                   {viewType === 'front' ? 'CORONAL (FRONT)' : viewType === 'side' ? 'SAGITTAL (SIDE)' : 'ORTHOGONAL'}
                 </div>
               </div>
@@ -405,14 +426,14 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
                   {/* Shoulder & Pelvis Level Axis */}
                   <div className="space-y-6">
-                    <div className="flex items-center gap-2 text-[9px] text-white/80 font-mono">
-                      <div className="h-px bg-white/40 flex-1 border-t border-dashed" />
-                      <span className="bg-black/60 px-2 py-0.5 rounded">SHOULDER LEVEL AXIS</span>
-                      <div className="h-px bg-white/40 flex-1 border-t border-dashed" />
+                    <div className="flex items-center gap-2 text-[9px] text-foreground/80 font-mono">
+                      <div className="h-px bg-card/40 flex-1 border-t border-dashed" />
+                      <span className="bg-background/60 px-2 py-0.5 rounded">SHOULDER LEVEL AXIS</span>
+                      <div className="h-px bg-card/40 flex-1 border-t border-dashed" />
                     </div>
-                    <div className="flex items-center gap-2 text-[9px] text-white/80 font-mono">
+                    <div className="flex items-center gap-2 text-[9px] text-foreground/80 font-mono">
                       <div className="h-px bg-emerald-400/50 flex-1" />
-                      <span className="bg-black/60 px-2 py-0.5 rounded text-emerald-300">ASIS PELVIS AXIS</span>
+                      <span className="bg-background/60 px-2 py-0.5 rounded text-emerald-300">ASIS PELVIS AXIS</span>
                       <div className="h-px bg-emerald-400/50 flex-1" />
                     </div>
                   </div>
@@ -436,7 +457,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                   {/* Vertical Plumb Line */}
                   <div className="absolute inset-y-10 left-1/2 -translate-x-1/2 flex flex-col items-center justify-between pointer-events-none">
                     <div className="w-0.5 h-full bg-sky-400/60 border-l border-dashed border-sky-300 flex flex-col justify-center items-center">
-                      <span className="bg-black/80 text-sky-300 text-[9px] font-mono px-2 py-0.5 rounded whitespace-nowrap -rotate-90">
+                      <span className="bg-background/80 text-sky-300 text-[9px] font-mono px-2 py-0.5 rounded whitespace-nowrap -rotate-90">
                         PLUMB: EAR → SHOULDER → HIP → ANKLE
                       </span>
                     </div>
@@ -458,7 +479,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
 
               {/* BOTTOM TIPS */}
               <div className="text-center">
-                <span className="bg-black/70 backdrop-blur-sm text-white/90 text-[10px] px-3 py-1 rounded-full border border-white/20 font-medium">
+                <span className="bg-background/70 backdrop-blur-sm text-foreground/90 text-[10px] px-3 py-1 rounded-full border border-white/20 font-medium">
                   {viewType === 'front'
                     ? 'Member faces camera with neutral posture, arms relaxed at sides.'
                     : 'Member turns 90° sideways, looking straight forward.'}
@@ -486,7 +507,7 @@ export const WebCameraCaptureModal: React.FC<WebCameraCaptureModalProps> = ({
                 variant="default"
                 size="sm"
                 onClick={handleConfirmPhoto}
-                className="gap-2 text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="gap-2 text-xs flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Use This Photo</span>
