@@ -249,7 +249,7 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
         })}
       </div>
 
-      {/* Conditions and consent — neither can be inferred from the image */}
+      {/* Capture conditions + consent */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-border/70 bg-muted/20 p-3">
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold text-foreground">Clothing fit</label>
@@ -258,40 +258,32 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
             onChange={(e) => setClothingFit(e.target.value as typeof clothingFit)}
             className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
           >
-            <option value="CLOSE_FITTING">Close-fitting athletic wear</option>
-            <option value="ORDINARY">Ordinary studio clothing</option>
-            <option value="LOOSE">Loose clothing</option>
+            <option value="CLOSE_FITTING">Close-fitting</option>
+            <option value="ORDINARY">Ordinary</option>
+            <option value="LOOSE">Loose</option>
           </select>
-          {clothingFit === 'LOOSE' && (
-            <p className="text-[10px] text-amber-600 dark:text-amber-600 dark:text-amber-400">
-              Posture angles still hold. Girth estimates will read low.
-            </p>
-          )}
         </div>
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-foreground">Capture setting</label>
+          <label className="text-[11px] font-semibold text-foreground">Setting</label>
           <select
             value={captureMode}
             onChange={(e) => setCaptureMode(e.target.value as typeof captureMode)}
             className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
           >
-            <option value="PUBLIC_STUDIO">Public studio floor</option>
-            <option value="PRIVATE_ROOM">Private assessment room</option>
+            <option value="PUBLIC_STUDIO">Studio floor</option>
+            <option value="PRIVATE_ROOM">Private room</option>
           </select>
         </div>
-        <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
-          <input type="checkbox" checked={consentPhotos} onChange={(e) => setConsentPhotos(e.target.checked)} className="mt-0.5" />
-          <span>Member agrees to photos being stored.</span>
-        </label>
-        <label className="flex items-start gap-2 text-[11px] text-foreground sm:col-span-2">
-          <input type="checkbox" checked={consentAiAnalysis} onChange={(e) => setConsentAiAnalysis(e.target.checked)} className="mt-0.5" />
-          <span>Member agrees to automated analysis of those photos.</span>
-        </label>
-        {(!consentPhotos || !consentAiAnalysis) && (
-          <p className="text-[10px] text-muted-foreground sm:col-span-2">
-            Without both, photos are stored but not analysed.
-          </p>
-        )}
+        <div className="sm:col-span-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-0.5">
+          <label className="flex items-center gap-2 text-[11px] text-foreground">
+            <input type="checkbox" checked={consentPhotos} onChange={(e) => setConsentPhotos(e.target.checked)} />
+            <span>Store photos</span>
+          </label>
+          <label className="flex items-center gap-2 text-[11px] text-foreground">
+            <input type="checkbox" checked={consentAiAnalysis} onChange={(e) => setConsentAiAnalysis(e.target.checked)} />
+            <span>Allow analysis</span>
+          </label>
+        </div>
       </div>
 
       <div className="space-y-1.5">
@@ -369,9 +361,7 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
                   </span>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Estimates. Use them to track change, not as tape measurements.
-              </p>
+              <p className="text-[10px] text-muted-foreground">Estimates — for tracking change.</p>
             </div>
           )}
         </div>
