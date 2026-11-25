@@ -92,6 +92,29 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [consentPhotos, setConsentPhotos] = useState(false);
   const [consentAi, setConsentAi] = useState(false);
   const [consentSecondary, setConsentSecondary] = useState(false);
+
+  // Consents are part of the record, not a local preference. Ticking one has to reach the
+  // server, otherwise the transformation endpoint keeps refusing against the stored value
+  // while the checkbox on screen says otherwise.
+  const persistConsents = React.useCallback(
+    (overrides: Record<string, boolean> = {}) => {
+      if (!activeSession?.id) return;
+      const payload = {
+        consent_body_measurements: consentBody,
+        consent_movement_photos: consentPhotos,
+        consent_ai_analysis: consentAi,
+        consent_secondary_use: consentSecondary,
+        consent_image_generation: consentImageGeneration,
+        ...overrides,
+      };
+      assessmentApi
+        .updateAssessment(activeSession.id, payload as any)
+        .then((fresh) => setActiveSession(fresh))
+        .catch(() => toast.error('Could not save the consent change.'));
+    },
+    [activeSession?.id, consentBody, consentPhotos, consentAi, consentSecondary, consentImageGeneration],
+  );
+
   const [memberAcknowledged, setMemberAcknowledged] = useState(false);
   const [coachStrengths, setCoachStrengths] = useState('');
   const [coachAreasToDevelop, setCoachAreasToDevelop] = useState('');
@@ -257,7 +280,8 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             setCoachAreasToDevelop={setCoachAreasToDevelop} workoutPrescription={workoutPrescription}
             setWorkoutPrescription={setWorkoutPrescription} dietPrescription={dietPrescription}
             setDietPrescription={setDietPrescription} reassessmentWeeks={reassessmentWeeks} setReassessmentWeeks={setReassessmentWeeks}
-            consentImageGeneration={consentImageGeneration} setConsentImageGeneration={setConsentImageGeneration}
+            consentImageGeneration={consentImageGeneration}
+            setConsentImageGeneration={(v: boolean) => { setConsentImageGeneration(v); persistConsents({ consent_image_generation: v }); }}
             memberAcknowledgementName={memberAcknowledgementName} setMemberAcknowledgementName={setMemberAcknowledgementName}
             coachSignOffName={coachSignOffName} setCoachSignOffName={setCoachSignOffName}
             agreedFirstMilestone={agreedFirstMilestone} setAgreedFirstMilestone={setAgreedFirstMilestone}
