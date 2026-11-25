@@ -188,19 +188,20 @@ export const AssessmentStudioWorkspace: React.FC = () => {
 
   const resetAll = () => {
     clearAssessmentDraft();
+    setResumableDraft(null);
     setActiveSession(null); setCurrentStep('intake'); setMemberName(''); setMemberPhone('+91');
     setHeightCm(null); setWeightKg(null); setWaistCm(null); setRestingHr(null); setRestingBp('');
     setFunctionalTests({}); setSymptoms({}); setConsentBody(false); setConsentPhotos(false);
     setConsentAi(false); setConsentSecondary(false);
   };
 
-  // Restore a saved draft once on mount, then keep saving it as the coach works.
+  // A saved draft is OFFERED as an explicit "Resume", never auto-filled — otherwise opening
+  // "New Assessment" would show the last member's data. A remount cannot tell "new" from
+  // "returned after a refresh", so we always ask rather than guess.
   const [draftHydrated, setDraftHydrated] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ASSESSMENT_DRAFT_KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
+  const [resumableDraft, setResumableDraft] = useState<any | null>(null);
+
+  const applyDraft = (d: any) => {
         if (d.currentStep) setCurrentStep(d.currentStep);
         if (d.activeSession) setActiveSession(d.activeSession);
         if (d.selectedMember) setSelectedMember(d.selectedMember);
@@ -244,14 +245,28 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         if (d.workoutPrescription != null) setWorkoutPrescription(d.workoutPrescription);
         if (d.dietPrescription != null) setDietPrescription(d.dietPrescription);
         if (d.reassessmentWeeks != null) setReassessmentWeeks(d.reassessmentWeeks);
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ASSESSMENT_DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        const meaningful = !!d && (d.selectedMember || d.activeSession || d.memberName
+          || (d.currentStep && d.currentStep !== 'intake'));
+        if (meaningful) setResumableDraft(d);
+        else clearAssessmentDraft();
       }
-    } catch { /* corrupt or unavailable storage: start fresh */ }
+    } catch { clearAssessmentDraft(); }
     setDraftHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleResumeDraft = () => { if (resumableDraft) applyDraft(resumableDraft); setResumableDraft(null); };
+  const handleDiscardDraft = () => { clearAssessmentDraft(); setResumableDraft(null); };
+
   useEffect(() => {
-    if (!draftHydrated) return;
+    if (!draftHydrated || resumableDraft) return;
     try {
       localStorage.setItem(ASSESSMENT_DRAFT_KEY, JSON.stringify({
         currentStep, activeSession, selectedMember, manualEntry, memberName, memberPhone,
@@ -282,6 +297,34 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         description="Guided member assessment — intake to sign-off."
       />
       <PageBody>
+        {resumableDraft && (
+          <div className="max-w-4xl mx-auto mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+            <p className="text-xs text-foreground">
+              Unfinished assessment
+              {resumableDraft.selectedMember?.name
+                ? ` — ${resumableDraft.selectedMember.name}`
+                : resumableDraft.memberName
+                ? ` — ${resumableDraft.memberName}`
+                : ''}
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleResumeDraft}
+                className="text-xs font-semibold px-3 py-1 rounded-lg bg-amber-500 text-foreground"
+              >
+                Resume
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="text-xs font-semibold px-3 py-1 rounded-lg text-muted-foreground hover:text-foreground"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border">
             {stepsList.map((s, i) => {
