@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { assessmentApi } from '@/api/endpoints/assessmentApi';
+import { assessmentApi, resolveMediaUrl } from '@/api/endpoints/assessmentApi';
 
 /**
  * The transformation preview.
@@ -97,7 +97,7 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
           </span>
           <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted flex items-center justify-center">
             {baselineUrl ? (
-              <img src={baselineUrl} alt="Baseline capture" className="w-full h-full object-cover" />
+              <img src={resolveMediaUrl(baselineUrl)} alt="Baseline capture" className="w-full h-full object-cover" />
             ) : (
               <span className="text-[10px] text-muted-foreground px-2">Not captured</span>
             )}
@@ -115,7 +115,7 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
               </span>
               <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted flex items-center justify-center">
                 {milestone ? (
-                  <img src={milestone.url} alt={`Illustrative month ${month}`} className="w-full h-full object-cover" />
+                  <img src={resolveMediaUrl(milestone.url)} alt={`Illustrative month ${month}`} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-[10px] text-muted-foreground px-2">
                     {rejection ? 'Discarded' : 'Not generated'}

@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { assessmentApi } from '@/api/endpoints/assessmentApi';
+import { assessmentApi, resolveMediaUrl } from '@/api/endpoints/assessmentApi';
 import { WebCameraCaptureModal } from './WebCameraCaptureModal';
 
 /**
@@ -86,6 +86,14 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
     [capturePreviews],
   );
 
+  // Photos picked this session that have NOT been uploaded yet. Captures restored from the
+  // server show in capturePreviews but are already saved, so "pending" must count files, not
+  // previews — otherwise returning to this step would try to re-upload nothing.
+  const pendingFileCount = useMemo(
+    () => CAPTURE_VIEWS.filter((view) => captureFiles[view.id]).length,
+    [captureFiles],
+  );
+
   const { data: scanState } = useQuery({
     queryKey: ['assessment-scan', scanPollingId],
     queryFn: () => assessmentApi.getScanStatus(scanPollingId as string),
@@ -104,6 +112,33 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
       toast.success('Body scan complete.');
     }
   }, [scanState?.is_terminal, scanState?.status, scanState?.error]);
+
+  // Load captures already stored on this assessment, so returning to this step (or a refresh)
+  // re-shows the photos and the last scan instead of looking empty.
+  const { data: storedDetail } = useQuery({
+    queryKey: ['assessment-captures', assessmentId],
+    queryFn: () => assessmentApi.getAssessment(assessmentId as string),
+    enabled: !!assessmentId,
+  });
+
+  useEffect(() => {
+    const photos = (storedDetail as any)?.photos as Record<string, string | null> | undefined;
+    if (!photos) return;
+    setCapturePreviews((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const view of CAPTURE_VIEWS) {
+        const url = photos[view.scanKey];
+        // Only fill a tile that has no freshly picked file and no preview yet.
+        if (url && !captureFiles[view.id] && !next[view.id]) {
+          next[view.id] = url;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedDetail]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -133,6 +168,9 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
       } else {
         toast.success('Captures saved.');
       }
+      // Files are now on the server; clear them so "Continue" does not re-upload, while the
+      // previews stay on screen.
+      setCaptureFiles({ ...EMPTY_CAPTURES });
       onCaptured?.();
     },
     onError: (err: any) => toast.error(err?.data?.error || 'Failed to store the captures.'),
@@ -149,14 +187,12 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
 
   // Let the step's "Continue" button save pending captures before it leaves this screen.
   useImperativeHandle(ref, () => ({
-    hasPending: () => capturedCount > 0 && !uploadMutation.isSuccess && !uploadMutation.isPending,
+    hasPending: () => pendingFileCount > 0 && !uploadMutation.isPending,
     commit: async () => {
       if (!assessmentId) return;
-      if (capturedCount > 0 && !uploadMutation.isSuccess) {
-        await uploadMutation.mutateAsync();
-      }
+      if (pendingFileCount > 0) await uploadMutation.mutateAsync();
     },
-  }), [capturedCount, assessmentId, uploadMutation]);
+  }), [pendingFileCount, assessmentId, uploadMutation]);
 
   return (
     <div className="space-y-4">
@@ -188,7 +224,7 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
                 }`}
               >
                 {preview ? (
-                  <img src={preview} alt={view.label} className="w-full h-full object-cover" />
+                  <img src={resolveMediaUrl(preview)} alt={view.label} className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-center p-3 space-y-1.5">
                     <Camera className="w-7 h-7 text-muted-foreground mx-auto" />
@@ -262,7 +298,7 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
         <Button
           size="sm"
           className="gap-1.5"
-          disabled={!assessmentId || capturedCount === 0 || uploadMutation.isPending}
+          disabled={!assessmentId || pendingFileCount === 0 || uploadMutation.isPending}
           onClick={() => uploadMutation.mutate()}
         >
           {uploadMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -271,8 +307,10 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
         {/* A disabled button with no stated reason is the thing people file bugs about. */}
         {!assessmentId ? (
           <p className="text-[11px] text-amber-600 dark:text-amber-400">Finish the health screening first.</p>
-        ) : capturedCount === 0 ? (
+        ) : pendingFileCount === 0 && capturedCount === 0 ? (
           <p className="text-[11px] text-muted-foreground">Add at least one photo to scan.</p>
+        ) : pendingFileCount === 0 && capturedCount > 0 ? (
+          <p className="text-[11px] text-muted-foreground">Photos saved.</p>
         ) : null}
       </div>
 

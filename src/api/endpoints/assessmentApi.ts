@@ -472,6 +472,21 @@ export interface DisplayScreenSummary {
   };
 }
 
+/**
+ * Uploaded media is served behind a signed URL by the API host, but the API returns it as a
+ * root-relative "/media/..." path. In an <img> on the CRM host that path resolves to the
+ * frontend origin (which does not serve media) and 404s, so point root-relative media at the
+ * API backend. Blob/data/absolute URLs pass through untouched.
+ */
+export const resolveMediaUrl = (url?: string | null): string => {
+  if (!url) return '';
+  if (url.startsWith('/')) {
+    const base = (import.meta.env['VITE_BACKEND_URL'] as string | undefined) || '';
+    return `${base}${url}`;
+  }
+  return url;
+};
+
 export const assessmentApi = {
   async startAssessment(payload: {
     user_profile_id?: string;
