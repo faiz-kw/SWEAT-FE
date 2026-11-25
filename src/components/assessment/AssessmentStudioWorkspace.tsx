@@ -234,10 +234,16 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             screeningCoachNotes={screeningCoachNotes} setScreeningCoachNotes={setScreeningCoachNotes}
             onPrev={() => setCurrentStep('intake')}
             onNext={() => {
-              if (screeningOutcome === 'DEFER_MEDICAL_CLEARANCE' || screeningOutcome === 'STOPPED_SAFETY_CONCERNS') {
-                startSessionMutation.mutate();
+              // The record is created once screening is done, whatever the outcome. It used
+              // to be created only when screening deferred or stopped, so on the normal
+              // cleared path there was no assessment to attach anything to: captures could
+              // not upload and the body scan could never run.
+              if (activeSession) {
+                const halted = screeningOutcome === 'DEFER_MEDICAL_CLEARANCE'
+                  || screeningOutcome === 'STOPPED_SAFETY_CONCERNS';
+                setCurrentStep(halted ? 'tv_display' : 'vitals');
               } else {
-                setCurrentStep('vitals');
+                startSessionMutation.mutate();
               }
             }}
           />
