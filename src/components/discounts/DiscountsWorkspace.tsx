@@ -422,6 +422,11 @@ const CAMPAIGN_ORDER_TYPE_OPTIONS = [
   { id: 'NEW_PACKAGE', name: 'Additional / New Package' },
 ];
 
+const CAMPAIGN_ELIGIBILITY_SCOPE_OPTIONS = [
+  { id: 'GLOBAL', name: 'Overall Account Status (Any Program)' },
+  { id: 'TARGET_PROGRAM', name: 'Selected Program Only (Cross-Program Aware)' },
+];
+
 function formatDateForInput(date: Date | string | null | undefined): string {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -500,6 +505,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [campPackageIds, setCampPackageIds] = useState<string[]>([]);
   const [campMemberTypes, setCampMemberTypes] = useState<string[]>(['NEW', 'ACTIVE', 'EXPIRED']);
   const [campOrderTypes, setCampOrderTypes] = useState<string[]>(['NEW_MEMBERSHIP', 'RENEWAL', 'REJOIN', 'UPGRADE', 'NEW_PACKAGE']);
+  const [campEligibilityScope, setCampEligibilityScope] = useState<'GLOBAL' | 'TARGET_PROGRAM'>('GLOBAL');
   const isCreateInitializedRef = React.useRef(false);
 
   // Code Generation Form State
@@ -889,6 +895,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampPackageIds(activePackages.map((p) => p.id));
     setCampMemberTypes(CAMPAIGN_MEMBER_TYPE_OPTIONS.map((m) => m.id));
     setCampOrderTypes(CAMPAIGN_ORDER_TYPE_OPTIONS.map((o) => o.id));
+    setCampEligibilityScope('GLOBAL');
     isCreateInitializedRef.current = true;
     setIsCampaignModalOpen(true);
   };
@@ -933,11 +940,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     const rawOrderTypes = Array.isArray(cfg['order_types']) && (cfg['order_types'] as string[]).length > 0
       ? (cfg['order_types'] as string[]).map((x) => String(x).toUpperCase())
       : CAMPAIGN_ORDER_TYPE_OPTIONS.map((o) => o.id);
+    const rawScope = String(cfg['eligibility_scope'] || 'GLOBAL').toUpperCase();
     setCampBranchIds(bIds);
     setCampProgramIds(progIds);
     setCampPackageIds(pkgIds);
     setCampMemberTypes(normalizedMemTypes.length > 0 ? normalizedMemTypes : CAMPAIGN_MEMBER_TYPE_OPTIONS.map((m) => m.id));
     setCampOrderTypes(rawOrderTypes);
+    setCampEligibilityScope(rawScope === 'TARGET_PROGRAM' ? 'TARGET_PROGRAM' : 'GLOBAL');
     setCampBranchId(bIds[0] || '');
     setCampPackageId(pkgIds[0] || '');
     setIsCampaignModalOpen(true);
@@ -978,6 +987,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
         allowed_member_types: expandedMemberTypes,
         member_type: isAllMemberTypes ? null : (campMemberTypes.length === 2 && campMemberTypes.includes('NEW') && campMemberTypes.includes('EXPIRED') ? 'NEW_OR_EXPIRED' : campMemberTypes.join(',')),
         order_types: isAllOrderTypes ? [] : campOrderTypes,
+        eligibility_scope: campEligibilityScope,
       },
     };
     saveCampaignMutation.mutate(payload);
@@ -2924,6 +2934,26 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   placeholder="Select transaction types..."
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Member Status Scope</label>
+              <select
+                value={campEligibilityScope}
+                onChange={(e) => setCampEligibilityScope(e.target.value as 'GLOBAL' | 'TARGET_PROGRAM')}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {CAMPAIGN_ELIGIBILITY_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {campEligibilityScope === 'TARGET_PROGRAM'
+                  ? 'Selected Program Only checks member status specifically within the target program (e.g. an active Pilates member buying Bootcamp is treated as a New Member for Bootcamp).'
+                  : 'Overall Account Status checks active membership across all programs on the member account.'}
+              </p>
             </div>
 
             {/* Dedicated Responsive Validity & Schedule Card */}

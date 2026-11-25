@@ -1,0 +1,26 @@
+# Production systemd unit template for SWEAT Multi-Studio Turnstile Worker
+# Install on Linux cloud/edge server at /etc/systemd/system/sweat-turnstile-daemon.service
+#
+# Commands:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sweat-turnstile-daemon
+#   sudo journalctl -u sweat-turnstile-daemon -f
+
+[Unit]
+Description=SWEAT Fitness Universal Multi-Studio Turnstile Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/fitness-command-center
+EnvironmentFile=/opt/fitness-command-center/.env.turnstile
+ExecStart=/opt/fitness-command-center/backend/.venv/bin/python /opt/fitness-command-center/sweat_turnstile_daemon.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

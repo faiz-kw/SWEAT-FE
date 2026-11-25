@@ -556,13 +556,16 @@ export const UpgradeModal: React.FC<{
 
   const isWithinWindow = upgradeOptionsData ? Boolean(upgradeOptionsData.is_within_window) : true;
 
-  // Parse current session count from snapshot or package name (e.g., "144 Sessions" -> 144)
+  // Parse current session count from snapshot or package name (e.g., "144 Sessions" -> 144, "Elite 300" -> 300)
   const currentSessions = useMemo(() => {
     const snap = selectedContract?.contract_snapshot;
     if (snap?.total_sessions && Number(snap.total_sessions) > 0) return Number(snap.total_sessions);
     if (snap?.session_count && Number(snap.session_count) > 0) return Number(snap.session_count);
-    const match = (selectedContract?.package_name || member?.package_name || '').match(/(\d+)\s*session/i);
-    return match ? parseInt(match[1], 10) : (selectedContract?.home_sessions_remaining || 36);
+    if (selectedContract?.total_sessions && Number(selectedContract.total_sessions) > 0) return Number(selectedContract.total_sessions);
+    if (selectedContract?.session_count && Number(selectedContract.session_count) > 0) return Number(selectedContract.session_count);
+    const pkgName = selectedContract?.package_name || member?.package_name || '';
+    const match = pkgName.match(/(\d+)\s*session/i) || pkgName.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : (selectedContract?.home_sessions_remaining || 0);
   }, [selectedContract, member?.package_name]);
 
   // Current plan base price estimate from snapshot or catalog plans
@@ -679,8 +682,7 @@ export const UpgradeModal: React.FC<{
   // Calculate Difference to Pay: Target Price - Current Paid Price
   const targetPrice = selectedTargetPlan ? selectedTargetPlan.price : 0;
   const rawDifference = Math.max(0, targetPrice - currentPlanPrice);
-  const discountAmount = appliedCoupon ? appliedCoupon.discount_amount : 0;
-  const differenceToPay = Math.max(0, rawDifference - discountAmount);
+  const differenceToPay = rawDifference;
   const extraSessionsAdded = selectedTargetPlan ? Math.max(0, selectedTargetPlan.sessions - currentSessions) : 0;
 
   const mutation = useMutation({
@@ -692,7 +694,6 @@ export const UpgradeModal: React.FC<{
         payment_method: paymentMethod,
         payment_amount: differenceToPay,
         difference_amount: differenceToPay,
-        coupon_code: appliedCoupon ? appliedCoupon.code : undefined,
         reason: `${reason}: upgraded from ${currentSessions} to ${selectedTargetPlan?.sessions} sessions`,
         ...(extraPayload || {}),
       } as any),
@@ -803,22 +804,22 @@ export const UpgradeModal: React.FC<{
             </div>
           )}
 
-          {/* Upgrade Window Banner */}
-          {upgradeOptionsData && !isWithinWindow && (
+          {/* Upgrade Window Banner (Only displayed if an upgrade time policy is enforced) */}
+          {upgradeOptionsData && (upgradeOptionsData.window_days > 0) && !isWithinWindow && (
             <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-rose-600 dark:text-rose-400">
                 <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
                 <span>Upgrade Window Expired</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {upgradeOptionsData.message || `Upgrades by paying only difference are strictly allowed within ${upgradeOptionsData.window_days || 15} days of the 1st package purchase.`}
+                {upgradeOptionsData.message || `Upgrades by paying only difference are strictly allowed within ${upgradeOptionsData.window_days} days of the 1st package purchase.`}
               </p>
             </div>
           )}
 
-          {upgradeOptionsData && isWithinWindow && (
+          {upgradeOptionsData && (upgradeOptionsData.window_days > 0) && isWithinWindow && (
             <div className="flex items-center justify-between text-[11px] px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/20 font-medium">
-              <span>✓ Upgrade Window Active ({upgradeOptionsData.window_days || 15} Days Policy)</span>
+              <span>✓ Upgrade Window Active ({upgradeOptionsData.window_days} Days Policy)</span>
               <span>{upgradeOptionsData.days_remaining ?? 0} Days Remaining</span>
             </div>
           )}
@@ -888,23 +889,6 @@ export const UpgradeModal: React.FC<{
             )}
           </div>
 
-          {/* Unified Coupon & Offers Selector */}
-          {selectedTargetPlan && (
-            <div className="pt-2 pb-1 border-t border-border/50">
-              <ApplicableOffersSelector
-                packageId={selectedTargetPlan.id}
-                subtotal={rawDifference > 0 ? rawDifference : targetPrice}
-                orderType="UPGRADE"
-                branchId={selectedContract?.purchase_branch_id || (member as any)?.branch_id}
-                memberId={member.id}
-                appliedCoupon={appliedCoupon}
-                onApplyCoupon={(c) => setAppliedCoupon(c)}
-                onRemoveCoupon={() => setAppliedCoupon(null)}
-                disabled={mutation.isPending}
-              />
-            </div>
-          )}
-
           {/* Difference Calculation Breakdown */}
           {selectedTargetPlan && (
             <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2 text-xs">
@@ -916,12 +900,6 @@ export const UpgradeModal: React.FC<{
                 <span>Current Plan Paid Credit ({currentSessions} Sessions):</span>
                 <span className="font-medium text-foreground">-₹{currentPlanPrice.toLocaleString()}</span>
               </div>
-              {appliedCoupon && (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span>Upgrade Coupon ({appliedCoupon.code}):</span>
-                  <span>-₹{discountAmount.toLocaleString()}</span>
-                </div>
-              )}
               {catalogMRP > currentPlanPrice && (
                 <div className="flex justify-between text-[11px] text-muted-foreground/80">
                   <span>Current Package Catalog MRP:</span>
@@ -3958,13 +3936,14 @@ export const PurchaseProgramPackageModal: React.FC<{
               <div className="pt-2 pb-1 border-t border-border/50">
                 <ApplicableOffersSelector
                   packageId={selectedPkg.id}
-                  branchId={selectedBranchId}
+                  branchId={selectedBranchId || (member as any)?.branch_id}
                   memberId={member.id}
                   subtotal={priceEstimate}
                   orderType="NEW_PACKAGE"
                   appliedCoupon={appliedCoupon}
                   onApplyCoupon={(c) => setAppliedCoupon(c)}
                   onRemoveCoupon={() => setAppliedCoupon(null)}
+                  disabled={mutation.isPending}
                 />
               </div>
             )}
@@ -3982,21 +3961,6 @@ export const PurchaseProgramPackageModal: React.FC<{
                 <option value="ONLINE">UPI / Online Gateway</option>
                 <option value="CASH">Cash (Front Desk / Admin Direct Activation)</option>
               </select>
-            </div>
-
-            {/* Unified Coupon & Offers Selector */}
-            <div className="pt-2 pb-1 border-t border-border/50">
-              <ApplicableOffersSelector
-                packageId={selectedPkg?.id || selectedPackageId}
-                subtotal={priceEstimate}
-                orderType="NEW_MEMBERSHIP"
-                branchId={selectedBranchId || (member as any)?.branch_id}
-                memberId={member.id}
-                appliedCoupon={appliedCoupon}
-                onApplyCoupon={(c) => setAppliedCoupon(c)}
-                onRemoveCoupon={() => setAppliedCoupon(null)}
-                disabled={mutation.isPending}
-              />
             </div>
 
             {/* Summary Price Callout */}
