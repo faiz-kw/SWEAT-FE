@@ -341,39 +341,85 @@ interface DiscountsWorkspaceProps {
 }
 
 const CONDITION_TYPE_OPTIONS = [
-  { value: 'USAGE_PERCENTAGE_GTE', label: 'Session Usage % >= (e.g. 80%)' },
-  { value: 'SESSIONS_REMAINING_LTE', label: 'Sessions Remaining <= (e.g. 3)' },
-  { value: 'PACKAGE_AGE_DAYS_GTE', label: 'Package Age (Days) >= (e.g. 60)' },
-  { value: 'CONSECUTIVE_DAYS_INACTIVE_GTE', label: 'Inactive Days >= (e.g. 14)' },
-  { value: 'CURRENT_PACKAGE_EQUALS', label: 'Current Package = (Package ID)' },
-  { value: 'ATTENDANCE_FREQUENCY_DROP_PCT_GTE', label: 'Attendance Drop % >= (e.g. 50%)' },
+  { value: 'USAGE_PERCENTAGE_GTE', label: 'Sessions Used (%)' },
+  { value: 'SESSIONS_REMAINING_LTE', label: 'Sessions Left' },
+  { value: 'PACKAGE_AGE_DAYS_GTE', label: 'Days Since Plan Started' },
+  { value: 'CONSECUTIVE_DAYS_INACTIVE_GTE', label: 'Days Without a Visit' },
+  { value: 'CURRENT_PACKAGE_EQUALS', label: 'Current Plan' },
+  { value: 'ATTENDANCE_FREQUENCY_DROP_PCT_GTE', label: 'Visit Drop (%)' },
 ];
 
+const CONDITION_LABEL_MAP: Record<string, string> = {
+  USAGE_PERCENTAGE_GTE: 'Sessions Used (%)',
+  USAGE_PERCENTAGE: 'Sessions Used (%)',
+  SESSIONS_REMAINING_LTE: 'Sessions Left',
+  SESSIONS_REMAINING: 'Sessions Left',
+  PACKAGE_AGE_DAYS_GTE: 'Days Since Plan Started',
+  PACKAGE_AGE_DAYS: 'Days Since Plan Started',
+  CONSECUTIVE_DAYS_INACTIVE_GTE: 'Days Without a Visit',
+  CONSECUTIVE_DAYS_INACTIVE: 'Days Without a Visit',
+  CURRENT_PACKAGE_EQUALS: 'Current Plan',
+  ATTENDANCE_FREQUENCY_DROP_PCT_GTE: 'Visit Drop (%)',
+};
+
+const OPERATOR_LABEL_MAP: Record<string, string> = {
+  GREATER_THAN_OR_EQUAL: 'at least (>=)',
+  LESS_THAN_OR_EQUAL: 'at most (<=)',
+  EQUALS: 'exactly (=)',
+  GREATER_THAN: 'more than (>)',
+  LESS_THAN: 'less than (<)',
+  NOT_EQUALS: 'not equal to (!=)',
+};
+
+const formatRuleNumericValue = (condType: string, rawVal: any): string => {
+  if (rawVal === null || rawVal === undefined || rawVal === '') return 'true';
+  const strVal = String(rawVal).trim();
+  const num = Number(strVal);
+  const cleanNum = !isNaN(num) ? String(Number(num.toFixed(2))) : strVal;
+  if (condType.includes('PERCENTAGE') || condType.includes('PCT')) return `${cleanNum}%`;
+  if (condType.includes('DAYS')) return `${cleanNum} days`;
+  return cleanNum;
+};
+
 const OPERATOR_OPTIONS: Array<{ value: ConditionOperator; label: string }> = [
-  { value: 'GREATER_THAN_OR_EQUAL', label: '>= (Greater Than or Equal)' },
-  { value: 'LESS_THAN_OR_EQUAL', label: '<= (Less Than or Equal)' },
-  { value: 'EQUALS', label: '= (Equals)' },
-  { value: 'GREATER_THAN', label: '> (Greater Than)' },
-  { value: 'LESS_THAN', label: '< (Less Than)' },
-  { value: 'NOT_EQUALS', label: '!= (Not Equals)' },
+  { value: 'GREATER_THAN_OR_EQUAL', label: 'At least (>=)' },
+  { value: 'LESS_THAN_OR_EQUAL', label: 'At most (<=)' },
+  { value: 'EQUALS', label: 'Exactly (=)' },
+  { value: 'GREATER_THAN', label: 'More than (>)' },
+  { value: 'LESS_THAN', label: 'Less than (<)' },
+  { value: 'NOT_EQUALS', label: 'Not equal to (!=)' },
 ];
 
 const ACTION_TYPE_OPTIONS: Array<{ value: ActionType; label: string }> = [
-  { value: 'SHOW_OFFER', label: 'Show Offer (Banner / Notification)' },
-  { value: 'APPLY_PERCENTAGE_DISCOUNT', label: 'Apply Percentage Discount (%)' },
-  { value: 'APPLY_FIXED_DISCOUNT', label: 'Apply Fixed Discount (₹)' },
-  { value: 'ALLOW_UPGRADE_PRICE', label: 'Allow Tier Upgrade Price' },
-  { value: 'SHOW_COUPON', label: 'Display Promo Coupon' },
+  { value: 'SHOW_OFFER', label: 'Show Offer Banner' },
+  { value: 'APPLY_PERCENTAGE_DISCOUNT', label: 'Give Percentage Discount (%)' },
+  { value: 'APPLY_FIXED_DISCOUNT', label: 'Give Flat Amount Off (₹)' },
+  { value: 'ALLOW_UPGRADE_PRICE', label: 'Unlock Upgrade Discount' },
+  { value: 'SHOW_COUPON', label: 'Show Promo Coupon' },
 ];
 
 const RULE_TYPE_OPTIONS: Array<{ value: RuleType; label: string }> = [
-  { value: 'OFFER', label: 'Contextual Retention Offer' },
-  { value: 'UPGRADE_OFFER', label: 'Package Upgrade Offer' },
-  { value: 'RENEWAL', label: 'Membership Renewal Incentive' },
-  { value: 'AUTO_DISCOUNT', label: 'Automated Cart Discount' },
-  { value: 'CROSS_SELL', label: 'Cross-Sell Add-On' },
-  { value: 'REJOIN', label: 'Win-Back / Rejoin Promo' },
-  { value: 'COUPON', label: 'Promotional Coupon Rule' },
+  { value: 'OFFER', label: 'Member Retention Offer' },
+  { value: 'UPGRADE_OFFER', label: 'Plan Upgrade Offer' },
+  { value: 'RENEWAL', label: 'Renewal Discount' },
+  { value: 'AUTO_DISCOUNT', label: 'Auto-Applied Checkout Discount' },
+  { value: 'CROSS_SELL', label: 'Add-On / Cross-Sell Offer' },
+  { value: 'REJOIN', label: 'Rejoin / Win-Back Offer (Expired Members)' },
+  { value: 'COUPON', label: 'Promo Code Trigger' },
+];
+
+const CAMPAIGN_MEMBER_TYPE_OPTIONS = [
+  { id: 'NEW', name: 'New Members / Leads' },
+  { id: 'ACTIVE', name: 'Existing Active Members' },
+  { id: 'EXPIRED', name: 'Rejoining / Expired Members' },
+];
+
+const CAMPAIGN_ORDER_TYPE_OPTIONS = [
+  { id: 'NEW_MEMBERSHIP', name: 'New Membership (Lead Conversion)' },
+  { id: 'RENEWAL', name: 'Membership Renewal' },
+  { id: 'REJOIN', name: 'Rejoin (Expired Member)' },
+  { id: 'UPGRADE', name: 'Plan Upgrade' },
+  { id: 'NEW_PACKAGE', name: 'Additional / New Package' },
 ];
 
 function formatDateForInput(date: Date | string | null | undefined): string {
@@ -406,6 +452,8 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const { handleSearchChange } = useGlobalSearchSync(searchTerm, setSearchTerm);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [redemptionPage, setRedemptionPage] = useState(1);
+  const redemptionPageSize = 25;
 
   const displayTitle =
     title ||
@@ -450,6 +498,8 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   const [campBranchIds, setCampBranchIds] = useState<string[]>([]);
   const [campProgramIds, setCampProgramIds] = useState<string[]>([]);
   const [campPackageIds, setCampPackageIds] = useState<string[]>([]);
+  const [campMemberTypes, setCampMemberTypes] = useState<string[]>(['NEW', 'ACTIVE', 'EXPIRED']);
+  const [campOrderTypes, setCampOrderTypes] = useState<string[]>(['NEW_MEMBERSHIP', 'RENEWAL', 'REJOIN', 'UPGRADE', 'NEW_PACKAGE']);
   const isCreateInitializedRef = React.useRef(false);
 
   // Code Generation Form State
@@ -534,14 +584,22 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
   });
 
   const {
-    data: redemptions = [],
+    data: redemptionsPageData,
     isLoading: loadingRedemptions,
     isError: errorRedemptions,
     refetch: refetchRedemptions,
   } = useQuery({
-    queryKey: ['discount-redemptions'],
-    queryFn: () => discountsApi.getRedemptions(),
+    queryKey: ['discount-redemptions', redemptionPage, redemptionPageSize],
+    queryFn: () => discountsApi.getRedemptionsPaginated({ page: redemptionPage, page_size: redemptionPageSize }),
   });
+
+  const { data: redemptionsSummary, refetch: refetchRedemptionsSummary } = useQuery({
+    queryKey: ['discount-redemptions-summary'],
+    queryFn: () => discountsApi.getRedemptionsSummary(),
+  });
+
+  const redemptions = redemptionsPageData?.results || [];
+  const totalRedemptionsCount = redemptionsSummary?.total_redemptions ?? redemptionsPageData?.count ?? redemptions.length;
 
   // Fetch Branches
   const { data: branches = [] } = useQuery({
@@ -829,6 +887,8 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     setCampBranchIds(branches.map((b) => b.id));
     setCampProgramIds(programs.map((p) => p.id));
     setCampPackageIds(activePackages.map((p) => p.id));
+    setCampMemberTypes(CAMPAIGN_MEMBER_TYPE_OPTIONS.map((m) => m.id));
+    setCampOrderTypes(CAMPAIGN_ORDER_TYPE_OPTIONS.map((o) => o.id));
     isCreateInitializedRef.current = true;
     setIsCampaignModalOpen(true);
   };
@@ -862,9 +922,22 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
       : cfg['package_id']
       ? [cfg['package_id'] as string]
       : activePackages.map((p) => p.id);
+    const rawMemTypes = Array.isArray(cfg['allowed_member_types']) && (cfg['allowed_member_types'] as string[]).length > 0
+      ? (cfg['allowed_member_types'] as string[]).map((x) => String(x).toUpperCase())
+      : typeof cfg['member_type'] === 'string' && cfg['member_type']
+      ? (cfg['member_type'] === 'NEW_OR_EXPIRED' ? ['NEW', 'EXPIRED'] : [String(cfg['member_type']).toUpperCase()])
+      : CAMPAIGN_MEMBER_TYPE_OPTIONS.map((m) => m.id);
+    const normalizedMemTypes = Array.from(new Set(
+      rawMemTypes.map((m) => (m === 'REJOIN' || m === 'INACTIVE' ? 'EXPIRED' : m)).filter((m) => ['NEW', 'ACTIVE', 'EXPIRED'].includes(m))
+    ));
+    const rawOrderTypes = Array.isArray(cfg['order_types']) && (cfg['order_types'] as string[]).length > 0
+      ? (cfg['order_types'] as string[]).map((x) => String(x).toUpperCase())
+      : CAMPAIGN_ORDER_TYPE_OPTIONS.map((o) => o.id);
     setCampBranchIds(bIds);
     setCampProgramIds(progIds);
     setCampPackageIds(pkgIds);
+    setCampMemberTypes(normalizedMemTypes.length > 0 ? normalizedMemTypes : CAMPAIGN_MEMBER_TYPE_OPTIONS.map((m) => m.id));
+    setCampOrderTypes(rawOrderTypes);
     setCampBranchId(bIds[0] || '');
     setCampPackageId(pkgIds[0] || '');
     setIsCampaignModalOpen(true);
@@ -875,6 +948,13 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     const isAllBranches = campBranchIds.length === branches.length || campBranchIds.length === 0;
     const isAllPrograms = campProgramIds.length === programs.length || campProgramIds.length === 0;
     const isAllPackages = campPackageIds.length === availablePackagesForCampaign.length || campPackageIds.length === 0;
+    const isAllMemberTypes = campMemberTypes.length === 0 || campMemberTypes.length === CAMPAIGN_MEMBER_TYPE_OPTIONS.length;
+    const isAllOrderTypes = campOrderTypes.length === 0 || campOrderTypes.length === CAMPAIGN_ORDER_TYPE_OPTIONS.length;
+    const expandedMemberTypes = isAllMemberTypes
+      ? []
+      : campMemberTypes.includes('EXPIRED')
+      ? Array.from(new Set([...campMemberTypes, 'REJOIN', 'INACTIVE']))
+      : campMemberTypes;
 
     const payload: any = {
       name: campName,
@@ -895,6 +975,9 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
         program_ids: isAllPrograms ? [] : campProgramIds,
         package_ids: isAllPackages ? [] : campPackageIds,
         package_id: isAllPackages ? null : (campPackageIds.length === 1 ? campPackageIds[0] : null),
+        allowed_member_types: expandedMemberTypes,
+        member_type: isAllMemberTypes ? null : (campMemberTypes.length === 2 && campMemberTypes.includes('NEW') && campMemberTypes.includes('EXPIRED') ? 'NEW_OR_EXPIRED' : campMemberTypes.join(',')),
+        order_types: isAllOrderTypes ? [] : campOrderTypes,
       },
     };
     saveCampaignMutation.mutate(payload);
@@ -1212,10 +1295,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
     return true;
   });
 
-  const totalSavingsIssued = safeRedemptions.reduce(
-    (acc, r) => acc + (parseFloat(r.discount_amount || '0') || 0),
-    0
-  );
+  const totalSavingsIssued = redemptionsSummary?.total_savings
+    ? (parseFloat(redemptionsSummary.total_savings) || 0)
+    : safeRedemptions.reduce(
+        (acc, r) => acc + (parseFloat(r.discount_amount || '0') || 0),
+        0
+      );
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -1235,9 +1320,11 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   queryClient.invalidateQueries({ queryKey: ['discount-campaigns'] }),
                   queryClient.invalidateQueries({ queryKey: ['discount-rules'] }),
                   queryClient.invalidateQueries({ queryKey: ['discount-redemptions'] }),
+                  queryClient.invalidateQueries({ queryKey: ['discount-redemptions-summary'] }),
                   refetchCampaigns(),
                   refetchRules(),
                   refetchRedemptions(),
+                  refetchRedemptionsSummary(),
                   simUserProfileId ? refetchMemberContext() : Promise.resolve(),
                 ]);
                 toast.info('Discounts and rules refreshed');
@@ -1296,10 +1383,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
           />
           <CRMKpiTile
             label="Total Redemptions"
-            value={redemptions.length}
+            value={totalRedemptionsCount}
             isLoading={loadingRedemptions}
-            badge={{ text: 'Verified', variant: 'positive' }}
-            hint="Discounts redeemed by members"
+            badge={{ text: 'Paid Only', variant: 'positive' }}
+            hint="Discounts redeemed on paid orders"
           />
           <CRMKpiTile
             label="Total Savings Issued"
@@ -1359,7 +1446,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <Award className="w-3.5 h-3.5" />
             <span>Redemption Audit</span>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-              {safeRedemptions.length}
+              {totalRedemptionsCount}
             </Badge>
           </button>
 
@@ -1782,10 +1869,10 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               <div>
                 <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span>Dynamic Eligibility Rules</span>
+                  <span>Automatic Offer Rules</span>
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Contextual triggers evaluating session consumption, membership age, and automated upgrade incentives.
+                  Automatically show or apply offers based on a member's session usage, plan age, or activity.
                 </p>
               </div>
 
@@ -1796,25 +1883,25 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Create Dynamic Rule</span>
+                  <span>Create Offer Rule</span>
                 </Button>
               )}
             </div>
 
             {loadingRules ? (
-              <CRMLoadingState message="Loading dynamic eligibility rules..." />
+              <CRMLoadingState message="Loading automatic offer rules..." />
             ) : errorRules ? (
               <CRMErrorState
-                title="Failed to Load Dynamic Rules"
-                message="Unable to communicate with the dynamic rules engine. Please verify network access and retry."
+                title="Failed to Load Offer Rules"
+                message="Unable to communicate with the offer rules engine. Please verify network access and retry."
                 onRetry={refetchRules}
               />
             ) : safeRules.length === 0 ? (
               <CRMEmptyState
                 icon={Sparkles}
-                title="No Dynamic Eligibility Rules"
-                description="No dynamic retention rules configured. Contextual triggers evaluate session consumption, membership age, and automatic upgrade incentives."
-                actionLabel={canCreate ? '+ Create Dynamic Rule' : undefined}
+                title="No Automatic Offer Rules"
+                description="Create rules to automatically reward members based on their session usage, plan age, or inactivity."
+                actionLabel={canCreate ? '+ Create Offer Rule' : undefined}
                 onAction={openCreateRuleModal}
                 canAction={canCreate}
               />
@@ -1869,30 +1956,30 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="text-sm font-semibold text-foreground">{r.name}</h4>
-                            <Badge variant="outline" className="text-[11px] font-mono">
-                              Priority: {r.priority}
+                            <Badge variant="outline" className="text-[11px]">
+                              Priority {r.priority}
                             </Badge>
                             <Badge
                               variant="secondary"
                               className="text-[11px]"
                             >
-                              {r.rule_type}
+                              {RULE_TYPE_OPTIONS.find((opt) => opt.value === r.rule_type)?.label || r.rule_type}
                             </Badge>
                             <Badge
                               variant={r.evaluation_mode === 'ALL_CONDITIONS' ? 'default' : 'outline'}
                               className={cn(
-                                'text-[11px] font-mono',
+                                'text-[11px]',
                                 r.evaluation_mode === 'ALL_CONDITIONS'
                                   ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 border-blue-500/30'
                                   : 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
                               )}
                               title={
                                 r.evaluation_mode === 'ALL_CONDITIONS'
-                                  ? 'Flat evaluation: All conditions must match simultaneously (logical AND).'
-                                  : 'Flat evaluation: Any single condition matching qualifies the member (logical OR).'
+                                  ? 'The member must meet every condition below to qualify.'
+                                  : 'The member only needs to meet at least one condition below to qualify.'
                               }
                             >
-                              {r.evaluation_mode === 'ALL_CONDITIONS' ? 'ALL CONDITIONS (AND)' : 'ANY CONDITION (OR)'}
+                              {r.evaluation_mode === 'ALL_CONDITIONS' ? 'Match All Rules' : 'Match Any Rule'}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
@@ -1983,58 +2070,73 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                         <div className="p-3 bg-muted/40 rounded-xl text-xs border border-border/40 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-muted-foreground">
-                              Evaluation Criteria ({r.conditions?.length || 0}):
+                              Qualifying Conditions ({r.conditions?.length || 0})
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              Logic: {r.evaluation_mode === 'ALL_CONDITIONS' ? 'AND' : 'OR'}
+                            <span className="text-[11px] text-muted-foreground">
+                              {r.evaluation_mode === 'ALL_CONDITIONS' ? 'Must match all' : 'Match any'}
                             </span>
                           </div>
                           {r.conditions && r.conditions.length > 0 ? (
-                            r.conditions.map((c: any) => (
-                              <div
-                                key={c.id}
-                                className="text-foreground font-mono text-[11px] bg-background/60 p-1.5 rounded border border-border/40"
-                              >
-                                • <span className="font-semibold">{c.condition_type}</span>{' '}
-                                <span className="text-primary font-bold">{c.operator}</span>{' '}
-                                <span className="underline">{c.numeric_value || c.text_value || 'true'}</span>
-                              </div>
-                            ))
+                            r.conditions.map((c: any) => {
+                              const condLabel = CONDITION_LABEL_MAP[c.condition_type] || c.condition_type;
+                              const opLabel = OPERATOR_LABEL_MAP[c.operator] || c.operator;
+                              const valLabel = c.condition_type === 'CURRENT_PACKAGE_EQUALS' && c.text_value
+                                ? (packages.find((p) => p.id === c.text_value)?.name || c.text_value)
+                                : c.numeric_value !== null && c.numeric_value !== undefined && c.numeric_value !== ''
+                                ? formatRuleNumericValue(c.condition_type, c.numeric_value)
+                                : (c.text_value || 'true');
+                              return (
+                                <div
+                                  key={c.id}
+                                  className="text-foreground text-xs bg-background/60 p-2 rounded border border-border/40"
+                                >
+                                  • <span className="font-semibold">{condLabel}</span>{' '}
+                                  <span className="text-primary font-medium">{opLabel}</span>{' '}
+                                  <span className="font-semibold">{valLabel}</span>
+                                </div>
+                              );
+                            })
                           ) : (
-                            <span className="text-muted-foreground italic block">Always matches (no conditions)</span>
+                            <span className="text-muted-foreground italic block">Applies to everyone (no conditions)</span>
                           )}
                         </div>
 
                         <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                              Configured Offer Action:
+                              Reward &amp; Benefit
                             </span>
                           </div>
                           {r.actions && r.actions.length > 0 ? (
-                            r.actions.map((a: any) => (
-                              <div key={a.id} className="text-emerald-800 dark:text-emerald-200 space-y-1">
-                                <div className="font-bold flex items-center gap-1.5">
-                                  <span>{a.action_type}</span>
-                                  {a.auto_apply && (
-                                    <Badge variant="outline" className="text-[9px] bg-emerald-500/20 border-emerald-500/40 text-emerald-800 dark:text-emerald-300">
-                                      AUTO-APPLY
-                                    </Badge>
-                                  )}
+                            r.actions.map((a: any) => {
+                              const actionLabel = ACTION_TYPE_OPTIONS.find((opt) => opt.value === a.action_type)?.label || a.action_type;
+                              const linkedCamp = a.campaign ? campaigns.find((cp) => cp.id === a.campaign) : null;
+                              return (
+                                <div key={a.id} className="text-emerald-800 dark:text-emerald-200 space-y-1">
+                                  <div className="font-semibold flex items-center gap-1.5">
+                                    <span>{actionLabel}</span>
+                                    {a.auto_apply && (
+                                      <Badge variant="outline" className="text-[9px] bg-emerald-500/20 border-emerald-500/40 text-emerald-800 dark:text-emerald-300">
+                                        Auto-Applied
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs">
+                                    Reward:{' '}
+                                    {a.discount_percentage
+                                      ? `${formatPercentage(a.discount_percentage)}% OFF`
+                                      : a.discount_amount
+                                      ? `₹${a.discount_amount} OFF`
+                                      : linkedCamp
+                                      ? `${linkedCamp.name} (${linkedCamp.discount_type === 'PERCENTAGE' ? `${formatPercentage(linkedCamp.discount_value)}% OFF` : formatCurrency(linkedCamp.discount_value)})`
+                                      : 'Promo Coupon Offer'}
+                                  </div>
+                                  {a.message && <div className="text-[11px] italic">"{a.message}"</div>}
                                 </div>
-                                <div className="font-mono text-xs">
-                                  Benefit:{' '}
-                                  {a.discount_percentage
-                                    ? `${formatPercentage(a.discount_percentage)}% OFF`
-                                    : a.discount_amount
-                                    ? `₹${a.discount_amount} OFF`
-                                    : 'Special Incentive'}
-                                </div>
-                                {a.message && <div className="text-[11px] italic">"{a.message}"</div>}
-                              </div>
-                            ))
+                              );
+                            })
                           ) : (
-                            <span className="text-muted-foreground italic block">No action configured</span>
+                            <span className="text-muted-foreground italic block">No reward configured</span>
                           )}
                         </div>
                       </div>
@@ -2076,7 +2178,8 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 description="No discounts or promotional coupon redemptions have been processed yet."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-muted/50 text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
                     <tr>
@@ -2121,6 +2224,39 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   </tbody>
                 </table>
               </div>
+              {totalRedemptionsCount > redemptionPageSize && (
+                <div className="px-5 py-3.5 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/20 text-xs">
+                  <span className="text-muted-foreground">
+                    Showing {((redemptionPage - 1) * redemptionPageSize) + 1}–{Math.min(redemptionPage * redemptionPageSize, totalRedemptionsCount)} of {totalRedemptionsCount.toLocaleString('en-IN')} paid redemptions
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={redemptionPage <= 1 || loadingRedemptions}
+                      onClick={() => setRedemptionPage((p) => Math.max(1, p - 1))}
+                      className="h-8 text-xs px-3"
+                    >
+                      Previous
+                    </Button>
+                    <span className="font-medium text-foreground px-2">
+                      Page {redemptionPage} of {Math.max(1, Math.ceil(totalRedemptionsCount / redemptionPageSize))}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={redemptionPage >= Math.ceil(totalRedemptionsCount / redemptionPageSize) || loadingRedemptions}
+                      onClick={() => setRedemptionPage((p) => p + 1)}
+                      className="h-8 text-xs px-3"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
@@ -2764,6 +2900,32 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Who Can Use This Coupon</label>
+                <CheckboxMultiSelect
+                  label="Member Types"
+                  allLabel="All Member Types"
+                  items={CAMPAIGN_MEMBER_TYPE_OPTIONS}
+                  selectedIds={campMemberTypes}
+                  onChange={setCampMemberTypes}
+                  placeholder="Select eligible members..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Applicable Transaction Types</label>
+                <CheckboxMultiSelect
+                  label="Transaction Types"
+                  allLabel="All Transactions"
+                  items={CAMPAIGN_ORDER_TYPE_OPTIONS}
+                  selectedIds={campOrderTypes}
+                  onChange={setCampOrderTypes}
+                  placeholder="Select transaction types..."
+                />
+              </div>
+            </div>
+
             {/* Dedicated Responsive Validity & Schedule Card */}
             <div className="p-3.5 sm:p-4 rounded-xl border border-border/80 bg-muted/20 space-y-3">
               <div className="flex items-center">
@@ -2948,17 +3110,17 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
-              {editingRule ? 'Edit Dynamic Eligibility Rule' : 'Create Dynamic Eligibility Rule'}
+              {editingRule ? 'Edit Automatic Offer Rule' : 'Create Automatic Offer Rule'}
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSaveRule} className="space-y-4 pt-2">
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Rule Name *</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Offer Rule Name *</label>
               <Input
                 type="text"
                 required
-                placeholder="e.g. 80% Session Usage Renewal Incentive"
+                placeholder="e.g. 20% Off When 80% Sessions Used"
                 value={ruleName}
                 onChange={(e) => setRuleName(e.target.value)}
                 className="h-9 text-xs"
@@ -2966,9 +3128,9 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Notes / Purpose</label>
               <Input
-                placeholder="Internal business context and trigger notes"
+                placeholder="Short note explaining when this offer should apply"
                 value={ruleDesc}
                 onChange={(e) => setRuleDesc(e.target.value)}
                 className="h-9 text-xs"
@@ -2977,7 +3139,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Rule Type *</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Offer Category *</label>
                 <select
                   value={ruleType}
                   onChange={(e) => setRuleType(e.target.value as RuleType)}
@@ -2992,7 +3154,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Priority</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Priority (Lower runs first)</label>
                 <Input
                   type="number"
                   value={rulePriority}
@@ -3019,9 +3181,9 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <div className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                  Flat Evaluation Mode:
+                  When Should This Offer Trigger?
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <label className="inline-flex items-center gap-1.5 text-xs text-blue-800 dark:text-blue-200 cursor-pointer font-medium">
                     <input
                       type="radio"
@@ -3031,7 +3193,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                       onChange={() => setRuleEvaluationMode('ALL_CONDITIONS')}
                       className="text-blue-600"
                     />
-                    <span>All Conditions (AND)</span>
+                    <span>Match All Rules</span>
                   </label>
                   <label className="inline-flex items-center gap-1.5 text-xs text-blue-800 dark:text-blue-200 cursor-pointer font-medium">
                     <input
@@ -3042,34 +3204,34 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                       onChange={() => setRuleEvaluationMode('ANY_CONDITION')}
                       className="text-blue-600"
                     />
-                    <span>Any Condition (OR)</span>
+                    <span>Match Any Single Rule</span>
                   </label>
                 </div>
               </div>
               <p className="text-[11px] text-blue-700 dark:text-blue-300">
                 {ruleEvaluationMode === 'ALL_CONDITIONS'
-                  ? 'All conditions must match simultaneously. The member must satisfy each configured condition threshold to qualify.'
-                  : 'Any condition match qualifies the member. If even one configured condition evaluates to true, the offer triggers.'}
+                  ? 'The member must meet every condition below to qualify for this offer.'
+                  : 'The member only needs to meet at least one condition below to qualify for this offer.'}
               </p>
             </div>
 
             {/* Scope Filters — EXACT SAME 3 DROPDOWNS AS IN CREATE DISCOUNT CAMPAIGN */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Branch Scope (Optional)</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Valid Locations (Optional)</label>
                 <CheckboxMultiSelect
                   label="Branches"
-                  allLabel="All Branches"
+                  allLabel="All Locations"
                   items={branches.map((b) => ({ id: b.id, name: b.name }))}
                   selectedIds={ruleBranchIds}
                   onChange={setRuleBranchIds}
-                  placeholder="Search branches..."
-                  emptyMessage="No branches found"
+                  placeholder="Search locations..."
+                  emptyMessage="No locations found"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Program Scope (Optional)</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Eligible Programs (Optional)</label>
                 <CheckboxMultiSelect
                   label="Programs"
                   allLabel="All Programs"
@@ -3082,7 +3244,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Package Scope (Optional)</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Eligible Packages (Optional)</label>
                 <CheckboxMultiSelect
                   label="Packages"
                   allLabel="All Packages"
@@ -3103,7 +3265,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             <div className="space-y-3 pt-2 border-t border-border/60">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Evaluation Conditions ({ruleConditions.length})
+                  Qualifying Conditions ({ruleConditions.length})
                 </span>
                 <Button
                   type="button"
@@ -3207,12 +3369,12 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
             {/* Action Configuration (Visible in both Create and Edit) */}
             <div className="space-y-3 pt-2 border-t border-border/60">
               <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">
-                Reward Action Configuration
+                Reward &amp; Benefit
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Action Type</label>
+                  <label className="block text-xs font-medium text-foreground mb-1">What Reward to Give</label>
                   <select
                     value={ruleActionType}
                     onChange={(e) => setRuleActionType(e.target.value as ActionType)}
@@ -3290,9 +3452,9 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Offer Banner / Notification Message</label>
+                <label className="block text-xs font-medium text-foreground mb-1">Message Shown to Member</label>
                 <Input
-                  placeholder="e.g. Exclusive renewal privilege: Enjoy your personalized offer!"
+                  placeholder="e.g. You unlocked a special 20% renewal discount!"
                   value={ruleActionMessage}
                   onChange={(e) => setRuleActionMessage(e.target.value)}
                   className="h-9 text-xs"
@@ -3306,7 +3468,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                   onChange={(e) => setRuleActionAutoApply(e.target.checked)}
                   className="rounded border-border text-primary"
                 />
-                <span>Auto-apply to checkout without requiring coupon code entry</span>
+                <span>Automatically apply discount at checkout (no promo code needed)</span>
               </label>
             </div>
 
@@ -3325,7 +3487,7 @@ export const DiscountsWorkspace: React.FC<DiscountsWorkspaceProps> = ({
                 size="sm"
                 className="h-9 text-xs font-semibold"
               >
-                {editingRule ? 'Update Rule' : 'Create Dynamic Rule'}
+                {editingRule ? 'Save Offer Rule' : 'Create Offer Rule'}
               </Button>
             </DialogFooter>
           </form>

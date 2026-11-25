@@ -127,9 +127,35 @@ export const discountsApi = {
   },
 
   // Redemptions
-  getRedemptions: async (params?: { campaign_id?: string; order_id?: string }): Promise<DiscountRedemption[]> => {
+  getRedemptions: async (params?: { campaign_id?: string; order_id?: string; page?: number; page_size?: number }): Promise<DiscountRedemption[]> => {
     const res = await api.get('/tenant/discount-redemptions/', { params });
     return res.data.results || res.data;
+  },
+
+  getRedemptionsPaginated: async (params?: { campaign_id?: string; order_id?: string; page?: number; page_size?: number }): Promise<{
+    results: DiscountRedemption[];
+    count: number;
+    next: string | null;
+    previous: string | null;
+  }> => {
+    const res = await api.get('/tenant/discount-redemptions/', { params });
+    if (Array.isArray(res.data)) {
+      return { results: res.data, count: res.data.length, next: null, previous: null };
+    }
+    return {
+      results: res.data.results || [],
+      count: typeof res.data.count === 'number' ? res.data.count : (res.data.results || []).length,
+      next: res.data.next ?? null,
+      previous: res.data.previous ?? null,
+    };
+  },
+
+  getRedemptionsSummary: async (params?: { campaign_id?: string }): Promise<{
+    total_redemptions: number;
+    total_savings: string;
+  }> => {
+    const res = await api.get('/tenant/discount-redemptions/summary/', { params });
+    return res.data;
   },
 
   redeemCoupon: async (data: {
