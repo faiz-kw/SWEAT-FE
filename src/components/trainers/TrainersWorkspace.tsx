@@ -198,7 +198,7 @@ export function TrainersWorkspace() {
   const [selectedBranchId, setSelectedBranchId] = React.useState<string>('');
 
   React.useEffect(() => {
-    if (branches.length > 0 && !selectedBranchId) {
+    if (branches.length > 0 && !selectedBranchId && branches[0]) {
       setSelectedBranchId(branches[0].id);
     }
   }, [branches, selectedBranchId]);
@@ -289,7 +289,7 @@ export function TrainersWorkspace() {
     setAvailabilityResult(null);
     try {
       const isoStart = `${checkDate}T${checkTime}:00Z`;
-      const branchId = selectedBranchId || branches[0]?.id;
+      const branchId = selectedBranchId || branches[0]?.id || '';
       const result = await workforceApi.checkAvailability(selectedTrainer.id, {
         start_datetime: isoStart,
         branch_id: branchId,
@@ -377,7 +377,7 @@ export function TrainersWorkspace() {
     <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
       {/* Top Header */}
       <header className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-4 sm:py-5 sticky top-0 z-10 w-full">
-        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="w-full flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
@@ -390,14 +390,14 @@ export function TrainersWorkspace() {
                 {isTrainer ? 'Trainer Active' : 'Layer 2 Verified'}
               </Badge>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-2xl">
               {isTrainer
-                ? `Welcome back, ${currentTrainer?.trainer_name || user?.full_name || 'Coach'}. View your operational profile, weekly roster shifts, and allotted workout classes.`
+                ? `Welcome back, ${currentTrainer?.trainer_name || user?.fullName || (user as any)?.full_name || 'Coach'}. View your operational profile, weekly roster shifts, and allotted workout classes.`
                 : 'Data-driven trainer qualifications, recurring work shifts, exceptions, and live scheduling eligibility.'}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
             <Button
               variant="outline"
               size="sm"
@@ -408,7 +408,7 @@ export function TrainersWorkspace() {
                 ]);
               }}
               disabled={isFetching}
-              className="gap-1.5 h-9"
+              className="gap-1.5 h-9 shrink-0"
               title="Refresh real-time data"
             >
               <RefreshCw className={cn("w-3.5 h-3.5 transition-transform", isFetching && "animate-spin")} />
@@ -416,21 +416,11 @@ export function TrainersWorkspace() {
             </Button>
             {!isTrainer && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsExcelImportOpen(true)}
-                  className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
-                  title="Import Trainer Roster or Directory"
-                >
-                  <Upload className="w-3.5 h-3.5 text-primary" />
-                  <span>Import Schedule</span>
-                </Button>
                 <Link to="/admin/rosters">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold"
+                    className="gap-1.5 h-9 border-border shadow-xs text-xs font-semibold shrink-0 cursor-pointer"
                     title="Manage all staff rosters in Administration"
                   >
                     <Calendar className="w-3.5 h-3.5 text-primary" />
@@ -440,7 +430,7 @@ export function TrainersWorkspace() {
                 <Button
                   size="sm"
                   onClick={() => setActiveTab('availability')}
-                  className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm text-xs font-semibold shrink-0 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Eligibility Scanner</span>
@@ -478,9 +468,9 @@ export function TrainersWorkspace() {
         </div>
       </header>
 
-      {/* Navigation Tabs & Filters */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/50 pb-4 mb-6">
+      {/* Navigation Tabs Bar */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+        <div className="border-b border-border/50 pb-3 mb-6">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
             {!isTrainer && (
               <button
@@ -507,7 +497,7 @@ export function TrainersWorkspace() {
             </button>
             <button
               onClick={() => setActiveTab('classes')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'classes'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -518,7 +508,7 @@ export function TrainersWorkspace() {
             </button>
             <button
               onClick={() => setActiveTab('availability')}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'availability'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -528,52 +518,6 @@ export function TrainersWorkspace() {
               <span>{isTrainer ? 'Check My Slot Availability' : 'Slot Availability Engine'}</span>
             </button>
           </div>
-
-          {activeTab === 'directory' && !isTrainer && (
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Branch Filter */}
-              <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
-                <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">Branch:</span>
-                <select
-                  value={directoryBranchId}
-                  onChange={(e) => setDirectoryBranchId(e.target.value)}
-                  className="h-7 rounded border-none bg-transparent px-1 text-xs font-semibold focus:outline-none cursor-pointer text-foreground"
-                >
-                  <option value="ALL">All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="relative flex-1 min-w-[200px] sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search name, code, email or bio..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-9 h-9 text-xs sm:text-sm"
-                />
-              </div>
-              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/40">
-                {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => setStatusFilter(st)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                      statusFilter === st
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Studio Shift Roster View */}
@@ -588,7 +532,66 @@ export function TrainersWorkspace() {
 
         {/* Directory View */}
         {activeTab === 'directory' && (
-          <div>
+          <div className="space-y-4">
+            {!isTrainer && (
+              /* Dedicated Filter & Control Bar matching Image 3 */
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card shadow-2xs">
+                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1">
+                  {/* Branch Filter */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Branch:</span>
+                    <select
+                      value={directoryBranchId}
+                      onChange={(e) => setDirectoryBranchId(e.target.value)}
+                      className="bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-w-[170px] cursor-pointer shadow-2xs"
+                    >
+                      <option value="ALL">All Branches</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Status Toggle Pills */}
+                  <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+                    {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setStatusFilter(st)}
+                        className={`px-3 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                          statusFilter === st
+                            ? 'bg-background text-foreground shadow-2xs font-semibold'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative flex-1 min-w-[220px] max-w-sm">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search name, code, email or bio..."
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="pl-9 h-9 text-xs sm:text-sm bg-background border-border"
+                    />
+                  </div>
+                </div>
+
+                {/* Counter Stats */}
+                <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-muted-foreground">
+                  <span>
+                    Showing <strong className="text-foreground">{trainers.length}</strong> of {totalTrainers} Trainers
+                  </span>
+                </div>
+              </div>
+            )}
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
@@ -1336,7 +1339,7 @@ export function TrainersWorkspace() {
                   setEligibleList(null);
                   try {
                     const isoStart = `${checkDate}T${checkTime}:00Z`;
-                    const branchId = selectedBranchId || branches[0]?.id;
+                    const branchId = selectedBranchId || branches[0]?.id || '';
                     const res = await workforceApi.findEligibleTrainers({
                       start_datetime: isoStart,
                       branch_id: branchId,

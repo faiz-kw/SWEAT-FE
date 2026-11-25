@@ -38,10 +38,10 @@ import { useAuth } from '@/api/auth/AuthProvider';
 import { isOrganizationAdmin, isTrainerUser } from '@/lib/nav';
 
 interface TrainerAllottedClassesViewProps {
-  trainerId?: string; // Pre-selected trainer ID
-  trainerName?: string;
-  isEmbedded?: boolean; // When rendered inside modal or tab
-  onApplyLeave?: () => void;
+  trainerId?: string | undefined; // Pre-selected trainer ID
+  trainerName?: string | undefined;
+  isEmbedded?: boolean | undefined; // When rendered inside modal or tab
+  onApplyLeave?: (() => void) | undefined;
 }
 
 export const TrainerAllottedClassesView: React.FC<TrainerAllottedClassesViewProps> = ({

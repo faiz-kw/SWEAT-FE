@@ -723,11 +723,12 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
         </div>
       </div>
 
-      {/* 2. Controls & Period Navigation Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 sm:p-3.5 rounded-xl border border-border bg-card shadow-2xs">
-        {/* Week Period Switcher & Date Picker */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center border rounded-lg bg-muted/40 p-0.5">
+      {/* 2. Controls & Period Navigation Bar (Aligned with Image 3 pattern) */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border border-border bg-card shadow-2xs">
+        {/* Left Side: Filter & Navigation Controls */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 flex-1">
+          {/* Week Stepper */}
+          <div className="flex items-center border rounded-lg bg-muted/40 p-0.5 shadow-2xs">
             <Button
               type="button"
               variant="ghost"
@@ -737,13 +738,13 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
                 prev.setDate(prev.getDate() - 7);
                 setCurrentWeekDate(prev);
               }}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
               title="Previous Week (7 Days Earlier)"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </Button>
-            <div className="px-3 py-1 text-center min-w-[190px]">
-              <div className="text-xs font-bold text-foreground">{weekInfo.formattedRange}</div>
+            <div className="px-2.5 py-0.5 text-center min-w-[145px]">
+              <div className="text-xs font-bold text-foreground whitespace-nowrap">{weekInfo.formattedRange}</div>
               <div className="text-[10px] text-muted-foreground font-medium">
                 {weekInfo.isCurrentWeek ? 'Active Studio Week' : 'Scheduled Shift Week'}
               </div>
@@ -757,15 +758,15 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
                 next.setDate(next.getDate() + 7);
                 setCurrentWeekDate(next);
               }}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
               title="Next Week (7 Days Later)"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </Button>
           </div>
 
           {/* Jump Directly to ANY Date */}
-          <div className="flex items-center gap-1.5 bg-background border border-input rounded-lg px-2.5 py-1 h-9 shadow-2xs hover:border-primary/50 transition-colors">
+          <div className="flex items-center gap-1.5 bg-background border border-input rounded-lg px-2 py-0.5 h-8 shadow-2xs hover:border-primary/50 transition-colors">
             <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">Pick Date:</span>
             <input
@@ -776,7 +777,7 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
                   setCurrentWeekDate(parseDateStr(e.target.value));
                 }
               }}
-              className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer w-[105px]"
               title="Pick any date to jump directly to that week"
             />
           </div>
@@ -787,7 +788,7 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
               variant="outline"
               size="sm"
               onClick={() => setCurrentWeekDate(new Date())}
-              className="h-9 text-xs gap-1.5 font-semibold"
+              className="h-8 text-xs gap-1.5 font-semibold px-2"
               title="Return to the current live active week"
             >
               <RotateCcw className="w-3 h-3 text-primary" />
@@ -795,8 +796,25 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
             </Button>
           )}
 
-          {/* Quick Date Presets for Nov 21–30 */}
-          <div className="hidden xl:flex items-center gap-1 border-l pl-2 border-border/60 text-2xs">
+          {/* Studio Filter (Placed in Filter Group) */}
+          <div className="flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/60 h-8">
+            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Studio:</span>
+            <select
+              value={selectedBranchFilter}
+              onChange={(e) => setSelectedBranchFilter(e.target.value)}
+              className="h-7 border-none bg-transparent px-1 text-xs font-semibold text-foreground focus:outline-none cursor-pointer min-w-[140px]"
+            >
+              <option value="ALL">All {branches.length} Studio Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quick Date Presets */}
+          <div className="hidden 2xl:flex items-center gap-1 border-l pl-2 border-border/60 text-2xs">
             <button
               type="button"
               onClick={() => setCurrentWeekDate(parseDateStr('2026-11-21'))}
@@ -836,15 +854,18 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
               Nov 30
             </button>
           </div>
+        </div>
 
+        {/* Right Side: View Mode Toggle & Primary Actions */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 self-end lg:self-auto">
           {/* View Mode Toggle */}
-          <div className="flex items-center border rounded-lg bg-muted/30 p-0.5 sm:ml-2">
+          <div className="flex items-center border rounded-lg bg-muted/40 p-0.5 shadow-2xs">
             <button
               type="button"
               onClick={() => setViewMode('CARDS')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
                 viewMode === 'CARDS'
-                  ? 'bg-background text-foreground shadow-xs'
+                  ? 'bg-background text-foreground shadow-2xs font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -854,9 +875,9 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
             <button
               type="button"
               onClick={() => setViewMode('MATRIX')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
                 viewMode === 'MATRIX'
-                  ? 'bg-background text-foreground shadow-xs'
+                  ? 'bg-background text-foreground shadow-2xs font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -864,30 +885,11 @@ export const StudioShiftRosterBoard: React.FC<StudioShiftRosterBoardProps> = ({
               <span>7-Day Matrix</span>
             </button>
           </div>
-        </div>
-
-        {/* Studio Filter and Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-between lg:justify-end">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Filter Studio:</span>
-            <select
-              value={selectedBranchFilter}
-              onChange={(e) => setSelectedBranchFilter(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
-            >
-              <option value="ALL">All {branches.length} Studio Branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
           <Button
             size="sm"
             onClick={() => handleOpenQuickAlloc()}
-            className="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs"
+            className="gap-1.5 h-8 px-3 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Quick Shift Allocation</span>

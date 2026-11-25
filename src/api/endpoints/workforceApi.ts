@@ -56,11 +56,11 @@ export const workforceApi = {
   },
 
   getTrainersPaginated: async (params?: {
-    trainer_status?: string;
-    search?: string;
-    branch_id?: string;
-    page?: number;
-    page_size?: number;
+    trainer_status?: string | undefined;
+    search?: string | undefined;
+    branch_id?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<PaginatedResponse<TrainerProfile>> => {
     const query = new URLSearchParams();
     if (params?.trainer_status && params.trainer_status !== 'ALL') {
@@ -128,11 +128,11 @@ export const workforceApi = {
     params: {
       start_datetime: string;
       branch_id: string;
-      duration_minutes?: number;
-      delivery_mode?: string;
-      specialty_code?: string;
-      min_proficiency?: string;
-      category_id?: string;
+      duration_minutes?: number | undefined;
+      delivery_mode?: string | undefined;
+      specialty_code?: string | undefined;
+      min_proficiency?: string | undefined;
+      category_id?: string | undefined;
     }
   ): Promise<AvailabilityCheckResult> => {
     const query = new URLSearchParams();
@@ -153,12 +153,12 @@ export const workforceApi = {
   findEligibleTrainers: async (params: {
     start_datetime: string;
     branch_id: string;
-    duration_minutes?: number;
-    delivery_mode?: string;
-    specialty_code?: string;
-    min_proficiency?: string;
-    category_id?: string;
-    include_off_duty?: boolean;
+    duration_minutes?: number | undefined;
+    delivery_mode?: string | undefined;
+    specialty_code?: string | undefined;
+    min_proficiency?: string | undefined;
+    category_id?: string | undefined;
+    include_off_duty?: boolean | undefined;
   }): Promise<EligibleTrainer[]> => {
     const query = new URLSearchParams();
     query.append('start_datetime', params.start_datetime);

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   FileSpreadsheet,
@@ -156,6 +156,7 @@ export interface SimulatedOccurrence {
   status: string;
   na_fields_filled: string[];
   rule_source: string;
+  date_label?: string;
 }
 
 export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
@@ -177,6 +178,20 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   const [rows, setRows] = useState<RowPreview[]>([]);
   const [importResult, setImportResult] = useState<any>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setStep(1);
+      setSelectedFile(null);
+      setEntityType(defaultEntityType);
+      setSummary(null);
+      setRows([]);
+      setImportResult(null);
+      setSimulatedShifts([]);
+      setSimulatedOccurrences([]);
+      setSimulatedVideos([]);
+    }
+  }, [isOpen, defaultEntityType]);
+
   const [isDetecting, setIsDetecting] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -186,7 +201,7 @@ export const ExcelImportWizardModal: React.FC<ExcelImportWizardModalProps> = ({
   const [occurrencesSummary, setOccurrencesSummary] = useState<any>(null);
   const [isSimulatingOccurrences, setIsSimulatingOccurrences] = useState(false);
   const [availableBranches, setAvailableBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
-  const [availableTemplates, setAvailableTemplates] = useState<Array<{ id: string; name: string; code: string; default_capacity: number; category_name: string }>>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<Array<{ id: string; name: string; code: string; default_capacity: number; category_name: string; status?: string }>>([]);
 
   const [simulatedShifts, setSimulatedShifts] = useState<SimulatedTrainerShift[]>([]);
   const [shiftsSummary, setShiftsSummary] = useState<any>(null);
