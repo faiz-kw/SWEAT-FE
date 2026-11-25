@@ -1,10 +1,26 @@
-import React, { useState } from 'react';
-import { Dumbbell, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Dumbbell, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { SymptomLoggerModal } from '../shared/SymptomLoggerModal';
 import { MovementBatteryExtras } from './MovementBatteryExtras';
-import type { FunctionalTestsPayload, FunctionalTestItem, SymptomRecord } from '@/api/endpoints/assessmentApi';
+import { TestLibraryPicker, type RecordedTest } from './TestLibraryPicker';
+import { assessmentApi } from '@/api/endpoints/assessmentApi';
+import type { FunctionalTestsPayload, SymptomRecord } from '@/api/endpoints/assessmentApi';
+
+/**
+ * The movement battery, driven by the served test catalogue.
+ *
+ * The coach picks the tests that suit this member instead of filling one fixed form: a chair
+ * stand and a goblet squat are both valid ways to assess lower body, and the specification
+ * asks for one framework with adaptive protocols rather than a different programme per age.
+ *
+ * Warm-up observation stays a fixed card because it is one standard set of observations
+ * rather than a choice of protocol.
+ */
+
+// Domains whose tests come from the catalogue. Warm-up is handled separately.
+const LIBRARY_DOMAINS = ['lower_body', 'upper_body', 'core', 'balance', 'mobility', 'cardiovascular', 'performance'];
 
 interface AssessmentMovementStepProps {
   tests: FunctionalTestsPayload;
@@ -25,40 +41,44 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
 }) => {
   const [activeModalDomain, setActiveModalDomain] = useState<string | null>(null);
 
+  const { data: library, isLoading } = useQuery({
+    queryKey: ['assessment-test-library'],
+    queryFn: () => assessmentApi.getTestLibrary(),
+    staleTime: 30 * 60 * 1000, // the catalogue changes with a release, not during a session
+  });
+
   const handleSymptomLogged = (sym: SymptomRecord) => {
     if (!activeModalDomain) return;
     setSymptoms((prev) => ({ ...prev, [activeModalDomain]: sym }));
   };
 
-  const updateDomain = (
-    domain: 'lower_body' | 'upper_body' | 'core' | 'balance',
-    defaultTestName: string,
-    field: keyof FunctionalTestItem,
-    val: string | number | null
-  ) => {
-    setTests((prev) => {
-      const existing = (typeof prev[domain] === 'object' && prev[domain] && !('assessed_tests' in (prev[domain] || {})))
-        ? (prev[domain] as FunctionalTestItem)
-        : {};
-      return {
-        ...prev,
-        [domain]: {
-          ...existing,
-          ...(defaultTestName ? { test_name: existing.test_name || defaultTestName } : {}),
-          [field]: val,
-        },
-      };
-    });
+  const recordedFor = (domainKey: string): RecordedTest[] => {
+    const section = (tests as Record<string, unknown>)[domainKey];
+    if (Array.isArray(section)) return section as RecordedTest[];
+    if (section && typeof section === 'object') {
+      const assessed = (section as { assessed_tests?: RecordedTest[] }).assessed_tests;
+      if (Array.isArray(assessed)) return assessed;
+      // A legacy single-test block, kept so an assessment started before the catalogue
+      // still opens with its data intact.
+      if (Object.keys(section).length) return [section as RecordedTest];
+    }
+    return [];
   };
 
-  const lb = (typeof tests.lower_body === 'object' && !('assessed_tests' in (tests.lower_body || {})) ? tests.lower_body : {}) as FunctionalTestItem;
-  const ub = (typeof tests.upper_body === 'object' && !('assessed_tests' in (tests.upper_body || {})) ? tests.upper_body : {}) as FunctionalTestItem;
-  const core = (typeof tests.core === 'object' && !('assessed_tests' in (tests.core || {})) ? tests.core : {}) as FunctionalTestItem;
-  const bal = (typeof tests.balance === 'object' && !('assessed_tests' in (tests.balance || {})) ? tests.balance : {}) as FunctionalTestItem;
+  const setRecordedFor = (domainKey: string, next: RecordedTest[]) => {
+    setTests((prev) => ({ ...prev, [domainKey]: { assessed_tests: next } }));
+  };
+
+  const assessedCount = useMemo(
+    () => LIBRARY_DOMAINS.filter((d) => recordedFor(d).some((t) => t.status && t.status !== 'NOT_ASSESSED')).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tests],
+  );
+
+  const domains = (library?.domains || []).filter((d) => LIBRARY_DOMAINS.includes(d.key));
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
@@ -68,275 +88,56 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             <h2 className="text-lg font-bold text-foreground">Movement Tests</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Record symptoms separately from performance.
+            Pick the tests that suit this member. Record symptoms separately from performance.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Dumbbell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          <span>Protocol v1.0</span>
+          <span>
+            {assessedCount}/{LIBRARY_DOMAINS.length} domains
+            {library?.protocol_version ? ` · protocol v${library.protocol_version}` : ''}
+          </span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Lower body (Squat) */}
-        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Lower body</span>
-            <select
-              value={lb.status || 'NOT_ASSESSED'}
-              onChange={(e) => updateDomain('lower_body', '', 'status', e.target.value)}
-              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
-              aria-label="Result status"
-            >
-              <option value="NOT_ASSESSED">Not assessed</option>
-              <option value="VALID">Valid</option>
-              <option value="MODIFIED">Modified</option>
-              <option value="INCOMPLETE">Incomplete</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => setActiveModalDomain('lower_body')}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['lower_body'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
-              }`}
-            >
-              <AlertTriangle className="w-3 h-3" />
-              <span>{symptoms['lower_body'] ? 'Symptom Logged' : 'Log Symptom'}</span>
-            </button>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Squat</label>
-            <select
-              value={lb.variation || 'Bodyweight squat'}
-              onChange={(e) => updateDomain('lower_body', 'Squat', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
-            >
-              <option value="Box squat">Box squat</option>
-              <option value="Bodyweight squat">Bodyweight squat</option>
-              <option value="Goblet squat">Goblet squat</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Reps</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={lb.reps ?? ''}
-                onChange={(e) => updateDomain('lower_body', 'Squat', 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-muted border-border text-xs text-foreground"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Quality</label>
-              <select
-                value={lb.movement_quality || 'Meets criteria'}
-                onChange={(e) => updateDomain('lower_body', 'Squat', 'movement_quality', e.target.value)}
-                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
-              >
-                <option value="Meets criteria">Meets criteria</option>
-                <option value="Needs cueing">Needs cueing</option>
-                <option value="Modified">Modified</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Upper body (Push-up) */}
-        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Upper body</span>
-            <select
-              value={ub.status || 'NOT_ASSESSED'}
-              onChange={(e) => updateDomain('upper_body', '', 'status', e.target.value)}
-              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
-              aria-label="Result status"
-            >
-              <option value="NOT_ASSESSED">Not assessed</option>
-              <option value="VALID">Valid</option>
-              <option value="MODIFIED">Modified</option>
-              <option value="INCOMPLETE">Incomplete</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => setActiveModalDomain('upper_body')}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['upper_body'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
-              }`}
-            >
-              <AlertTriangle className="w-3 h-3" />
-              <span>{symptoms['upper_body'] ? 'Symptom Logged' : 'Log Symptom'}</span>
-            </button>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Push-up</label>
-            <select
-              value={ub.variation || 'Wall Push-up'}
-              onChange={(e) => updateDomain('upper_body', 'Push-up', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
-            >
-              <option value="Wall Push-up">Wall Push-up</option>
-              <option value="High incline">High incline</option>
-              <option value="Knee Push-up">Knee Push-up</option>
-              <option value="Floor">Floor</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Reps</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={ub.reps ?? ''}
-                onChange={(e) => updateDomain('upper_body', 'Push-up', 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-muted border-border text-xs text-foreground"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Quality</label>
-              <select
-                value={ub.movement_quality || 'Meets criteria'}
-                onChange={(e) => updateDomain('upper_body', 'Push-up', 'movement_quality', e.target.value)}
-                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
-              >
-                <option value="Meets criteria">Meets criteria</option>
-                <option value="Needs cueing">Needs cueing</option>
-                <option value="Modified">Modified</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Domain 3: Core (Plank) */}
-        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Domain 3: Core</span>
-            <select
-              value={core.status || 'NOT_ASSESSED'}
-              onChange={(e) => updateDomain('core', '', 'status', e.target.value)}
-              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
-              aria-label="Result status"
-            >
-              <option value="NOT_ASSESSED">Not assessed</option>
-              <option value="VALID">Valid</option>
-              <option value="MODIFIED">Modified</option>
-              <option value="INCOMPLETE">Incomplete</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => setActiveModalDomain('core')}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['core'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
-              }`}
-            >
-              <AlertTriangle className="w-3 h-3" />
-              <span>{symptoms['core'] ? 'Symptom Logged' : 'Log Symptom'}</span>
-            </button>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Plank Protocol</label>
-            <select
-              value={core.variation || 'Forearm plank'}
-              onChange={(e) => updateDomain('core', 'Plank', 'variation', e.target.value)}
-              className="w-full h-9 rounded bg-muted border border-border px-2.5 text-xs text-foreground"
-            >
-              <option value="Elevated Plank">Elevated plank</option>
-              <option value="Forearm plank">Forearm plank</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Hold (seconds)</label>
-            <Input
-              type="number"
-              placeholder="e.g. 45"
-              value={core.hold_seconds ?? ''}
-              onChange={(e) => updateDomain('core', 'Plank', 'hold_seconds', e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="h-9 bg-muted border-border text-xs text-foreground"
-            />
-          </div>
-        </div>
-
-        {/* Balance */}
-        <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Balance</span>
-            <select
-              value={bal.status || 'NOT_ASSESSED'}
-              onChange={(e) => updateDomain('balance', '', 'status', e.target.value)}
-              className="h-7 rounded bg-muted border border-border px-2 text-[11px] text-foreground mr-auto ml-2"
-              aria-label="Result status"
-            >
-              <option value="NOT_ASSESSED">Not assessed</option>
-              <option value="VALID">Valid</option>
-              <option value="MODIFIED">Modified</option>
-              <option value="INCOMPLETE">Incomplete</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => setActiveModalDomain('balance')}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                symptoms['balance'] ? 'bg-destructive/20 text-destructive border-destructive/40' : 'bg-muted text-muted-foreground border-border hover:text-foreground'
-              }`}
-            >
-              <AlertTriangle className="w-3 h-3" />
-              <span>{symptoms['balance'] ? 'Symptom Logged' : 'Log Symptom'}</span>
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Left leg (sec)</label>
-              <Input
-                type="number"
-                placeholder="25"
-                value={bal.single_leg_left_sec ?? ''}
-                onChange={(e) => updateDomain('balance', 'Single leg balance', 'single_leg_left_sec', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-muted border-border text-xs text-foreground"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Right leg (sec)</label>
-              <Input
-                type="number"
-                placeholder="25"
-                value={bal.single_leg_right_sec ?? ''}
-                onChange={(e) => updateDomain('balance', 'Single leg balance', 'single_leg_right_sec', e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="h-9 bg-muted border-border text-xs text-foreground"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-muted-foreground mb-1">Support used</label>
-              <select
-                value={bal.support_used || 'None'}
-                onChange={(e) => updateDomain('balance', 'Single leg balance', 'support_used', e.target.value)}
-                className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
-              >
-                <option value="None">None</option>
-                <option value="Fingertip touch">Fingertip touch</option>
-                <option value="Support available">Support available</option>
-                <option value="Hands-on assistance">Hands-on assistance</option>
-              </select>
-            </div>
-          </div>
-
+        {/* Warm-up observation is a fixed set of observations, not a choice of protocol. */}
         <MovementBatteryExtras
           tests={tests}
           setTests={setTests}
           symptoms={symptoms}
           onLogSymptom={(domain) => setActiveModalDomain(domain)}
         />
-        </div>
+
+        {isLoading && (
+          <div className="p-6 rounded-xl bg-card border border-border text-center text-xs text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+            Loading the test catalogue…
+          </div>
+        )}
+
+        {domains.map((domain) => (
+          <TestLibraryPicker
+            key={domain.key}
+            domain={domain}
+            protocolVersion={library?.protocol_version || '1.0'}
+            recorded={recordedFor(domain.key)}
+            onChange={(next) => setRecordedFor(domain.key, next)}
+            onLogSymptom={() => setActiveModalDomain(domain.key)}
+            hasSymptom={!!symptoms[domain.key]}
+          />
+        ))}
       </div>
 
       {activeModalDomain && (
         <SymptomLoggerModal
           isOpen={true}
-          domainName={activeModalDomain.replace('_', ' ').toUpperCase()}
+          domainName={activeModalDomain.replace(/_/g, ' ').toUpperCase()}
           onClose={() => setActiveModalDomain(null)}
           onSaveSymptom={handleSymptomLogged}
         />
       )}
 
-      {/* Navigation */}
       <div className="flex items-center justify-between pt-4 border-t border-border">
         <Button variant="ghost" onClick={onPrev} className="text-xs text-muted-foreground gap-1.5">
           <ArrowLeft className="w-4 h-4" />

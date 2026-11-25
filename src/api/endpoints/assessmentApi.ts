@@ -104,6 +104,41 @@ export interface CardiovascularTest {
   status?: TestResultStatus;
 }
 
+/** One input on a catalogue test. Drives a tablet form, so the kinds are deliberately few. */
+export interface AssessmentTestField {
+  key: string;
+  label: string;
+  type: 'number' | 'seconds' | 'select' | 'text' | 'bool';
+  options?: string[];
+  placeholder?: string;
+  default?: string;
+}
+
+/** A test the battery can run, as served by the catalogue. */
+export interface AssessmentTestDefinition {
+  code: string;
+  domain: string;
+  name: string;
+  section: string;
+  difficulty: 'accessible' | 'scaled' | 'advanced';
+  variations?: string[];
+  fields: AssessmentTestField[];
+  note?: string;
+}
+
+export interface AssessmentTestDomain {
+  key: string;
+  label: string;
+  optional: boolean;
+  tests: AssessmentTestDefinition[];
+}
+
+export interface AssessmentTestLibrary {
+  protocol_version: string;
+  status_options: string[];
+  domains: AssessmentTestDomain[];
+}
+
 export type TestResultStatus = 'VALID' | 'MODIFIED' | 'INCOMPLETE' | 'NOT_ASSESSED';
 
 export interface FunctionalTestsPayload {
@@ -494,6 +529,12 @@ export const assessmentApi = {
 
   async capturePhotos(id: string, formData: FormData): Promise<AssessmentSession> {
     const res = await api.post<AssessmentSession>(`/tenant/assessments/${id}/capture/`, formData);
+    return res.data;
+  },
+
+  /** The served test catalogue: every test the battery can run, with its fields. */
+  async getTestLibrary(): Promise<AssessmentTestLibrary> {
+    const res = await api.get<AssessmentTestLibrary>('/tenant/assessments/test-library/');
     return res.data;
   },
 

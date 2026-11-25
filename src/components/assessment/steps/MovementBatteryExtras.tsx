@@ -2,23 +2,19 @@ import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type {
-  CardiovascularTest,
   FunctionalTestsPayload,
-  MobilityTests,
   TestResultStatus,
   WarmUpObservation,
 } from '@/api/endpoints/assessmentApi';
 
 /**
- * The parts of the movement battery that had no inputs: warm-up observation (section 4),
- * mobility (section 9) and cardio (section 10).
+ * Section 4 warm-up observation.
  *
- * Until these existed, the capability matrix reported mobility, cardiovascular and functional
- * movement from hardcoded constants, because nothing ever collected them.
+ * Mobility and cardio were here too until the test catalogue took them over; they offer a
+ * choice of protocol, whereas warm-up is one fixed set of observations.
  *
- * Every card carries a result status. "Not assessed" is the default on purpose: a test the
- * coach skipped must not contribute a capability level, and the backend drops any entry
- * marked not assessed or incomplete.
+ * The card carries a result status defaulting to "Not assessed", because a skipped
+ * observation must not contribute a capability level.
  */
 
 const STATUS_OPTIONS: Array<{ value: TestResultStatus; label: string }> = [
@@ -31,13 +27,6 @@ const STATUS_OPTIONS: Array<{ value: TestResultStatus; label: string }> = [
 const SCREEN_OPTIONS = ['Comfortable', 'Modified', 'Restricted'];
 const OBSERVATION_OPTIONS = ['Normal', 'Modified', 'Uses support', 'Unable today'];
 
-const CARDIO_PROTOCOLS = [
-  'Comfortable treadmill walk',
-  'Submaximal treadmill walk',
-  '2-minute step test',
-  '6-minute walk test',
-  'Stationary cycle',
-];
 
 const selectClass = 'w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground';
 const labelClass = 'block text-xs text-muted-foreground mb-1';
@@ -121,17 +110,10 @@ export const MovementBatteryExtras: React.FC<MovementBatteryExtrasProps> = ({
   symptoms,
 }) => {
   const warmUp = (tests.warm_up_observation || {}) as WarmUpObservation;
-  const mobility = (tests.mobility || {}) as MobilityTests;
-  const cardio = (tests.cardiovascular || {}) as CardiovascularTest;
 
   const setWarmUp = (field: keyof WarmUpObservation, value: unknown) =>
     setTests((prev) => ({ ...prev, warm_up_observation: { ...(prev.warm_up_observation || {}), [field]: value } }));
 
-  const setMobility = (field: keyof MobilityTests, value: unknown) =>
-    setTests((prev) => ({ ...prev, mobility: { ...(prev.mobility || {}), [field]: value } }));
-
-  const setCardio = (field: keyof CardiovascularTest, value: unknown) =>
-    setTests((prev) => ({ ...prev, cardiovascular: { ...(prev.cardiovascular || {}), [field]: value } }));
 
   const numeric = (v: string) => (v === '' ? null : Number(v));
 
@@ -198,139 +180,6 @@ export const MovementBatteryExtras: React.FC<MovementBatteryExtrasProps> = ({
         </div>
       </CardShell>
 
-      {/* Section 9 — mobility */}
-      <CardShell
-        title="Mobility"
-        status={mobility.status}
-        onStatus={(v) => setMobility('status', v)}
-        onLogSymptom={() => onLogSymptom('mobility')}
-        hasSymptom={!!symptoms['mobility']}
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Shoulder</label>
-            <select value={mobility.shoulder_mobility || ''} onChange={(e) => setMobility('shoulder_mobility', e.target.value)} className={selectClass}>
-              <option value="">—</option>
-              {SCREEN_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Ankle (knee to wall)</label>
-            <select value={mobility.ankle_knee_to_wall || ''} onChange={(e) => setMobility('ankle_knee_to_wall', e.target.value)} className={selectClass}>
-              <option value="">—</option>
-              {SCREEN_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Ankle left (cm)</label>
-            <Input type="number" placeholder="—" value={mobility.ankle_left_cm ?? ''}
-              onChange={(e) => setMobility('ankle_left_cm', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Ankle right (cm)</label>
-            <Input type="number" placeholder="—" value={mobility.ankle_right_cm ?? ''}
-              onChange={(e) => setMobility('ankle_right_cm', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Hamstring reach</label>
-            <select value={mobility.hamstring_reach || ''} onChange={(e) => setMobility('hamstring_reach', e.target.value)} className={selectClass}>
-              <option value="">—</option>
-              {SCREEN_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Sit &amp; reach (cm)</label>
-            <Input type="number" placeholder="—" value={mobility.sit_and_reach_cm ?? ''}
-              onChange={(e) => setMobility('sit_and_reach_cm', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-        </div>
-        {mobility.ankle_left_cm != null && mobility.ankle_right_cm != null &&
-          Math.abs(Number(mobility.ankle_left_cm) - Number(mobility.ankle_right_cm)) >= 4 && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400">
-              {Math.abs(Number(mobility.ankle_left_cm) - Number(mobility.ankle_right_cm)).toFixed(1)}cm
-              side-to-side difference — worth addressing in the plan.
-            </p>
-          )}
-      </CardShell>
-
-      {/* Section 10 — cardio */}
-      <CardShell
-        title="Cardio"
-        status={cardio.status}
-        onStatus={(v) => setCardio('status', v)}
-        onLogSymptom={() => onLogSymptom('cardiovascular')}
-        hasSymptom={!!symptoms['cardiovascular']}
-      >
-        <div>
-          <label className={labelClass}>Protocol</label>
-          <select value={cardio.protocol || ''} onChange={(e) => setCardio('protocol', e.target.value)} className={selectClass}>
-            <option value="">—</option>
-            {CARDIO_PROTOCOLS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className={labelClass}>Duration (min)</label>
-            <Input type="number" placeholder="0" value={cardio.duration_minutes ?? ''}
-              onChange={(e) => setCardio('duration_minutes', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Distance (m)</label>
-            <Input type="number" placeholder="0" value={cardio.distance_m ?? ''}
-              onChange={(e) => setCardio('distance_m', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Steps / reps</label>
-            <Input type="number" placeholder="0" value={cardio.repetitions ?? ''}
-              onChange={(e) => setCardio('repetitions', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>HR after (bpm)</label>
-            <Input type="number" placeholder="0" value={cardio.hr_after_bpm ?? ''}
-              onChange={(e) => setCardio('hr_after_bpm', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Recovery HR</label>
-            <Input type="number" placeholder="0" value={cardio.recovery_hr_bpm ?? ''}
-              onChange={(e) => setCardio('recovery_hr_bpm', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-          <div>
-            <label className={labelClass}>Exertion (0–10)</label>
-            <Input type="number" min={0} max={10} placeholder="0" value={cardio.perceived_exertion ?? ''}
-              onChange={(e) => setCardio('perceived_exertion', numeric(e.target.value))}
-              className="h-9 bg-muted border-border text-xs text-foreground" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Talk test</label>
-            <select value={cardio.talk_test || ''} onChange={(e) => setCardio('talk_test', e.target.value)} className={selectClass}>
-              <option value="">—</option>
-              <option value="Comfortable">Comfortable</option>
-              <option value="Somewhat difficult">Somewhat difficult</option>
-              <option value="Difficult">Difficult</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Stopped because</label>
-            <select value={cardio.stopping_reason || ''} onChange={(e) => setCardio('stopping_reason', e.target.value)} className={selectClass}>
-              <option value="">—</option>
-              <option value="Protocol complete">Protocol complete</option>
-              <option value="Fatigue">Fatigue</option>
-              <option value="Symptoms">Symptoms</option>
-              <option value="Safety">Safety</option>
-            </select>
-          </div>
-        </div>
-      </CardShell>
     </>
   );
 };
