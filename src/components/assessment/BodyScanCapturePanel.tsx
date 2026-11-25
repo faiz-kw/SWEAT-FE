@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,10 +23,10 @@ const CAPTURE_VIEWS: Array<{
   instruction: string;
   framing: 'front' | 'side';
 }> = [
-  { id: 'photo_front', scanKey: 'front', label: '1. Front Standing', instruction: 'Face the camera, look straight ahead at the 2.5m marker', framing: 'front' },
-  { id: 'photo_back', scanKey: 'back', label: '2. Back Standing', instruction: 'Face away, heels on the floor markers, arms relaxed', framing: 'front' },
-  { id: 'photo_side_left', scanKey: 'left', label: '3. Left Profile', instruction: 'Left shoulder to camera, arms resting naturally at sides', framing: 'side' },
-  { id: 'photo_side_right', scanKey: 'right', label: '4. Right Profile', instruction: 'Right shoulder to camera, same stance as the left', framing: 'side' },
+  { id: 'photo_front', scanKey: 'front', label: 'Front', instruction: 'Face the camera, look ahead', framing: 'front' },
+  { id: 'photo_back', scanKey: 'back', label: 'Back', instruction: 'Face away, arms relaxed', framing: 'front' },
+  { id: 'photo_side_left', scanKey: 'left', label: 'Left', instruction: 'Left side to camera', framing: 'side' },
+  { id: 'photo_side_right', scanKey: 'right', label: 'Right', instruction: 'Right side to camera', framing: 'side' },
 ];
 
 const EMPTY_CAPTURES: Record<CaptureViewId, null> = {
@@ -45,6 +45,18 @@ interface BodyScanCapturePanelProps {
 }
 
 /**
+ * Imperative handle so the step's own "Continue" can save pending captures before it
+ * advances. Without this, selecting photos and pressing Continue (instead of "Save & scan")
+ * silently dropped them: the panel unmounts on navigation and the files were never uploaded.
+ */
+export interface BodyScanCaptureHandle {
+  /** True when photos are selected but not yet uploaded to the server. */
+  hasPending: () => boolean;
+  /** Uploads any pending captures and starts the scan. A no-op when nothing is pending. */
+  commit: () => Promise<void>;
+}
+
+/**
  * Baseline capture and body scan.
  *
  * Uploads are stored immediately and the pose analysis runs in the background, so this panel
@@ -52,12 +64,12 @@ interface BodyScanCapturePanelProps {
  * is a different statement from a measured zero, and a view that failed its quality gate
  * produces no numbers at all.
  */
-export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
+export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCapturePanelProps>(({
   assessmentId,
   heightCm,
   weightKg,
   onCaptured,
-}) => {
+}, ref) => {
   const [captureFiles, setCaptureFiles] = useState<Record<CaptureViewId, File | null>>({ ...EMPTY_CAPTURES });
   const [capturePreviews, setCapturePreviews] = useState<Record<CaptureViewId, string | null>>({ ...EMPTY_CAPTURES });
   const [cameraForView, setCameraForView] = useState<CaptureViewId | null>(null);
@@ -135,14 +147,23 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
     onError: (err: any) => toast.error(err?.data?.error || 'Could not restart the scan.'),
   });
 
+  // Let the step's "Continue" button save pending captures before it leaves this screen.
+  useImperativeHandle(ref, () => ({
+    hasPending: () => capturedCount > 0 && !uploadMutation.isSuccess && !uploadMutation.isPending,
+    commit: async () => {
+      if (!assessmentId) return;
+      if (capturedCount > 0 && !uploadMutation.isSuccess) {
+        await uploadMutation.mutateAsync();
+      }
+    },
+  }), [capturedCount, assessmentId, uploadMutation]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">Baseline Captures</h4>
-          <p className="text-[11px] text-muted-foreground">
-            Front, back and both profiles. Same stance and distance every time.
-          </p>
+          <h4 className="text-sm font-semibold text-foreground">Body scan photos</h4>
+          <p className="text-[11px] text-muted-foreground">Optional — four angles, same stance each time.</p>
         </div>
         <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted font-semibold text-foreground">
           {capturedCount} / 4 captured
@@ -249,12 +270,9 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
         </Button>
         {/* A disabled button with no stated reason is the thing people file bugs about. */}
         {!assessmentId ? (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400">
-            Complete the health screening first — the assessment record is created there, and
-            captures attach to it.
-          </p>
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">Finish the health screening first.</p>
         ) : capturedCount === 0 ? (
-          <p className="text-[11px] text-muted-foreground">Take at least one capture to run the scan.</p>
+          <p className="text-[11px] text-muted-foreground">Add at least one photo to scan.</p>
         ) : null}
       </div>
 
@@ -338,4 +356,6 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
       )}
     </div>
   );
-};
+});
+
+BodyScanCapturePanel.displayName = 'BodyScanCapturePanel';

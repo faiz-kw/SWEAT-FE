@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PageHeader, PageBody } from '@/components/enterprise/Page';
@@ -22,8 +22,15 @@ import { AssessmentTvDisplayStep } from './steps/AssessmentTvDisplayStep';
 
 export type AssessmentStep = 'intake' | 'safety_gate' | 'vitals' | 'movement' | 'goals' | 'review' | 'tv_display';
 
+// The whole intake lives in memory, so a refresh or an accidental navigation used to wipe it.
+// We keep a local draft so a coach can pick up exactly where they left off.
+const ASSESSMENT_DRAFT_KEY = 'sweat_assessment_draft_v1';
+
 export const AssessmentStudioWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
+  const clearAssessmentDraft = React.useCallback(() => {
+    try { localStorage.removeItem(ASSESSMENT_DRAFT_KEY); } catch { /* storage unavailable */ }
+  }, []);
   const [currentStep, setCurrentStep] = useState<AssessmentStep>('intake');
   const [memberAcknowledgementName, setMemberAcknowledgementName] = useState('');
   const [coachSignOffName, setCoachSignOffName] = useState('');
@@ -172,6 +179,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
     onSuccess: (data) => {
       setActiveSession(data);
       queryClient.invalidateQueries({ queryKey: ['assessments'] });
+      clearAssessmentDraft();
       toast.success('Assessment approved. Studio TV display unlocked.');
       setCurrentStep('tv_display');
     },
@@ -179,11 +187,86 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   });
 
   const resetAll = () => {
+    clearAssessmentDraft();
     setActiveSession(null); setCurrentStep('intake'); setMemberName(''); setMemberPhone('+91');
     setHeightCm(null); setWeightKg(null); setWaistCm(null); setRestingHr(null); setRestingBp('');
     setFunctionalTests({}); setSymptoms({}); setConsentBody(false); setConsentPhotos(false);
     setConsentAi(false); setConsentSecondary(false);
   };
+
+  // Restore a saved draft once on mount, then keep saving it as the coach works.
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ASSESSMENT_DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.currentStep) setCurrentStep(d.currentStep);
+        if (d.activeSession) setActiveSession(d.activeSession);
+        if (d.selectedMember) setSelectedMember(d.selectedMember);
+        if (d.manualEntry != null) setManualEntry(d.manualEntry);
+        if (d.memberName != null) setMemberName(d.memberName);
+        if (d.memberPhone != null) setMemberPhone(d.memberPhone);
+        if (d.assessmentType) setAssessmentType(d.assessmentType);
+        if (d.trainingExperience) setTrainingExperience(d.trainingExperience);
+        if (d.activityLevel) setActivityLevel(d.activityLevel);
+        if (d.preferredStyle) setPreferredStyle(d.preferredStyle);
+        if (d.userNotes != null) setUserNotes(d.userNotes);
+        if (d.screeningAnswers) setScreeningAnswers(d.screeningAnswers);
+        if (d.screeningOutcome) setScreeningOutcome(d.screeningOutcome);
+        if (d.screeningCoachNotes != null) setScreeningCoachNotes(d.screeningCoachNotes);
+        if (d.heightCm !== undefined) setHeightCm(d.heightCm);
+        if (d.weightKg !== undefined) setWeightKg(d.weightKg);
+        if (d.waistCm !== undefined) setWaistCm(d.waistCm);
+        if (d.restingHr !== undefined) setRestingHr(d.restingHr);
+        if (d.restingBp != null) setRestingBp(d.restingBp);
+        if (d.provenance) setProvenance(d.provenance);
+        if (d.functionalTests) setFunctionalTests(d.functionalTests);
+        if (d.symptoms) setSymptoms(d.symptoms);
+        if (d.targetGoal) setTargetGoal(d.targetGoal);
+        if (d.customGoalOutcome != null) setCustomGoalOutcome(d.customGoalOutcome);
+        if (d.durationWeeks != null) setDurationWeeks(d.durationWeeks);
+        if (d.weeklyFrequency != null) setWeeklyFrequency(d.weeklyFrequency);
+        if (d.perceivedBarrier != null) setPerceivedBarrier(d.perceivedBarrier);
+        if (d.confidenceScore != null) setConfidenceScore(d.confidenceScore);
+        if (d.consentBody != null) setConsentBody(d.consentBody);
+        if (d.consentPhotos != null) setConsentPhotos(d.consentPhotos);
+        if (d.consentAi != null) setConsentAi(d.consentAi);
+        if (d.consentSecondary != null) setConsentSecondary(d.consentSecondary);
+        if (d.consentImageGeneration != null) setConsentImageGeneration(d.consentImageGeneration);
+        if (d.memberAcknowledged != null) setMemberAcknowledged(d.memberAcknowledged);
+        if (d.memberAcknowledgementName != null) setMemberAcknowledgementName(d.memberAcknowledgementName);
+        if (d.coachSignOffName != null) setCoachSignOffName(d.coachSignOffName);
+        if (d.agreedFirstMilestone != null) setAgreedFirstMilestone(d.agreedFirstMilestone);
+        if (d.goalReviewDate != null) setGoalReviewDate(d.goalReviewDate);
+        if (d.coachStrengths != null) setCoachStrengths(d.coachStrengths);
+        if (d.coachAreasToDevelop != null) setCoachAreasToDevelop(d.coachAreasToDevelop);
+        if (d.workoutPrescription != null) setWorkoutPrescription(d.workoutPrescription);
+        if (d.dietPrescription != null) setDietPrescription(d.dietPrescription);
+        if (d.reassessmentWeeks != null) setReassessmentWeeks(d.reassessmentWeeks);
+      }
+    } catch { /* corrupt or unavailable storage: start fresh */ }
+    setDraftHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    try {
+      localStorage.setItem(ASSESSMENT_DRAFT_KEY, JSON.stringify({
+        currentStep, activeSession, selectedMember, manualEntry, memberName, memberPhone,
+        assessmentType, trainingExperience, activityLevel, preferredStyle, userNotes,
+        screeningAnswers, screeningOutcome, screeningCoachNotes,
+        heightCm, weightKg, waistCm, restingHr, restingBp, provenance,
+        functionalTests, symptoms,
+        targetGoal, customGoalOutcome, durationWeeks, weeklyFrequency, perceivedBarrier, confidenceScore,
+        consentBody, consentPhotos, consentAi, consentSecondary, consentImageGeneration,
+        memberAcknowledged, memberAcknowledgementName, coachSignOffName, agreedFirstMilestone,
+        goalReviewDate, coachStrengths, coachAreasToDevelop, workoutPrescription, dietPrescription,
+        reassessmentWeeks,
+      }));
+    } catch { /* storage full/unavailable: progress simply is not persisted */ }
+  });
 
   const stepsList: Array<{ id: AssessmentStep; label: string }> = [
     { id: 'intake', label: '1. Intake' }, { id: 'safety_gate', label: '2. Safety Gate' },
@@ -195,24 +278,40 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <PageHeader
-        title="Assessment Studio Workspace"
-        description="Standardized 17-section functional movement assessment, safety readiness gate & clinical roadmap."
+        title="Assessment"
+        description="Guided member assessment — intake to sign-off."
       />
       <PageBody>
         <div className="max-w-4xl mx-auto mb-8">
-          <div className="flex items-center justify-between overflow-x-auto pb-2 border-b border-border">
-            {stepsList.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setCurrentStep(s.id)}
-                className={`text-xs font-semibold whitespace-nowrap px-3 py-1.5 rounded-lg transition-all ${
-                  currentStep === s.id ? 'bg-amber-500 text-foreground shadow-md shadow-amber-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-card'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border">
+            {stepsList.map((s, i) => {
+              const activeIdx = stepsList.findIndex((x) => x.id === currentStep);
+              const done = i < activeIdx;
+              const active = s.id === currentStep;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setCurrentStep(s.id)}
+                  className={`flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap px-3 py-1.5 rounded-lg transition-all ${
+                    active
+                      ? 'bg-amber-500 text-foreground shadow-sm'
+                      : done
+                      ? 'text-emerald-600 dark:text-emerald-400 hover:bg-card'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-card'
+                  }`}
+                >
+                  <span
+                    className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${
+                      active ? 'bg-foreground/15' : done ? 'bg-emerald-500/15' : 'bg-muted'
+                    }`}
+                  >
+                    {done ? '✓' : i + 1}
+                  </span>
+                  <span>{s.label.replace(/^\d+\.\s*/, '')}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

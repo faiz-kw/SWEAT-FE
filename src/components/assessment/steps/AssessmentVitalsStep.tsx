@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
-import { Activity, Scale, ArrowRight, ArrowLeft, Info, Heart } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { Activity, Scale, ArrowRight, ArrowLeft, Info, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProvenanceSelect } from '../shared/ProvenanceSelect';
-import { BodyScanCapturePanel } from '../BodyScanCapturePanel';
+import { BodyScanCapturePanel, type BodyScanCaptureHandle } from '../BodyScanCapturePanel';
 import type { ProvenanceTag } from '@/api/endpoints/assessmentApi';
 
 interface AssessmentVitalsStepProps {
@@ -44,6 +44,26 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
 }) => {
   const updateProvenance = (metric: string, tag: ProvenanceTag) => {
     setProvenance((prev) => ({ ...prev, [metric]: tag }));
+  };
+
+  // "Continue" should save the photos it finds, so nobody loses a capture by pressing the
+  // wrong button. If the upload fails we stay on the step (the panel shows the error) so it
+  // can be retried rather than silently moving on without a scan.
+  const captureRef = useRef<BodyScanCaptureHandle>(null);
+  const [savingCaptures, setSavingCaptures] = useState(false);
+
+  const handleContinue = async () => {
+    if (captureRef.current?.hasPending()) {
+      setSavingCaptures(true);
+      try {
+        await captureRef.current.commit();
+      } catch {
+        setSavingCaptures(false);
+        return;
+      }
+      setSavingCaptures(false);
+    }
+    onNext();
   };
 
   // Real-time calculations
@@ -242,6 +262,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
       {/* Baseline captures and the body scan they feed */}
       <div className="rounded-xl border border-border bg-card/40 p-4">
         <BodyScanCapturePanel
+          ref={captureRef}
           assessmentId={assessmentId}
           heightCm={heightCm}
           weightKg={weightKg}
@@ -255,11 +276,21 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
           <span>Back</span>
         </Button>
         <Button
-          onClick={onNext}
+          onClick={handleContinue}
+          disabled={savingCaptures}
           className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-6 h-10 gap-2"
         >
-          <span>Continue</span>
-          <ArrowRight className="w-4 h-4" />
+          {savingCaptures ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Saving photos…</span>
+            </>
+          ) : (
+            <>
+              <span>Continue</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </Button>
       </div>
     </div>
