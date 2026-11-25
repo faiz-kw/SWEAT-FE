@@ -27,6 +27,14 @@ interface AssessmentReviewSignOffStepProps {
   setDietPrescription: (val: string) => void;
   reassessmentWeeks: number;
   setReassessmentWeeks: (val: number) => void;
+  memberAcknowledgementName: string;
+  setMemberAcknowledgementName: (val: string) => void;
+  coachSignOffName: string;
+  setCoachSignOffName: (val: string) => void;
+  agreedFirstMilestone: string;
+  setAgreedFirstMilestone: (val: string) => void;
+  goalReviewDate: string;
+  setGoalReviewDate: (val: string) => void;
   isApproving: boolean;
   onApproveAndSignOff: () => void;
   onPrev: () => void;
@@ -55,6 +63,14 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
   setDietPrescription,
   reassessmentWeeks,
   setReassessmentWeeks,
+  memberAcknowledgementName,
+  setMemberAcknowledgementName,
+  coachSignOffName,
+  setCoachSignOffName,
+  agreedFirstMilestone,
+  setAgreedFirstMilestone,
+  goalReviewDate,
+  setGoalReviewDate,
   isApproving,
   onApproveAndSignOff,
   onPrev,
@@ -261,6 +277,56 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             <option value={8}>8 Weeks</option>
             <option value={12}>12 Weeks</option>
           </select>
+        </div>
+
+        {/* Section 12 closes with something concrete to work toward and a date to check it. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Agreed first milestone</label>
+            <input
+              value={agreedFirstMilestone}
+              onChange={(e) => setAgreedFirstMilestone(e.target.value)}
+              placeholder="e.g. Three sessions a week for four weeks"
+              className="w-full h-9 rounded bg-muted border border-border px-3 text-xs text-foreground"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Review date</label>
+            <input
+              type="date"
+              value={goalReviewDate}
+              onChange={(e) => setGoalReviewDate(e.target.value)}
+              className="w-full h-9 rounded bg-muted border border-border px-3 text-xs text-foreground"
+            />
+          </div>
+        </div>
+
+        {/* Section 16 sign-off. Typed confirmations, stamped server-side at approval. */}
+        <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-3 mt-2">
+          <p className="text-xs font-semibold text-foreground">Sign-off</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Member name</label>
+              <input
+                value={memberAcknowledgementName}
+                onChange={(e) => setMemberAcknowledgementName(e.target.value)}
+                placeholder="Typed by the member"
+                className="w-full h-9 rounded bg-background border border-border px-3 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Coach name</label>
+              <input
+                value={coachSignOffName}
+                onChange={(e) => setCoachSignOffName(e.target.value)}
+                placeholder="Assessing coach"
+                className="w-full h-9 rounded bg-background border border-border px-3 text-xs text-foreground"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Recorded with the time of approval and the account that approved it.
+          </p>
         </div>
       </div>
 

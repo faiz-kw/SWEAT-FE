@@ -24,6 +24,10 @@ export type AssessmentStep = 'intake' | 'safety_gate' | 'vitals' | 'movement' | 
 export const AssessmentStudioWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<AssessmentStep>('intake');
+  const [memberAcknowledgementName, setMemberAcknowledgementName] = useState('');
+  const [coachSignOffName, setCoachSignOffName] = useState('');
+  const [agreedFirstMilestone, setAgreedFirstMilestone] = useState('');
+  const [goalReviewDate, setGoalReviewDate] = useState('');
   const [activeSession, setActiveSession] = useState<AssessmentSession | null>(null);
 
   // Profile & Intake
@@ -113,6 +117,10 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         coach_notes: `${coachStrengths} | ${coachAreasToDevelop}`.trim(),
         workout_prescription: workoutPrescription, diet_prescription: dietPrescription,
         reassessment_interval_weeks: reassessmentWeeks,
+        member_acknowledgement_name: memberAcknowledgementName,
+        coach_sign_off_name: coachSignOffName,
+        agreed_first_milestone: agreedFirstMilestone,
+        ...(goalReviewDate ? { goal_review_date: goalReviewDate } : {}),
       });
     },
     onSuccess: (data) => {
@@ -224,6 +232,10 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             setCoachAreasToDevelop={setCoachAreasToDevelop} workoutPrescription={workoutPrescription}
             setWorkoutPrescription={setWorkoutPrescription} dietPrescription={dietPrescription}
             setDietPrescription={setDietPrescription} reassessmentWeeks={reassessmentWeeks} setReassessmentWeeks={setReassessmentWeeks}
+            memberAcknowledgementName={memberAcknowledgementName} setMemberAcknowledgementName={setMemberAcknowledgementName}
+            coachSignOffName={coachSignOffName} setCoachSignOffName={setCoachSignOffName}
+            agreedFirstMilestone={agreedFirstMilestone} setAgreedFirstMilestone={setAgreedFirstMilestone}
+            goalReviewDate={goalReviewDate} setGoalReviewDate={setGoalReviewDate}
             isApproving={approveMutation.isPending} onApproveAndSignOff={() => approveMutation.mutate()} onPrev={() => setCurrentStep('goals')}
           />
         )}

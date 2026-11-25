@@ -576,6 +576,10 @@ export const assessmentApi = {
       diet_prescription?: string;
       reassessment_interval_weeks?: number;
       send_whatsapp?: boolean;
+      member_acknowledgement_name?: string;
+      coach_sign_off_name?: string;
+      agreed_first_milestone?: string;
+      goal_review_date?: string;
     }
   ): Promise<AssessmentSession> {
     const res = await api.post<AssessmentSession>(`/tenant/assessments/${id}/approve-and-send/`, {
