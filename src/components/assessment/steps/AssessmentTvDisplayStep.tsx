@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tv, Sparkles, CheckCircle2, RotateCcw, Package as PackageIcon, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { TransformationPreviewPanel } from '../TransformationPreviewPanel';
 import type { AssessmentSession } from '@/api/endpoints/assessmentApi';
 
 interface AssessmentTvDisplayStepProps {
@@ -89,21 +90,40 @@ export const AssessmentTvDisplayStep: React.FC<AssessmentTvDisplayStepProps> = (
       <div className="p-5 rounded-xl bg-card border border-border space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Movement baseline</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+          {/* A domain with no data reads "Not assessed". Defaulting to a flattering label
+              here would undo the backend's refusal to invent one. */}
           {Object.entries({
-            'Lower Body': matrix.lower_body || 'Developing',
-            'Upper Body': matrix.upper_body || 'Developing',
-            'Core': matrix.core || 'Developing',
-            'Balance': matrix.balance || 'Developing',
-            'Mobility': matrix.mobility || 'Within Protocol',
-            'Cardio': matrix.cardiovascular || 'Baseline',
-          }).map(([k, v]) => (
-            <div key={k} className="p-2.5 rounded-lg bg-muted border border-border text-center">
-              <span className="text-[10px] text-muted-foreground block uppercase font-bold">{k}</span>
-              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{v}</span>
-            </div>
-          ))}
+            'Lower Body': matrix.lower_body,
+            'Upper Body': matrix.upper_body,
+            'Core': matrix.core,
+            'Balance': matrix.balance,
+            'Mobility': matrix.mobility,
+            'Cardio': matrix.cardiovascular,
+            'Functional': matrix.functional_movement,
+          }).map(([k, v]) => {
+            const assessed = !!v && v !== 'Not assessed';
+            return (
+              <div key={k} className="p-2.5 rounded-lg bg-muted border border-border text-center">
+                <span className="text-[10px] text-muted-foreground block uppercase font-bold">{k}</span>
+                <span className={`text-xs font-semibold ${assessed ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                  {v || 'Not assessed'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Starting point beside the illustrated milestones, labelled as a simulation. */}
+      {session?.id && (
+        <div className="p-5 rounded-xl bg-card border border-border">
+          <TransformationPreviewPanel
+            assessmentId={session.id}
+            baselineUrl={(session as any)?.photos?.front || session.photo_front_url}
+            consentGiven={!!(session as any)?.consent_image_generation}
+          />
+        </div>
+      )}
 
       {/* Action to Start New Session */}
       <div className="flex justify-end pt-4 border-t border-border">

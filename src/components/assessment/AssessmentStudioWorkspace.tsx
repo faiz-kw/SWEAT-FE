@@ -28,6 +28,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [coachSignOffName, setCoachSignOffName] = useState('');
   const [agreedFirstMilestone, setAgreedFirstMilestone] = useState('');
   const [goalReviewDate, setGoalReviewDate] = useState('');
+  const [consentImageGeneration, setConsentImageGeneration] = useState(false);
   const [activeSession, setActiveSession] = useState<AssessmentSession | null>(null);
 
   // Profile & Intake
@@ -96,6 +97,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
       resting_blood_pressure: restingBp, functional_tests_payload: functionalTests,
       symptoms_and_safety_events: symptoms, consent_body_measurements: consentBody,
       consent_movement_photos: consentPhotos, consent_ai_analysis: consentAi, consent_secondary_use: consentSecondary,
+      consent_image_generation: consentImageGeneration,
     }),
     onSuccess: (data) => {
       setActiveSession(data);
@@ -232,6 +234,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             setCoachAreasToDevelop={setCoachAreasToDevelop} workoutPrescription={workoutPrescription}
             setWorkoutPrescription={setWorkoutPrescription} dietPrescription={dietPrescription}
             setDietPrescription={setDietPrescription} reassessmentWeeks={reassessmentWeeks} setReassessmentWeeks={setReassessmentWeeks}
+            consentImageGeneration={consentImageGeneration} setConsentImageGeneration={setConsentImageGeneration}
             memberAcknowledgementName={memberAcknowledgementName} setMemberAcknowledgementName={setMemberAcknowledgementName}
             coachSignOffName={coachSignOffName} setCoachSignOffName={setCoachSignOffName}
             agreedFirstMilestone={agreedFirstMilestone} setAgreedFirstMilestone={setAgreedFirstMilestone}

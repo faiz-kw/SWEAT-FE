@@ -27,6 +27,8 @@ interface AssessmentReviewSignOffStepProps {
   setDietPrescription: (val: string) => void;
   reassessmentWeeks: number;
   setReassessmentWeeks: (val: number) => void;
+  consentImageGeneration: boolean;
+  setConsentImageGeneration: (val: boolean) => void;
   memberAcknowledgementName: string;
   setMemberAcknowledgementName: (val: string) => void;
   coachSignOffName: string;
@@ -63,6 +65,8 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
   setDietPrescription,
   reassessmentWeeks,
   setReassessmentWeeks,
+  consentImageGeneration,
+  setConsentImageGeneration,
   memberAcknowledgementName,
   setMemberAcknowledgementName,
   coachSignOffName,
@@ -202,6 +206,23 @@ export const AssessmentReviewSignOffStep: React.FC<AssessmentReviewSignOffStepPr
             <div className="text-xs">
               <span className="font-semibold text-foreground">Anonymised research</span>
               <p className="text-muted-foreground mt-0.5">Optional. Anonymised, used to improve benchmarks.</p>
+            </div>
+          </label>
+
+          {/* Generating a picture of a member's future body is a separate act from
+              analysing their posture, so it carries its own opt-in. */}
+          <label className="flex items-start gap-3 p-3 rounded-lg bg-muted/60 border border-border/50 cursor-pointer hover:bg-muted transition-colors">
+            <input
+              type="checkbox"
+              checked={consentImageGeneration}
+              onChange={(e) => setConsentImageGeneration(e.target.checked)}
+              className="mt-0.5 accent-amber-500 rounded"
+            />
+            <div className="text-xs">
+              <span className="font-semibold text-foreground">Transformation preview</span>
+              <p className="text-muted-foreground mt-0.5">
+                Optional. An illustrated preview built from their own photo, labelled as a simulation.
+              </p>
             </div>
           </label>
         </div>

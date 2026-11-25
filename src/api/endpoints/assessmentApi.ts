@@ -105,6 +105,32 @@ export interface CardiovascularTest {
 }
 
 /** One input on a catalogue test. Drives a tablet form, so the kinds are deliberately few. */
+/** One generated milestone, with the verification that let it be shown. */
+export interface TransformationMilestone {
+  url: string;
+  waist_reduction_pct: number;
+  verification: {
+    accepted: boolean;
+    worst_joint?: string;
+    worst_drift_ratio?: number;
+    threshold?: number;
+  };
+}
+
+export interface TransformationPreview {
+  status: 'NOT_REQUESTED' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'REFUSED_NO_CONSENT';
+  generated_at?: string | null;
+  renderer?: string;
+  is_generative?: boolean;
+  cost_per_image_usd?: number;
+  is_simulation?: boolean;
+  disclosure?: string;
+  accepted_count?: number;
+  milestones?: Record<string, TransformationMilestone>;
+  rejected?: Record<string, string>;
+  error?: string;
+}
+
 export interface AssessmentTestField {
   key: string;
   label: string;
@@ -481,6 +507,10 @@ export const assessmentApi = {
     consent_ai_analysis?: boolean;
     consent_secondary_use?: boolean;
     consent_notice_version?: string;
+    consent_image_generation?: boolean;
+    target_weight_kg?: number | null;
+    agreed_first_milestone?: string;
+    goal_review_date?: string;
   }): Promise<AssessmentSession> {
     const res = await api.post<AssessmentSession>('/tenant/assessments/', payload);
     return res.data;
@@ -533,6 +563,20 @@ export const assessmentApi = {
   },
 
   /** The served test catalogue: every test the battery can run, with its fields. */
+  /** Builds the milestone previews. Refused without consent_image_generation. */
+  async buildTransformation(id: string, renderer?: 'morph' | 'fal'): Promise<TransformationPreview> {
+    const res = await api.post<TransformationPreview>(
+      `/tenant/assessments/${id}/transformation/`, renderer ? { renderer } : {},
+    );
+    return res.data;
+  },
+
+  /** What was produced, and how it was verified. */
+  async getTransformation(id: string): Promise<TransformationPreview> {
+    const res = await api.get<TransformationPreview>(`/tenant/assessments/${id}/transformation/`);
+    return res.data;
+  },
+
   async getTestLibrary(): Promise<AssessmentTestLibrary> {
     const res = await api.get<AssessmentTestLibrary>('/tenant/assessments/test-library/');
     return res.data;
