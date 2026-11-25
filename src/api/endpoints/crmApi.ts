@@ -1247,6 +1247,36 @@ export const crmApi = {
     return res.data?.results ?? [];
   },
 
+  getCampaignDrilldownTrials: async (params: {
+    campaign_name?: string;
+    platform?: string;
+  }): Promise<import('@/types/crm').CampaignDrilldownTrial[]> => {
+    const sp = new URLSearchParams();
+    if (params.campaign_name) sp.append('campaign_name', params.campaign_name);
+    if (params.platform) sp.append('platform', params.platform);
+    const res = await api.get<import('@/types/crm').CampaignDrilldownTrial[]>(
+      `/tenant/crm/campaigns/trials/?${sp.toString()}`
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  },
+
+  getCampaignPlatforms: async (): Promise<import('@/types/crm').CampaignPlatformStatus[]> => {
+    const res = await api.get<import('@/types/crm').CampaignPlatformStatus[]>(
+      '/tenant/crm/campaigns/platforms/'
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  },
+
+  createCampaign: async (
+    payload: import('@/types/crm').CreateCampaignPayload
+  ): Promise<import('@/types/crm').CampaignPerformanceItem> => {
+    const res = await api.post<import('@/types/crm').CampaignPerformanceItem>(
+      '/tenant/crm/campaigns/',
+      payload
+    );
+    return res.data;
+  },
+
   getCampaignDrilldownConversions: async (params: {
     campaign_name?: string;
     platform?: string;

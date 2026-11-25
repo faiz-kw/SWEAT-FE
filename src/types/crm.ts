@@ -1249,6 +1249,52 @@ export interface CampaignPerformanceItem {
   conversions_count: number;
   conversion_rate: number;
   paid_revenue: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  landing_page_url?: string;
+  tracking_url?: string;
+  created_at?: string;
+  branches?: string[];
+  status?: string;
+}
+
+export interface CampaignPlatformStatus {
+  platform: string;
+  label: string;
+  status: 'ACTIVE' | 'CONNECTED' | 'DISCONNECTED' | 'CONFIGURED';
+  pages_count: number;
+  last_lead_at: string | null;
+  details?: string;
+}
+
+export interface CreateCampaignPayload {
+  campaign_name: string;
+  platform: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  landing_page_url?: string;
+  branch_id?: string;
+}
+
+export interface CampaignDrilldownTrial {
+  id: string;
+  lead_id: string;
+  lead_name: string;
+  phone_normalized: string | null;
+  branch_name: string;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  status: string;
+  confirmation_status: string;
+  attended: boolean;
+  trainer_name: string | null;
+  created_at: string | null;
 }
 
 export interface CampaignPerformanceSummary {
