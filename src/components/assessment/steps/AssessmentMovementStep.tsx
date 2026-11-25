@@ -284,25 +284,36 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Left Leg (Sec)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Left leg (sec)</label>
               <Input
                 type="number"
                 placeholder="25"
-                value={bal.hold_seconds ?? ''}
-                onChange={(e) => updateDomain('balance', 'Single Leg Balance', 'hold_seconds', e.target.value ? parseInt(e.target.value, 10) : null)}
+                value={bal.single_leg_left_sec ?? ''}
+                onChange={(e) => updateDomain('balance', 'Single leg balance', 'single_leg_left_sec', e.target.value ? parseInt(e.target.value, 10) : null)}
                 className="h-9 bg-muted border-border text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Support Used</label>
+              <label className="block text-xs text-muted-foreground mb-1">Right leg (sec)</label>
+              <Input
+                type="number"
+                placeholder="25"
+                value={bal.single_leg_right_sec ?? ''}
+                onChange={(e) => updateDomain('balance', 'Single leg balance', 'single_leg_right_sec', e.target.value ? parseInt(e.target.value, 10) : null)}
+                className="h-9 bg-muted border-border text-xs text-foreground"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-muted-foreground mb-1">Support used</label>
               <select
-                value={bal.movement_quality || 'None (Independent)'}
-                onChange={(e) => updateDomain('balance', 'Single Leg Balance', 'movement_quality', e.target.value)}
+                value={bal.support_used || 'None'}
+                onChange={(e) => updateDomain('balance', 'Single leg balance', 'support_used', e.target.value)}
                 className="w-full h-9 rounded bg-muted border border-border px-2 text-xs text-foreground"
               >
-                <option value="None (Independent)">None</option>
+                <option value="None">None</option>
                 <option value="Fingertip touch">Fingertip touch</option>
-                <option value="Hand support">Hand support</option>
+                <option value="Support available">Support available</option>
+                <option value="Hands-on assistance">Hands-on assistance</option>
               </select>
             </div>
           </div>

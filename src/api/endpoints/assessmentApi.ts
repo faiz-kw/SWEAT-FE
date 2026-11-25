@@ -42,6 +42,11 @@ export interface VitalsData {
 }
 
 export interface FunctionalTestItem {
+  // Balance is timed per side and records whether support was used; the capability
+  // evaluator reads these exact names.
+  single_leg_left_sec?: number | null;
+  single_leg_right_sec?: number | null;
+  support_used?: string;
   protocol_version?: string;
   test_name?: string;
   variation?: string;
