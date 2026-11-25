@@ -2,9 +2,14 @@ import React from 'react';
 import { UserCheck, ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MemberPicker, type SelectedMember } from '../shared/MemberPicker';
 import { Textarea } from '@/components/ui/textarea';
 
 interface AssessmentIntakeStepProps {
+  selectedMember: SelectedMember | null;
+  onSelectMember: (m: SelectedMember | null) => void;
+  manualEntry: boolean;
+  setManualEntry: (v: boolean) => void;
   memberName: string;
   setMemberName: (val: string) => void;
   memberPhone: string;
@@ -23,6 +28,10 @@ interface AssessmentIntakeStepProps {
 }
 
 export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
+  selectedMember,
+  onSelectMember,
+  manualEntry,
+  setManualEntry,
   memberName,
   setMemberName,
   memberPhone,
@@ -63,31 +72,18 @@ export const AssessmentIntakeStep: React.FC<AssessmentIntakeStepProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Member Name */}
-        <div>
-          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Full name <span className="text-amber-600 dark:text-amber-400">*</span>
-          </label>
-          <Input
-            value={memberName}
-            onChange={(e) => setMemberName(e.target.value)}
-            placeholder="e.g. Priya Sharma"
-            className="h-10 bg-card border-border text-sm text-foreground focus:border-amber-500"
-          />
-        </div>
-
-        {/* Member Phone */}
-        <div>
-          <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-            Mobile number
-          </label>
-          <Input
-            value={memberPhone}
-            onChange={(e) => setMemberPhone(e.target.value)}
-            placeholder="+91 98765 43210"
-            className="h-10 bg-card border-border text-sm text-foreground focus:border-amber-500"
-          />
-        </div>
+        {/* Picking the member is what links the assessment to a real record; typing a name
+            leaves it unlinked, with nothing to compare against at reassessment. */}
+        <MemberPicker
+          value={selectedMember}
+          onSelect={onSelectMember}
+          manualName={memberName}
+          setManualName={setMemberName}
+          manualPhone={memberPhone}
+          setManualPhone={setMemberPhone}
+          manualMode={manualEntry}
+          setManualMode={setManualEntry}
+        />
 
         {/* Assessment Type */}
         <div>
