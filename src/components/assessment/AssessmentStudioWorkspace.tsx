@@ -12,6 +12,7 @@ import {
 } from '@/api/endpoints/assessmentApi';
 
 import { AssessmentIntakeStep } from './steps/AssessmentIntakeStep';
+import type { SelectedMember } from './shared/MemberPicker';
 import { AssessmentSafetyGateStep } from './steps/AssessmentSafetyGateStep';
 import { AssessmentVitalsStep } from './steps/AssessmentVitalsStep';
 import { AssessmentMovementStep } from './steps/AssessmentMovementStep';
@@ -29,6 +30,20 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [agreedFirstMilestone, setAgreedFirstMilestone] = useState('');
   const [goalReviewDate, setGoalReviewDate] = useState('');
   const [consentImageGeneration, setConsentImageGeneration] = useState(false);
+
+  // Picking from the directory links the assessment to a real member and carries across the
+  // details the record needs, including the date of birth and sex the metabolic equation
+  // takes. Manual entry stays available for a walk-in who is not in the system.
+  const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
+
+  const handleSelectMember = (member: SelectedMember | null) => {
+    setSelectedMember(member);
+    if (member) {
+      setMemberName(member.name);
+      setMemberPhone(member.phone || '');
+    }
+  };
   const [activeSession, setActiveSession] = useState<AssessmentSession | null>(null);
 
   // Profile & Intake
@@ -77,6 +92,29 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [consentPhotos, setConsentPhotos] = useState(false);
   const [consentAi, setConsentAi] = useState(false);
   const [consentSecondary, setConsentSecondary] = useState(false);
+
+  // Consents are part of the record, not a local preference. Ticking one has to reach the
+  // server, otherwise the transformation endpoint keeps refusing against the stored value
+  // while the checkbox on screen says otherwise.
+  const persistConsents = React.useCallback(
+    (overrides: Record<string, boolean> = {}) => {
+      if (!activeSession?.id) return;
+      const payload = {
+        consent_body_measurements: consentBody,
+        consent_movement_photos: consentPhotos,
+        consent_ai_analysis: consentAi,
+        consent_secondary_use: consentSecondary,
+        consent_image_generation: consentImageGeneration,
+        ...overrides,
+      };
+      assessmentApi
+        .updateAssessment(activeSession.id, payload as any)
+        .then((fresh) => setActiveSession(fresh))
+        .catch(() => toast.error('Could not save the consent change.'));
+    },
+    [activeSession?.id, consentBody, consentPhotos, consentAi, consentSecondary, consentImageGeneration],
+  );
+
   const [memberAcknowledged, setMemberAcknowledged] = useState(false);
   const [coachStrengths, setCoachStrengths] = useState('');
   const [coachAreasToDevelop, setCoachAreasToDevelop] = useState('');
@@ -86,7 +124,13 @@ export const AssessmentStudioWorkspace: React.FC = () => {
 
   const startSessionMutation = useMutation({
     mutationFn: () => assessmentApi.startAssessment({
-      member_name: memberName, member_phone: memberPhone, assessment_type: assessmentType,
+      member_name: selectedMember?.name || memberName,
+      member_phone: selectedMember?.phone || memberPhone,
+      ...(selectedMember?.user_profile_id ? { user_profile_id: selectedMember.user_profile_id } : {}),
+      ...(selectedMember?.branch_id ? { branch_id: selectedMember.branch_id } : {}),
+      ...(selectedMember?.date_of_birth ? { member_date_of_birth: selectedMember.date_of_birth } : {}),
+      ...(selectedMember?.gender ? { member_sex: String(selectedMember.gender).toUpperCase() } : {}),
+      assessment_type: assessmentType,
       training_experience: trainingExperience, current_activity_level: activityLevel,
       preferred_training_style: preferredStyle, target_goal: targetGoal, stated_goal_outcome: customGoalOutcome,
       target_timeline_weeks: durationWeeks, target_timeline_months: Math.max(1, Math.round(durationWeeks / 4.33)),
@@ -174,6 +218,8 @@ export const AssessmentStudioWorkspace: React.FC = () => {
 
         {currentStep === 'intake' && (
           <AssessmentIntakeStep
+            selectedMember={selectedMember} onSelectMember={handleSelectMember}
+            manualEntry={manualEntry} setManualEntry={setManualEntry}
             memberName={memberName} setMemberName={setMemberName} memberPhone={memberPhone} setMemberPhone={setMemberPhone}
             assessmentType={assessmentType} setAssessmentType={setAssessmentType} trainingExperience={trainingExperience}
             setTrainingExperience={setTrainingExperience} activityLevel={activityLevel} setActivityLevel={setActivityLevel}
@@ -188,10 +234,16 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             screeningCoachNotes={screeningCoachNotes} setScreeningCoachNotes={setScreeningCoachNotes}
             onPrev={() => setCurrentStep('intake')}
             onNext={() => {
-              if (screeningOutcome === 'DEFER_MEDICAL_CLEARANCE' || screeningOutcome === 'STOPPED_SAFETY_CONCERNS') {
-                startSessionMutation.mutate();
+              // The record is created once screening is done, whatever the outcome. It used
+              // to be created only when screening deferred or stopped, so on the normal
+              // cleared path there was no assessment to attach anything to: captures could
+              // not upload and the body scan could never run.
+              if (activeSession) {
+                const halted = screeningOutcome === 'DEFER_MEDICAL_CLEARANCE'
+                  || screeningOutcome === 'STOPPED_SAFETY_CONCERNS';
+                setCurrentStep(halted ? 'tv_display' : 'vitals');
               } else {
-                setCurrentStep('vitals');
+                startSessionMutation.mutate();
               }
             }}
           />
@@ -234,7 +286,8 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             setCoachAreasToDevelop={setCoachAreasToDevelop} workoutPrescription={workoutPrescription}
             setWorkoutPrescription={setWorkoutPrescription} dietPrescription={dietPrescription}
             setDietPrescription={setDietPrescription} reassessmentWeeks={reassessmentWeeks} setReassessmentWeeks={setReassessmentWeeks}
-            consentImageGeneration={consentImageGeneration} setConsentImageGeneration={setConsentImageGeneration}
+            consentImageGeneration={consentImageGeneration}
+            setConsentImageGeneration={(v: boolean) => { setConsentImageGeneration(v); persistConsents({ consent_image_generation: v }); }}
             memberAcknowledgementName={memberAcknowledgementName} setMemberAcknowledgementName={setMemberAcknowledgementName}
             coachSignOffName={coachSignOffName} setCoachSignOffName={setCoachSignOffName}
             agreedFirstMilestone={agreedFirstMilestone} setAgreedFirstMilestone={setAgreedFirstMilestone}

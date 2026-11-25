@@ -237,15 +237,26 @@ export const BodyScanCapturePanel: React.FC<BodyScanCapturePanelProps> = ({
         )}
       </div>
 
-      <Button
-        size="sm"
-        className="gap-1.5"
-        disabled={!assessmentId || capturedCount === 0 || uploadMutation.isPending}
-        onClick={() => uploadMutation.mutate()}
-      >
-        {uploadMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        Save &amp; scan
-      </Button>
+      <div className="space-y-1.5">
+        <Button
+          size="sm"
+          className="gap-1.5"
+          disabled={!assessmentId || capturedCount === 0 || uploadMutation.isPending}
+          onClick={() => uploadMutation.mutate()}
+        >
+          {uploadMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Save &amp; scan
+        </Button>
+        {/* A disabled button with no stated reason is the thing people file bugs about. */}
+        {!assessmentId ? (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            Complete the health screening first — the assessment record is created there, and
+            captures attach to it.
+          </p>
+        ) : capturedCount === 0 ? (
+          <p className="text-[11px] text-muted-foreground">Take at least one capture to run the scan.</p>
+        ) : null}
+      </div>
 
       {/* Scan result */}
       {scanState && (

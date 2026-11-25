@@ -475,6 +475,8 @@ export interface DisplayScreenSummary {
 export const assessmentApi = {
   async startAssessment(payload: {
     user_profile_id?: string;
+    member_date_of_birth?: string;
+    member_sex?: string;
     member_name?: string;
     member_phone?: string;
     branch_id?: string;
