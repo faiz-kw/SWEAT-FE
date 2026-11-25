@@ -27,6 +27,103 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersApi } from '@/api/endpoints/membersApi';
+import { type ApplicableCoupon } from '@/api/endpoints/discountsApi';
+import { getAccessToken } from '@/api/auth/tokenManager';
+import { cmsApi } from '@/api/endpoints/cmsApi';
+
+// Reusable coupon input + "available coupons" apply list (renew / upgrade flows)
+const CouponPicker: React.FC<{
+  packageId?: string;
+  packageVersionId?: string;
+  orderType: 'NEW_MEMBERSHIP' | 'RENEWAL' | 'UPGRADE';
+  orderSubtotal?: number;
+  userProfileId?: string;
+  value: string;
+  onChange: (code: string) => void;
+  onApply?: (code: string, discountAmount: number) => void;
+}> = ({ packageId, packageVersionId, orderType, orderSubtotal, userProfileId, value, onChange, onApply }) => {
+  const [input, setInput] = useState(value);
+  const [status, setStatus] = useState<null | 'valid' | 'invalid'>(null);
+  useEffect(() => { setInput(value); }, [value]);
+  const { data, isFetched } = useQuery({
+    queryKey: ['applicable-coupons', packageId, packageVersionId, orderType, orderSubtotal, userProfileId],
+    queryFn: () => discountsApi.getApplicableCoupons({
+      package_id: packageId,
+      package_version_id: packageVersionId,
+      order_type: orderType,
+      order_subtotal: orderSubtotal,
+      user_profile_id: userProfileId,
+    }),
+    enabled: !!(packageId || packageVersionId),
+    staleTime: 60_000,
+  });
+  const coupons: ApplicableCoupon[] = data?.coupons ?? [];
+  const money = (n: number) => `₹${Number(n || 0).toFixed(0)}`;
+  const apply = (code: string) => {
+    const c = code.trim();
+    setInput(c);
+    if (!c) { setStatus(null); onChange(''); onApply?.('', 0); return; }
+    const match = coupons.find((x) => x.code.toUpperCase() === c.toUpperCase());
+    if (match) {
+      setStatus('valid'); onChange(c); onApply?.(c, match.discount_amount);
+    } else if (isFetched) {
+      setStatus('invalid'); onChange(''); onApply?.('', 0);
+    } else {
+      setStatus(null); onChange(c); onApply?.(c, 0);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">Coupon (optional)</label>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          placeholder="PROMO CODE"
+          className="flex-1 h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 font-mono text-sm uppercase tracking-wider"
+        />
+        <button
+          type="button"
+          onClick={() => apply(input)}
+          className="h-9 px-4 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold"
+        >Apply</button>
+      </div>
+      {status === 'valid' && value && (
+        <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Coupon applied: {value}</div>
+      )}
+      {status === 'invalid' && (
+        <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">✕ Coupon not valid for this package / member</div>
+      )}
+      {coupons.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Available Coupons ({coupons.length})</div>
+          {coupons.map((c) => {
+            const applied = value.toUpperCase() === c.code.toUpperCase();
+            return (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => apply(c.code)}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-left transition-colors ${applied ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-gray-400'}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-xs tracking-wider">{c.code}</span>
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `${money(c.discount_value)} OFF`}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-400 truncate">Save {money(c.discount_amount)}{c.name ? ` · ${c.name}` : ''}</div>
+                </div>
+                <span className={`text-[11px] font-bold shrink-0 ${applied ? 'text-emerald-600' : 'text-blue-600'}`}>{applied ? 'Applied' : 'Apply'}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 import { fetchTenantSettingsApi } from '@/api/endpoints/api-admin';
 import { discountsApi } from '@/api/endpoints/discountsApi';
 import { crmApi } from '@/api/endpoints/crmApi';
@@ -414,6 +511,8 @@ export const UpgradeModal: React.FC<{
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponState | null>(null);
   const [reason, setReason] = useState('Upgraded to higher session tier plan');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -938,6 +1037,11 @@ export const ExtendModal: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ONLINE' | 'PAYMENT_LINK'>('PAYMENT_LINK');
   const [generatedLink, setGeneratedLink] = useState<any | null>(null);
   const [reason, setReason] = useState('Purchased validity extension to preserve unconsumed sessions');
+  const [paymentMode, setPaymentMode] = useState<'COMPLIMENTARY' | 'PAY_AT_FACILITY' | 'ONLINE'>('ONLINE');
+  const [facilityAmount, setFacilityAmount] = useState('');
+  const [transactionDetails, setTransactionDetails] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const contracts = useMemo(() => {
     if (activeContracts && activeContracts.length > 0) {
@@ -1032,10 +1136,17 @@ export const ExtendModal: React.FC<{
   const mutation = useMutation({
     mutationFn: (extraPayload?: any) =>
       membersApi.extendMembership(selectedContract?.membership_id || member?.id, {
+        membership_id: selectedContract?.membership_id || member?.id,
         days: effectiveDays,
-        fee: effectiveFee,
-        payment_method: paymentMethod,
         reason: `${reason} (+${effectiveDays} days)`,
+        payment_mode: paymentMode,
+        ...(paymentMode === 'PAY_AT_FACILITY'
+          ? {
+              amount: Number(facilityAmount || effectiveFee),
+              payment_method: (paymentMethod === 'CARD' ? 'CARD' : paymentMethod === 'CASH' ? 'CASH' : 'UPI') as 'CASH' | 'CARD' | 'UPI',
+              transaction_details: transactionDetails || undefined,
+            }
+          : {}),
         ...(extraPayload || {}),
       } as any),
     onSuccess: (res) => {
@@ -1050,8 +1161,45 @@ export const ExtendModal: React.FC<{
     },
   });
 
+  const resolveAttachmentUrl = async (): Promise<string | undefined> => {
+    if (!attachmentFile) return undefined;
+    setUploadingAttachment(true);
+    try {
+      const res = await cmsApi.uploadBannerMedia(attachmentFile);
+      return res?.url;
+    } catch {
+      toast.error('Failed to upload attachment.');
+      return undefined;
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const handleExecuteExtend = async () => {
-    if (effectiveFee > 0 && paymentMethod === 'ONLINE') {
+    if (paymentMode === 'COMPLIMENTARY') {
+      if (!reason.trim()) {
+        toast.error('Reason is required for a complimentary extension.');
+        return;
+      }
+      const attUrl = await resolveAttachmentUrl();
+      mutation.mutate((attUrl ? { attachment_url: attUrl } : undefined) as any);
+      return;
+    }
+
+    if (paymentMode === 'PAY_AT_FACILITY') {
+      const amt = Number(facilityAmount || effectiveFee);
+      if (!amt || amt <= 0) {
+        toast.error('Amount is required for Paid at Facilities.');
+        return;
+      }
+      const attUrl = await resolveAttachmentUrl();
+      mutation.mutate((attUrl ? { attachment_url: attUrl } : undefined) as any);
+      return;
+    }
+
+    // ONLINE gateway
+    if (effectiveFee > 0) {
+      const attUrl = await resolveAttachmentUrl();
       try {
         await openRazorpayCheckout({
           amount: effectiveFee,
@@ -1068,6 +1216,7 @@ export const ExtendModal: React.FC<{
             await mutation.mutateAsync({
               razorpay_payment_id: verifyData.razorpay_payment_id,
               razorpay_signature: verifyData.razorpay_signature,
+              ...(attUrl ? { attachment_url: attUrl } : {}),
             } as any);
           },
           onFailure: (err: any) => {
@@ -1077,19 +1226,6 @@ export const ExtendModal: React.FC<{
       } catch (err: any) {
         toast.error(err?.message || 'Failed to open Razorpay payment gateway.');
       }
-      return;
-    }
-
-    if (effectiveFee > 0 && paymentMethod === 'PAYMENT_LINK') {
-      const payUrl = `https://pay.sweatfitness.in/extend/${member?.id || 'pay'}?amount=${effectiveFee}&days=${effectiveDays}`;
-      setGeneratedLink({
-        paymentUrl: payUrl,
-        amount: effectiveFee,
-        orderNumber: `ORD-EXT-${Date.now().toString().slice(-6)}`,
-        memberName: member?.name,
-        memberPhone: member?.phone,
-        packageName: `Validity Extension (+${effectiveDays} Days - Valid till ${newExtendedExpiry})`,
-      });
       return;
     }
 
@@ -1239,18 +1375,94 @@ export const ExtendModal: React.FC<{
           )}
 
           {canExtend && (
-            <div className="space-y-2">
-              <Label className="text-xs">Payment Mode</Label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
-              >
-                <option value="PAYMENT_LINK">Send Payment Link (Online / WhatsApp / UPI)</option>
-                <option value="CARD">Credit/Debit Card (POS Terminal)</option>
-                <option value="ONLINE">Online Payment (Instant Gateway)</option>
-                <option value="CASH">Cash Payment</option>
-              </select>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Extension Type</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { v: 'COMPLIMENTARY', label: 'Complimentary', hint: 'Free' },
+                    { v: 'PAY_AT_FACILITY', label: 'Paid at Facilities', hint: 'Cash / Card / UPI' },
+                    { v: 'ONLINE', label: 'Online', hint: 'Gateway' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setPaymentMode(opt.v)}
+                      className={`p-2 rounded-xl border text-center transition-all ${
+                        paymentMode === opt.v
+                          ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30'
+                          : 'border-border hover:bg-muted/40'
+                      }`}
+                    >
+                      <span className="block font-bold text-xs text-foreground">{opt.label}</span>
+                      <span className="block text-[10px] text-muted-foreground mt-0.5">{opt.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentMode === 'PAY_AT_FACILITY' && (
+                <div className="space-y-2 p-3 rounded-xl border border-border bg-muted/20">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Amount (₹) <span className="text-rose-500">*</span></Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={facilityAmount}
+                      onChange={(e) => setFacilityAmount(e.target.value)}
+                      placeholder={String(effectiveFee || '')}
+                      className="bg-background text-sm font-medium h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Payment Method</Label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value as any)}
+                      className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="CARD">Card (POS)</option>
+                      <option value="PAYMENT_LINK">UPI / QR</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Transaction Details <span className="text-muted-foreground">(optional)</span></Label>
+                    <Input
+                      type="text"
+                      value={transactionDetails}
+                      onChange={(e) => setTransactionDetails(e.target.value)}
+                      placeholder="Ref / UTR / receipt no."
+                      className="bg-background text-sm font-medium h-9"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  Reason {paymentMode === 'COMPLIMENTARY' && <span className="text-rose-500">*</span>}
+                </Label>
+                <Input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Reason for extension"
+                  className="bg-background text-sm font-medium h-9"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Attachment <span className="text-muted-foreground">(optional)</span></Label>
+                <Input
+                  type="file"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                  className="bg-background text-xs h-9"
+                />
+                {attachmentFile && (
+                  <span className="text-[10px] text-muted-foreground block truncate">{attachmentFile.name}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1261,13 +1473,152 @@ export const ExtendModal: React.FC<{
           </Button>
           <Button
             onClick={handleExecuteExtend}
-            disabled={mutation.isPending || !canExtend || !customDate}
+            disabled={mutation.isPending || uploadingAttachment || !canExtend || !customDate}
             className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
           >
+            {(mutation.isPending || uploadingAttachment) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {paymentMode === 'COMPLIMENTARY'
+              ? 'Apply Complimentary Extension'
+              : paymentMode === 'PAY_AT_FACILITY'
+              ? `Collect ₹${Number(facilityAmount || effectiveFee).toLocaleString()} & Extend`
+              : `Pay ₹${effectiveFee.toLocaleString()} & Extend`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ----------------------------------------------------------------------------
+// CHANGE START DATE MODAL
+// ----------------------------------------------------------------------------
+export const ChangeStartDateModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  member: Member;
+  activeContracts?: any[];
+}> = ({ isOpen, onClose, member, activeContracts = [] }) => {
+  const queryClient = useQueryClient();
+  const contracts = useMemo(() => {
+    if (activeContracts && activeContracts.length > 0) {
+      return activeContracts.map((c: any) => ({ ...c, membership_id: c.membership_id || c.id }));
+    }
+    return [{
+      membership_id: member?.id,
+      package_name: member?.package_name,
+      program_name: member?.program_name,
+      end_date: member?.expiry_date,
+    }];
+  }, [activeContracts, member]);
+
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => contracts[0]?.membership_id || member?.id || '');
+  const selectedContract = useMemo(
+    () => contracts.find((c: any) => (c.membership_id || c.id) === selectedContractId) || contracts[0],
+    [contracts, selectedContractId],
+  );
+  const [startDate, setStartDate] = useState<string>('');
+  const [reason, setReason] = useState('Corrected membership start date');
+
+  const sessionsUsed = useMemo(() => getContractRemainingSessions(selectedContract, member) >= 0
+    ? (selectedContract?.sessions_used ?? 0)
+    : 0, [selectedContract, member]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      membersApi.changeStartDate(member?.id, {
+        start_date: startDate,
+        membership_id: selectedContract?.membership_id || member?.id,
+        reason,
+      }),
+    onSuccess: (res: any) => {
+      toast.success(res.message || 'Start date updated.');
+      queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err.message || 'Failed to change start date');
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!startDate) {
+      toast.error('Please select a new start date.');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-sky-500" />
+            Change Start Date
+          </DialogTitle>
+          <DialogDescription>
+            Update {member.name}'s membership start date.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-3">
+          {contracts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Membership</Label>
+              <select
+                value={selectedContractId}
+                onChange={(e) => setSelectedContractId(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-md border border-input bg-background font-medium"
+              >
+                {contracts.map((c: any) => (
+                  <option key={c.membership_id} value={c.membership_id}>
+                    {c.package_name || 'Membership'} ({c.program_name || 'General'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {sessionsUsed > 0 && (
+            <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] flex items-start gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+              <span>Start date can only be changed before any session is used.</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs">New Start Date <span className="text-rose-500">*</span></Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-background text-sm font-medium h-9"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Reason</Label>
+            <Input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for the change"
+              className="bg-background text-sm font-medium h-9"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={mutation.isPending || !startDate}
+            className="bg-sky-600 hover:bg-sky-700 text-white font-semibold"
+          >
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {paymentMethod === 'ONLINE' && effectiveFee > 0
-              ? `Pay ₹${effectiveFee.toLocaleString()} & Extend`
-              : 'Pay & Extend Validity'}
+            Change Start Date
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2728,7 +3079,24 @@ export const InvoiceDetailModal: React.FC<{
 }> = ({ isOpen, onClose, invoice, member }) => {
   if (!invoice) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    try {
+      const invId = invoice.id || invoice.invoice_id;
+      const orderId = invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.id);
+      const base = ((import.meta.env.VITE_API_BASE_URL as string) || '').replace(/\/$/, '');
+      const pdfUrl = invId ? `${base}/tenant/invoice/${invId}/` : (orderId ? `${base}/tenant/invoice/order/${orderId}/` : null);
+      if (pdfUrl) {
+        const token = getAccessToken();
+        const resp = await fetch(pdfUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (resp.ok) {
+          const pdf = await resp.blob();
+          const ou = URL.createObjectURL(pdf);
+          window.open(ou, '_blank');
+          setTimeout(() => URL.revokeObjectURL(ou), 60000);
+          return;
+        }
+      }
+    } catch { /* fall back to plain-text invoice below */ }
     const pkgName = invoice.package_name || (invoice.order && typeof invoice.order === 'object' && invoice.order.items?.[0]?.item_name_snapshot) || 'Membership Plan Subscription';
     const orderRef = invoice.order_number || invoice.order_id || (typeof invoice.order === 'string' ? invoice.order : invoice.order?.order_number) || 'ORD-CANONICAL';
     const payRef = invoice.payment_reference || (invoice.order && typeof invoice.order === 'object' && invoice.order.payments?.[0]?.provider_transaction_id) || invoice.order_number || 'TXN-REF';
@@ -2852,11 +3220,8 @@ export const InvoiceDetailModal: React.FC<{
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button id="btn-download-invoice" variant="outline" onClick={handleDownload} className="gap-1.5">
-            <Download className="w-4 h-4" /> Download
-          </Button>
-          <Button id="btn-print-invoice" onClick={() => window.print()} className="bg-primary text-primary-foreground gap-1.5">
-            <Printer className="w-4 h-4" /> Print Invoice
+          <Button id="btn-download-invoice" onClick={handleDownload} className="bg-primary text-primary-foreground gap-1.5">
+            <Download className="w-4 h-4" /> Download PDF
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3617,6 +3982,21 @@ export const PurchaseProgramPackageModal: React.FC<{
                 <option value="ONLINE">UPI / Online Gateway</option>
                 <option value="CASH">Cash (Front Desk / Admin Direct Activation)</option>
               </select>
+            </div>
+
+            {/* Unified Coupon & Offers Selector */}
+            <div className="pt-2 pb-1 border-t border-border/50">
+              <ApplicableOffersSelector
+                packageId={selectedPkg?.id || selectedPackageId}
+                subtotal={priceEstimate}
+                orderType="NEW_MEMBERSHIP"
+                branchId={selectedBranchId || (member as any)?.branch_id}
+                memberId={member.id}
+                appliedCoupon={appliedCoupon}
+                onApplyCoupon={(c) => setAppliedCoupon(c)}
+                onRemoveCoupon={() => setAppliedCoupon(null)}
+                disabled={mutation.isPending}
+              />
             </div>
 
             {/* Summary Price Callout */}

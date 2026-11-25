@@ -97,6 +97,7 @@ import {
   RenewModal,
   UpgradeModal,
   ExtendModal,
+  ChangeStartDateModal,
   FreezeModal,
   TransferModal,
   CancelModal,
@@ -1012,6 +1013,18 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
                   </Button>
                 );
               })}
+              {canAdjustEntitlements && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActiveModal('CHANGE_START_DATE')}
+                  className="h-8 text-xs font-medium"
+                  title="Change start date"
+                >
+                  <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                  Change Start Date
+                </Button>
+              )}
               {!isTrialMember && (
                 <Button
                   size="sm"
@@ -1594,6 +1607,15 @@ export const Member360Workspace: React.FC<Member360WorkspaceProps> = ({ memberId
           member={modalMember}
           activeContracts={activeContracts}
           pricingConfig={(data360 as any)?.config}
+        />
+      )}
+
+      {activeModal === 'CHANGE_START_DATE' && (
+        <ChangeStartDateModal
+          isOpen={true}
+          onClose={() => setActiveModal(null)}
+          member={modalMember}
+          activeContracts={activeContracts}
         />
       )}
 
