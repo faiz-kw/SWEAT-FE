@@ -3715,6 +3715,14 @@ export const PurchaseProgramPackageModal: React.FC<{
     return Math.max(0, priceEstimate - discount);
   }, [priceEstimate, appliedCoupon]);
 
+  // Amount collected now. Defaults to the full payable; a smaller value is a partial payment
+  // and the backend records the remaining balance as due.
+  const [collectAmount, setCollectAmount] = useState<string>('');
+  React.useEffect(() => { setCollectAmount(String(finalPayable)); }, [finalPayable]);
+  const collectNum = parseFloat(collectAmount);
+  const isPartialPurchase = !isNaN(collectNum) && collectNum > 0 && collectNum < finalPayable;
+  const balanceDue = isPartialPurchase ? finalPayable - collectNum : 0;
+
   const mutation = useMutation({
     mutationFn: () =>
       membersApi.purchasePackage(member.id, {
@@ -3722,12 +3730,14 @@ export const PurchaseProgramPackageModal: React.FC<{
         branch_id: selectedBranchId || undefined,
         start_schedule: startSchedule,
         custom_start_date: startSchedule === 'CUSTOM' ? customStartDate : undefined,
-        payment_amount: finalPayable,
+        payment_amount: (!isNaN(collectNum) && collectNum > 0) ? collectNum : finalPayable,
+        is_partial_payment: isPartialPurchase,
+        ...(isPartialPurchase ? { partial_amount: collectNum } : {}),
         payment_provider: paymentMethod === 'PAYMENT_LINK' ? 'PAYMENT_LINK' : (paymentMethod === 'CASH' ? 'CASH' : (paymentMethod === 'CARD' ? 'ICICI_POS' : 'RAZORPAY')),
         payment_method: paymentMethod,
         reason: `${reason} - ${selectedPkg?.name || ''} (${selectedPkg?.program_name || ''})`,
         coupon_code: appliedCoupon?.code || undefined,
-      }),
+      } as any),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['member', member?.id] });
       queryClient.invalidateQueries({ queryKey: ['member-360', member?.id] });
@@ -3979,6 +3989,27 @@ export const PurchaseProgramPackageModal: React.FC<{
                 <span className="font-semibold text-foreground">Total Payable Amount:</span>
                 <span className="text-base font-bold text-foreground">₹{finalPayable.toLocaleString()}</span>
               </div>
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                <span className="font-semibold text-foreground">Collect now:</span>
+                <div className="relative w-32">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={collectAmount}
+                    onChange={(e) => setCollectAmount(e.target.value)}
+                    disabled={mutation.isPending}
+                    className="w-full pl-5 pr-2 py-1 text-xs text-right rounded-md border border-input bg-background font-bold"
+                  />
+                </div>
+              </div>
+              {isPartialPurchase && (
+                <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-medium">
+                  <span>Partial — balance due:</span>
+                  <span>₹{balanceDue.toLocaleString()}</span>
+                </div>
+              )}
             </div>
           </div>
 
