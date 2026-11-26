@@ -143,7 +143,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {Object.entries(data.vitals_comparison).map(([metric, val]) => (
+                  {Object.entries(data.vitals_comparison || {}).map(([metric, val]) => (
                     <tr key={metric} className="hover:bg-muted/30">
                       <td className="py-2.5 font-medium text-foreground capitalize">{metric.replace(/_/g, ' ')}</td>
                       <td className="py-2.5 text-muted-foreground">{val.previous != null ? val.previous : '—'}</td>
@@ -160,7 +160,7 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
           <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
             <h3 className="text-sm font-semibold text-foreground">Movement tests</h3>
             <div className="space-y-4">
-              {data.movement_comparisons.map((item) => (
+              {(data.movement_comparisons || []).map((item) => (
                 <div
                   key={`${item.domain}-${item.test_title}`}
                   className="rounded-lg border border-border/80 bg-background/60 p-4 space-y-3"
@@ -219,11 +219,11 @@ export const ReassessmentComparisonView: React.FC<ReassessmentComparisonViewProp
           </div>
 
           {/* Capability Matrix Comparison */}
-          {Object.keys(data.capability_comparison).length > 0 && (
+          {Object.keys(data.capability_comparison || {}).length > 0 && (
             <div className="rounded-xl border border-border bg-card/60 p-5">
               <h3 className="text-sm font-semibold text-foreground mb-3">Capability change</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {Object.entries(data.capability_comparison).map(([domain, caps]) => (
+                {Object.entries(data.capability_comparison || {}).map(([domain, caps]) => (
                   <div key={domain} className="rounded-lg border border-border bg-background p-3 text-xs">
                     <span className="font-medium capitalize text-muted-foreground">{domain.replace(/_/g, ' ')}</span>
                     <div className="mt-1 flex items-center justify-between text-[11px]">

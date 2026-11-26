@@ -662,8 +662,11 @@ export const assessmentApi = {
 
   async getTestProgressions(params?: { user_profile_id?: string }): Promise<TestProgressionRecord[]> {
     const query = params?.user_profile_id ? `?user_profile_id=${encodeURIComponent(params.user_profile_id)}` : '';
-    const res = await api.get<TestProgressionRecord[]>(`/tenant/assessment-progressions/${query}`);
-    return res.data;
+    const res = await api.get<TestProgressionRecord[] | { results?: TestProgressionRecord[] }>(`/tenant/assessment-progressions/${query}`);
+    const data = res.data as any;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.results)) return data.results;
+    return [];
   },
 
   async createTestProgression(payload: Partial<TestProgressionRecord>): Promise<TestProgressionRecord> {
