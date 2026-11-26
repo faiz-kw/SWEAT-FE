@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -113,12 +113,17 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
     }
   }, [scanState?.is_terminal, scanState?.status, scanState?.error]);
 
+  const queryClient = useQueryClient();
+
   // Load captures already stored on this assessment, so returning to this step (or a refresh)
   // re-shows the photos and the last scan instead of looking empty.
   const { data: storedDetail } = useQuery({
     queryKey: ['assessment-captures', assessmentId],
     queryFn: () => assessmentApi.getAssessment(assessmentId as string),
     enabled: !!assessmentId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -129,8 +134,11 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
       let changed = false;
       for (const view of CAPTURE_VIEWS) {
         const url = photos[view.scanKey];
-        // Only fill a tile that has no freshly picked file and no preview yet.
-        if (url && !captureFiles[view.id] && !next[view.id]) {
+        // Fill an empty tile, and also replace a transient blob: preview with the persistent
+        // server URL once it is stored — a blob URL dies on refresh/GC, which is why the
+        // photos "vanished after a while". Never overwrite a freshly picked, not-yet-uploaded file.
+        const current = next[view.id];
+        if (url && !captureFiles[view.id] && (!current || current.startsWith('blob:'))) {
           next[view.id] = url;
           changed = true;
         }
@@ -168,9 +176,13 @@ export const BodyScanCapturePanel = forwardRef<BodyScanCaptureHandle, BodyScanCa
       } else {
         toast.success('Captures saved.');
       }
-      // Files are now on the server; clear them so "Continue" does not re-upload, while the
-      // previews stay on screen.
+      // Files are now on the server; clear them so "Continue" does not re-upload. Refetch the
+      // stored captures so the transient blob: previews are swapped for the persistent server
+      // URLs (otherwise they vanish on refresh/GC).
       setCaptureFiles({ ...EMPTY_CAPTURES });
+      if (assessmentId) {
+        queryClient.invalidateQueries({ queryKey: ['assessment-captures', assessmentId] });
+      }
       onCaptured?.();
     },
     onError: (err: any) => toast.error(err?.data?.error || 'Failed to store the captures.'),

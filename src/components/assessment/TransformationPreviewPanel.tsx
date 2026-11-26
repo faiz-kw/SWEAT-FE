@@ -31,6 +31,10 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
     queryKey: ['assessment-transformation', assessmentId],
     queryFn: () => assessmentApi.getTransformation(assessmentId),
     enabled: !!assessmentId,
+    // Keep the generated images on screen; don't drop or re-blank them on window focus or GC.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
     // The build runs in the background (~90s of hosted image edits). While it is in progress
     // the GET reports PROCESSING, so poll until it settles, then stop.
     refetchInterval: (query) => {

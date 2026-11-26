@@ -268,7 +268,18 @@ export const AssessmentStudioWorkspace: React.FC = () => {
       toast.success('Assessment approved. Studio TV display unlocked.');
       setCurrentStep('tv_display');
     },
-    onError: () => toast.error('Approval failed. Staff role required.'),
+    onError: (err: any) => {
+      // Surface the server's real reason. Admin, trainer and staff are all allowed to approve
+      // (only members are blocked), so a blanket "staff role required" was misleading and hid
+      // the actual cause (usually a missing required field).
+      const d = err?.data ?? err?.response?.data;
+      let msg: string | undefined = d?.error || d?.detail;
+      if (!msg && d && typeof d === 'object') {
+        const first = Object.values(d).flat().find((v) => typeof v === 'string');
+        if (typeof first === 'string') msg = first;
+      }
+      toast.error(msg || 'Approval failed. Please check the required fields and try again.');
+    },
   });
 
   const resetAll = () => {
