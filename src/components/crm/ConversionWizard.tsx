@@ -869,7 +869,7 @@ function PaymentStep({
             <Label className="text-xs font-bold text-foreground uppercase tracking-wider block">
               Payment to Record ({quote.pricing.currency})
             </Label>
-            {paymentProvider === 'RAZORPAY' && (
+            {paymentProvider === 'RAZORPAY' && !isShort && (
               <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                 Full Upfront
               </span>
@@ -885,7 +885,6 @@ function PaymentStep({
               type="number"
               step="0.01"
               min="0"
-              disabled={paymentProvider === 'RAZORPAY'}
               value={paymentAmount}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => onAmountChange(e.target.value)}
               className="bg-background border-border pl-8 h-10 text-base font-bold"
@@ -903,10 +902,10 @@ function PaymentStep({
               Cannot exceed {formatCurrency(quote.pricing.total_payable, quote.pricing.currency)}
             </p>
           )}
-          {paymentProvider === 'CASH' && isShort && (
+          {isShort && (
             <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
               <AlertTriangle size={13} />
-              Less than quoted total of {formatCurrency(quote.pricing.total_payable, quote.pricing.currency)}
+              Partial payment — balance {formatCurrency(String((quoted - entered).toFixed(2)), quote.pricing.currency)} will be recorded as due.
             </p>
           )}
         </div>
@@ -2123,9 +2122,6 @@ const handleCancelRazorpay = useCallback(() => {
     } else if (step === 4) {
       if (!paymentProvider) { toast.error('Please select a payment method'); return; }
       if (!paymentAmount || parseFloat(paymentAmount) <= 0) { toast.error('Please enter a valid payment amount'); return; }
-      if (paymentProvider === 'RAZORPAY' && quote && parseFloat(paymentAmount) < parseFloat(quote.pricing.total_payable)) {
-        toast.error('Razorpay online checkout requires full package payment'); return;
-      }
       setStep(5);
     } else if (step === 5) {
       if (!selectedVersionId || !selectedBranchId || !paymentProvider || !paymentAmount) return;
@@ -2143,11 +2139,17 @@ const handleCancelRazorpay = useCallback(() => {
       }
 
       const sigData = termsSignatureData;
+      // A payment below the quoted total is a partial payment; the backend records the balance
+      // as due (subject to the tenant's partial-payment policy).
+      const _totalPayable = quote ? parseFloat(quote.pricing.total_payable) : 0;
+      const isPartialPayment = !!quote && parseFloat(paymentAmount) > 0 && parseFloat(paymentAmount) < _totalPayable;
       const payload: ConversionPayload = {
         package_version_id: selectedVersionId,
         branch_id: selectedBranchId,
         payment_provider: paymentProvider,
         payment_amount: paymentAmount,
+        is_partial_payment: isPartialPayment,
+        ...(isPartialPayment ? { partial_amount: paymentAmount } : {}),
         idempotency_key: idempotencyKey,
         signature_data: sigData,
         agreement_accepted: true,
@@ -2173,11 +2175,13 @@ const handleCancelRazorpay = useCallback(() => {
             branch_id: string;
             coupon_code?: string;
             is_partial_payment: boolean;
+            partial_amount?: string;
             channel: string;
           } = {
             package_version_id: selectedVersionId,
             branch_id: selectedBranchId,
-            is_partial_payment: false,
+            is_partial_payment: isPartialPayment,
+            ...(isPartialPayment ? { partial_amount: paymentAmount } : {}),
             channel: 'STAFF',
           };
           if (appliedCoupon) checkoutPayload.coupon_code = appliedCoupon;
@@ -2203,7 +2207,7 @@ const handleCancelRazorpay = useCallback(() => {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 order_id: checkoutOrder.order_id,
-                is_partial_payment: false,
+                is_partial_payment: isPartialPayment,
                 idempotency_key: response.razorpay_order_id,
                 signature_data: sigData,
                 agreement_accepted: true,
