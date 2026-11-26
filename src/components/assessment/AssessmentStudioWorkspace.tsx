@@ -137,6 +137,71 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   const [dietPrescription, setDietPrescription] = useState('');
   const [reassessmentWeeks, setReassessmentWeeks] = useState(6);
 
+  const syncAssessmentToServer = React.useCallback(
+    async (extra: Record<string, unknown> = {}) => {
+      if (!activeSession?.id) return null;
+      try {
+        const payload = {
+          measured_height_cm: heightCm,
+          measured_weight_kg: weightKg,
+          waist_circumference_cm: waistCm,
+          resting_heart_rate_bpm: restingHr,
+          resting_blood_pressure: restingBp,
+          functional_tests_payload: functionalTests,
+          symptoms_and_safety_events: symptoms,
+          target_goal: targetGoal,
+          stated_goal_outcome: customGoalOutcome,
+          target_timeline_weeks: durationWeeks,
+          target_timeline_months: Math.max(1, Math.round(durationWeeks / 4.33)),
+          weekly_frequency_days: weeklyFrequency,
+          perceived_barrier: perceivedBarrier,
+          member_confidence_score: confidenceScore,
+          ...extra,
+        };
+        const fresh = await assessmentApi.updateAssessment(activeSession.id, payload as any);
+        setActiveSession(fresh);
+        return fresh;
+      } catch (err) {
+        // Silently preserve local state so the coach flow is never blocked
+        return null;
+      }
+    },
+    [
+      activeSession?.id,
+      heightCm,
+      weightKg,
+      waistCm,
+      restingHr,
+      restingBp,
+      functionalTests,
+      symptoms,
+      targetGoal,
+      customGoalOutcome,
+      durationWeeks,
+      weeklyFrequency,
+      perceivedBarrier,
+      confidenceScore,
+    ],
+  );
+
+  // Auto-sync pending tests to backend if activeSession exists but capability_matrix is unassessed
+  useEffect(() => {
+    if (
+      activeSession?.id &&
+      (currentStep === 'review' || currentStep === 'tv_display') &&
+      functionalTests &&
+      Object.keys(functionalTests).length > 0
+    ) {
+      const matrix = activeSession.capability_matrix || {};
+      const isUnassessed =
+        Object.keys(matrix).length === 0 ||
+        Object.values(matrix).every((v) => !v || v === 'Not assessed');
+      if (isUnassessed) {
+        syncAssessmentToServer();
+      }
+    }
+  }, [currentStep, activeSession?.id, activeSession?.capability_matrix, functionalTests, syncAssessmentToServer]);
+
   const startSessionMutation = useMutation({
     mutationFn: () => assessmentApi.startAssessment({
       member_name: selectedMember?.name || memberName,
@@ -183,8 +248,9 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   });
 
   const approveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!activeSession) throw new Error('No active session.');
+      await syncAssessmentToServer();
       return assessmentApi.approveAndSend(activeSession.id, {
         coach_notes: `${coachStrengths} | ${coachAreasToDevelop}`.trim(),
         workout_prescription: workoutPrescription, diet_prescription: dietPrescription,
@@ -410,13 +476,21 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             heightCm={heightCm} setHeightCm={setHeightCm} weightKg={weightKg} setWeightKg={setWeightKg}
             waistCm={waistCm} setWaistCm={setWaistCm} restingHr={restingHr} setRestingHr={setRestingHr}
             restingBp={restingBp} setRestingBp={setRestingBp} provenance={provenance} setProvenance={setProvenance}
-            onPrev={() => setCurrentStep('safety_gate')} onNext={() => setCurrentStep('movement')}
+            onPrev={() => setCurrentStep('safety_gate')}
+            onNext={() => {
+              syncAssessmentToServer();
+              setCurrentStep('movement');
+            }}
           />
         )}
         {currentStep === 'movement' && (
           <AssessmentMovementStep
             tests={functionalTests} setTests={setFunctionalTests} symptoms={symptoms} setSymptoms={setSymptoms}
-            onPrev={() => setCurrentStep('vitals')} onNext={() => setCurrentStep('goals')}
+            onPrev={() => setCurrentStep('vitals')}
+            onNext={() => {
+              syncAssessmentToServer();
+              setCurrentStep('goals');
+            }}
           />
         )}
         {currentStep === 'goals' && (
@@ -426,8 +500,12 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             weeklyFrequency={weeklyFrequency} setWeeklyFrequency={setWeeklyFrequency} perceivedBarrier={perceivedBarrier}
             setPerceivedBarrier={setPerceivedBarrier} confidenceScore={confidenceScore} setConfidenceScore={setConfidenceScore}
             onPrev={() => setCurrentStep('movement')}
-            onNext={() => {
-              if (!activeSession) startSessionMutation.mutate();
+            onNext={async () => {
+              if (!activeSession) {
+                startSessionMutation.mutate();
+              } else {
+                await syncAssessmentToServer();
+              }
               setCurrentStep('review');
             }}
           />
