@@ -96,7 +96,7 @@ export const AssessmentVitalsStep: React.FC<AssessmentVitalsStepProps> = ({
   }, [heightCm, weightKg]);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
