@@ -118,7 +118,7 @@ export interface TransformationMilestone {
 }
 
 export interface TransformationPreview {
-  status: 'NOT_REQUESTED' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'REFUSED_NO_CONSENT';
+  status: 'NOT_REQUESTED' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'REFUSED_NO_CONSENT';
   generated_at?: string | null;
   renderer?: string;
   is_generative?: boolean;

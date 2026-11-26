@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, ShieldCheck, Sparkles, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { assessmentApi, resolveMediaUrl } from '@/api/endpoints/assessmentApi';
+import { assessmentApi, resolveMediaUrl, type TransformationPreview } from '@/api/endpoints/assessmentApi';
 
 /**
  * The transformation preview.
@@ -31,15 +31,29 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
     queryKey: ['assessment-transformation', assessmentId],
     queryFn: () => assessmentApi.getTransformation(assessmentId),
     enabled: !!assessmentId,
+    // The build runs in the background (~90s of hosted image edits). While it is in progress
+    // the GET reports PROCESSING, so poll until it settles, then stop.
+    refetchInterval: (query) => {
+      const s = (query.state.data as TransformationPreview | undefined)?.status;
+      return s === 'PROCESSING' || s === 'QUEUED' ? 4000 : false;
+    },
   });
+
+  const isProcessing = preview?.status === 'PROCESSING' || preview?.status === 'QUEUED';
 
   const build = useMutation({
     mutationFn: (renderer?: 'morph' | 'fal') => assessmentApi.buildTransformation(assessmentId, renderer),
     onSuccess: (data) => {
       refetch();
-      if (data.status === 'COMPLETED') toast.success('Preview generated and verified.');
-      else if (data.status === 'PARTIAL') toast.warning('Some milestones failed verification and were discarded.');
-      else toast.error(data.error || 'The preview could not be produced.');
+      if (data.status === 'PROCESSING' || data.status === 'QUEUED') {
+        toast.info('Generating the preview — this takes about a minute.');
+      } else if (data.status === 'COMPLETED') {
+        toast.success('Preview generated and verified.');
+      } else if (data.status === 'PARTIAL') {
+        toast.warning('Some milestones failed verification and were discarded.');
+      } else {
+        toast.error(data.error || 'The preview could not be produced.');
+      }
     },
     onError: (err: any) => toast.error(err?.data?.error || 'The preview could not be produced.'),
   });
@@ -86,14 +100,24 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
             size="sm"
             variant="outline"
             className="h-7 text-[11px] gap-1.5"
-            disabled={build.isPending || !consentGiven}
+            disabled={build.isPending || isProcessing || !consentGiven}
             onClick={() => build.mutate(undefined)}
           >
-            {build.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-            {hasAny ? 'Rebuild' : 'Generate'}
+            {build.isPending || isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {isProcessing ? 'Generating…' : hasAny ? 'Rebuild' : 'Generate'}
           </Button>
         </div>
       </div>
+
+      {isProcessing && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+          <p className="text-[11px] text-foreground">
+            Generating this member's preview from their baseline photo — this usually takes about
+            a minute. You can stay on this page; it will appear automatically.
+          </p>
+        </div>
+      )}
 
       {!consentGiven && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
