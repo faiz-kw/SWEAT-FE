@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Loader2, ShieldCheck, Sparkles } from 'lucide-react';
+import { Loader2, ShieldCheck, Sparkles, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { assessmentApi, resolveMediaUrl } from '@/api/endpoints/assessmentApi';
@@ -47,6 +47,25 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
   const milestones = preview?.milestones || {};
   const rejected = preview?.rejected || {};
   const hasAny = Object.keys(milestones).length > 0;
+
+  // Click-to-zoom: the morph change is subtle, so a full-size view (with prev/next through
+  // baseline → month 1/2/3) is the only way to actually see the difference.
+  const viewable = React.useMemo(() => {
+    const list: Array<{ url: string; label: string; sub?: string }> = [];
+    if (baselineUrl) list.push({ url: resolveMediaUrl(baselineUrl), label: 'Starting point', sub: 'Measured today' });
+    [1, 2, 3].forEach((m) => {
+      const ms = (milestones as any)[`month_${m}`];
+      if (ms?.url) list.push({ url: resolveMediaUrl(ms.url), label: `Month ${m}`, sub: `Waist −${ms.waist_reduction_pct}% · illustrative` });
+    });
+    return list;
+  }, [baselineUrl, milestones]);
+  const [zoomIndex, setZoomIndex] = React.useState<number | null>(null);
+  const openZoom = (url?: string | null) => {
+    if (!url) return;
+    const resolved = resolveMediaUrl(url);
+    const idx = viewable.findIndex((v) => v.url === resolved);
+    if (idx >= 0) setZoomIndex(idx);
+  };
 
   return (
     <div className="space-y-3 pt-2">
@@ -97,7 +116,7 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
           </span>
           <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted flex items-center justify-center">
             {baselineUrl ? (
-              <img src={resolveMediaUrl(baselineUrl)} alt="Baseline capture" className="w-full h-full object-cover" />
+              <img src={resolveMediaUrl(baselineUrl)} alt="Baseline capture" onClick={() => openZoom(baselineUrl)} className="w-full h-full object-cover cursor-zoom-in transition hover:opacity-90" />
             ) : (
               <span className="text-[10px] text-muted-foreground px-2">Not captured</span>
             )}
@@ -115,7 +134,7 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
               </span>
               <div className="aspect-3/4 rounded-xl overflow-hidden bg-muted flex items-center justify-center">
                 {milestone ? (
-                  <img src={resolveMediaUrl(milestone.url)} alt={`Illustrative month ${month}`} className="w-full h-full object-cover" />
+                  <img src={resolveMediaUrl(milestone.url)} alt={`Illustrative month ${month}`} onClick={() => openZoom(milestone.url)} className="w-full h-full object-cover cursor-zoom-in transition hover:opacity-90" />
                 ) : (
                   <span className="text-[10px] text-muted-foreground px-2">
                     {rejection ? 'Discarded' : 'Not generated'}
@@ -144,6 +163,55 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
 
       {preview?.disclosure && (
         <p className="text-[10px] text-muted-foreground">{preview.disclosure}</p>
+      )}
+
+      {/* Full-size view — tap any image to compare baseline → milestones up close. */}
+      {zoomIndex !== null && viewable[zoomIndex] && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 sm:p-8"
+          onClick={() => setZoomIndex(null)}
+        >
+          <div className="relative w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={viewable[zoomIndex].url}
+              alt={viewable[zoomIndex].label}
+              className="w-full max-h-[78vh] object-contain rounded-xl bg-black"
+            />
+            <div className="mt-3 text-center text-white">
+              <p className="text-sm font-semibold">{viewable[zoomIndex].label}</p>
+              {viewable[zoomIndex].sub && <p className="text-xs text-white/70 mt-0.5">{viewable[zoomIndex].sub}</p>}
+              <p className="text-[11px] text-white/50 mt-1">{zoomIndex + 1} / {viewable.length}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setZoomIndex(null)}
+              className="absolute -top-3 -right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg hover:bg-white/90"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            {zoomIndex > 0 && (
+              <button
+                type="button"
+                aria-label="Previous"
+                onClick={() => setZoomIndex(zoomIndex - 1)}
+                className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-black shadow-lg hover:bg-white"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+            {zoomIndex < viewable.length - 1 && (
+              <button
+                type="button"
+                aria-label="Next"
+                onClick={() => setZoomIndex(zoomIndex + 1)}
+                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-black shadow-lg hover:bg-white"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
