@@ -292,7 +292,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   return (
     <>
         {resumableDraft && (
-          <div className="max-w-4xl mx-auto mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+          <div className="max-w-4xl mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
             <p className="text-xs text-foreground">
               Unfinished assessment
               {resumableDraft.selectedMember?.name
@@ -319,7 +319,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
             </div>
           </div>
         )}
-        <div className="max-w-4xl mx-auto mb-8">
+        <div className="max-w-4xl mb-8">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border">
             {stepsList.map((s, i) => {
               const activeIdx = stepsList.findIndex((x) => x.id === currentStep);

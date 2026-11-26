@@ -78,7 +78,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
   const domains = (library?.domains || []).filter((d) => LIBRARY_DOMAINS.includes(d.key));
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">

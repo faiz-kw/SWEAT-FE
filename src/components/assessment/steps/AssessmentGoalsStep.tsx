@@ -45,7 +45,7 @@ export const AssessmentGoalsStep: React.FC<AssessmentGoalsStepProps> = ({
   onNext,
 }) => {
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
