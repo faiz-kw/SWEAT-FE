@@ -88,7 +88,7 @@ export const AssessmentMovementStep: React.FC<AssessmentMovementStepProps> = ({
             <h2 className="text-lg font-bold text-foreground">Movement Tests</h2>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Pick the tests that suit this member. Record symptoms separately from performance.
+            Pick the tests that fit. Log symptoms separately.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -98,8 +98,7 @@ export const AssessmentSafetyGateStep: React.FC<AssessmentSafetyGateStepProps> =
             <h4 className="font-semibold text-sm">Stop — medical clearance needed</h4>
           </div>
           <p className="text-xs text-red-200/80 leading-relaxed">
-            The member reported affirmative symptoms to cardiovascular or neurological risk factors (chest pain, syncope, or resting breathlessness). 
-            Physical movement testing must be deferred until written clearance from a licensed physician is provided.
+            Chest pain, fainting or breathlessness was reported. Defer physical testing until a doctor clears the member in writing.
           </p>
         </div>
       )}
