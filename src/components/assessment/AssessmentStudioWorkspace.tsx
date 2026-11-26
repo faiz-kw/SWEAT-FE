@@ -34,7 +34,12 @@ const normalizeSex = (gender?: string | null): string => {
   return 'UNDISCLOSED';
 };
 
-export const AssessmentStudioWorkspace: React.FC = () => {
+interface AssessmentStudioWorkspaceProps {
+  /** When set, open and continue this existing backend assessment instead of starting a new one. */
+  resumeId?: string | null;
+}
+
+export const AssessmentStudioWorkspace: React.FC<AssessmentStudioWorkspaceProps> = ({ resumeId = null }) => {
   const queryClient = useQueryClient();
   const clearAssessmentDraft = React.useCallback(() => {
     try { localStorage.removeItem(ASSESSMENT_DRAFT_KEY); } catch { /* storage unavailable */ }
@@ -343,7 +348,54 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         if (d.reassessmentWeeks != null) setReassessmentWeeks(d.reassessmentWeeks);
   };
 
+  // Opening an existing assessment from the register: load it and attach to it, so continuing
+  // UPDATES that row instead of creating a brand-new one each time (which produced duplicate
+  // draft rows). Loaded once per resumeId.
+  const { data: resumeData } = useQuery({
+    queryKey: ['assessment-resume', resumeId],
+    queryFn: () => assessmentApi.getAssessment(resumeId as string),
+    enabled: !!resumeId,
+    staleTime: 60 * 1000,
+  });
+  const [resumeApplied, setResumeApplied] = useState(false);
   useEffect(() => {
+    if (!resumeId || !resumeData || resumeApplied) return;
+    const a = resumeData as any;
+    setActiveSession(a);
+    if (a.member_name) setMemberName(a.member_name);
+    if (a.member_phone) setMemberPhone(a.member_phone);
+    if (a.user_profile_id) {
+      setSelectedMember({ user_profile_id: a.user_profile_id, name: a.member_name || '', phone: a.member_phone || '' });
+    }
+    if (a.assessment_type) setAssessmentType(a.assessment_type);
+    if (a.target_goal) setTargetGoal(a.target_goal);
+    if (a.stated_goal_outcome != null) setCustomGoalOutcome(a.stated_goal_outcome);
+    if (a.consent_body_measurements != null) setConsentBody(a.consent_body_measurements);
+    if (a.consent_movement_photos != null) setConsentPhotos(a.consent_movement_photos);
+    if (a.consent_ai_analysis != null) setConsentAi(a.consent_ai_analysis);
+    if (a.consent_secondary_use != null) setConsentSecondary(a.consent_secondary_use);
+    if (a.consent_image_generation != null) setConsentImageGeneration(a.consent_image_generation);
+    if (a.measured_height_cm != null) setHeightCm(a.measured_height_cm);
+    if (a.measured_weight_kg != null) setWeightKg(a.measured_weight_kg);
+    if (a.waist_circumference_cm != null) setWaistCm(a.waist_circumference_cm);
+    if (a.resting_heart_rate_bpm != null) setRestingHr(a.resting_heart_rate_bpm);
+    if (a.resting_blood_pressure) setRestingBp(a.resting_blood_pressure);
+    if (a.screening_outcome) setScreeningOutcome(a.screening_outcome);
+    if (a.health_screening) setScreeningAnswers(a.health_screening);
+    const st = a.status;
+    setCurrentStep(
+      st === 'APPROVED' || st === 'CANCELLED' || st === 'DEFERRED' ? 'tv_display'
+        : st === 'PENDING_REVIEW' ? 'review'
+        : 'vitals',
+    );
+    clearAssessmentDraft();
+    setResumeApplied(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId, resumeData, resumeApplied]);
+
+  useEffect(() => {
+    // When opening a specific assessment, ignore any stale local form draft.
+    if (resumeId) { setDraftHydrated(true); return; }
     try {
       const raw = localStorage.getItem(ASSESSMENT_DRAFT_KEY);
       if (raw) {

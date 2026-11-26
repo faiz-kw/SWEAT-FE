@@ -24,6 +24,7 @@ type ActiveTab = 'register' | 'new' | 'reassessment' | 'progressions';
 
 function AssessmentOpsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('register');
+  const [resumeId, setResumeId] = useState<string | null>(null);
   const [progressions, setProgressions] = useState<TestProgressionRecord[]>([]);
   const [loadingProgressions, setLoadingProgressions] = useState(false);
   const [progressionsError, setProgressionsError] = useState<string | null>(null);
@@ -72,7 +73,7 @@ function AssessmentOpsPage() {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => { if (tab.id === 'new') setResumeId(null); setActiveTab(tab.id); }}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                     isActive
@@ -93,12 +94,12 @@ function AssessmentOpsPage() {
       {/* Tab Contents */}
       {activeTab === 'register' && (
         <AssessmentRegister
-          onNew={() => setActiveTab('new')}
-          onOpen={() => setActiveTab('new')}
+          onNew={() => { setResumeId(null); setActiveTab('new'); }}
+          onOpen={(row) => { setResumeId(row.id); setActiveTab('new'); }}
         />
       )}
 
-      {activeTab === 'new' && <AssessmentStudioWorkspace />}
+      {activeTab === 'new' && <AssessmentStudioWorkspace key={resumeId ?? 'new'} resumeId={resumeId} />}
 
       {activeTab === 'reassessment' && <ReassessmentComparisonView />}
 
