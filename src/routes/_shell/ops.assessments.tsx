@@ -33,9 +33,11 @@ function AssessmentOpsPage() {
     setProgressionsError(null);
     try {
       const data = await assessmentApi.getTestProgressions();
-      setProgressions(data);
+      const items = Array.isArray(data) ? data : ((data as any)?.results ?? []);
+      setProgressions(items);
     } catch {
       setProgressionsError('Failed to load active test progressions.');
+      setProgressions([]);
     } finally {
       setLoadingProgressions(false);
     }
@@ -126,13 +128,13 @@ function AssessmentOpsPage() {
             </div>
           )}
 
-          {loadingProgressions && progressions.length === 0 && (
+          {loadingProgressions && (!Array.isArray(progressions) || progressions.length === 0) && (
             <div className="rounded-xl border border-border bg-card/40 p-8 text-center text-xs text-muted-foreground">
               Loading active exercise progressions...
             </div>
           )}
 
-          {!loadingProgressions && progressions.length === 0 && !progressionsError && (
+          {!loadingProgressions && (!Array.isArray(progressions) || progressions.length === 0) && !progressionsError && (
             <div className="rounded-xl border border-border bg-card/40 p-8 text-center">
               <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
               <h3 className="mt-3 text-sm font-semibold text-foreground">No Active Progressions Found</h3>
@@ -143,12 +145,12 @@ function AssessmentOpsPage() {
           )}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {progressions.map((prog) => (
+            {(Array.isArray(progressions) ? progressions : []).map((prog) => (
               <IndividualProgressionCard
                 key={prog.id}
                 progression={prog}
                 onApproved={(updated) => {
-                  setProgressions((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                  setProgressions((prev) => (Array.isArray(prev) ? prev : []).map((p) => (p.id === updated.id ? updated : p)));
                 }}
               />
             ))}
