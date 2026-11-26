@@ -351,12 +351,18 @@ export const AssessmentStudioWorkspace: React.FC<AssessmentStudioWorkspaceProps>
   // Opening an existing assessment from the register: load it and attach to it, so continuing
   // UPDATES that row instead of creating a brand-new one each time (which produced duplicate
   // draft rows). Loaded once per resumeId.
-  const { data: resumeData } = useQuery({
+  const { data: resumeData, isError: resumeLoadError } = useQuery({
     queryKey: ['assessment-resume', resumeId],
     queryFn: () => assessmentApi.getAssessment(resumeId as string),
     enabled: !!resumeId,
     staleTime: 60 * 1000,
+    retry: false,
   });
+  useEffect(() => {
+    if (resumeId && resumeLoadError) {
+      toast.error('This assessment could not be opened — it may have been removed. Start a new assessment or pick another from the list.');
+    }
+  }, [resumeId, resumeLoadError]);
   const [resumeApplied, setResumeApplied] = useState(false);
   useEffect(() => {
     if (!resumeId || !resumeData || resumeApplied) return;
