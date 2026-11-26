@@ -59,8 +59,8 @@ function AssessmentOpsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground pb-24">
       <PageHeader
-        title="Assessment & Transformation Studio"
-        description="Standardised 17-section assessment battery, safety screening, like-for-like reassessments and progression tracking."
+        title="Assessments"
+        description="Guided member assessments, intake to sign-off."
         actions={
           <div className="flex items-center gap-1 rounded-xl border border-border bg-card/80 p-1 overflow-x-auto">
             {TABS.map((tab) => {

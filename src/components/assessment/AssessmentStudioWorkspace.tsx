@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { PageHeader, PageBody } from '@/components/enterprise/Page';
 import {
   assessmentApi,
   type AssessmentSession,
@@ -291,12 +290,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <PageHeader
-        title="Assessment"
-        description="Guided member assessment — intake to sign-off."
-      />
-      <PageBody>
+    <>
         {resumableDraft && (
           <div className="max-w-4xl mx-auto mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
             <p className="text-xs text-foreground">
@@ -440,7 +434,6 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         {currentStep === 'tv_display' && (
           <AssessmentTvDisplayStep session={activeSession} onNewSession={resetAll} />
         )}
-      </PageBody>
-    </div>
+    </>
   );
 };
