@@ -25,6 +25,15 @@ export type AssessmentStep = 'intake' | 'safety_gate' | 'vitals' | 'movement' | 
 // We keep a local draft so a coach can pick up exactly where they left off.
 const ASSESSMENT_DRAFT_KEY = 'sweat_assessment_draft_v1';
 
+const normalizeSex = (gender?: string | null): string => {
+  if (!gender) return '';
+  const s = String(gender).trim().toUpperCase();
+  if (s === 'M' || s === 'MALE') return 'MALE';
+  if (s === 'F' || s === 'FEMALE') return 'FEMALE';
+  if (s === 'OTHER') return 'OTHER';
+  return 'UNDISCLOSED';
+};
+
 export const AssessmentStudioWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const clearAssessmentDraft = React.useCallback(() => {
@@ -135,7 +144,7 @@ export const AssessmentStudioWorkspace: React.FC = () => {
       ...(selectedMember?.user_profile_id ? { user_profile_id: selectedMember.user_profile_id } : {}),
       ...(selectedMember?.branch_id ? { branch_id: selectedMember.branch_id } : {}),
       ...(selectedMember?.date_of_birth ? { member_date_of_birth: selectedMember.date_of_birth } : {}),
-      ...(selectedMember?.gender ? { member_sex: String(selectedMember.gender).toUpperCase() } : {}),
+      ...(selectedMember?.gender ? { member_sex: normalizeSex(selectedMember.gender) } : {}),
       assessment_type: assessmentType,
       training_experience: trainingExperience, current_activity_level: activityLevel,
       preferred_training_style: preferredStyle, target_goal: targetGoal, stated_goal_outcome: customGoalOutcome,
@@ -159,7 +168,18 @@ export const AssessmentStudioWorkspace: React.FC = () => {
         setCurrentStep('vitals');
       }
     },
-    onError: () => toast.error('Failed to initialize assessment session.'),
+    onError: (err: any) => {
+      const msg =
+        err?.data?.error ||
+        err?.data?.detail ||
+        (typeof err?.data === 'object'
+          ? Object.entries(err.data)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+              .join(' | ')
+          : null) ||
+        'Failed to initialize assessment session.';
+      toast.error(msg);
+    },
   });
 
   const approveMutation = useMutation({
