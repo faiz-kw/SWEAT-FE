@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Activity,
   Pencil,
+  QrCode,
   ToggleLeft,
   ToggleRight,
   LayoutList,
@@ -91,6 +92,7 @@ import { TrainerAllottedClassesView } from "./TrainerAllottedClassesView";
 import { ClassAttendanceModal } from "./ClassAttendanceModal";
 import { ClassBookingBreakdown } from "./ClassBookingBreakdown";
 import { AssignTrainerModal } from "./AssignTrainerModal";
+import { ClassPassScanModal } from "./ClassPassScanModal";
 
 export function normalizeDaysOfWeek(days: any): number[] {
   if (!days) return [];
@@ -321,6 +323,7 @@ export const ClassesWorkspace: React.FC = () => {
   );
   const [isAssignVideoOpen, setIsAssignVideoOpen] = useState<boolean>(false);
   const [editOccurrence, setEditOccurrence] = useState<ClassOccurrence | null>(null);
+  const [scanOccurrence, setScanOccurrence] = useState<ClassOccurrence | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
@@ -4618,6 +4621,21 @@ export const ClassesWorkspace: React.FC = () => {
                                     <Pencil className="size-3.5" />
                                   </Button>
                                 )}
+
+                                {canEdit && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setScanOccurrence(occ);
+                                    }}
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/5"
+                                    title="Scan pass — check member in / out"
+                                  >
+                                    <QrCode className="size-3.5" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                             {/* Class Session Info */}
@@ -8135,6 +8153,21 @@ export const ClassesWorkspace: React.FC = () => {
           toast.success("Classes schedule updated from Excel!");
         }}
       />
+
+      {/* Scan Pass — Check In / Out Modal */}
+      {scanOccurrence && (
+        <ClassPassScanModal
+          open={Boolean(scanOccurrence)}
+          onOpenChange={(open) => !open && setScanOccurrence(null)}
+          occurrenceId={scanOccurrence.id}
+          className={
+            scanOccurrence.template_name ||
+            scanOccurrence.class_name ||
+            "Class"
+          }
+          classDate={scanOccurrence.occurrence_date}
+        />
+      )}
 
       {/* Edit Class Slot Modal */}
       <Dialog

@@ -166,6 +166,40 @@ export const bookingsApi = {
     return res.data.results || res.data;
   },
 
+  // Manual class pass scan (front-desk fallback until turnstile is live)
+  scanClassPass: async (
+    occurrenceId: string,
+    token: string,
+  ): Promise<{
+    ok: boolean;
+    action?: 'IN' | 'OUT' | 'USED';
+    direction?: string;
+    reason?: string;
+    member_name?: string;
+    member_number?: string;
+    class_name?: string;
+    time?: string;
+    message: string;
+  }> => {
+    const res = await api.post('/tenant/access/class-pass-scan/', {
+      occurrence_id: occurrenceId,
+      token: token,
+    });
+    return res.data;
+  },
+
+  getClassPassLog: async (
+    occurrenceId: string,
+  ): Promise<{
+    ok: boolean;
+    events: { member_name: string; direction: string; time: string | null }[];
+  }> => {
+    const res = await api.get('/tenant/access/class-pass-scan/', {
+      params: { occurrence_id: occurrenceId },
+    });
+    return res.data;
+  },
+
   // Member Attendance States (Discipline)
   getMemberAttendanceStates: async (params?: {
     is_suspended?: boolean;
