@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, ShieldCheck, Sparkles, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { assessmentApi, resolveMediaUrl, type TransformationPreview } from '@/api/endpoints/assessmentApi';
+import { assessmentApi, resolveMediaUrl, type TransformationPreview, type ProjectionMetric } from '@/api/endpoints/assessmentApi';
 
 /**
  * The transformation preview.
@@ -188,6 +188,62 @@ export const TransformationPreviewPanel: React.FC<TransformationPreviewPanelProp
           );
         })}
       </div>
+
+      {preview?.projection && (preview.projection.waist || preview.projection.weight || preview.projection.body_fat) && (() => {
+        const p = preview.projection!;
+        const chip = (label: string, m?: ProjectionMetric) => m ? (
+          <div key={label} className="rounded-xl border border-border bg-background/60 px-3 py-2 min-w-[106px]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+            <div className="flex items-baseline gap-1.5 mt-0.5 tabular-nums">
+              <span className="text-xs text-muted-foreground line-through">{m.current}</span>
+              <span className="text-lg font-bold text-foreground">{m.target}</span>
+              <span className="text-[10px] text-muted-foreground">{m.unit}</span>
+            </div>
+            <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+              ▼ {Math.round((m.current - m.target) * 10) / 10} {m.unit}
+            </div>
+          </div>
+        ) : null;
+
+        const series = p.waist?.months || p.weight?.months;
+        let spark: React.ReactNode = null;
+        if (series) {
+          const base = p.waist?.current ?? p.weight?.current ?? 0;
+          const vals: number[] = [base, ...Object.keys(series).sort().map((k) => series[k] ?? 0)];
+          const min = Math.min(...vals), max = Math.max(...vals), rng = (max - min) || 1;
+          const xy = (v: number, i: number): [number, number] => [8 + (i * 196) / (vals.length - 1), 6 + (1 - (v - min) / rng) * 42];
+          const pts = vals.map((v, i) => xy(v, i).join(',')).join(' ');
+          const [ex, ey] = xy(vals[vals.length - 1] ?? 0, vals.length - 1);
+          spark = (
+            <svg viewBox="0 0 212 56" className="w-[196px] max-w-full h-auto text-primary">
+              <polyline fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+              <circle cx={ex} cy={ey} r="3.5" fill="currentColor" />
+            </svg>
+          );
+        }
+
+        return (
+          <div className="rounded-2xl border border-border bg-card/40 p-3.5 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Projected targets</span>
+              {p.goal && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">{p.goal}</span>}
+            </div>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex flex-wrap gap-2">
+                {chip('Waist', p.waist)}
+                {chip('Weight', p.weight)}
+                {chip('Body fat', p.body_fat)}
+              </div>
+              {spark && (
+                <div className="shrink-0 text-center">
+                  {spark}
+                  <div className="text-[10px] text-muted-foreground mt-0.5">3-month trajectory</div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {preview?.disclosure && (
         <p className="text-[10px] text-muted-foreground">{preview.disclosure}</p>

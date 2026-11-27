@@ -129,6 +129,21 @@ export interface TransformationPreview {
   milestones?: Record<string, TransformationMilestone>;
   rejected?: Record<string, string>;
   error?: string;
+  projection?: TransformationProjection;
+}
+
+export interface ProjectionMetric {
+  current: number;
+  target: number;
+  unit: string;
+  months?: Record<string, number>;
+}
+
+export interface TransformationProjection {
+  goal?: string;
+  waist?: ProjectionMetric;
+  weight?: ProjectionMetric;
+  body_fat?: ProjectionMetric;
 }
 
 export interface AssessmentTestField {
