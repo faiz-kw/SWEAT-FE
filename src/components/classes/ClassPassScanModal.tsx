@@ -150,17 +150,18 @@ export const ClassPassScanModal: React.FC<Props> = ({
       } catch (err: any) {
         if (!cancelled) {
           setCameraError(
-            'Camera not available. Use manual code entry instead.',
+            'Could not start the camera — allow camera access for this site, or use the Manual code tab.',
           );
-          setMode('manual');
         }
       }
     };
 
-    start();
+    // small delay so the dialog's reader element is mounted before the scanner attaches
+    const startTimer = setTimeout(start, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(startTimer);
       const inst = scannerRef.current;
       scannerRef.current = null;
       if (inst) {
