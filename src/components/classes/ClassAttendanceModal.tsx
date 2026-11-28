@@ -133,7 +133,7 @@ export const ClassAttendanceModal: React.FC<ClassAttendanceModalProps> = ({
         user_profile: memberId,
         occurrence: occurrence!.id,
         booking_type: 'MEMBER',
-        booking_source: isTrainer ? 'TRAINER' : 'ADMIN',
+        booking_source: isAdmin ? 'ADMIN' : isTrainer ? 'TRAINER' : 'FRONT_DESK',
       });
     },
     onSuccess: () => {
