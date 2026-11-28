@@ -93,6 +93,7 @@ import { ClassAttendanceModal } from "./ClassAttendanceModal";
 import { ClassBookingBreakdown } from "./ClassBookingBreakdown";
 import { AssignTrainerModal } from "./AssignTrainerModal";
 import { ClassPassScanModal } from "./ClassPassScanModal";
+import { BulkScheduleImportModal } from "./BulkScheduleImportModal";
 
 export function normalizeDaysOfWeek(days: any): number[] {
   if (!days) return [];
@@ -787,6 +788,7 @@ export const ClassesWorkspace: React.FC = () => {
 
   // Modals state
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ClassCategory | null>(null);
 
@@ -2808,6 +2810,18 @@ export const ClassesWorkspace: React.FC = () => {
               <FileSpreadsheet className="size-3.5 text-emerald-600" />
               <span>Upload Excel</span>
             </Button>
+            {canCreate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkImportOpen(true)}
+                className="gap-1.5 h-8 text-xs font-semibold"
+                title="Bulk upload class sessions from Excel (ID-based: no name mismatch)"
+              >
+                <FileSpreadsheet className="size-3.5 text-primary" />
+                <span>Upload Schedule</span>
+              </Button>
+            )}
             {primaryTab === "sessions" && canCreate && (
               <Button
                 size="sm"
@@ -8151,6 +8165,16 @@ export const ClassesWorkspace: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ["class-templates"] });
           queryClient.invalidateQueries({ queryKey: ["calendar-occurrences"] });
           toast.success("Classes schedule updated from Excel!");
+        }}
+      />
+
+      {/* ID-based bulk schedule import */}
+      <BulkScheduleImportModal
+        open={bulkImportOpen}
+        onOpenChange={setBulkImportOpen}
+        onDone={() => {
+          queryClient.invalidateQueries({ queryKey: ["class-occurrences"] });
+          queryClient.invalidateQueries({ queryKey: ["calendar-occurrences"] });
         }}
       />
 

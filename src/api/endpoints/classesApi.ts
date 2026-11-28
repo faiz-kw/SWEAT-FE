@@ -415,6 +415,34 @@ export const classesApi = {
     return res.data;
   },
 
+  // --- ID-based bulk schedule import ---
+  async bulkImportSchedulePreview(file: File): Promise<{
+    summary: { total: number; ready: number; errors: number; with_trainer: number; trainer_unresolved: number };
+    rows: Array<{
+      row: number; ok: boolean; errors: string[]; date: string; branch: string; class: string;
+      trainer: string; trainer_unresolved: boolean; start: string; end: string; capacity: number | null;
+    }>;
+  }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.post<any>('/tenant/class-schedule-bulk-import/preview/', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data as any;
+  },
+
+  async bulkImportScheduleCommit(file: File): Promise<{
+    status: string;
+    result: { created: number; duplicates: number; errors: number; trainer_assigned: number; trainer_conflict: number; trainer_unresolved: number };
+  }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.post<any>('/tenant/class-schedule-bulk-import/commit/', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data as any;
+  },
+
   // --- Branch Availability & Pricing ---
   async getBranchAvailabilities(templateId?: string): Promise<ClassBranchAvailability[]> {
     const res = await api.get<any>('/tenant/class-branch-availabilities/');
