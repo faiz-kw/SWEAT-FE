@@ -71,11 +71,55 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   initialTab = 'bookings',
 }) => {
   const queryClient = useQueryClient();
-  const { can, canViewPhoneNumber } = usePermissions();
+  const { can, canViewPhoneNumber, user, isSuperAdmin } = usePermissions();
   const canCreate = can('ops.bookings.create');
   const canEdit = can('ops.bookings.edit');
   const canDelete = can('ops.bookings.delete');
   const canPolicies = can('core.settings.edit') || can('ops.classes.create');
+
+  const defaultBookingSource = React.useMemo<BookingSource>(() => {
+    const roleUpper = (user?.role || '').toUpperCase().trim();
+    if (isSuperAdmin || roleUpper === 'ORG_ADMIN' || roleUpper === 'SUPER_ADMIN' || roleUpper === 'TENANT_ADMIN') {
+      return 'ADMIN';
+    }
+    if (roleUpper === 'TRAINER' || roleUpper === 'HYBRID_TRAINERS') {
+      return 'TRAINER';
+    }
+    if (roleUpper === 'SALES_REP') {
+      return 'SALES_REP';
+    }
+    return 'FRONT_DESK';
+  }, [user?.role, isSuperAdmin]);
+
+  const formatBookingSourceBadge = (source?: string | null): string => {
+    const s = (source || '').toUpperCase();
+    switch (s) {
+      case 'MOBILE_APP':
+        return '📱 App';
+      case 'ADMIN':
+        return '🛡️ Admin';
+      case 'FRONT_DESK':
+        return '🏢 Front Desk';
+      case 'SALES_REP':
+        return '💼 Sales Rep';
+      case 'TRAINER':
+        return '🏋️ Trainer';
+      case 'WEB':
+        return '🌐 Web Portal';
+      default:
+        return source || '—';
+    }
+  };
+
+  const formatBookedByOrigin = (booking: { booked_by_name?: string | null; booking_source?: string | null }): string => {
+    if (booking.booked_by_name) {
+      return booking.booked_by_name;
+    }
+    const s = (booking.booking_source || '').toUpperCase();
+    if (s === 'MOBILE_APP') return 'App';
+    if (s === 'ADMIN') return 'Admin';
+    return booking.booking_source || '—';
+  };
 
   const [activeTab, setActiveTab] = useState<'bookings' | 'waitlist' | 'policies'>(() => {
     if (initialTab === 'policies' && !canPolicies) return 'bookings';
@@ -152,7 +196,11 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
   const [selectedOccurrence, setSelectedOccurrence] = useState<ClassOccurrence | null>(null);
   const [selectedMembershipId, setSelectedMembershipId] = useState<string>('');
   const [createBookingType, setCreateBookingType] = useState<BookingType>('MEMBER');
-  const [createBookingSource, setCreateBookingSource] = useState<BookingSource>('FRONT_DESK');
+  const [createBookingSource, setCreateBookingSource] = useState<BookingSource>(defaultBookingSource);
+
+  React.useEffect(() => {
+    setCreateBookingSource(defaultBookingSource);
+  }, [defaultBookingSource]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [parqModalMembershipId, setParqModalMembershipId] = useState<string | null>(null);
   const [occurrenceScope, setOccurrenceScope] = useState<'UPCOMING' | 'PREVIOUS' | 'ALL'>('UPCOMING');
@@ -1074,13 +1122,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-muted text-foreground border border-border">
-                                {booking.booking_source === 'MOBILE_APP'
-                                  ? '📱 Mobile App'
-                                  : booking.booking_source === 'WEB'
-                                  ? '🌐 Web Portal'
-                                  : booking.booking_source === 'FRONT_DESK'
-                                  ? '🏢 Front Desk'
-                                  : booking.booking_source || 'App'}
+                                {formatBookingSourceBadge(booking.booking_source)}
                               </span>
                               {booking.is_trial || booking.booking_source === 'TRIAL' || booking.booking_type === 'TRIAL' ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
@@ -1093,7 +1135,7 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                               )}
                             </div>
                             <div className="text-[11px] text-muted-foreground mt-1">
-                              By: <span className="text-foreground font-medium">{booking.booked_by_name || (booking.booking_source === 'MOBILE_APP' ? 'Member (Self)' : 'Staff')}</span>
+                              By: <span className="text-foreground font-medium">{formatBookedByOrigin(booking)}</span>
                             </div>
                           </td>
                           {(() => {
@@ -2362,16 +2404,10 @@ export const BookingsWorkspace: React.FC<BookingsWorkspaceProps> = ({
                 <div>
                   <span className="text-muted-foreground block text-[10px]">Booking Channel &amp; Origin</span>
                   <span className="text-foreground font-medium">
-                    {selectedBooking.booking_source === 'MOBILE_APP'
-                      ? '📱 Mobile App'
-                      : selectedBooking.booking_source === 'WEB'
-                      ? '🌐 Web Portal'
-                      : selectedBooking.booking_source === 'FRONT_DESK'
-                      ? '🏢 Front Desk'
-                      : selectedBooking.booking_source}
+                    {formatBookingSourceBadge(selectedBooking.booking_source)}
                   </span>
                   <div className="text-[10px] text-muted-foreground mt-0.5">
-                    Booked by: <span className="text-foreground font-medium">{selectedBooking.booked_by_name || 'Member (Self)'}</span>
+                    Booked by: <span className="text-foreground font-medium">{formatBookedByOrigin(selectedBooking)}</span>
                   </div>
                 </div>
                 <div>
